@@ -109,6 +109,13 @@ export interface EngineInfo {
   available: boolean;
 }
 
+export interface GitHubRepo {
+  name: string;
+  url: string;
+  description: string;
+  isPrivate: boolean;
+}
+
 export interface TaskWithRun extends Task {
   latestRun?: AgentRun;
   repo?: Repository;
@@ -118,7 +125,8 @@ export interface TaskWithRun extends Task {
 
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string }
-  | { type: "unsubscribe"; taskId: string };
+  | { type: "unsubscribe"; taskId: string }
+  | { type: "agent_input"; taskId: string; input: string };
 
 export type WsServerMessage =
   | { type: "task_updated"; task: Task }

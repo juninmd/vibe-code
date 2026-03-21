@@ -45,7 +45,7 @@ const app = new Hono();
 app.use("/api/*", cors({ origin: "*" }));
 
 // REST Routes
-app.route("/api/repos", createReposRouter(db));
+app.route("/api/repos", createReposRouter(db, git));
 app.route("/api/tasks", createTasksRouter(db, orchestrator));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry));
@@ -82,6 +82,8 @@ app.get(
           hub.subscribe(client, msg.taskId);
         } else if (msg.type === "unsubscribe") {
           hub.unsubscribe(client, msg.taskId);
+        } else if (msg.type === "agent_input") {
+          orchestrator.sendInput(msg.taskId, msg.input);
         }
       } catch {
         // Invalid message, ignore

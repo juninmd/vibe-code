@@ -5,6 +5,7 @@ import type {
   AgentRun,
   AgentLog,
   EngineInfo,
+  GitHubRepo,
   CreateRepoRequest,
   CreateTaskRequest,
   UpdateTaskRequest,
@@ -37,6 +38,7 @@ export const api = {
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
     refresh: (id: string) =>
       request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
+    listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
   },
 
   tasks: {

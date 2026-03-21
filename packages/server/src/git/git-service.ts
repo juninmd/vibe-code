@@ -22,6 +22,18 @@ export class GitService {
     await mkdir(this.workspacesDir, { recursive: true });
   }
 
+  async detectDefaultBranch(url: string): Promise<string> {
+    try {
+      const result = await this.exec(["git", "ls-remote", "--symref", url, "HEAD"]);
+      // Output like: ref: refs/heads/main	HEAD
+      const match = result.stdout.match(/ref: refs\/heads\/(\S+)\s+HEAD/);
+      if (match) return match[1];
+    } catch {
+      // Fallback
+    }
+    return "main";
+  }
+
   async cloneRepo(url: string, name: string): Promise<string> {
     const barePath = join(this.reposDir, `${name}.git`);
     await this.exec(["git", "clone", "--bare", url, barePath]);
@@ -92,6 +104,31 @@ export class GitService {
       { cwd: wtPath }
     );
     return result.stdout.trim();
+  }
+
+  async listGitHubRepos(limit = 200): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {
+    try {
+      const result = await this.exec([
+        "gh", "repo", "list",
+        "--limit", String(limit),
+        "--json", "nameWithOwner,url,description,isPrivate",
+      ]);
+      const repos = JSON.parse(result.stdout) as {
+        nameWithOwner: string;
+        url: string;
+        description: string | null;
+        isPrivate: boolean;
+      }[];
+      return repos.map((r) => ({
+        name: r.nameWithOwner,
+        url: r.url,
+        description: r.description ?? "",
+        isPrivate: r.isPrivate,
+      }));
+    } catch (err: any) {
+      console.error("[git] Failed to list GitHub repos:", err.message);
+      return [];
+    }
   }
 
   getBarePath(repoName: string): string {

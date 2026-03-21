@@ -28,4 +28,7 @@ export interface AgentEngine {
 
   /** Kill a running agent process */
   abort(runId: string): void;
+
+  /** Send input to a running agent's stdin */
+  sendInput(runId: string, input: string): boolean;
 }

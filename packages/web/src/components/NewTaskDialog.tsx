@@ -12,7 +12,7 @@ interface NewTaskDialogProps {
   onClose: () => void;
   repos: Repository[];
   engines: EngineInfo[];
-  onSubmit: (data: { title: string; description: string; repoId: string; engine?: string }) => void;
+  onSubmit: (data: { title: string; description: string; repoId: string; engine?: string; autoLaunch: boolean }) => void;
 }
 
 export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTaskDialogProps) {
@@ -20,6 +20,7 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [description, setDescription] = useState("");
   const [repoId, setRepoId] = useState("");
   const [engine, setEngine] = useState("");
+  const [autoLaunch, setAutoLaunch] = useState(true);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +30,7 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
       description: description.trim(),
       repoId,
       engine: engine || undefined,
+      autoLaunch,
     });
     setTitle("");
     setDescription("");
@@ -90,6 +92,16 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
               ))}
           </Select>
         </div>
+
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoLaunch}
+            onChange={(e) => setAutoLaunch(e.target.checked)}
+            className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
+          />
+          <span className="text-sm text-zinc-300">Launch agent immediately</span>
+        </label>
 
         <div className="flex gap-2 justify-end pt-2">
           <Button type="button" variant="ghost" onClick={onClose}>

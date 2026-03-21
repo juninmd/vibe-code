@@ -21,7 +21,7 @@ export class AiderEngine implements AgentEngine {
 
     const proc = Bun.spawn(
       ["aider", "--yes-always", "--no-auto-commits", "--message", prompt],
-      { cwd: workdir, stdout: "pipe", stderr: "pipe" }
+      { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 
     if (options?.runId) this.processes.set(options.runId, proc);
@@ -72,6 +72,19 @@ export class AiderEngine implements AgentEngine {
     if (proc) {
       proc.kill();
       this.processes.delete(runId);
+    }
+  }
+
+  sendInput(runId: string, input: string): boolean {
+    const proc = this.processes.get(runId);
+    if (!proc?.stdin || typeof proc.stdin === "number") return false;
+    try {
+      const sink = proc.stdin as import("bun").FileSink;
+      sink.write(input + "\n");
+      sink.flush();
+      return true;
+    } catch {
+      return false;
     }
   }
 }

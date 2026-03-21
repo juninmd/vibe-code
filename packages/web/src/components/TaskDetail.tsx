@@ -12,6 +12,7 @@ interface TaskDetailProps {
   onCancel: (taskId: string) => void;
   onRetry: (taskId: string) => void;
   onDelete: (taskId: string) => void;
+  onSendInput: (taskId: string, input: string) => void;
 }
 
 const statusVariant: Record<string, "default" | "success" | "warning" | "danger" | "info" | "purple"> = {
@@ -30,7 +31,9 @@ export function TaskDetail({
   onCancel,
   onRetry,
   onDelete,
+  onSendInput,
 }: TaskDetailProps) {
+  const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -113,6 +116,8 @@ export function TaskDetail({
             <AgentOutput
               runId={task.latestRun?.id ?? null}
               liveLogs={liveLogs}
+              isRunning={isRunning}
+              onSendInput={(input) => onSendInput(task.id, input)}
             />
           </div>
 

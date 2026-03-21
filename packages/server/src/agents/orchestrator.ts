@@ -8,6 +8,7 @@ import type { AgentEvent } from "./engine";
 interface ActiveRun {
   runId: string;
   taskId: string;
+  engineName: string;
   abort: AbortController;
 }
 
@@ -70,7 +71,7 @@ export class Orchestrator {
 
     // Launch async (don't await)
     const abort = new AbortController();
-    this.activeRuns.set(task.id, { runId: run.id, taskId: task.id, abort });
+    this.activeRuns.set(task.id, { runId: run.id, taskId: task.id, engineName: engine.name, abort });
     this.runAgent(task, run, engine, repo, abort).catch((err) => {
       console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
     });
@@ -102,6 +103,27 @@ export class Orchestrator {
       taskId,
       status: "cancelled",
     });
+  }
+
+  sendInput(taskId: string, input: string): boolean {
+    const active = this.activeRuns.get(taskId);
+    if (!active) return false;
+    const engine = this.registry.get(active.engineName);
+    if (!engine) return false;
+    const sent = engine.sendInput(active.runId, input);
+    if (sent) {
+      // Log the user input
+      this.db.logs.create(active.runId, "stdin", input);
+      this.hub.broadcastToTask(taskId, {
+        type: "agent_log",
+        runId: active.runId,
+        taskId,
+        stream: "stdin" as any,
+        content: input,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return sent;
   }
 
   private async runAgent(

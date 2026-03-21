@@ -21,19 +21,17 @@ export class ClaudeCodeEngine implements AgentEngine {
 
     const proc = Bun.spawn(
       ["claude", "--print", "--output-format", "stream-json", "-p", prompt],
-      { cwd: workdir, stdout: "pipe", stderr: "pipe" }
+      { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    // Handle abort signal
     if (options?.signal) {
       options.signal.addEventListener("abort", () => {
         proc.kill();
       });
     }
 
-    // Stream stdout
     const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -67,7 +65,6 @@ export class ClaudeCodeEngine implements AgentEngine {
       reader.releaseLock();
     }
 
-    // Stream any remaining stderr
     const stderr = await new Response(proc.stderr).text();
     if (stderr.trim()) {
       yield { type: "log", stream: "stderr", content: stderr };
@@ -87,6 +84,19 @@ export class ClaudeCodeEngine implements AgentEngine {
     if (proc) {
       proc.kill();
       this.processes.delete(runId);
+    }
+  }
+
+  sendInput(runId: string, input: string): boolean {
+    const proc = this.processes.get(runId);
+    if (!proc?.stdin || typeof proc.stdin === "number") return false;
+    try {
+      const sink = proc.stdin as import("bun").FileSink;
+      sink.write(input + "\n");
+      sink.flush();
+      return true;
+    } catch {
+      return false;
     }
   }
 }

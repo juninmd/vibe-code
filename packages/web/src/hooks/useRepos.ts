@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Repository, CreateRepoRequest } from "@vibe-code/shared";
 import { api } from "../api/client";
 
 export function useRepos() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -20,6 +21,23 @@ export function useRepos() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Poll while any repo is cloning
+  useEffect(() => {
+    const hasCloning = repos.some((r) => r.status === "cloning" || r.status === "pending");
+    if (hasCloning && !pollRef.current) {
+      pollRef.current = setInterval(refresh, 2000);
+    } else if (!hasCloning && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [repos, refresh]);
 
   const addRepo = useCallback(async (data: CreateRepoRequest) => {
     const repo = await api.repos.create(data);

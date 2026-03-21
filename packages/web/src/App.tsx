@@ -53,7 +53,7 @@ export default function App() {
     [updateTaskLocal, refresh]
   );
 
-  const { connected, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
+  const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
 
   const handleTaskClick = useCallback(
     (task: TaskWithRun) => {
@@ -132,6 +132,9 @@ export default function App() {
             await removeTask(id);
             handleCloseDetail();
           }}
+          onSendInput={(taskId, input) => {
+            send({ type: "agent_input", taskId, input });
+          }}
         />
       )}
 
@@ -141,8 +144,11 @@ export default function App() {
         onClose={() => setShowNewTask(false)}
         repos={repos}
         engines={engines}
-        onSubmit={async (data) => {
-          await createTask(data);
+        onSubmit={async ({ autoLaunch, ...data }) => {
+          const task = await createTask(data);
+          if (autoLaunch && task) {
+            await launchTask(task.id, data.engine);
+          }
         }}
       />
 
