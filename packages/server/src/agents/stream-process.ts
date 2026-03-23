@@ -110,7 +110,7 @@ export async function* streamProcess(
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
-    yield { type: "error", content: `Process exited with code ${exitCode}` };
+    yield { type: "log", stream: "stderr", content: `[process] Exited with code ${exitCode}` };
   }
   yield { type: "complete", exitCode: exitCode ?? 0 };
 }

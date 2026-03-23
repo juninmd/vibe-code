@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentLog } from "@vibe-code/shared";
 import { api } from "../api/client";
 
@@ -21,7 +21,13 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
     api.runs.logs(runId).then(setHistoricLogs).catch(console.error);
   }, [runId]);
 
-  const allLogs = [...historicLogs, ...liveLogs];
+  // Deduplicate: filter live logs that are already covered by historic logs
+  const allLogs = useMemo(() => {
+    if (historicLogs.length === 0) return liveLogs;
+    const lastHistoric = historicLogs[historicLogs.length - 1];
+    const filtered = liveLogs.filter((l) => l.timestamp > lastHistoric.timestamp);
+    return [...historicLogs, ...filtered];
+  }, [historicLogs, liveLogs]);
 
   useEffect(() => {
     if (scrollRef.current) {

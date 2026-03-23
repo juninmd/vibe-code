@@ -91,6 +91,18 @@ export class GitService {
     return result.stdout.trim().length > 0;
   }
 
+  async hasCommitsAhead(wtPath: string, baseBranch: string): Promise<boolean> {
+    try {
+      const result = await this.exec(
+        ["git", "log", `origin/${baseBranch}..HEAD`, "--oneline"],
+        { cwd: wtPath }
+      );
+      return result.stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   async commitAll(wtPath: string, message: string): Promise<void> {
     await this.exec(["git", "add", "-A"], { cwd: wtPath });
     const hasChanges = await this.hasChanges(wtPath);

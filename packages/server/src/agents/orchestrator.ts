@@ -247,13 +247,19 @@ export class Orchestrator {
 
       if (abort.signal.aborted) return;
 
-      // Check if there are changes to commit and push
+      // Commit any uncommitted changes left by the agent
       const hasChanges = await this.git.hasChanges(wtPath);
       if (hasChanges) {
         await this.git.commitAll(wtPath, `vibe-code: ${task.title}`);
       }
 
-      // Check if there are commits to push (agent may have committed directly)
+      // Check that the agent actually produced commits (vs base branch)
+      const hasCommits = await this.git.hasCommitsAhead(wtPath, repo.defaultBranch);
+      if (!hasCommits) {
+        throw new Error("Agent completed but made no changes");
+      }
+
+      // Push branch and create PR
       try {
         await this.git.push(wtPath, branch);
 
@@ -338,6 +344,7 @@ export class Orchestrator {
         timestamp: new Date().toISOString(),
       });
     } else if (event.type === "error" && event.content) {
+      // Log error but do NOT throw — let the flow continue to commit/push/PR
       this.db.logs.create(runId, "stderr", event.content);
       this.hub.broadcastAll({
         type: "agent_log",
@@ -347,7 +354,6 @@ export class Orchestrator {
         content: event.content,
         timestamp: new Date().toISOString(),
       });
-      throw new Error(event.content);
     } else if (event.type === "status" && event.content) {
       const run = this.db.runs.getById(runId);
       if (run) {

@@ -232,11 +232,11 @@ export function createTaskQueries(db: Database) {
 export function createRunQueries(db: Database) {
   const stmts = {
     listByTask: db.prepare<RunRow, [string]>(
-      "SELECT * FROM agent_runs WHERE task_id = ? ORDER BY created_at DESC"
+      "SELECT * FROM agent_runs WHERE task_id = ? ORDER BY created_at DESC, rowid DESC"
     ),
     getById: db.prepare<RunRow, [string]>("SELECT * FROM agent_runs WHERE id = ?"),
     getLatestByTask: db.prepare<RunRow, [string]>(
-      "SELECT * FROM agent_runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1"
+      "SELECT * FROM agent_runs WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1"
     ),
     insert: db.prepare<RunRow, [string, string]>(
       "INSERT INTO agent_runs (task_id, engine) VALUES (?, ?) RETURNING *"

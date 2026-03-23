@@ -3,6 +3,7 @@ import type { EngineInfo } from "@vibe-code/shared";
 import { ClaudeCodeEngine } from "./engines/claude-code";
 import { AiderEngine } from "./engines/aider";
 import { OpenCodeEngine } from "./engines/opencode";
+import { GeminiEngine } from "./engines/gemini";
 
 export class EngineRegistry {
   private engines: Map<string, AgentEngine> = new Map();
@@ -11,6 +12,7 @@ export class EngineRegistry {
     this.register(new ClaudeCodeEngine());
     this.register(new AiderEngine());
     this.register(new OpenCodeEngine());
+    this.register(new GeminiEngine());
   }
 
   register(engine: AgentEngine): void {
