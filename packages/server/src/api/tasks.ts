@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { Orchestrator } from "../agents/orchestrator";
+import type { GitService } from "../git/git-service";
+import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -23,7 +25,7 @@ const launchTaskSchema = z.object({
   engine: z.string().optional(),
 });
 
-export function createTasksRouter(db: Db, orchestrator: Orchestrator) {
+export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
   const router = new Hono();
 
   router.get("/", (c) => {
@@ -135,6 +137,79 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator) {
   router.get("/:id/runs", (c) => {
     const runs = db.runs.listByTask(c.req.param("id"));
     return c.json({ data: runs });
+  });
+
+  // ─── Diff Endpoints ─────────────────────────────────────────────────────────
+
+  router.get("/:id/diff", async (c) => {
+    if (!git) return c.json({ error: "unavailable", message: "Git service not configured" }, 500);
+
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    if (!task.branchName) return c.json({ data: { files: [], totalAdditions: 0, totalDeletions: 0 } as DiffSummary });
+
+    const repo = db.repos.getById(task.repoId);
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const latestRun = db.runs.getLatestByTask(task.id);
+
+    try {
+      // If there's a running agent with a worktree, diff in the worktree
+      const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
+      const opts = useWorktree
+        ? { cwd: latestRun.worktreePath! }
+        : { gitDir: barePath };
+
+      const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
+      const headBranch = useWorktree ? "HEAD" : task.branchName;
+
+      const files = await git.diffSummary(baseBranch, headBranch, opts);
+      const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
+      const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
+
+      return c.json({
+        data: {
+          files: files as DiffFileSummary[],
+          totalAdditions,
+          totalDeletions,
+        } satisfies DiffSummary,
+      });
+    } catch (err: any) {
+      return c.json({ error: "diff_failed", message: err.message }, 500);
+    }
+  });
+
+  router.get("/:id/diff/file", async (c) => {
+    if (!git) return c.json({ error: "unavailable", message: "Git service not configured" }, 500);
+
+    const filePath = c.req.query("path");
+    if (!filePath) return c.json({ error: "validation", message: "Missing 'path' query parameter" }, 400);
+
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    if (!task.branchName) return c.json({ data: { patch: "" } });
+
+    const repo = db.repos.getById(task.repoId);
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const latestRun = db.runs.getLatestByTask(task.id);
+
+    try {
+      const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
+      const opts = useWorktree
+        ? { cwd: latestRun.worktreePath! }
+        : { gitDir: barePath };
+
+      const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
+      const headBranch = useWorktree ? "HEAD" : task.branchName;
+
+      const patch = await git.diffFileContent(baseBranch, headBranch, filePath, opts);
+      return c.json({ data: { patch } });
+    } catch (err: any) {
+      return c.json({ error: "diff_failed", message: err.message }, 500);
+    }
   });
 
   return router;

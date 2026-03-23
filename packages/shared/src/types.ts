@@ -121,6 +121,22 @@ export interface TaskWithRun extends Task {
   repo?: Repository;
 }
 
+// ─── Diff Types ─────────────────────────────────────────────────────────────
+
+export interface DiffFileSummary {
+  path: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+  oldPath?: string;
+}
+
+export interface DiffSummary {
+  files: DiffFileSummary[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
 // ─── WebSocket Protocol ──────────────────────────────────────────────────────
 
 export type WsClientMessage =

@@ -21,7 +21,7 @@ export class OpenCodeEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir}` };
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--format", "json", prompt],
+      ["opencode", "run", "--format", "json", "--print-logs", prompt],
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 
@@ -31,18 +31,56 @@ export class OpenCodeEngine implements AgentEngine {
       try {
         const event = JSON.parse(line) as { type: string; part?: Record<string, unknown> };
         const part = event.part ?? {};
+        const partType = String(part.type ?? event.type);
+
+        // Text output from the model
         if (event.type === "text" && part.text) {
           return [{ type: "log", stream: "stdout", content: String(part.text) }];
-        } else if (event.type === "tool_use" && part.tool) {
-          return [{ type: "log", stream: "stdout", content: `[tool] ${String(part.tool)}` }];
-        } else if (event.type === "tool_result" && part.content) {
-          return [{ type: "log", stream: "stdout", content: `[tool result] ${String(part.content)}` }];
-        } else if (event.type === "error") {
+        }
+
+        // Tool usage — opencode uses part.name (not part.tool)
+        if (event.type === "tool_use") {
+          const toolName = String(part.name ?? part.tool ?? "unknown");
+          const input = part.input ? ` ${JSON.stringify(part.input).slice(0, 200)}` : "";
+          return [{ type: "log", stream: "stdout", content: `[tool] ${toolName}${input}` }];
+        }
+
+        // Tool result
+        if (event.type === "tool_result") {
+          const content = part.content ?? part.output ?? part.text;
+          if (content) {
+            const text = typeof content === "string" ? content : JSON.stringify(content);
+            return [{ type: "log", stream: "stdout", content: `[tool result] ${text.slice(0, 500)}` }];
+          }
+          return [{ type: "log", stream: "stdout", content: "[tool result] (done)" }];
+        }
+
+        // Thinking / reasoning
+        if (event.type === "thinking" && part.text) {
+          return [{ type: "log", stream: "stdout", content: `[thinking] ${String(part.text).slice(0, 300)}` }];
+        }
+
+        // Step boundaries
+        if (event.type === "step_start") {
+          return [{ type: "log", stream: "system", content: "[opencode] Step started" }];
+        }
+        if (event.type === "step_finish") {
+          const reason = part.reason ? ` (${String(part.reason)})` : "";
+          const tokens = part.tokens as Record<string, number> | undefined;
+          const tokenInfo = tokens?.total ? ` — ${tokens.total} tokens` : "";
+          return [{ type: "log", stream: "system", content: `[opencode] Step finished${reason}${tokenInfo}` }];
+        }
+
+        // Errors
+        if (event.type === "error") {
           const msg = String((part as Record<string, unknown>).message ?? line);
           return [{ type: "log", stream: "stderr", content: msg }];
         }
-        return [];
+
+        // Fallback: don't silently drop unknown events
+        return [{ type: "log", stream: "stdout", content: `[${partType}] ${JSON.stringify(part).slice(0, 300)}` }];
       } catch {
+        // Not JSON — show as raw output
         return [{ type: "log", stream: "stdout", content: line }];
       }
     }, options?.signal);

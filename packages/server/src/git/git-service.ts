@@ -138,6 +138,76 @@ export class GitService {
     }
   }
 
+  async diffSummary(
+    baseBranch: string,
+    headBranch: string,
+    opts: { cwd?: string; gitDir?: string }
+  ): Promise<{ path: string; status: string; additions: number; deletions: number; oldPath?: string }[]> {
+    const args = ["git"];
+    if (opts.gitDir) args.push("--git-dir", opts.gitDir);
+    args.push("diff", "--numstat", "-M", `${baseBranch}...${headBranch}`);
+
+    const numstat = await this.exec(args, { cwd: opts.cwd }).catch(() => ({ stdout: "", stderr: "", exitCode: 1 }));
+
+    // Also get name-status for file status (A/M/D/R)
+    const statusArgs = ["git"];
+    if (opts.gitDir) statusArgs.push("--git-dir", opts.gitDir);
+    statusArgs.push("diff", "--name-status", "-M", `${baseBranch}...${headBranch}`);
+
+    const nameStatus = await this.exec(statusArgs, { cwd: opts.cwd }).catch(() => ({ stdout: "", stderr: "", exitCode: 1 }));
+
+    const statusMap = new Map<string, { status: string; oldPath?: string }>();
+    for (const line of nameStatus.stdout.trim().split("\n")) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      const code = parts[0].charAt(0);
+      const status = code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
+      const filePath = code === "R" ? parts[2] : parts[1];
+      const oldPath = code === "R" ? parts[1] : undefined;
+      if (filePath) statusMap.set(filePath, { status, oldPath });
+    }
+
+    const files: { path: string; status: string; additions: number; deletions: number; oldPath?: string }[] = [];
+    for (const line of numstat.stdout.trim().split("\n")) {
+      if (!line) continue;
+      const [add, del, ...pathParts] = line.split("\t");
+      const filePath = pathParts.join("\t").replace(/^.* => /, "").replace(/[{}]/g, "");
+      const info = statusMap.get(filePath);
+      files.push({
+        path: filePath,
+        status: info?.status ?? "modified",
+        additions: add === "-" ? 0 : parseInt(add, 10) || 0,
+        deletions: del === "-" ? 0 : parseInt(del, 10) || 0,
+        oldPath: info?.oldPath,
+      });
+    }
+
+    return files;
+  }
+
+  async diffFileContent(
+    baseBranch: string,
+    headBranch: string,
+    filePath: string,
+    opts: { cwd?: string; gitDir?: string }
+  ): Promise<string> {
+    const args = ["git"];
+    if (opts.gitDir) args.push("--git-dir", opts.gitDir);
+    args.push("diff", "-M", `${baseBranch}...${headBranch}`, "--", filePath);
+
+    const result = await this.exec(args, { cwd: opts.cwd });
+    return result.stdout;
+  }
+
+  async branchExists(barePath: string, branch: string): Promise<boolean> {
+    try {
+      await this.exec(["git", "--git-dir", barePath, "rev-parse", "--verify", branch]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   getBarePath(repoName: string): string {
     return join(this.reposDir, `${repoName}.git`);
   }

@@ -6,6 +6,7 @@ import type {
   AgentLog,
   EngineInfo,
   GitHubRepo,
+  DiffSummary,
   CreateRepoRequest,
   CreateTaskRequest,
   UpdateTaskRequest,
@@ -65,6 +66,9 @@ export const api = {
     retry: (id: string) =>
       request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
+    diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
+    diffFile: (id: string, path: string) =>
+      request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),
   },
 
   runs: {

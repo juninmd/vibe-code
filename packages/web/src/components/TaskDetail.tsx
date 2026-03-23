@@ -3,6 +3,7 @@ import type { TaskWithRun, AgentLog } from "@vibe-code/shared";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { AgentOutput } from "./AgentOutput";
+import { DiffViewer } from "./DiffViewer";
 import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskDetailProps {
@@ -270,6 +271,14 @@ export function TaskDetail({
               onSendInput={(input) => onSendInput(task.id, input)}
             />
           </div>
+
+          {/* Git Diff */}
+          {task.branchName && (
+            <div>
+              <h3 className="text-xs font-medium text-zinc-500 mb-2">Changes</h3>
+              <DiffViewer taskId={task.id} branchName={task.branchName} />
+            </div>
+          )}
 
           {/* Timestamps */}
           <div className="text-xs text-zinc-600 space-y-1 pt-2 border-t border-zinc-800">

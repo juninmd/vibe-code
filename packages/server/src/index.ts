@@ -46,7 +46,7 @@ app.use("/api/*", cors({ origin: "*" }));
 
 // REST Routes
 app.route("/api/repos", createReposRouter(db, git, hub));
-app.route("/api/tasks", createTasksRouter(db, orchestrator));
+app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry));
 
