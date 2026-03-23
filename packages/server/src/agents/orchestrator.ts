@@ -81,9 +81,24 @@ export class Orchestrator {
 
   async cancel(taskId: string): Promise<void> {
     const active = this.activeRuns.get(taskId);
-    if (!active) throw new Error("No active run for this task");
+    if (!active) {
+      // No active run — still reset the task status if it's stuck as in_progress
+      const task = this.db.tasks.getById(taskId);
+      if (task && task.status === "in_progress") {
+        const updated = this.db.tasks.update(taskId, { status: "backlog" });
+        if (updated) {
+          this.hub.broadcastAll({ type: "task_updated", task: updated });
+        }
+      }
+      return;
+    }
 
+    // Signal abort and kill the process via the engine
     active.abort.abort();
+    const engine = this.registry.get(active.engineName);
+    if (engine) {
+      engine.abort(active.runId);
+    }
 
     // Update run status
     this.db.runs.updateStatus(active.runId, "cancelled", {

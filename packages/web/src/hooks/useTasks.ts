@@ -45,7 +45,11 @@ export function useTasks(repoFilter?: string) {
   }, [refresh]);
 
   const cancelTask = useCallback(async (id: string) => {
-    await api.tasks.cancel(id);
+    try {
+      await api.tasks.cancel(id);
+    } catch (err) {
+      console.error("Failed to cancel task:", err);
+    }
     await refresh();
   }, [refresh]);
 

@@ -1,5 +1,6 @@
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import type { Subprocess } from "bun";
+import { streamProcess } from "../stream-process";
 
 export class ClaudeCodeEngine implements AgentEngine {
   name = "claude-code";
@@ -26,57 +27,27 @@ export class ClaudeCodeEngine implements AgentEngine {
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    if (options?.signal) {
-      options.signal.addEventListener("abort", () => {
-        proc.kill();
-      });
-    }
-
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.type === "assistant" && parsed.content) {
-              for (const block of parsed.content) {
-                if (block.type === "text") {
-                  yield { type: "log", stream: "stdout", content: block.text };
-                } else if (block.type === "tool_use") {
-                  yield { type: "log", stream: "system", content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}` };
-                }
-              }
+    yield* streamProcess(proc, (line) => {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.type === "assistant" && parsed.content) {
+          const events: AgentEvent[] = [];
+          for (const block of parsed.content) {
+            if (block.type === "text") {
+              events.push({ type: "log", stream: "stdout", content: block.text });
+            } else if (block.type === "tool_use") {
+              events.push({ type: "log", stream: "system", content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}` });
             }
-          } catch {
-            yield { type: "log", stream: "stdout", content: line };
           }
+          return events;
         }
+        return [];
+      } catch {
+        return [{ type: "log", stream: "stdout", content: line }];
       }
-    } finally {
-      reader.releaseLock();
-    }
+    }, options?.signal);
 
-    const stderr = await new Response(proc.stderr).text();
-    if (stderr.trim()) {
-      yield { type: "log", stream: "stderr", content: stderr };
-    }
-
-    const exitCode = await proc.exited;
     if (options?.runId) this.processes.delete(options.runId);
-
-    if (exitCode !== 0) {
-      yield { type: "error", content: `Claude Code exited with code ${exitCode}` };
-    }
-    yield { type: "complete", exitCode: exitCode ?? 0 };
   }
 
   abort(runId: string): void {

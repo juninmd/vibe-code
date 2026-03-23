@@ -1,5 +1,6 @@
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import type { Subprocess } from "bun";
+import { streamProcess } from "../stream-process";
 
 export class AiderEngine implements AgentEngine {
   name = "aider";
@@ -26,45 +27,11 @@ export class AiderEngine implements AgentEngine {
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    if (options?.signal) {
-      options.signal.addEventListener("abort", () => {
-        proc.kill();
-      });
-    }
+    yield* streamProcess(proc, (line) => {
+      return [{ type: "log", stream: "stdout", content: line }];
+    }, options?.signal);
 
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim()) {
-            yield { type: "log", stream: "stdout", content: line };
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-
-    const stderr = await new Response(proc.stderr).text();
-    if (stderr.trim()) {
-      yield { type: "log", stream: "stderr", content: stderr };
-    }
-
-    const exitCode = await proc.exited;
     if (options?.runId) this.processes.delete(options.runId);
-
-    if (exitCode !== 0) {
-      yield { type: "error", content: `Aider exited with code ${exitCode}` };
-    }
-    yield { type: "complete", exitCode: exitCode ?? 0 };
   }
 
   abort(runId: string): void {
