@@ -50,5 +50,17 @@ export function useRepos() {
     await refresh();
   }, [refresh]);
 
-  return { repos, loading, refresh, addRepo, removeRepo };
+  const addOrUpdateRepo = useCallback((repo: Repository) => {
+    setRepos((prev) => {
+      const idx = prev.findIndex((r) => r.id === repo.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = repo;
+        return next;
+      }
+      return [repo, ...prev];
+    });
+  }, []);
+
+  return { repos, loading, refresh, addRepo, removeRepo, addOrUpdateRepo };
 }

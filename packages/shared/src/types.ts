@@ -3,7 +3,7 @@
 export type TaskStatus = "backlog" | "in_progress" | "review" | "done" | "failed";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-export type LogStream = "stdout" | "stderr" | "system";
+export type LogStream = "stdout" | "stderr" | "system" | "stdin";
 
 export const TASK_COLUMNS: TaskStatus[] = ["backlog", "in_progress", "review", "done"];
 
@@ -130,6 +130,7 @@ export type WsClientMessage =
 
 export type WsServerMessage =
   | { type: "task_updated"; task: Task }
+  | { type: "repo_updated"; repo: Repository }
   | { type: "agent_log"; runId: string; taskId: string; stream: LogStream; content: string; timestamp: string }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };

@@ -18,7 +18,7 @@ export default function App() {
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
 
-  const { repos, addRepo, removeRepo } = useRepos();
+  const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
   const { tasks, createTask, updateTask, removeTask, launchTask, cancelTask, retryTask, updateTaskLocal, refresh } =
     useTasks(selectedRepoId ?? undefined);
   const engines = useEngines();
@@ -28,7 +28,14 @@ export default function App() {
       switch (msg.type) {
         case "task_updated":
           updateTaskLocal(msg.task as TaskWithRun);
+          setSelectedTask((prev) =>
+            prev?.id === msg.task.id ? { ...prev, ...msg.task } as TaskWithRun : prev
+          );
           refresh();
+          break;
+        case "repo_updated":
+          // Update repo in-place without full refresh
+          addOrUpdateRepo(msg.repo);
           break;
         case "agent_log":
           setLiveLogs((prev) => ({
@@ -125,9 +132,15 @@ export default function App() {
           task={selectedTask}
           liveLogs={liveLogs[selectedTask.id] ?? []}
           onClose={handleCloseDetail}
-          onLaunch={launchTask}
+          onLaunch={async (id, engine) => {
+            setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+            await launchTask(id, engine);
+          }}
           onCancel={cancelTask}
-          onRetry={retryTask}
+          onRetry={async (id) => {
+            setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+            await retryTask(id);
+          }}
           onDelete={async (id) => {
             await removeTask(id);
             handleCloseDetail();

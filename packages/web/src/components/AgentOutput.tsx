@@ -16,6 +16,7 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setHistoricLogs([]);
     if (!runId) return;
     api.runs.logs(runId).then(setHistoricLogs).catch(console.error);
   }, [runId]);

@@ -212,7 +212,9 @@ export function createTaskQueries(db: Database) {
       const row = db.prepare(sql).get(...values) as TaskRow | null;
       return row ? mapTask(row) : null;
     },
-    updateField: (id: string, field: string, value: string | number | null): Task | null => {
+    updateField: (id: string, field: "pr_url" | "branch_name" | "status" | "engine", value: string | number | null): Task | null => {
+      const allowed = ["pr_url", "branch_name", "status", "engine"] as const;
+      if (!allowed.includes(field as typeof allowed[number])) throw new Error(`Invalid field: ${field}`);
       const sql = `UPDATE tasks SET ${field} = ?, updated_at = datetime('now') WHERE id = ? RETURNING *`;
       const row = db.prepare(sql).get(value, id) as TaskRow | null;
       return row ? mapTask(row) : null;
@@ -253,13 +255,16 @@ export function createRunQueries(db: Database) {
       const row = stmts.insert.get(taskId, engine)!;
       return mapRun(row);
     },
-    updateStatus: (id: string, status: string, extra?: Record<string, string | number | null>): AgentRun | null => {
+    updateStatus: (id: string, status: string, extra?: Partial<Record<"started_at" | "finished_at" | "exit_code" | "error_message" | "worktree_path", string | number | null>>): AgentRun | null => {
+      const allowed = ["started_at", "finished_at", "exit_code", "error_message", "worktree_path"] as const;
       const sets = ["status = ?"];
       const values: (string | number | null)[] = [status];
       if (extra) {
-        for (const [key, value] of Object.entries(extra)) {
-          sets.push(`${key} = ?`);
-          values.push(value);
+        for (const key of allowed) {
+          if (key in extra) {
+            sets.push(`${key} = ?`);
+            values.push(extra[key] ?? null);
+          }
         }
       }
       values.push(id);

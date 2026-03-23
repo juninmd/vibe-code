@@ -20,7 +20,7 @@ export class OpenCodeEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir}` };
 
     const proc = Bun.spawn(
-      ["opencode", "-p", prompt],
+      ["opencode", "run", "--format", "json", prompt],
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 
@@ -32,32 +32,101 @@ export class OpenCodeEngine implements AgentEngine {
       });
     }
 
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
+    // Collect events from both stdout and stderr into a shared queue
+    const eventQueue: AgentEvent[] = [];
+    const waiting: { resolve: (() => void) | null } = { resolve: null };
+    let stdoutDone = false;
+    let stderrDone = false;
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim()) {
-            yield { type: "log", stream: "stdout", content: line };
+    const push = (event: AgentEvent) => {
+      eventQueue.push(event);
+      if (waiting.resolve) {
+        waiting.resolve();
+        waiting.resolve = null;
+      }
+    };
+
+    // Stream stderr in parallel
+    const stderrTask = (async () => {
+      const reader = proc.stderr.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.trim()) {
+              push({ type: "log", stream: "stderr", content: line });
+            }
           }
         }
+        if (buffer.trim()) {
+          push({ type: "log", stream: "stderr", content: buffer });
+        }
+      } finally {
+        reader.releaseLock();
+        stderrDone = true;
+        if (waiting.resolve) { waiting.resolve(); waiting.resolve = null; }
       }
-    } finally {
-      reader.releaseLock();
+    })();
+
+    // Stream stdout in parallel
+    const stdoutTask = (async () => {
+      const reader = proc.stdout.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const event = JSON.parse(line) as { type: string; part?: Record<string, unknown> };
+              const part = event.part ?? {};
+              if (event.type === "text" && part.text) {
+                push({ type: "log", stream: "stdout", content: String(part.text) });
+              } else if (event.type === "tool_use" && part.tool) {
+                push({ type: "log", stream: "stdout", content: `[tool] ${String(part.tool)}` });
+              } else if (event.type === "tool_result" && part.content) {
+                push({ type: "log", stream: "stdout", content: `[tool result] ${String(part.content)}` });
+              } else if (event.type === "error") {
+                const msg = String((part as Record<string, unknown>).message ?? line);
+                push({ type: "log", stream: "stderr", content: msg });
+              }
+            } catch {
+              push({ type: "log", stream: "stdout", content: line });
+            }
+          }
+        }
+        if (buffer.trim()) {
+          push({ type: "log", stream: "stdout", content: buffer });
+        }
+      } finally {
+        reader.releaseLock();
+        stdoutDone = true;
+        if (waiting.resolve) { waiting.resolve(); waiting.resolve = null; }
+      }
+    })();
+
+    // Yield events as they arrive from either stream
+    while (true) {
+      while (eventQueue.length > 0) {
+        yield eventQueue.shift()!;
+      }
+      if (stdoutDone && stderrDone && eventQueue.length === 0) break;
+      await new Promise<void>((r) => { waiting.resolve = r; });
     }
 
-    const stderr = await new Response(proc.stderr).text();
-    if (stderr.trim()) {
-      yield { type: "log", stream: "stderr", content: stderr };
-    }
-
+    // Wait for both tasks and process exit
+    await Promise.all([stdoutTask, stderrTask]);
     const exitCode = await proc.exited;
     if (options?.runId) this.processes.delete(options.runId);
 

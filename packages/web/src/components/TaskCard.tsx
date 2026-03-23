@@ -2,14 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
 import { Badge } from "./ui/badge";
-
-const statusBadge: Record<string, { variant: "default" | "success" | "warning" | "danger" | "info" | "purple"; label: string }> = {
-  backlog: { variant: "default", label: "Backlog" },
-  in_progress: { variant: "info", label: "Running" },
-  review: { variant: "purple", label: "Review" },
-  done: { variant: "success", label: "Done" },
-  failed: { variant: "danger", label: "Failed" },
-};
+import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskCardProps {
   task: TaskWithRun;
@@ -26,7 +19,8 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const badge = statusBadge[task.status] ?? statusBadge.backlog;
+  const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
+  const ProviderIcon = provider?.icon;
 
   return (
     <div
@@ -35,25 +29,40 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className="bg-zinc-800/80 border border-zinc-700/50 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors group"
+      className="bg-zinc-800/80 border border-zinc-700/50 rounded-lg p-3 cursor-grab active:cursor-grabbing hover:border-zinc-600 transition-colors"
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="text-sm font-medium text-zinc-100 line-clamp-2 flex-1">
+      {/* Title row */}
+      <div className="flex items-start gap-2 mb-2">
+        {ProviderIcon && (
+          <span className={`mt-0.5 shrink-0 ${provider!.color}`}>
+            <ProviderIcon size={13} />
+          </span>
+        )}
+        <h3 className="text-sm font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
           {task.title}
         </h3>
-        {task.status === "failed" && <Badge variant={badge.variant}>{badge.label}</Badge>}
       </div>
 
+      {/* Description */}
       {task.description && (
-        <p className="text-xs text-zinc-500 line-clamp-2 mb-2">{task.description}</p>
+        <p className="text-xs text-zinc-500 line-clamp-2 mb-2 ml-[21px]">{task.description}</p>
       )}
 
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Footer */}
+      <div className="flex items-center gap-2 flex-wrap ml-[21px]">
         {task.repo && (
-          <Badge variant="default">{task.repo.name}</Badge>
+          <span className="text-xs text-zinc-500 font-medium">{task.repo.name}</span>
+        )}
+        {task.branchName && (
+          <code className="text-xs text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded hidden sm:inline">
+            {task.branchName}
+          </code>
         )}
         {task.engine && (
-          <Badge variant="purple">{task.engine}</Badge>
+          <Badge variant="purple" className="text-[10px] py-0 px-1.5">{task.engine}</Badge>
+        )}
+        {task.status === "failed" && (
+          <Badge variant="danger" className="text-[10px] py-0 px-1.5">Failed</Badge>
         )}
         {task.prUrl && (
           <a
@@ -67,7 +76,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           </a>
         )}
         {task.latestRun?.status === "running" && (
-          <span className="flex items-center gap-1 text-xs text-blue-400">
+          <span className="flex items-center gap-1 text-xs text-blue-400 ml-auto">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
             Running
           </span>

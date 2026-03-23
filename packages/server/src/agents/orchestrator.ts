@@ -256,7 +256,7 @@ export class Orchestrator {
   private async handleEvent(event: AgentEvent, runId: string, taskId: string): Promise<void> {
     if (event.type === "log" && event.content) {
       this.db.logs.create(runId, event.stream ?? "stdout", event.content);
-      this.hub.broadcastToTask(taskId, {
+      this.hub.broadcastAll({
         type: "agent_log",
         runId,
         taskId,
@@ -266,7 +266,7 @@ export class Orchestrator {
       });
     } else if (event.type === "error" && event.content) {
       this.db.logs.create(runId, "stderr", event.content);
-      this.hub.broadcastToTask(taskId, {
+      this.hub.broadcastAll({
         type: "agent_log",
         runId,
         taskId,

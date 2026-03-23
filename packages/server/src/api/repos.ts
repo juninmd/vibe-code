@@ -2,12 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import type { BroadcastHub } from "../ws/broadcast";
 
 const createRepoSchema = z.object({
-  url: z.string().min(1),
+  url: z.string().url("Must be a valid URL").min(1),
 });
 
-export function createReposRouter(db: Db, git: GitService) {
+export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
   router.get("/", (c) => {
@@ -29,11 +30,14 @@ export function createReposRouter(db: Db, git: GitService) {
       // Clone in background — respond immediately, update status async
       (async () => {
         try {
-          db.repos.updateStatus(repo.id, "cloning");
+          const cloning = db.repos.updateStatus(repo.id, "cloning");
+          if (cloning) hub.broadcastAll({ type: "repo_updated", repo: cloning });
           const localPath = await git.cloneRepo(parsed.data.url, repo.name);
-          db.repos.updateStatus(repo.id, "ready", localPath);
+          const ready = db.repos.updateStatus(repo.id, "ready", localPath);
+          if (ready) hub.broadcastAll({ type: "repo_updated", repo: ready });
         } catch (err: any) {
-          db.repos.updateStatus(repo.id, "error", null, err.message);
+          const failed = db.repos.updateStatus(repo.id, "error", null, err.message);
+          if (failed) hub.broadcastAll({ type: "repo_updated", repo: failed });
         }
       })();
 

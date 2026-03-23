@@ -60,7 +60,7 @@ export class GitService {
     // Create worktree with new branch from default branch
     await this.exec([
       "git", "--git-dir", barePath,
-      "worktree", "add", "-b", branch, wtPath, `origin/${defaultBranch}`,
+      "worktree", "add", "-b", branch, wtPath, defaultBranch,
     ]);
 
     return wtPath;
@@ -90,6 +90,13 @@ export class GitService {
     await this.exec(["git", "add", "-A"], { cwd: wtPath });
     const hasChanges = await this.hasChanges(wtPath);
     if (hasChanges) {
+      // Ensure git identity is set (required in some environments)
+      try {
+        await this.exec(["git", "config", "user.email"], { cwd: wtPath });
+      } catch {
+        await this.exec(["git", "config", "user.email", "vibe-code@localhost"], { cwd: wtPath });
+        await this.exec(["git", "config", "user.name", "vibe-code"], { cwd: wtPath });
+      }
       await this.exec(["git", "commit", "-m", message], { cwd: wtPath });
     }
   }
