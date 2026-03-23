@@ -65,6 +65,8 @@ export const api = {
       request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
     retry: (id: string) =>
       request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
+    retryPR: (id: string) =>
+      request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
     diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
     diffFile: (id: string, path: string) =>

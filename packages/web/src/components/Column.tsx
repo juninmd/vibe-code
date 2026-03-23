@@ -24,9 +24,10 @@ interface ColumnProps {
   status: TaskStatus;
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
+  onRetryPR: (taskId: string) => void;
 }
 
-export function Column({ status, tasks, onTaskClick }: ColumnProps) {
+export function Column({ status, tasks, onTaskClick, onRetryPR }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
 
@@ -56,6 +57,7 @@ export function Column({ status, tasks, onTaskClick }: ColumnProps) {
               key={task.id}
               task={task}
               onClick={() => onTaskClick(task)}
+              onRetryPR={onRetryPR}
             />
           ))}
         </SortableContext>

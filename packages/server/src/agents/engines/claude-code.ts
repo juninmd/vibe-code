@@ -21,7 +21,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[claude-code] Starting in ${workdir}` };
 
     const proc = Bun.spawn(
-      ["claude", "--print", "--output-format", "stream-json", "-p", prompt],
+      ["claude", "--print", "--verbose", "--output-format", "stream-json", "-p", prompt],
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 

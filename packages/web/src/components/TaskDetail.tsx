@@ -13,6 +13,7 @@ interface TaskDetailProps {
   onLaunch: (taskId: string, engine?: string) => void;
   onCancel: (taskId: string) => void;
   onRetry: (taskId: string) => void;
+  onRetryPR: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onSendInput: (taskId: string, input: string) => void;
 }
@@ -50,6 +51,7 @@ export function TaskDetail({
   onLaunch,
   onCancel,
   onRetry,
+  onRetryPR,
   onDelete,
   onSendInput,
 }: TaskDetailProps) {
@@ -230,6 +232,18 @@ export function TaskDetail({
                 }}
               >
                 {loadingAction === "retry" ? "Retrying..." : "Retry"}
+              </Button>
+            )}
+            {task.status === "review" && !task.prUrl && (
+              <Button
+                variant="primary"
+                disabled={!!loadingAction}
+                onClick={async () => {
+                  setLoadingAction("retry-pr");
+                  try { await onRetryPR(task.id); } finally { setLoadingAction(null); }
+                }}
+              >
+                {loadingAction === "retry-pr" ? "Retrying..." : "Retry PR"}
               </Button>
             )}
             {task.status === "in_progress" && (

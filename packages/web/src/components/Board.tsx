@@ -19,9 +19,10 @@ interface BoardProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
   onTaskMove: (taskId: string, newStatus: TaskStatus, newOrder: number) => void;
+  onRetryPR: (taskId: string) => void;
 }
 
-export function Board({ tasks, onTaskClick, onTaskMove }: BoardProps) {
+export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
 
   const sensors = useSensors(
@@ -97,6 +98,7 @@ export function Board({ tasks, onTaskClick, onTaskMove }: BoardProps) {
             status={status}
             tasks={tasksByColumn[status]}
             onTaskClick={onTaskClick}
+            onRetryPR={onRetryPR}
           />
         ))}
       </div>
@@ -104,7 +106,7 @@ export function Board({ tasks, onTaskClick, onTaskMove }: BoardProps) {
       <DragOverlay>
         {activeTask ? (
           <div className="rotate-2 opacity-90">
-            <TaskCard task={activeTask} onClick={() => {}} />
+            <TaskCard task={activeTask} onClick={() => {}} onRetryPR={onRetryPR} />
           </div>
         ) : null}
       </DragOverlay>

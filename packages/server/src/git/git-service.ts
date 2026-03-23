@@ -49,7 +49,8 @@ export class GitService {
     branch: string,
     repoName: string,
     runId: string,
-    defaultBranch: string = "main"
+    base: string = "main",
+    isNewBranch: boolean = true
   ): Promise<string> {
     const wtPath = join(this.workspacesDir, repoName, runId);
     await mkdir(join(this.workspacesDir, repoName), { recursive: true });
@@ -57,11 +58,15 @@ export class GitService {
     // Fetch latest
     await this.fetchRepo(barePath);
 
-    // Create worktree with new branch from default branch
-    await this.exec([
-      "git", "--git-dir", barePath,
-      "worktree", "add", "-b", branch, wtPath, defaultBranch,
-    ]);
+    // Create worktree
+    const args = ["git", "--git-dir", barePath, "worktree", "add"];
+    if (isNewBranch) {
+      args.push("-b", branch, wtPath, base);
+    } else {
+      args.push(wtPath, branch);
+    }
+    
+    await this.exec(args);
 
     return wtPath;
   }
@@ -102,15 +107,26 @@ export class GitService {
   }
 
   async push(wtPath: string, branch: string): Promise<void> {
-    await this.exec(["git", "push", "origin", branch], { cwd: wtPath });
+    await this.exec(["git", "push", "-u", "origin", branch], { cwd: wtPath });
   }
 
-  async createPR(wtPath: string, title: string, body: string): Promise<string> {
+  async checkout(wtPath: string, branch: string): Promise<void> {
+    await this.exec(["git", "checkout", branch], { cwd: wtPath });
+  }
+
+  async createPR(wtPath: string, repoUrl: string, branch: string, title: string, body: string): Promise<string> {
+    const repoInfo = this.getRepoOwnerAndName(repoUrl);
     const result = await this.exec(
-      ["gh", "pr", "create", "--title", title, "--body", body],
+      ["gh", "pr", "create", "--repo", repoInfo, "--title", title, "--body", body, "--head", branch],
       { cwd: wtPath }
     );
     return result.stdout.trim();
+  }
+
+  getRepoOwnerAndName(url: string): string {
+    // Matches https://github.com/owner/repo[.git] or git@github.com:owner/repo[.git]
+    const match = url.match(/[:/]([^/:]+\/[^/.]+)(?:\.git)?$/);
+    return match ? match[1] : url;
   }
 
   async listGitHubRepos(limit = 200): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {

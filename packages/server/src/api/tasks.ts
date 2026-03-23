@@ -134,6 +134,22 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }
   });
 
+  router.post("/:id/retry-pr", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    if (task.status !== "review") {
+      return c.json({ error: "invalid_state", message: "Can only retry PR for tasks in review" }, 400);
+    }
+
+    try {
+      const prUrl = await orchestrator.retryPR(task.id);
+      return c.json({ data: { prUrl } });
+    } catch (err: any) {
+      return c.json({ error: "retry_pr_failed", message: err.message }, 500);
+    }
+  });
+
   router.get("/:id/runs", (c) => {
     const runs = db.runs.listByTask(c.req.param("id"));
     return c.json({ data: runs });

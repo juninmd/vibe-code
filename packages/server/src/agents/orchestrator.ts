@@ -120,6 +120,69 @@ export class Orchestrator {
     });
   }
 
+  async retryPR(taskId: string): Promise<string> {
+    const task = this.db.tasks.getById(taskId);
+    if (!task) throw new Error("Task not found");
+    if (task.status !== "review") throw new Error("Task must be in review status");
+    if (!task.branchName) throw new Error("Task has no branch associated");
+
+    const repo = this.db.repos.getById(task.repoId);
+    if (!repo) throw new Error("Repository not found");
+
+    const barePath = repo.localPath ?? this.git.getBarePath(repo.name);
+    const run = this.db.runs.getLatestByTask(taskId);
+    if (!run) throw new Error("No run found for this task");
+
+    const engine = this.registry.get(run.engine);
+    if (!engine) throw new Error(`Engine ${run.engine} not found`);
+
+    // Log the attempt
+    this.db.logs.create(run.id, "system", "Retrying Pull Request creation...");
+    this.hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId: run.id,
+      taskId,
+      stream: "system",
+      content: "Retrying Pull Request creation...",
+      timestamp: new Date().toISOString(),
+    });
+
+    // Create a temporary worktree using the task branch
+    const wtId = `retry-pr-${Date.now()}`;
+    const wtPath = await this.git.createWorktree(barePath, task.branchName, repo.name, wtId, repo.defaultBranch, false);
+
+    try {
+      // Push with -u to ensure it's tracked
+      await this.git.push(wtPath, task.branchName);
+
+      // Create PR
+      const prBody = `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`;
+      const prUrl = await this.git.createPR(wtPath, repo.url, task.branchName, task.title, prBody);
+
+      // Update task with PR URL
+      this.db.tasks.updateField(task.id, "pr_url", prUrl);
+      const updatedTask = this.db.tasks.getById(task.id);
+      if (updatedTask) {
+        this.hub.broadcastAll({ type: "task_updated", task: updatedTask });
+      }
+
+      this.db.logs.create(run.id, "system", `Pull Request created manually: ${prUrl}`);
+      this.hub.broadcastToTask(taskId, {
+        type: "agent_log",
+        runId: run.id,
+        taskId,
+        stream: "system",
+        content: `Pull Request created manually: ${prUrl}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      return prUrl;
+    } finally {
+      // Cleanup worktree
+      await this.git.removeWorktree(barePath, wtPath);
+    }
+  }
+
   sendInput(taskId: string, input: string): boolean {
     const active = this.activeRuns.get(taskId);
     if (!active) return false;
@@ -196,7 +259,7 @@ export class Orchestrator {
 
         // Create PR
         const prBody = `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`;
-        const prUrl = await this.git.createPR(wtPath, task.title, prBody);
+        const prUrl = await this.git.createPR(wtPath, repo.url, branch, task.title, prBody);
 
         // Update task with PR info
         this.db.tasks.updateField(task.id, "pr_url", prUrl);
@@ -228,6 +291,7 @@ export class Orchestrator {
           exit_code: 0,
           error_message: `Push/PR failed: ${pushErr.message}`,
         });
+        this.db.tasks.updateField(task.id, "branch_name", branch);
         const updatedTask = this.db.tasks.update(task.id, { status: "review" });
         if (updatedTask) {
           this.hub.broadcastAll({ type: "task_updated", task: updatedTask });
@@ -283,6 +347,7 @@ export class Orchestrator {
         content: event.content,
         timestamp: new Date().toISOString(),
       });
+      throw new Error(event.content);
     } else if (event.type === "status" && event.content) {
       const run = this.db.runs.getById(runId);
       if (run) {

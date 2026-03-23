@@ -59,6 +59,12 @@ export function useTasks(repoFilter?: string) {
     return run;
   }, [refresh]);
 
+  const retryPR = useCallback(async (id: string) => {
+    const result = await api.tasks.retryPR(id);
+    await refresh();
+    return result;
+  }, [refresh]);
+
   // Update a single task in-place (from WebSocket)
   const updateTaskLocal = useCallback((updatedTask: TaskWithRun) => {
     setTasks((prev) =>
@@ -76,6 +82,7 @@ export function useTasks(repoFilter?: string) {
     launchTask,
     cancelTask,
     retryTask,
+    retryPR,
     updateTaskLocal,
   };
 }

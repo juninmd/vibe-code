@@ -19,8 +19,18 @@ export default function App() {
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
 
   const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
-  const { tasks, createTask, updateTask, removeTask, launchTask, cancelTask, retryTask, updateTaskLocal, refresh } =
-    useTasks(selectedRepoId ?? undefined);
+  const { 
+    tasks, 
+    createTask, 
+    updateTask, 
+    removeTask, 
+    launchTask, 
+    cancelTask, 
+    retryTask, 
+    retryPR, 
+    updateTaskLocal, 
+    refresh 
+  } = useTasks(selectedRepoId ?? undefined);
   const engines = useEngines();
 
   const handleWsMessage = useCallback(
@@ -123,6 +133,7 @@ export default function App() {
             tasks={tasks}
             onTaskClick={handleTaskClick}
             onTaskMove={handleTaskMove}
+            onRetryPR={retryPR}
           />
         </main>
       </div>
@@ -142,6 +153,7 @@ export default function App() {
             setLiveLogs((prev) => ({ ...prev, [id]: [] }));
             await retryTask(id);
           }}
+          onRetryPR={retryPR}
           onDelete={async (id) => {
             await removeTask(id);
             handleCloseDetail();
