@@ -44,6 +44,7 @@ interface RunRow {
   task_id: string;
   engine: string;
   status: string;
+  current_status: string | null;
   worktree_path: string | null;
   started_at: string | null;
   finished_at: string | null;
@@ -99,6 +100,7 @@ function mapRun(row: RunRow): AgentRun {
     taskId: row.task_id,
     engine: row.engine,
     status: row.status as AgentRun["status"],
+    currentStatus: row.current_status,
     worktreePath: row.worktree_path,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
@@ -255,8 +257,8 @@ export function createRunQueries(db: Database) {
       const row = stmts.insert.get(taskId, engine)!;
       return mapRun(row);
     },
-    updateStatus: (id: string, status: string, extra?: Partial<Record<"started_at" | "finished_at" | "exit_code" | "error_message" | "worktree_path", string | number | null>>): AgentRun | null => {
-      const allowed = ["started_at", "finished_at", "exit_code", "error_message", "worktree_path"] as const;
+    updateStatus: (id: string, status: string, extra?: Partial<Record<"started_at" | "finished_at" | "exit_code" | "error_message" | "worktree_path" | "current_status", string | number | null>>): AgentRun | null => {
+      const allowed = ["started_at", "finished_at", "exit_code", "error_message", "worktree_path", "current_status"] as const;
       const sets = ["status = ?"];
       const values: (string | number | null)[] = [status];
       if (extra) {

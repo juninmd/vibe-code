@@ -76,9 +76,11 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           </a>
         )}
         {task.latestRun?.status === "running" && (
-          <span className="flex items-center gap-1 text-xs text-blue-400 ml-auto">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            Running
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[120px]">
+            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <span className="truncate">
+              {task.latestRun.currentStatus || "Running..."}
+            </span>
           </span>
         )}
       </div>

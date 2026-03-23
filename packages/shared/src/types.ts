@@ -49,6 +49,7 @@ export interface AgentRun {
   taskId: string;
   engine: string;
   status: RunStatus;
+  currentStatus: string | null;
   worktreePath: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -147,6 +148,7 @@ export type WsClientMessage =
 export type WsServerMessage =
   | { type: "task_updated"; task: Task }
   | { type: "repo_updated"; repo: Repository }
+  | { type: "run_updated"; run: AgentRun }
   | { type: "agent_log"; runId: string; taskId: string; stream: LogStream; content: string; timestamp: string }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };

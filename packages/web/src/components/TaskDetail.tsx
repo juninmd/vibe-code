@@ -102,7 +102,7 @@ export function TaskDetail({
             {isRunning && (
               <span className="flex items-center gap-1.5 text-xs text-blue-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                Running
+                {task.latestRun?.currentStatus || "Running"}
               </span>
             )}
           </div>

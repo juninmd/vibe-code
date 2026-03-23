@@ -20,6 +20,8 @@ export class OpenCodeEngine implements AgentEngine {
   async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir}` };
 
+    // Use --print-logs to see internal agent steps in stderr
+    // Use --format json for structured output in stdout
     const proc = Bun.spawn(
       ["opencode", "run", "--format", "json", "--print-logs", prompt],
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
@@ -28,61 +30,88 @@ export class OpenCodeEngine implements AgentEngine {
     if (options?.runId) this.processes.set(options.runId, proc);
 
     yield* streamProcess(proc, (line) => {
-      try {
-        const event = JSON.parse(line) as { type: string; part?: Record<string, unknown> };
-        const part = event.part ?? {};
-        const partType = String(part.type ?? event.type);
+      // Sometimes multiple JSON objects are on the same line if they arrive quickly
+      const results: AgentEvent[] = [];
+      const jsonObjects = line.split(/(?<=\})\s*(?=\{)/);
 
-        // Text output from the model
-        if (event.type === "text" && part.text) {
-          return [{ type: "log", stream: "stdout", content: String(part.text) }];
-        }
+      for (const jsonStr of jsonObjects) {
+        try {
+          const event = JSON.parse(jsonStr) as { type: string; part?: Record<string, any>; timestamp?: number };
+          const part = event.part ?? {};
+          const partType = String(part.type ?? event.type);
 
-        // Tool usage — opencode uses part.name (not part.tool)
-        if (event.type === "tool_use") {
-          const toolName = String(part.name ?? part.tool ?? "unknown");
-          const input = part.input ? ` ${JSON.stringify(part.input).slice(0, 200)}` : "";
-          return [{ type: "log", stream: "stdout", content: `[tool] ${toolName}${input}` }];
-        }
-
-        // Tool result
-        if (event.type === "tool_result") {
-          const content = part.content ?? part.output ?? part.text;
-          if (content) {
-            const text = typeof content === "string" ? content : JSON.stringify(content);
-            return [{ type: "log", stream: "stdout", content: `[tool result] ${text.slice(0, 500)}` }];
+          // Text output from the model
+          if (event.type === "text" && (part.text || part.content)) {
+            const text = part.text ?? part.content;
+            results.push({ type: "log", stream: "stdout", content: String(text) });
+            continue;
           }
-          return [{ type: "log", stream: "stdout", content: "[tool result] (done)" }];
-        }
 
-        // Thinking / reasoning
-        if (event.type === "thinking" && part.text) {
-          return [{ type: "log", stream: "stdout", content: `[thinking] ${String(part.text).slice(0, 300)}` }];
-        }
+          // Tool usage / Tool result
+          if (event.type === "tool_use" || event.type === "tool" || partType === "tool") {
+            const toolName = String(part.tool ?? part.name ?? "unknown");
+            const state = part.state ?? {};
+            const status = state.status ?? "calling";
+            const input = state.input ?? part.input;
+            const output = state.output ?? part.output ?? part.content;
 
-        // Step boundaries
-        if (event.type === "step_start") {
-          return [{ type: "log", stream: "system", content: "[opencode] Step started" }];
-        }
-        if (event.type === "step_finish") {
-          const reason = part.reason ? ` (${String(part.reason)})` : "";
-          const tokens = part.tokens as Record<string, number> | undefined;
-          const tokenInfo = tokens?.total ? ` — ${tokens.total} tokens` : "";
-          return [{ type: "log", stream: "system", content: `[opencode] Step finished${reason}${tokenInfo}` }];
-        }
+            if (status === "calling" || !status) {
+              const inputStr = input ? ` ${JSON.stringify(input).slice(0, 200)}` : "";
+              results.push({ type: "status", content: `Tool: ${toolName}` });
+              results.push({ type: "log", stream: "stdout", content: `[tool] ${toolName}${inputStr}` });
+            } else if (status === "completed") {
+              const outputStr = output ? `: ${typeof output === "string" ? output : JSON.stringify(output)}` : " (done)";
+              results.push({ type: "log", stream: "stdout", content: `[tool result] ${toolName}${outputStr.slice(0, 500)}` });
+            }
+            continue;
+          }
 
-        // Errors
-        if (event.type === "error") {
-          const msg = String((part as Record<string, unknown>).message ?? line);
-          return [{ type: "log", stream: "stderr", content: msg }];
-        }
+          // Thinking / reasoning
+          if ((event.type === "thinking" || partType === "thinking") && part.text) {
+            results.push({ type: "status", content: "Thinking..." });
+            results.push({ type: "log", stream: "system", content: `[thinking] ${String(part.text).trim()}` });
+            continue;
+          }
 
-        // Fallback: don't silently drop unknown events
-        return [{ type: "log", stream: "stdout", content: `[${partType}] ${JSON.stringify(part).slice(0, 300)}` }];
-      } catch {
-        // Not JSON — show as raw output
-        return [{ type: "log", stream: "stdout", content: line }];
+          // Step boundaries
+          if (event.type === "step_start" || partType === "step-start") {
+            results.push({ type: "status", content: "Agent is thinking..." });
+            results.push({ type: "log", stream: "system", content: "[opencode] Step started" });
+            continue;
+          }
+          if (event.type === "step_finish" || partType === "step-finish") {
+            const reason = part.reason ? ` (${String(part.reason)})` : "";
+            const tokens = part.tokens as Record<string, number> | undefined;
+            const tokenInfo = tokens?.total ? ` — ${tokens.total} tokens` : "";
+            results.push({ type: "log", stream: "system", content: `[opencode] Step finished${reason}${tokenInfo}` });
+            continue;
+          }
+
+          // Errors
+          if (event.type === "error" || partType === "error") {
+            const msg = String(part.message ?? part.error ?? jsonStr);
+            results.push({ type: "log", stream: "stderr", content: msg });
+            continue;
+          }
+
+          // Progress updates
+          if (event.type === "progress" || partType === "progress") {
+            const msg = String(part.message ?? "Working...");
+            results.push({ type: "status", content: msg });
+            results.push({ type: "log", stream: "system", content: `[progress] ${msg}` });
+            continue;
+          }
+
+          // Fallback: don't silently drop unknown events but keep it clean
+          if (event.type !== "heartbeat") {
+            results.push({ type: "log", stream: "system", content: `[${partType}] ${JSON.stringify(part).slice(0, 200)}` });
+          }
+        } catch {
+          // Not JSON — show as raw output
+          results.push({ type: "log", stream: "stdout", content: jsonStr });
+        }
       }
+      return results;
     }, options?.signal);
 
     if (options?.runId) this.processes.delete(options.runId);

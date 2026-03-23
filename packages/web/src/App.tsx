@@ -53,6 +53,7 @@ export default function App() {
           }));
           break;
         case "run_status":
+        case "run_updated":
           refresh();
           break;
       }

@@ -39,6 +39,7 @@ export function initDatabase(dbPath: string): Database {
       task_id        TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
       engine         TEXT NOT NULL,
       status         TEXT NOT NULL DEFAULT 'queued',
+      current_status TEXT,
       worktree_path  TEXT,
       started_at     TEXT,
       finished_at    TEXT,

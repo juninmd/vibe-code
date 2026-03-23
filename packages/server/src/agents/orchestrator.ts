@@ -159,15 +159,12 @@ export class Orchestrator {
 
     try {
       // Update run to running
-      this.db.runs.updateStatus(run.id, "running", {
+      const updatedRun = this.db.runs.updateStatus(run.id, "running", {
         started_at: new Date().toISOString(),
       });
-      this.hub.broadcastAll({
-        type: "run_status",
-        runId: run.id,
-        taskId: task.id,
-        status: "running",
-      });
+      if (updatedRun) {
+        this.hub.broadcastAll({ type: "run_updated", run: updatedRun });
+      }
 
       // Create worktree
       wtPath = await this.git.createWorktree(barePath, branch, repo.name, run.id, repo.defaultBranch);
@@ -238,7 +235,7 @@ export class Orchestrator {
       }
     } catch (err: any) {
       // Agent failed
-      this.db.runs.updateStatus(run.id, "failed", {
+      const updatedRun = this.db.runs.updateStatus(run.id, "failed", {
         finished_at: new Date().toISOString(),
         error_message: err.message,
       });
@@ -248,12 +245,9 @@ export class Orchestrator {
       if (failedTask) {
         this.hub.broadcastAll({ type: "task_updated", task: failedTask });
       }
-      this.hub.broadcastAll({
-        type: "run_status",
-        runId: run.id,
-        taskId: task.id,
-        status: "failed",
-      });
+      if (updatedRun) {
+        this.hub.broadcastAll({ type: "run_updated", run: updatedRun });
+      }
     } finally {
       this.activeRuns.delete(task.id);
 
@@ -289,6 +283,14 @@ export class Orchestrator {
         content: event.content,
         timestamp: new Date().toISOString(),
       });
+    } else if (event.type === "status" && event.content) {
+      const run = this.db.runs.getById(runId);
+      if (run) {
+        const updated = this.db.runs.updateStatus(runId, run.status, { current_status: event.content });
+        if (updated) {
+          this.hub.broadcastAll({ type: "run_updated", run: updated });
+        }
+      }
     }
   }
 
