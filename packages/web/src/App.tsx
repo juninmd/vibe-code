@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import { TaskDetail } from "./components/TaskDetail";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { AddRepoDialog } from "./components/AddRepoDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { Button } from "./components/ui/button";
 import { useTasks } from "./hooks/useTasks";
 import { useRepos } from "./hooks/useRepos";
@@ -16,6 +17,7 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
 
   const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
@@ -106,6 +108,7 @@ export default function App() {
         onSelectRepo={setSelectedRepoId}
         onAddRepo={() => setShowAddRepo(true)}
         onRemoveRepo={removeRepo}
+        onOpenSettings={() => setShowSettings(true)}
         connected={connected}
       />
 
@@ -184,6 +187,11 @@ export default function App() {
         onSubmit={async (data) => {
           await addRepo(data);
         }}
+      />
+
+      <SettingsDialog
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
       />
     </div>
   );

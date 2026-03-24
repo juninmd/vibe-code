@@ -80,4 +80,10 @@ export const api = {
   engines: {
     list: () => request<EngineInfo[]>("/engines"),
   },
+
+  settings: {
+    get: () => request<{ githubToken: string; githubTokenSet: boolean }>("/settings"),
+    update: (data: { githubToken?: string }) =>
+      request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+  },
 };

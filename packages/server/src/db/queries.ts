@@ -298,6 +298,23 @@ export function createLogQueries(db: Database) {
   };
 }
 
+// ─── Settings Queries ────────────────────────────────────────────────────────
+
+export function createSettingsQueries(db: Database) {
+  const getStmt = db.prepare<{ value: string }, [string]>("SELECT value FROM settings WHERE key = ?");
+  const setStmt = db.prepare<null, [string, string]>("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  const allStmt = db.query<{ key: string; value: string }, []>("SELECT key, value FROM settings");
+
+  return {
+    get: (key: string): string | null => getStmt.get(key)?.value ?? null,
+    set: (key: string, value: string): void => { setStmt.run(key, value); },
+    getAll: (): Record<string, string> => {
+      const rows = allStmt.all();
+      return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    },
+  };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractRepoName(url: string): string {

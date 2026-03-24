@@ -16,6 +16,7 @@ interface SidebarProps {
   onSelectRepo: (id: string | null) => void;
   onAddRepo: () => void;
   onRemoveRepo: (id: string) => void;
+  onOpenSettings: () => void;
   connected: boolean;
 }
 
@@ -25,6 +26,7 @@ export function Sidebar({
   onSelectRepo,
   onAddRepo,
   onRemoveRepo,
+  onOpenSettings,
   connected,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
@@ -37,11 +39,19 @@ export function Sidebar({
     <aside className="w-64 shrink-0 border-r border-zinc-800 flex flex-col bg-zinc-950">
       <div className="p-4 border-b border-zinc-800">
         <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-lg font-bold text-zinc-100">Vibe Code</h1>
+          <h1 className="text-lg font-bold text-zinc-100 flex-1">Vibe Code</h1>
           <span
             className={`w-2 h-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-400"}`}
             title={connected ? "Connected" : "Disconnected"}
           />
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title="Settings"
+            className="text-zinc-600 hover:text-zinc-300 transition-colors cursor-pointer"
+          >
+            ⚙
+          </button>
         </div>
         <p className="text-xs text-zinc-500">AI Agent Task Manager</p>
       </div>

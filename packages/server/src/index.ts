@@ -9,10 +9,12 @@ import { createReposRouter } from "./api/repos";
 import { createTasksRouter } from "./api/tasks";
 import { createRunsRouter } from "./api/runs";
 import { createEnginesRouter } from "./api/engines";
+import { createSettingsRouter } from "./api/settings";
 import { GitService } from "./git/git-service";
 import { EngineRegistry } from "./agents/registry";
 import { Orchestrator } from "./agents/orchestrator";
 import { BroadcastHub } from "./ws/broadcast";
+import { PrPoller } from "./git/pr-poller";
 import type { WsClientMessage } from "@vibe-code/shared";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -35,6 +37,9 @@ const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
 
 await git.init();
 
+const prPoller = new PrPoller(db, hub);
+prPoller.start();
+
 // ─── Hono App ────────────────────────────────────────────────────────────────
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -49,6 +54,7 @@ app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry));
+app.route("/api/settings", createSettingsRouter(db));
 
 // Health check
 app.get("/api/health", (c) => {
