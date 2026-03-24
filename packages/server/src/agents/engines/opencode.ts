@@ -29,9 +29,16 @@ export class OpenCodeEngine implements AgentEngine {
     const tmpFile = join(tmpdir(), `opencode-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--format", "json", "--print-logs", prompt],
+      ["opencode", "run", "--format", "json", "--print-logs", "--model", "opencode/minimax-m2.5-free", prompt],
       { cwd: workdir, stdout: Bun.file(tmpFile), stderr: "pipe", stdin: "pipe" }
     );
+
+    // Close stdin immediately so opencode enters non-interactive mode and
+    // auto-approves file write permissions without waiting for user input.
+    try {
+      const sink = proc.stdin as import("bun").FileSink;
+      await sink.end();
+    } catch { /* ignore */ }
 
     if (options?.runId) this.processes.set(options.runId, proc);
 

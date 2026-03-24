@@ -62,5 +62,12 @@ export function initDatabase(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_agent_logs_run_id ON agent_logs(run_id);
   `);
 
+  // Migrations: add columns that may be missing from older databases
+  const runCols = db.query("PRAGMA table_info(agent_runs)").all() as { name: string }[];
+  const runColNames = runCols.map((c) => c.name);
+  if (!runColNames.includes("current_status")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN current_status TEXT");
+  }
+
   return db;
 }

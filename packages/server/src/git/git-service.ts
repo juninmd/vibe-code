@@ -93,8 +93,9 @@ export class GitService {
 
   async hasCommitsAhead(wtPath: string, baseBranch: string): Promise<boolean> {
     try {
+      // Bare-cloned repos don't have origin/<branch> tracking refs, only local branch refs.
       const result = await this.exec(
-        ["git", "log", `origin/${baseBranch}..HEAD`, "--oneline"],
+        ["git", "log", `${baseBranch}..HEAD`, "--oneline"],
         { cwd: wtPath }
       );
       return result.stdout.trim().length > 0;
