@@ -21,7 +21,7 @@ export class GeminiEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[gemini] Starting in ${workdir}` };
 
     const proc = Bun.spawn(
-      ["gemini", "-p", prompt],
+      ["gemini", "--yolo", "-p", prompt],
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 
