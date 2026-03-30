@@ -1,5 +1,5 @@
-import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import type { Subprocess } from "bun";
+import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";
 
 export class ClaudeCodeEngine implements AgentEngine {
@@ -22,39 +22,48 @@ export class ClaudeCodeEngine implements AgentEngine {
     return [];
   }
 
-  async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
+  async *execute(
+    prompt: string,
+    workdir: string,
+    options?: EngineOptions
+  ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[claude-code] Starting in ${workdir}` };
 
     const args = ["claude", "--print", "--verbose", "--output-format", "stream-json"];
     if (options?.model) args.push("--model", options.model);
     args.push("-p", prompt);
 
-    const proc = Bun.spawn(
-      args,
-      { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
-    );
+    const proc = Bun.spawn(args, { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" });
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(proc, (line) => {
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.type === "assistant" && parsed.content) {
-          const events: AgentEvent[] = [];
-          for (const block of parsed.content) {
-            if (block.type === "text") {
-              events.push({ type: "log", stream: "stdout", content: block.text });
-            } else if (block.type === "tool_use") {
-              events.push({ type: "log", stream: "system", content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}` });
+    yield* streamProcess(
+      proc,
+      (line) => {
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.type === "assistant" && parsed.content) {
+            const events: AgentEvent[] = [];
+            for (const block of parsed.content) {
+              if (block.type === "text") {
+                events.push({ type: "log", stream: "stdout", content: block.text });
+              } else if (block.type === "tool_use") {
+                events.push({
+                  type: "log",
+                  stream: "system",
+                  content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`,
+                });
+              }
             }
+            return events;
           }
-          return events;
+          return [];
+        } catch {
+          return [{ type: "log", stream: "stdout", content: line }];
         }
-        return [];
-      } catch {
-        return [{ type: "log", stream: "stdout", content: line }];
-      }
-    }, options?.signal);
+      },
+      options?.signal
+    );
 
     if (options?.runId) this.processes.delete(options.runId);
   }
@@ -72,7 +81,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     if (!proc?.stdin || typeof proc.stdin === "number") return false;
     try {
       const sink = proc.stdin as import("bun").FileSink;
-      sink.write(input + "\n");
+      sink.write(`${input}\n`);
       sink.flush();
       return true;
     } catch {

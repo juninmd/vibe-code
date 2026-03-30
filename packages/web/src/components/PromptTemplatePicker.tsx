@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { PromptTemplate } from "@vibe-code/shared";
+import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
@@ -43,14 +43,15 @@ export function PromptTemplatePicker({
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const safeTemplates = templates ?? [];
   const filtered = search
-    ? templates.filter(
+    ? safeTemplates.filter(
         (t) =>
           t.title.toLowerCase().includes(search.toLowerCase()) ||
           t.description?.toLowerCase().includes(search.toLowerCase()) ||
           t.category?.toLowerCase().includes(search.toLowerCase())
       )
-    : templates;
+    : safeTemplates;
 
   // Group by category
   const grouped = filtered.reduce<Record<string, PromptTemplate[]>>((acc, t) => {
@@ -64,7 +65,11 @@ export function PromptTemplatePicker({
     if (!newTitle.trim() || !currentContent.trim()) return;
     setSaving(true);
     try {
-      await onSaveNew({ title: newTitle.trim(), content: currentContent.trim(), category: newCategory });
+      await onSaveNew({
+        title: newTitle.trim(),
+        content: currentContent.trim(),
+        category: newCategory,
+      });
       setShowSaveForm(false);
       setNewTitle("");
     } finally {
@@ -88,7 +93,13 @@ export function PromptTemplatePicker({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <h2 className="text-sm font-semibold">Prompt Templates</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg cursor-pointer">&#x2715;</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-300 text-lg cursor-pointer"
+          >
+            &#x2715;
+          </button>
         </div>
 
         {/* Search */}
@@ -122,13 +133,13 @@ export function PromptTemplatePicker({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-zinc-100">{t.title}</span>
                         {t.category && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[t.category] ?? "bg-zinc-700 text-zinc-400"}`}>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[t.category] ?? "bg-zinc-700 text-zinc-400"}`}
+                          >
                             {CATEGORY_LABELS[t.category] ?? t.category}
                           </span>
                         )}
-                        {t.isBuiltin && (
-                          <span className="text-[10px] text-zinc-600">built-in</span>
-                        )}
+                        {t.isBuiltin && <span className="text-[10px] text-zinc-600">built-in</span>}
                       </div>
                       {t.description && (
                         <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t.description}</p>
@@ -136,7 +147,11 @@ export function PromptTemplatePicker({
                     </div>
                     {!t.isBuiltin && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(t.id);
+                        }}
                         disabled={deletingId === t.id}
                         className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-600 hover:text-red-400 transition-all cursor-pointer p-1"
                         title="Remover template"
@@ -168,7 +183,9 @@ export function PromptTemplatePicker({
                 className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
               >
                 {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
                 ))}
               </select>
               <div className="flex gap-2">

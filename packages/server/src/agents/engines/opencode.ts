@@ -1,8 +1,8 @@
-import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Subprocess } from "bun";
-import { join } from "path";
-import { tmpdir } from "os";
-import { rm } from "fs/promises";
+import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
@@ -25,21 +25,35 @@ export class OpenCodeEngine implements AgentEngine {
       await proc.exited;
       if (proc.exitCode !== 0) return [];
       const text = await new Response(proc.stdout).text();
-      return text.split("\n").map((l) => l.trim()).filter(Boolean);
+      return text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
     } catch {
       return [];
     }
   }
 
-  async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
+  async *execute(
+    prompt: string,
+    workdir: string,
+    options?: EngineOptions
+  ): AsyncGenerator<AgentEvent> {
     const model = options?.model ?? "opencode/minimax-m2.5-free";
-    yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir} (model: ${model})` };
+    yield {
+      type: "log",
+      stream: "system",
+      content: `[opencode] Starting in ${workdir} (model: ${model})`,
+    };
 
     // Write stdout to a temp file to avoid Windows pipe block-buffering.
     // On Windows, subprocess stdout piped via Bun.spawn is block-buffered (64KB),
     // meaning no data flows until the buffer fills or the process exits.
     // Writing to a file bypasses this issue entirely.
-    const tmpFile = join(tmpdir(), `opencode-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
+    const tmpFile = join(
+      tmpdir(),
+      `opencode-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`
+    );
 
     const proc = Bun.spawn(
       ["opencode", "run", "--format", "json", "--print-logs", "--model", model, prompt],
@@ -51,7 +65,9 @@ export class OpenCodeEngine implements AgentEngine {
     try {
       const sink = proc.stdin as import("bun").FileSink;
       await sink.end();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
@@ -63,8 +79,17 @@ export class OpenCodeEngine implements AgentEngine {
     const queue: AgentEvent[] = [];
     let stderrDone = false;
     let wakeup: (() => void) | null = null;
-    const notify = () => { if (wakeup) { const fn = wakeup; wakeup = null; fn(); } };
-    const push = (e: AgentEvent) => { queue.push(e); notify(); };
+    const notify = () => {
+      if (wakeup) {
+        const fn = wakeup;
+        wakeup = null;
+        fn();
+      }
+    };
+    const push = (e: AgentEvent) => {
+      queue.push(e);
+      notify();
+    };
 
     const stderrTask = (async () => {
       const reader = proc.stderr.getReader();
@@ -77,7 +102,8 @@ export class OpenCodeEngine implements AgentEngine {
           buf += dec.decode(value, { stream: true });
           const lines = buf.split("\n");
           buf = lines.pop() ?? "";
-          for (const line of lines) if (line.trim()) push({ type: "log", stream: "stderr", content: line });
+          for (const line of lines)
+            if (line.trim()) push({ type: "log", stream: "stderr", content: line });
         }
         if (buf.trim()) push({ type: "log", stream: "stderr", content: buf });
       } finally {
@@ -89,8 +115,12 @@ export class OpenCodeEngine implements AgentEngine {
 
     // Yield stderr events as they arrive, until process exits and stderr is fully drained
     while (!stderrDone || queue.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: length checked above
       while (queue.length > 0) yield queue.shift()!;
-      if (!stderrDone) await new Promise<void>(r => { wakeup = r; });
+      if (!stderrDone)
+        await new Promise<void>((r) => {
+          wakeup = r;
+        });
     }
 
     const exitCode = await proc.exited;
@@ -106,7 +136,9 @@ export class OpenCodeEngine implements AgentEngine {
     } catch {
       // stdout file might not exist if process failed immediately before writing
     } finally {
-      try { await rm(tmpFile); } catch {}
+      try {
+        await rm(tmpFile);
+      } catch {}
     }
 
     if (options?.runId) this.processes.delete(options.runId);
@@ -130,7 +162,7 @@ export class OpenCodeEngine implements AgentEngine {
     if (!proc?.stdin || typeof proc.stdin === "number") return false;
     try {
       const sink = proc.stdin as import("bun").FileSink;
-      sink.write(input + "\n");
+      sink.write(`${input}\n`);
       sink.flush();
       return true;
     } catch {
@@ -144,20 +176,28 @@ export class OpenCodeEngine implements AgentEngine {
 
     for (const jsonStr of jsonObjects) {
       try {
-        const event = JSON.parse(jsonStr) as { type: string; part?: Record<string, any>; timestamp?: number };
+        const event = JSON.parse(jsonStr) as {
+          type: string;
+          part?: Record<string, unknown>;
+          timestamp?: number;
+        };
         const part = event.part ?? {};
         const partType = String(part.type ?? event.type);
 
         // Text output from the model
         if (event.type === "text" && (part.text || part.content)) {
-          results.push({ type: "log", stream: "stdout", content: String(part.text ?? part.content) });
+          results.push({
+            type: "log",
+            stream: "stdout",
+            content: String(part.text ?? part.content),
+          });
           continue;
         }
 
         // Tool usage / Tool result
         if (event.type === "tool_use" || event.type === "tool" || partType === "tool") {
           const toolName = String(part.tool ?? part.name ?? "unknown");
-          const state = part.state ?? {};
+          const state = (part.state ?? {}) as Record<string, unknown>;
           const status = state.status ?? "calling";
           const input = state.input ?? part.input;
           const output = state.output ?? part.output ?? part.content;
@@ -165,10 +205,20 @@ export class OpenCodeEngine implements AgentEngine {
           if (status === "calling" || !status) {
             const inputStr = input ? ` ${JSON.stringify(input).slice(0, 200)}` : "";
             results.push({ type: "status", content: `Tool: ${toolName}` });
-            results.push({ type: "log", stream: "stdout", content: `[tool] ${toolName}${inputStr}` });
+            results.push({
+              type: "log",
+              stream: "stdout",
+              content: `[tool] ${toolName}${inputStr}`,
+            });
           } else if (status === "completed") {
-            const outputStr = output ? `: ${typeof output === "string" ? output : JSON.stringify(output)}` : " (done)";
-            results.push({ type: "log", stream: "stdout", content: `[tool result] ${toolName}${outputStr.slice(0, 500)}` });
+            const outputStr = output
+              ? `: ${typeof output === "string" ? output : JSON.stringify(output)}`
+              : " (done)";
+            results.push({
+              type: "log",
+              stream: "stdout",
+              content: `[tool result] ${toolName}${outputStr.slice(0, 500)}`,
+            });
           }
           continue;
         }
@@ -176,7 +226,11 @@ export class OpenCodeEngine implements AgentEngine {
         // Thinking / reasoning
         if ((event.type === "thinking" || partType === "thinking") && part.text) {
           results.push({ type: "status", content: "Thinking..." });
-          results.push({ type: "log", stream: "system", content: `[thinking] ${String(part.text).trim()}` });
+          results.push({
+            type: "log",
+            stream: "system",
+            content: `[thinking] ${String(part.text).trim()}`,
+          });
           continue;
         }
 
@@ -190,13 +244,21 @@ export class OpenCodeEngine implements AgentEngine {
           const reason = part.reason ? ` (${String(part.reason)})` : "";
           const tokens = part.tokens as Record<string, number> | undefined;
           const tokenInfo = tokens?.total ? ` — ${tokens.total} tokens` : "";
-          results.push({ type: "log", stream: "system", content: `[opencode] Step finished${reason}${tokenInfo}` });
+          results.push({
+            type: "log",
+            stream: "system",
+            content: `[opencode] Step finished${reason}${tokenInfo}`,
+          });
           continue;
         }
 
         // Errors
         if (event.type === "error" || partType === "error") {
-          results.push({ type: "log", stream: "stderr", content: String(part.message ?? part.error ?? jsonStr) });
+          results.push({
+            type: "log",
+            stream: "stderr",
+            content: String(part.message ?? part.error ?? jsonStr),
+          });
           continue;
         }
 
@@ -210,7 +272,11 @@ export class OpenCodeEngine implements AgentEngine {
 
         // Fallback: don't silently drop unknown events
         if (event.type !== "heartbeat") {
-          results.push({ type: "log", stream: "system", content: `[${partType}] ${JSON.stringify(part).slice(0, 200)}` });
+          results.push({
+            type: "log",
+            stream: "system",
+            content: `[${partType}] ${JSON.stringify(part).slice(0, 200)}`,
+          });
         }
       } catch {
         // Not JSON — show as raw output

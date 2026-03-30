@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { Dialog } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Button } from "./ui/button";
+import { Dialog } from "./ui/dialog";
+import { Input } from "./ui/input";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -21,9 +21,12 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setGithubToken("");
     setShowToken(false);
     setSaved(false);
-    api.settings.get().then((s) => {
-      setTokenSet(s.githubTokenSet);
-    }).catch(console.error);
+    api.settings
+      .get()
+      .then((s) => {
+        setTokenSet(s.githubTokenSet);
+      })
+      .catch(console.error);
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,9 +65,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* GitHub Token */}
         <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">
-            GitHub Token
-          </label>
+          <label className="block text-xs font-medium text-zinc-400 mb-1">GitHub Token</label>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
@@ -89,18 +90,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             )}
           </div>
           <p className="text-xs text-zinc-600 mt-1.5">
-            Used for PR merge polling. Requires{" "}
-            <code className="text-zinc-500">repo</code> scope.{" "}
-            {tokenSet && (
-              <span className="text-emerald-500">Token is currently set.</span>
-            )}
+            Used for PR merge polling. Requires <code className="text-zinc-500">repo</code> scope.{" "}
+            {tokenSet && <span className="text-emerald-500">Token is currently set.</span>}
           </p>
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <div className="text-xs text-emerald-400 h-4">
-            {saved && "Saved!"}
-          </div>
+          <div className="text-xs text-emerald-400 h-4">{saved && "Saved!"}</div>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel

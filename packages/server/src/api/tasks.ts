@@ -1,9 +1,9 @@
+import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { Db } from "../db";
 import type { Orchestrator } from "../agents/orchestrator";
+import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
-import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -67,7 +67,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     const latestRun = db.runs.getLatestByTask(task.id);
     const repo = db.repos.getById(task.repoId);
-    return c.json({ data: { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined } });
+    return c.json({
+      data: { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined },
+    });
   });
 
   router.patch("/:id", async (c) => {
@@ -94,7 +96,10 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
     if (task.status !== "backlog" && task.status !== "failed") {
-      return c.json({ error: "invalid_state", message: `Cannot launch task in "${task.status}" status` }, 400);
+      return c.json(
+        { error: "invalid_state", message: `Cannot launch task in "${task.status}" status` },
+        400
+      );
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -105,8 +110,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     try {
       const run = await orchestrator.launch(task, engineOverride, modelOverride);
       return c.json({ data: run }, 202);
-    } catch (err: any) {
-      return c.json({ error: "launch_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "launch_failed", message: msg }, 500);
     }
   });
 
@@ -117,8 +123,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     try {
       await orchestrator.cancel(task.id);
       return c.json({ data: { ok: true } });
-    } catch (err: any) {
-      return c.json({ error: "cancel_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "cancel_failed", message: msg }, 500);
     }
   });
 
@@ -133,8 +140,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     try {
       const run = await orchestrator.launch(task);
       return c.json({ data: run }, 202);
-    } catch (err: any) {
-      return c.json({ error: "retry_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "retry_failed", message: msg }, 500);
     }
   });
 
@@ -143,14 +151,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
     if (task.status !== "review") {
-      return c.json({ error: "invalid_state", message: "Can only retry PR for tasks in review" }, 400);
+      return c.json(
+        { error: "invalid_state", message: "Can only retry PR for tasks in review" },
+        400
+      );
     }
 
     try {
       const prUrl = await orchestrator.retryPR(task.id);
       return c.json({ data: { prUrl } });
-    } catch (err: any) {
-      return c.json({ error: "retry_pr_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "retry_pr_failed", message: msg }, 500);
     }
   });
 
@@ -166,7 +178,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
-    if (!task.branchName) return c.json({ data: { files: [], totalAdditions: 0, totalDeletions: 0 } as DiffSummary });
+    if (!task.branchName)
+      return c.json({ data: { files: [], totalAdditions: 0, totalDeletions: 0 } as DiffSummary });
 
     const repo = db.repos.getById(task.repoId);
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
@@ -177,9 +190,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     try {
       // If there's a running agent with a worktree, diff in the worktree
       const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
-      const opts = useWorktree
-        ? { cwd: latestRun.worktreePath! }
-        : { gitDir: barePath };
+      // biome-ignore lint/style/noNonNullAssertion: useWorktree guarantees worktreePath is set
+      const opts = useWorktree ? { cwd: latestRun.worktreePath! } : { gitDir: barePath };
 
       const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
       const headBranch = useWorktree ? "HEAD" : task.branchName;
@@ -195,8 +207,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
           totalDeletions,
         } satisfies DiffSummary,
       });
-    } catch (err: any) {
-      return c.json({ error: "diff_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "diff_failed", message: msg }, 500);
     }
   });
 
@@ -204,7 +217,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!git) return c.json({ error: "unavailable", message: "Git service not configured" }, 500);
 
     const filePath = c.req.query("path");
-    if (!filePath) return c.json({ error: "validation", message: "Missing 'path' query parameter" }, 400);
+    if (!filePath)
+      return c.json({ error: "validation", message: "Missing 'path' query parameter" }, 400);
 
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
@@ -218,17 +232,17 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     try {
       const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
-      const opts = useWorktree
-        ? { cwd: latestRun.worktreePath! }
-        : { gitDir: barePath };
+      // biome-ignore lint/style/noNonNullAssertion: useWorktree guarantees worktreePath is set
+      const opts = useWorktree ? { cwd: latestRun.worktreePath! } : { gitDir: barePath };
 
       const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
       const headBranch = useWorktree ? "HEAD" : task.branchName;
 
       const patch = await git.diffFileContent(baseBranch, headBranch, filePath, opts);
       return c.json({ data: { patch } });
-    } catch (err: any) {
-      return c.json({ error: "diff_failed", message: err.message }, 500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "diff_failed", message: msg }, 500);
     }
   });
 

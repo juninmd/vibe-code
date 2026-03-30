@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from "bun:test";
-import { Orchestrator } from "./orchestrator";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { createDb } from "../db";
-import type { AgentEngine, AgentEvent } from "./engine";
 import type { GitService } from "../git/git-service";
-import type { EngineRegistry } from "./registry";
 import type { BroadcastHub } from "../ws/broadcast";
+import type { AgentEngine, AgentEvent } from "./engine";
+import { Orchestrator } from "./orchestrator";
+import type { EngineRegistry } from "./registry";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ function makeHub(): BroadcastHub {
   return {
     broadcastAll: () => {},
     broadcastToTask: () => {},
-    addClient: () => ({ ws: {} as any, subscribedTasks: new Set() }),
+    addClient: () => ({ ws: {} as unknown, subscribedTasks: new Set() }),
     removeClient: () => {},
     subscribe: () => {},
     unsubscribe: () => {},
@@ -48,12 +48,9 @@ function makeRegistry(engine: AgentEngine): EngineRegistry {
   } as unknown as EngineRegistry;
 }
 
-function makeGit(opts: {
-  hasChanges?: boolean;
-  hasCommitsAhead?: boolean;
-  prUrl?: string;
-  failPush?: boolean;
-} = {}): GitService {
+function makeGit(
+  opts: { hasChanges?: boolean; hasCommitsAhead?: boolean; prUrl?: string; failPush?: boolean } = {}
+): GitService {
   const {
     hasChanges = false,
     hasCommitsAhead = true,
@@ -85,6 +82,7 @@ function makeGit(opts: {
 function seedRepo(db: Db, url = "https://github.com/owner/repo.git") {
   const repo = db.repos.create({ url });
   db.repos.updateStatus(repo.id, "ready", "/path/repo.git");
+  // biome-ignore lint/style/noNonNullAssertion: just inserted
   return db.repos.getById(repo.id)!;
 }
 
@@ -300,12 +298,7 @@ describe("Orchestrator — cancel", () => {
     // Manually set to in_progress (simulating a stuck task from previous session)
     db.tasks.update(task.id, { status: "in_progress" });
 
-    const orch = new Orchestrator(
-      db,
-      makeGit(),
-      makeRegistry(makeEngine([])),
-      makeHub()
-    );
+    const orch = new Orchestrator(db, makeGit(), makeRegistry(makeEngine([])), makeHub());
 
     await orch.cancel(task.id);
 
@@ -318,12 +311,7 @@ describe("Orchestrator — cancel", () => {
     const repo = seedRepo(db);
     const task = db.tasks.create({ title: "T", repoId: repo.id });
 
-    const orch = new Orchestrator(
-      db,
-      makeGit(),
-      makeRegistry(makeEngine([])),
-      makeHub()
-    );
+    const orch = new Orchestrator(db, makeGit(), makeRegistry(makeEngine([])), makeHub());
 
     await orch.cancel(task.id); // Should not throw
     const final = db.tasks.getById(task.id);

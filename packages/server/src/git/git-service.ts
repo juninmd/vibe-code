@@ -1,6 +1,6 @@
-import { join } from "path";
-import { homedir } from "os";
-import { mkdir } from "fs/promises";
+import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export class GitService {
   private basePath: string;
@@ -65,7 +65,7 @@ export class GitService {
     } else {
       args.push(wtPath, branch);
     }
-    
+
     await this.exec(args);
 
     return wtPath;
@@ -77,7 +77,7 @@ export class GitService {
     } catch {
       // If worktree remove fails, try manual cleanup
       try {
-        const { rm } = await import("fs/promises");
+        const { rm } = await import("node:fs/promises");
         await rm(wtPath, { recursive: true, force: true });
         await this.exec(["git", "--git-dir", barePath, "worktree", "prune"]);
       } catch {
@@ -94,10 +94,9 @@ export class GitService {
   async hasCommitsAhead(wtPath: string, baseBranch: string): Promise<boolean> {
     try {
       // Bare-cloned repos don't have origin/<branch> tracking refs, only local branch refs.
-      const result = await this.exec(
-        ["git", "log", `${baseBranch}..HEAD`, "--oneline"],
-        { cwd: wtPath }
-      );
+      const result = await this.exec(["git", "log", `${baseBranch}..HEAD`, "--oneline"], {
+        cwd: wtPath,
+      });
       return result.stdout.trim().length > 0;
     } catch {
       return false;
@@ -127,10 +126,28 @@ export class GitService {
     await this.exec(["git", "checkout", branch], { cwd: wtPath });
   }
 
-  async createPR(wtPath: string, repoUrl: string, branch: string, title: string, body: string): Promise<string> {
+  async createPR(
+    wtPath: string,
+    repoUrl: string,
+    branch: string,
+    title: string,
+    body: string
+  ): Promise<string> {
     const repoInfo = this.getRepoOwnerAndName(repoUrl);
     const result = await this.exec(
-      ["gh", "pr", "create", "--repo", repoInfo, "--title", title, "--body", body, "--head", branch],
+      [
+        "gh",
+        "pr",
+        "create",
+        "--repo",
+        repoInfo,
+        "--title",
+        title,
+        "--body",
+        body,
+        "--head",
+        branch,
+      ],
       { cwd: wtPath }
     );
     return result.stdout.trim();
@@ -142,12 +159,18 @@ export class GitService {
     return match ? match[1] : url;
   }
 
-  async listGitHubRepos(limit = 200): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {
+  async listGitHubRepos(
+    limit = 200
+  ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {
     try {
       const result = await this.exec([
-        "gh", "repo", "list",
-        "--limit", String(limit),
-        "--json", "nameWithOwner,url,description,isPrivate",
+        "gh",
+        "repo",
+        "list",
+        "--limit",
+        String(limit),
+        "--json",
+        "nameWithOwner,url,description,isPrivate",
       ]);
       const repos = JSON.parse(result.stdout) as {
         nameWithOwner: string;
@@ -171,36 +194,56 @@ export class GitService {
     baseBranch: string,
     headBranch: string,
     opts: { cwd?: string; gitDir?: string }
-  ): Promise<{ path: string; status: string; additions: number; deletions: number; oldPath?: string }[]> {
+  ): Promise<
+    { path: string; status: string; additions: number; deletions: number; oldPath?: string }[]
+  > {
     const args = ["git"];
     if (opts.gitDir) args.push("--git-dir", opts.gitDir);
     args.push("diff", "--numstat", "-M", `${baseBranch}...${headBranch}`);
 
-    const numstat = await this.exec(args, { cwd: opts.cwd }).catch(() => ({ stdout: "", stderr: "", exitCode: 1 }));
+    const numstat = await this.exec(args, { cwd: opts.cwd }).catch(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    }));
 
     // Also get name-status for file status (A/M/D/R)
     const statusArgs = ["git"];
     if (opts.gitDir) statusArgs.push("--git-dir", opts.gitDir);
     statusArgs.push("diff", "--name-status", "-M", `${baseBranch}...${headBranch}`);
 
-    const nameStatus = await this.exec(statusArgs, { cwd: opts.cwd }).catch(() => ({ stdout: "", stderr: "", exitCode: 1 }));
+    const nameStatus = await this.exec(statusArgs, { cwd: opts.cwd }).catch(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    }));
 
     const statusMap = new Map<string, { status: string; oldPath?: string }>();
     for (const line of nameStatus.stdout.trim().split("\n")) {
       if (!line) continue;
       const parts = line.split("\t");
       const code = parts[0].charAt(0);
-      const status = code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
+      const status =
+        code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
       const filePath = code === "R" ? parts[2] : parts[1];
       const oldPath = code === "R" ? parts[1] : undefined;
       if (filePath) statusMap.set(filePath, { status, oldPath });
     }
 
-    const files: { path: string; status: string; additions: number; deletions: number; oldPath?: string }[] = [];
+    const files: {
+      path: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      oldPath?: string;
+    }[] = [];
     for (const line of numstat.stdout.trim().split("\n")) {
       if (!line) continue;
       const [add, del, ...pathParts] = line.split("\t");
-      const filePath = pathParts.join("\t").replace(/^.* => /, "").replace(/[{}]/g, "");
+      const filePath = pathParts
+        .join("\t")
+        .replace(/^.* => /, "")
+        .replace(/[{}]/g, "");
       const info = statusMap.get(filePath);
       files.push({
         path: filePath,

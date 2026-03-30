@@ -1,15 +1,15 @@
-import { useState, useCallback } from "react";
-import type { TaskWithRun, TaskStatus, AgentLog, WsServerMessage } from "@vibe-code/shared";
+import type { AgentLog, TaskStatus, TaskWithRun, WsServerMessage } from "@vibe-code/shared";
+import { useCallback, useState } from "react";
+import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
+import { NewTaskDialog } from "./components/NewTaskDialog";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { TaskDetail } from "./components/TaskDetail";
-import { NewTaskDialog } from "./components/NewTaskDialog";
-import { AddRepoDialog } from "./components/AddRepoDialog";
-import { SettingsDialog } from "./components/SettingsDialog";
 import { Button } from "./components/ui/button";
-import { useTasks } from "./hooks/useTasks";
-import { useRepos } from "./hooks/useRepos";
 import { useEngines } from "./hooks/useEngines";
+import { useRepos } from "./hooks/useRepos";
+import { useTasks } from "./hooks/useTasks";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 export default function App() {
@@ -21,19 +21,19 @@ export default function App() {
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
 
   const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
-  const { 
-    tasks, 
-    createTask, 
-    updateTask, 
-    removeTask, 
-    launchTask, 
-    cancelTask, 
-    retryTask, 
-    retryPR, 
-    updateTaskLocal, 
-    refresh 
+  const {
+    tasks,
+    createTask,
+    updateTask,
+    removeTask,
+    launchTask,
+    cancelTask,
+    retryTask,
+    retryPR,
+    updateTaskLocal,
+    refresh,
   } = useTasks(selectedRepoId ?? undefined);
-  const engines = useEngines();
+  const { engines } = useEngines();
 
   const handleWsMessage = useCallback(
     (msg: WsServerMessage) => {
@@ -41,7 +41,7 @@ export default function App() {
         case "task_updated":
           updateTaskLocal(msg.task as TaskWithRun);
           setSelectedTask((prev) =>
-            prev?.id === msg.task.id ? { ...prev, ...msg.task } as TaskWithRun : prev
+            prev?.id === msg.task.id ? ({ ...prev, ...msg.task } as TaskWithRun) : prev
           );
           refresh();
           break;
@@ -70,7 +70,11 @@ export default function App() {
           break;
       }
     },
-    [updateTaskLocal, refresh]
+    [
+      updateTaskLocal,
+      refresh, // Update repo in-place without full refresh
+      addOrUpdateRepo,
+    ]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
@@ -118,7 +122,7 @@ export default function App() {
           <div>
             <h2 className="text-sm font-medium text-zinc-300">
               {selectedRepoId
-                ? repos.find((r) => r.id === selectedRepoId)?.name ?? "Repository"
+                ? (repos.find((r) => r.id === selectedRepoId)?.name ?? "Repository")
                 : "All Repositories"}
             </h2>
             <p className="text-xs text-zinc-600">
@@ -173,10 +177,10 @@ export default function App() {
         onClose={() => setShowNewTask(false)}
         repos={repos}
         engines={engines}
-        onSubmit={async ({ autoLaunch, ...data }) => {
+        onSubmit={async ({ autoLaunch, model, ...data }) => {
           const task = await createTask(data);
           if (autoLaunch && task) {
-            await launchTask(task.id, data.engine);
+            await launchTask(task.id, data.engine, model);
           }
         }}
       />
@@ -189,10 +193,7 @@ export default function App() {
         }}
       />
 
-      <SettingsDialog
-        open={showSettings}
-        onClose={() => setShowSettings(false)}
-      />
+      <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );
 }

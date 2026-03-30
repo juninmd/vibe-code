@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import type { PromptTemplate, CreatePromptTemplateRequest } from "@vibe-code/shared";
+import type { CreatePromptTemplateRequest, PromptTemplate } from "@vibe-code/shared";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 
 export function usePromptTemplates() {
@@ -7,7 +7,8 @@ export function usePromptTemplates() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.prompts.list()
+    api.prompts
+      .list()
       .then(setTemplates)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -24,11 +25,14 @@ export function usePromptTemplates() {
     setTemplates((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const updateTemplate = useCallback(async (id: string, data: Partial<CreatePromptTemplateRequest>) => {
-    const updated = await api.prompts.update(id, data);
-    setTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
-    return updated;
-  }, []);
+  const updateTemplate = useCallback(
+    async (id: string, data: Partial<CreatePromptTemplateRequest>) => {
+      const updated = await api.prompts.update(id, data);
+      setTemplates((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      return updated;
+    },
+    []
+  );
 
   return { templates, loading, addTemplate, removeTemplate, updateTemplate };
 }

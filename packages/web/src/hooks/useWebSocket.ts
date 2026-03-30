@@ -1,5 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from "react";
-import type { WsServerMessage, WsClientMessage } from "@vibe-code/shared";
+import type { WsClientMessage, WsServerMessage } from "@vibe-code/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type MessageHandler = (msg: WsServerMessage) => void;
 
@@ -60,10 +60,7 @@ export function useWebSocket(onMessage: MessageHandler) {
     }
   }, []);
 
-  const subscribe = useCallback(
-    (taskId: string) => send({ type: "subscribe", taskId }),
-    [send]
-  );
+  const subscribe = useCallback((taskId: string) => send({ type: "subscribe", taskId }), [send]);
 
   const unsubscribe = useCallback(
     (taskId: string) => send({ type: "unsubscribe", taskId }),

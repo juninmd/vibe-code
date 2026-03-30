@@ -10,7 +10,7 @@ type SpawnedProc = Subprocess<"pipe", "pipe", "pipe">;
 export async function* streamProcess(
   proc: SpawnedProc,
   parseLine: (line: string) => AgentEvent[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): AsyncGenerator<AgentEvent> {
   const eventQueue: AgentEvent[] = [];
   const waiting: { resolve: (() => void) | null } = { resolve: null };
@@ -100,10 +100,13 @@ export async function* streamProcess(
   // Yield events as they arrive from either stream
   while (true) {
     while (eventQueue.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: length checked above
       yield eventQueue.shift()!;
     }
     if (aborted || (stdoutDone && stderrDone && eventQueue.length === 0)) break;
-    await new Promise<void>((r) => { waiting.resolve = r; });
+    await new Promise<void>((r) => {
+      waiting.resolve = r;
+    });
   }
 
   await Promise.all([stdoutTask, stderrTask]);

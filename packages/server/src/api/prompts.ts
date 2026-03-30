@@ -15,7 +15,7 @@ export function createPromptsRouter(db: Db) {
   const app = new Hono();
 
   app.get("/", (c) => {
-    return c.json(db.prompts.list());
+    return c.json({ data: db.prompts.list() });
   });
 
   app.post("/", async (c) => {
@@ -23,7 +23,7 @@ export function createPromptsRouter(db: Db) {
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const template = db.prompts.create(parsed.data);
-    return c.json(template, 201);
+    return c.json({ data: template }, 201);
   });
 
   app.patch("/:id", async (c) => {
@@ -33,14 +33,14 @@ export function createPromptsRouter(db: Db) {
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const template = db.prompts.update(id, parsed.data);
     if (!template) return c.json({ error: "Not found or is a built-in template" }, 404);
-    return c.json(template);
+    return c.json({ data: template });
   });
 
   app.delete("/:id", (c) => {
     const id = c.req.param("id");
     const deleted = db.prompts.remove(id);
     if (!deleted) return c.json({ error: "Not found or is a built-in template" }, 404);
-    return c.json({ ok: true });
+    return c.json({ data: { ok: true } });
   });
 
   return app;

@@ -1,7 +1,7 @@
-import { useState } from "react";
 import type { Repository } from "@vibe-code/shared";
-import { Button } from "./ui/button";
+import { useState } from "react";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 
 const statusColors: Record<string, "default" | "success" | "warning" | "danger" | "info"> = {
   pending: "warning",
@@ -32,7 +32,11 @@ export function Sidebar({
   const [search, setSearch] = useState("");
 
   const filtered = search
-    ? repos.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.url.toLowerCase().includes(search.toLowerCase()))
+    ? repos.filter(
+        (r) =>
+          r.name.toLowerCase().includes(search.toLowerCase()) ||
+          r.url.toLowerCase().includes(search.toLowerCase())
+      )
     : repos;
 
   return (
@@ -78,6 +82,7 @@ export function Sidebar({
 
         <div className="space-y-1 overflow-y-auto flex-1">
           <button
+            type="button"
             onClick={() => onSelectRepo(null)}
             className={`w-full text-left px-2.5 py-1.5 rounded-md text-sm transition-colors cursor-pointer ${
               selectedRepoId === null
@@ -103,6 +108,7 @@ export function Sidebar({
                 {repo.status}
               </Badge>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemoveRepo(repo.id);
@@ -115,15 +121,11 @@ export function Sidebar({
           ))}
 
           {repos.length === 0 && (
-            <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">
-              No repositories yet
-            </p>
+            <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">No repositories yet</p>
           )}
 
           {repos.length > 0 && filtered.length === 0 && (
-            <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">
-              No matches
-            </p>
+            <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">No matches</p>
           )}
         </div>
       </div>

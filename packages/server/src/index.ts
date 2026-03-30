@@ -1,22 +1,21 @@
-import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { createBunWebSocket } from "hono/bun";
-import { join } from "path";
-import { homedir } from "os";
-
-import { createDb } from "./db";
-import { createReposRouter } from "./api/repos";
-import { createTasksRouter } from "./api/tasks";
-import { createRunsRouter } from "./api/runs";
-import { createEnginesRouter } from "./api/engines";
-import { createSettingsRouter } from "./api/settings";
-import { createPromptsRouter } from "./api/prompts";
-import { GitService } from "./git/git-service";
-import { EngineRegistry } from "./agents/registry";
-import { Orchestrator } from "./agents/orchestrator";
-import { BroadcastHub } from "./ws/broadcast";
-import { PrPoller } from "./git/pr-poller";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { WsClientMessage } from "@vibe-code/shared";
+import { Hono } from "hono";
+import { createBunWebSocket } from "hono/bun";
+import { cors } from "hono/cors";
+import { Orchestrator } from "./agents/orchestrator";
+import { EngineRegistry } from "./agents/registry";
+import { createEnginesRouter } from "./api/engines";
+import { createPromptsRouter } from "./api/prompts";
+import { createReposRouter } from "./api/repos";
+import { createRunsRouter } from "./api/runs";
+import { createSettingsRouter } from "./api/settings";
+import { createTasksRouter } from "./api/tasks";
+import { createDb } from "./db";
+import { GitService } from "./git/git-service";
+import { PrPoller } from "./git/pr-poller";
+import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -27,7 +26,8 @@ const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 
 // ─── Initialize Services ────────────────────────────────────────────────────
 
-import { mkdir } from "fs/promises";
+import { mkdir } from "node:fs/promises";
+
 await mkdir(DATA_DIR, { recursive: true });
 
 const db = createDb(DB_PATH);
@@ -81,7 +81,9 @@ app.get(
     onMessage(evt, ws) {
       try {
         const msg: WsClientMessage = JSON.parse(
-          typeof evt.data === "string" ? evt.data : new TextDecoder().decode(evt.data as ArrayBuffer)
+          typeof evt.data === "string"
+            ? evt.data
+            : new TextDecoder().decode(evt.data as ArrayBuffer)
         );
         const client = wsClients.get(ws);
         if (!client) return;
@@ -109,7 +111,7 @@ app.get(
 
 // ─── Start Server ────────────────────────────────────────────────────────────
 
-const server = Bun.serve({
+const _server = Bun.serve({
   fetch: app.fetch,
   websocket,
   port: PORT,

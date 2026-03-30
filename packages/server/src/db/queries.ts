@@ -1,15 +1,14 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import type {
-  Repository,
-  Task,
-  AgentRun,
   AgentLog,
-  PromptTemplate,
+  AgentRun,
+  CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
+  PromptTemplate,
+  Repository,
+  Task,
   UpdateTaskRequest,
-  CreatePromptTemplateRequest,
-  TaskWithRun,
 } from "@vibe-code/shared";
 
 // ─── Row types (snake_case from SQLite) ──────────────────────────────────────
@@ -151,7 +150,12 @@ export function createRepoQueries(db: Database) {
       const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main")!;
       return mapRepo(row);
     },
-    updateStatus: (id: string, status: string, localPath?: string | null, error?: string | null): Repository | null => {
+    updateStatus: (
+      id: string,
+      status: string,
+      localPath?: string | null,
+      error?: string | null
+    ): Repository | null => {
       const row = stmts.updateStatus.get(status, localPath ?? null, error ?? null, id);
       return row ? mapRepo(row) : null;
     },
@@ -200,18 +204,44 @@ export function createTaskQueries(db: Database) {
         .prepare<TaskRow, [string, string, string, string | null, string | null, number, number]>(
           "INSERT INTO tasks (title, description, repo_id, engine, model, priority, column_order) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
-        .get(req.title, req.description ?? "", req.repoId, req.engine ?? null, req.model ?? null, req.priority ?? 0, order)!;
+        .get(
+          req.title,
+          req.description ?? "",
+          req.repoId,
+          req.engine ?? null,
+          req.model ?? null,
+          req.priority ?? 0,
+          order
+        )!;
       return mapTask(row);
     },
     update: (id: string, req: UpdateTaskRequest): Task | null => {
       const sets: string[] = [];
       const values: (string | number | null)[] = [];
-      if (req.title !== undefined) { sets.push("title = ?"); values.push(req.title); }
-      if (req.description !== undefined) { sets.push("description = ?"); values.push(req.description); }
-      if (req.status !== undefined) { sets.push("status = ?"); values.push(req.status); }
-      if (req.columnOrder !== undefined) { sets.push("column_order = ?"); values.push(req.columnOrder); }
-      if (req.engine !== undefined) { sets.push("engine = ?"); values.push(req.engine ?? null); }
-      if (req.model !== undefined) { sets.push("model = ?"); values.push(req.model ?? null); }
+      if (req.title !== undefined) {
+        sets.push("title = ?");
+        values.push(req.title);
+      }
+      if (req.description !== undefined) {
+        sets.push("description = ?");
+        values.push(req.description);
+      }
+      if (req.status !== undefined) {
+        sets.push("status = ?");
+        values.push(req.status);
+      }
+      if (req.columnOrder !== undefined) {
+        sets.push("column_order = ?");
+        values.push(req.columnOrder);
+      }
+      if (req.engine !== undefined) {
+        sets.push("engine = ?");
+        values.push(req.engine ?? null);
+      }
+      if (req.model !== undefined) {
+        sets.push("model = ?");
+        values.push(req.model ?? null);
+      }
       if (sets.length === 0) return stmts.getById.get(id) ? mapTask(stmts.getById.get(id)!) : null;
       sets.push("updated_at = datetime('now')");
       values.push(id);
@@ -219,9 +249,14 @@ export function createTaskQueries(db: Database) {
       const row = db.prepare(sql).get(...values) as TaskRow | null;
       return row ? mapTask(row) : null;
     },
-    updateField: (id: string, field: "pr_url" | "branch_name" | "status" | "engine" | "model", value: string | number | null): Task | null => {
+    updateField: (
+      id: string,
+      field: "pr_url" | "branch_name" | "status" | "engine" | "model",
+      value: string | number | null
+    ): Task | null => {
       const allowed = ["pr_url", "branch_name", "status", "engine", "model"] as const;
-      if (!allowed.includes(field as typeof allowed[number])) throw new Error(`Invalid field: ${field}`);
+      if (!allowed.includes(field as (typeof allowed)[number]))
+        throw new Error(`Invalid field: ${field}`);
       const sql = `UPDATE tasks SET ${field} = ?, updated_at = datetime('now') WHERE id = ? RETURNING *`;
       const row = db.prepare(sql).get(value, id) as TaskRow | null;
       return row ? mapTask(row) : null;
@@ -262,8 +297,29 @@ export function createRunQueries(db: Database) {
       const row = stmts.insert.get(taskId, engine)!;
       return mapRun(row);
     },
-    updateStatus: (id: string, status: string, extra?: Partial<Record<"started_at" | "finished_at" | "exit_code" | "error_message" | "worktree_path" | "current_status", string | number | null>>): AgentRun | null => {
-      const allowed = ["started_at", "finished_at", "exit_code", "error_message", "worktree_path", "current_status"] as const;
+    updateStatus: (
+      id: string,
+      status: string,
+      extra?: Partial<
+        Record<
+          | "started_at"
+          | "finished_at"
+          | "exit_code"
+          | "error_message"
+          | "worktree_path"
+          | "current_status",
+          string | number | null
+        >
+      >
+    ): AgentRun | null => {
+      const allowed = [
+        "started_at",
+        "finished_at",
+        "exit_code",
+        "error_message",
+        "worktree_path",
+        "current_status",
+      ] as const;
       const sets = ["status = ?"];
       const values: (string | number | null)[] = [status];
       if (extra) {
@@ -306,13 +362,19 @@ export function createLogQueries(db: Database) {
 // ─── Settings Queries ────────────────────────────────────────────────────────
 
 export function createSettingsQueries(db: Database) {
-  const getStmt = db.prepare<{ value: string }, [string]>("SELECT value FROM settings WHERE key = ?");
-  const setStmt = db.prepare<null, [string, string]>("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+  const getStmt = db.prepare<{ value: string }, [string]>(
+    "SELECT value FROM settings WHERE key = ?"
+  );
+  const setStmt = db.prepare<null, [string, string]>(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)"
+  );
   const allStmt = db.query<{ key: string; value: string }, []>("SELECT key, value FROM settings");
 
   return {
     get: (key: string): string | null => getStmt.get(key)?.value ?? null,
-    set: (key: string, value: string): void => { setStmt.run(key, value); },
+    set: (key: string, value: string): void => {
+      setStmt.run(key, value);
+    },
     getAll: (): Record<string, string> => {
       const rows = allStmt.all();
       return Object.fromEntries(rows.map((r) => [r.key, r.value]));
@@ -351,9 +413,7 @@ export function createPromptTemplateQueries(db: Database) {
     list: db.prepare<PromptTemplateRow, []>(
       "SELECT * FROM prompt_templates ORDER BY is_builtin DESC, created_at ASC"
     ),
-    getById: db.prepare<PromptTemplateRow, [string]>(
-      "SELECT * FROM prompt_templates WHERE id = ?"
-    ),
+    getById: db.prepare<PromptTemplateRow, [string]>("SELECT * FROM prompt_templates WHERE id = ?"),
     insert: db.prepare<PromptTemplateRow, [string, string | null, string, string | null]>(
       "INSERT INTO prompt_templates (title, description, content, category) VALUES (?, ?, ?, ?) RETURNING *"
     ),
@@ -369,17 +429,35 @@ export function createPromptTemplateQueries(db: Database) {
       return row ? mapTemplate(row) : null;
     },
     create: (req: CreatePromptTemplateRequest): PromptTemplate => {
-      const row = stmts.insert.get(req.title, req.description ?? null, req.content, req.category ?? null)!;
+      const row = stmts.insert.get(
+        req.title,
+        req.description ?? null,
+        req.content,
+        req.category ?? null
+      )!;
       return mapTemplate(row);
     },
     update: (id: string, req: Partial<CreatePromptTemplateRequest>): PromptTemplate | null => {
       const sets: string[] = [];
       const values: (string | null)[] = [];
-      if (req.title !== undefined) { sets.push("title = ?"); values.push(req.title); }
-      if (req.description !== undefined) { sets.push("description = ?"); values.push(req.description ?? null); }
-      if (req.content !== undefined) { sets.push("content = ?"); values.push(req.content); }
-      if (req.category !== undefined) { sets.push("category = ?"); values.push(req.category ?? null); }
-      if (sets.length === 0) return stmts.getById.get(id) ? mapTemplate(stmts.getById.get(id)!) : null;
+      if (req.title !== undefined) {
+        sets.push("title = ?");
+        values.push(req.title);
+      }
+      if (req.description !== undefined) {
+        sets.push("description = ?");
+        values.push(req.description ?? null);
+      }
+      if (req.content !== undefined) {
+        sets.push("content = ?");
+        values.push(req.content);
+      }
+      if (req.category !== undefined) {
+        sets.push("category = ?");
+        values.push(req.category ?? null);
+      }
+      if (sets.length === 0)
+        return stmts.getById.get(id) ? mapTemplate(stmts.getById.get(id)!) : null;
       sets.push("updated_at = datetime('now')");
       values.push(id);
       const sql = `UPDATE prompt_templates SET ${sets.join(", ")} WHERE id = ? AND is_builtin = 0 RETURNING *`;

@@ -41,7 +41,11 @@ export function GitGenericIcon({ className = "", size = 16 }: IconProps) {
   );
 }
 
-export function getProviderFromUrl(url: string): { name: string; icon: typeof GitHubIcon; color: string } {
+export function getProviderFromUrl(url: string): {
+  name: string;
+  icon: typeof GitHubIcon;
+  color: string;
+} {
   if (url.includes("github.com") || url.includes("github")) {
     return { name: "GitHub", icon: GitHubIcon, color: "text-zinc-300" };
   }

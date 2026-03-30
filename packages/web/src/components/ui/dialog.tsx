@@ -26,6 +26,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
+            type="button"
             onClick={onClose}
             className="text-zinc-500 hover:text-zinc-300 cursor-pointer"
           >

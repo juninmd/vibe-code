@@ -1,9 +1,9 @@
-import type { AgentEngine } from "./engine";
 import type { EngineInfo } from "@vibe-code/shared";
-import { ClaudeCodeEngine } from "./engines/claude-code";
+import type { AgentEngine } from "./engine";
 import { AiderEngine } from "./engines/aider";
-import { OpenCodeEngine } from "./engines/opencode";
+import { ClaudeCodeEngine } from "./engines/claude-code";
 import { GeminiEngine } from "./engines/gemini";
+import { OpenCodeEngine } from "./engines/opencode";
 
 export class EngineRegistry {
   private engines: Map<string, AgentEngine> = new Map();

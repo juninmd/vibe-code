@@ -1,18 +1,18 @@
 import type {
+  AgentLog,
+  AgentRun,
+  CreatePromptTemplateRequest,
+  CreateRepoRequest,
+  CreateTaskRequest,
+  DiffSummary,
+  EngineInfo,
+  GitHubRepo,
+  LaunchTaskRequest,
+  PromptTemplate,
   Repository,
   Task,
   TaskWithRun,
-  AgentRun,
-  AgentLog,
-  EngineInfo,
-  GitHubRepo,
-  DiffSummary,
-  PromptTemplate,
-  CreateRepoRequest,
-  CreateTaskRequest,
   UpdateTaskRequest,
-  LaunchTaskRequest,
-  CreatePromptTemplateRequest,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
@@ -39,8 +39,7 @@ export const api = {
     create: (data: CreateRepoRequest) =>
       request<Repository>("/repos", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
-    refresh: (id: string) =>
-      request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
+    refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
     listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
   },
 
@@ -63,10 +62,8 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data ?? {}),
       }),
-    cancel: (id: string) =>
-      request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
-    retry: (id: string) =>
-      request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
+    cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
+    retry: (id: string) => request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
     retryPR: (id: string) =>
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
@@ -81,6 +78,7 @@ export const api = {
 
   engines: {
     list: () => request<EngineInfo[]>("/engines"),
+    models: (name: string) => request<string[]>(`/engines/${name}/models`),
   },
 
   settings: {
@@ -95,7 +93,6 @@ export const api = {
       request<PromptTemplate>("/prompts", { method: "POST", body: JSON.stringify(data) }),
     update: (id: string, data: Partial<CreatePromptTemplateRequest>) =>
       request<PromptTemplate>(`/prompts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    remove: (id: string) =>
-      request<{ ok: boolean }>(`/prompts/${id}`, { method: "DELETE" }),
+    remove: (id: string) => request<{ ok: boolean }>(`/prompts/${id}`, { method: "DELETE" }),
   },
 };

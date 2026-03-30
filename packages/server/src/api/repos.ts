@@ -35,18 +35,20 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
           const localPath = await git.cloneRepo(parsed.data.url, repo.name);
           const ready = db.repos.updateStatus(repo.id, "ready", localPath);
           if (ready) hub.broadcastAll({ type: "repo_updated", repo: ready });
-        } catch (err: any) {
-          const failed = db.repos.updateStatus(repo.id, "error", null, err.message);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const failed = db.repos.updateStatus(repo.id, "error", null, msg);
           if (failed) hub.broadcastAll({ type: "repo_updated", repo: failed });
         }
       })();
 
       return c.json({ data: { ...repo, status: "cloning" } }, 201);
-    } catch (err: any) {
-      if (err.message?.includes("UNIQUE")) {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg?.includes("UNIQUE")) {
         return c.json({ error: "conflict", message: "Repository already exists" }, 409);
       }
-      throw err;
+      throw err as Error;
     }
   });
 

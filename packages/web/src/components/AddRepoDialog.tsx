@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
 import type { GitHubRepo } from "@vibe-code/shared";
-import { Dialog } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Badge } from "./ui/badge";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Dialog } from "./ui/dialog";
+import { Input } from "./ui/input";
 
 interface AddRepoDialogProps {
   open: boolean;
@@ -22,7 +22,8 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    api.repos.listGitHub()
+    api.repos
+      .listGitHub()
       .then(setGhRepos)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -63,9 +64,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           type="button"
           onClick={() => setMode("github")}
           className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer ${
-            mode === "github"
-              ? "bg-zinc-700 text-zinc-100"
-              : "text-zinc-500 hover:text-zinc-300"
+            mode === "github" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
           }`}
         >
           GitHub
@@ -74,9 +73,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           type="button"
           onClick={() => setMode("manual")}
           className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer ${
-            mode === "manual"
-              ? "bg-zinc-700 text-zinc-100"
-              : "text-zinc-500 hover:text-zinc-300"
+            mode === "manual" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
           }`}
         >
           Manual URL
@@ -99,7 +96,9 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               </div>
             ) : filtered.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
-                {search ? "No repositories match your search" : "No repositories found. Is `gh` authenticated?"}
+                {search
+                  ? "No repositories match your search"
+                  : "No repositories found. Is `gh` authenticated?"}
               </div>
             ) : (
               filtered.map((repo) => (
@@ -114,13 +113,13 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                       {repo.name}
                     </span>
                     {repo.isPrivate && (
-                      <Badge variant="warning" className="text-[10px]">private</Badge>
+                      <Badge variant="warning" className="text-[10px]">
+                        private
+                      </Badge>
                     )}
                   </div>
                   {repo.description && (
-                    <p className="text-xs text-zinc-600 mt-0.5 truncate">
-                      {repo.description}
-                    </p>
+                    <p className="text-xs text-zinc-600 mt-0.5 truncate">{repo.description}</p>
                   )}
                 </button>
               ))
@@ -130,9 +129,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
       ) : (
         <form onSubmit={handleManualSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              Repository URL *
-            </label>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Repository URL *</label>
             <Input
               value={manualUrl}
               onChange={(e) => setManualUrl(e.target.value)}

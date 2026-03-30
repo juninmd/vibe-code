@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
 import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
+import { useCallback, useState } from "react";
 import { api } from "../api/client";
 
 interface DiffViewerProps {
@@ -33,6 +33,7 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
     return (
       <div>
         <button
+          type="button"
           onClick={loadDiff}
           className="text-xs text-violet-400 hover:text-violet-300 underline cursor-pointer"
         >
@@ -43,16 +44,18 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
   }
 
   if (loading) {
-    return (
-      <div className="text-xs text-zinc-500 py-2">Loading diff...</div>
-    );
+    return <div className="text-xs text-zinc-500 py-2">Loading diff...</div>;
   }
 
   if (error) {
     return (
       <div className="text-xs text-red-400 py-2">
         {error}
-        <button onClick={loadDiff} className="ml-2 text-zinc-400 hover:text-zinc-300 underline cursor-pointer">
+        <button
+          type="button"
+          onClick={loadDiff}
+          className="ml-2 text-zinc-400 hover:text-zinc-300 underline cursor-pointer"
+        >
           Retry
         </button>
       </div>
@@ -117,11 +120,14 @@ function DiffFileEntry({ taskId, file }: { taskId: string; file: DiffFileSummary
   return (
     <div>
       <button
+        type="button"
         onClick={toggle}
         className="w-full px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-zinc-800/40 transition-colors text-left cursor-pointer"
       >
         <span className="text-zinc-600 text-[10px]">{expanded ? "▼" : "▶"}</span>
-        <span className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${info.color}`}>
+        <span
+          className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${info.color}`}
+        >
           {info.label}
         </span>
         <span className="text-zinc-300 font-mono truncate flex-1">{file.path}</span>
@@ -160,11 +166,17 @@ function parsePatchLines(patch: string) {
       className = "text-green-400 bg-green-400/5";
     } else if (line.startsWith("-") && !line.startsWith("---")) {
       className = "text-red-400 bg-red-400/5";
-    } else if (!line.startsWith("diff") && !line.startsWith("index") && !line.startsWith("---") && !line.startsWith("+++")) {
+    } else if (
+      !line.startsWith("diff") &&
+      !line.startsWith("index") &&
+      !line.startsWith("---") &&
+      !line.startsWith("+++")
+    ) {
       className = "text-zinc-400";
     }
 
     return (
+      // biome-ignore lint/suspicious/noArrayIndexKey: diff lines have no stable identity
       <div key={i} className={className}>
         {line || " "}
       </div>

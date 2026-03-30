@@ -7,7 +7,10 @@ const GH_API = "https://api.github.com";
 export class PrPoller {
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private db: Db, private hub: BroadcastHub) {}
+  constructor(
+    private db: Db,
+    private hub: BroadcastHub
+  ) {}
 
   private getToken(): string | undefined {
     const dbToken = this.db.settings.get("github_token");
@@ -25,14 +28,13 @@ export class PrPoller {
   }
 
   private async poll(): Promise<void> {
-    const tasks = this.db.tasks.list().filter(
-      (t) => t.status === "review" && t.prUrl
-    );
+    const tasks = this.db.tasks.list().filter((t) => t.status === "review" && t.prUrl);
     if (tasks.length === 0) return;
 
     for (const task of tasks) {
       try {
-        const merged = await this.isPrMerged(task.prUrl!);
+        if (!task.prUrl) continue;
+        const merged = await this.isPrMerged(task.prUrl);
         if (merged) {
           const updated = this.db.tasks.update(task.id, { status: "done" });
           if (updated) {
@@ -66,7 +68,7 @@ export class PrPoller {
 
     const res = await fetch(apiUrl, { headers });
     if (!res.ok) return false;
-    const data = await res.json() as { merged: boolean; state: string };
+    const data = (await res.json()) as { merged: boolean; state: string };
     return data.merged === true;
   }
 }

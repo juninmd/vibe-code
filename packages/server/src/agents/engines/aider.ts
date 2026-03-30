@@ -1,5 +1,5 @@
-import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import type { Subprocess } from "bun";
+import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";
 
 export class AiderEngine implements AgentEngine {
@@ -31,23 +31,28 @@ export class AiderEngine implements AgentEngine {
     }
   }
 
-  async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
+  async *execute(
+    prompt: string,
+    workdir: string,
+    options?: EngineOptions
+  ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[aider] Starting in ${workdir}` };
 
     const args = ["aider", "--yes-always", "--no-auto-commits"];
     if (options?.model) args.push("--model", options.model);
     args.push("--message", prompt);
 
-    const proc = Bun.spawn(
-      args,
-      { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
-    );
+    const proc = Bun.spawn(args, { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" });
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(proc, (line) => {
-      return [{ type: "log", stream: "stdout", content: line }];
-    }, options?.signal);
+    yield* streamProcess(
+      proc,
+      (line) => {
+        return [{ type: "log", stream: "stdout", content: line }];
+      },
+      options?.signal
+    );
 
     if (options?.runId) this.processes.delete(options.runId);
   }
@@ -65,7 +70,7 @@ export class AiderEngine implements AgentEngine {
     if (!proc?.stdin || typeof proc.stdin === "number") return false;
     try {
       const sink = proc.stdin as import("bun").FileSink;
-      sink.write(input + "\n");
+      sink.write(`${input}\n`);
       sink.flush();
       return true;
     } catch {

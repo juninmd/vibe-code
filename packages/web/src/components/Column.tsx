@@ -38,16 +38,12 @@ export function Column({ status, tasks, onTaskClick, onRetryPR }: ColumnProps) {
     >
       <div className="px-4 py-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-300">
-            {TASK_STATUS_LABELS[status]}
-          </h2>
+          <h2 className="text-sm font-semibold text-zinc-300">{TASK_STATUS_LABELS[status]}</h2>
           <span className="text-xs text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
             {tasks.length}
           </span>
         </div>
-        <p className="text-[11px] text-zinc-600 mt-1 leading-tight">
-          {columnDescriptions[status]}
-        </p>
+        <p className="text-[11px] text-zinc-600 mt-1 leading-tight">{columnDescriptions[status]}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
@@ -63,9 +59,7 @@ export function Column({ status, tasks, onTaskClick, onRetryPR }: ColumnProps) {
         </SortableContext>
 
         {tasks.length === 0 && (
-          <div className="text-center py-8 text-zinc-700 text-xs">
-            Drop tasks here
-          </div>
+          <div className="text-center py-8 text-zinc-700 text-xs">Drop tasks here</div>
         )}
       </div>
     </div>

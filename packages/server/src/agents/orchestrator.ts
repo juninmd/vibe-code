@@ -1,9 +1,9 @@
-import type { Task, AgentRun } from "@vibe-code/shared";
+import type { AgentRun, LogStream, Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
-import type { EngineRegistry } from "./registry";
 import type { BroadcastHub } from "../ws/broadcast";
-import type { AgentEvent } from "./engine";
+import type { AgentEngine, AgentEvent } from "./engine";
+import type { EngineRegistry } from "./registry";
 
 interface ActiveRun {
   runId: string;
@@ -37,7 +37,7 @@ export class Orchestrator {
 
     // Resolve engine
     const engineName = engineOverride ?? task.engine;
-    let engine;
+    let engine: AgentEngine | undefined;
     if (engineName) {
       engine = this.registry.get(engineName);
       if (!engine) throw new Error(`Engine "${engineName}" not found`);
@@ -74,7 +74,12 @@ export class Orchestrator {
 
     // Launch async (don't await)
     const abort = new AbortController();
-    this.activeRuns.set(task.id, { runId: run.id, taskId: task.id, engineName: engine.name, abort });
+    this.activeRuns.set(task.id, {
+      runId: run.id,
+      taskId: task.id,
+      engineName: engine.name,
+      abort,
+    });
     this.runAgent(task, run, engine, repo, abort, model).catch((err) => {
       console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
     });
@@ -152,7 +157,14 @@ export class Orchestrator {
 
     // Create a temporary worktree using the task branch
     const wtId = `retry-pr-${Date.now()}`;
-    const wtPath = await this.git.createWorktree(barePath, task.branchName, repo.name, wtId, repo.defaultBranch, false);
+    const wtPath = await this.git.createWorktree(
+      barePath,
+      task.branchName,
+      repo.name,
+      wtId,
+      repo.defaultBranch,
+      false
+    );
 
     try {
       // Push with -u to ensure it's tracked
@@ -199,7 +211,7 @@ export class Orchestrator {
         type: "agent_log",
         runId: active.runId,
         taskId,
-        stream: "stdin" as any,
+        stream: "stdin" as LogStream,
         content: input,
         timestamp: new Date().toISOString(),
       });
@@ -211,9 +223,15 @@ export class Orchestrator {
     task: Task,
     run: AgentRun,
     engine: ReturnType<EngineRegistry["get"]> & {},
-    repo: { id: string; name: string; url: string; defaultBranch: string; localPath: string | null },
+    repo: {
+      id: string;
+      name: string;
+      url: string;
+      defaultBranch: string;
+      localPath: string | null;
+    },
     abort: AbortController,
-    model?: string
+    _model?: string
   ): Promise<void> {
     const barePath = repo.localPath ?? (await this.git.getBarePath(repo.name));
     const slugTitle = task.title
@@ -234,7 +252,13 @@ export class Orchestrator {
       }
 
       // Create worktree
-      wtPath = await this.git.createWorktree(barePath, branch, repo.name, run.id, repo.defaultBranch);
+      wtPath = await this.git.createWorktree(
+        barePath,
+        branch,
+        repo.name,
+        run.id,
+        repo.defaultBranch
+      );
       this.db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
 
       // Build prompt
@@ -294,12 +318,13 @@ export class Orchestrator {
           content: `PR created: ${prUrl}`,
           timestamp: new Date().toISOString(),
         });
-      } catch (pushErr: any) {
+      } catch (pushErr) {
         // Push failed - still mark as completed but without PR
+        const pushErrMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
         this.db.runs.updateStatus(run.id, "completed", {
           finished_at: new Date().toISOString(),
           exit_code: 0,
-          error_message: `Push/PR failed: ${pushErr.message}`,
+          error_message: `Push/PR failed: ${pushErrMsg}`,
         });
         this.db.tasks.updateField(task.id, "branch_name", branch);
         const updatedTask = this.db.tasks.update(task.id, { status: "review" });
@@ -307,11 +332,12 @@ export class Orchestrator {
           this.hub.broadcastAll({ type: "task_updated", task: updatedTask });
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       // Agent failed
+      const errMsg = err instanceof Error ? err.message : String(err);
       const updatedRun = this.db.runs.updateStatus(run.id, "failed", {
         finished_at: new Date().toISOString(),
-        error_message: err.message,
+        error_message: errMsg,
       });
       this.db.tasks.update(task.id, { status: "failed" });
 
@@ -343,7 +369,7 @@ export class Orchestrator {
         type: "agent_log",
         runId,
         taskId,
-        stream: (event.stream as any) ?? "stdout",
+        stream: (event.stream ?? "stdout") as LogStream,
         content: event.content,
         timestamp: new Date().toISOString(),
       });
@@ -361,7 +387,9 @@ export class Orchestrator {
     } else if (event.type === "status" && event.content) {
       const run = this.db.runs.getById(runId);
       if (run) {
-        const updated = this.db.runs.updateStatus(runId, run.status, { current_status: event.content });
+        const updated = this.db.runs.updateStatus(runId, run.status, {
+          current_status: event.content,
+        });
         if (updated) {
           this.hub.broadcastAll({ type: "run_updated", run: updated });
         }
@@ -373,14 +401,15 @@ export class Orchestrator {
     repoId: string,
     url: string,
     name: string,
-    defaultBranch: string
+    _defaultBranch: string
   ): Promise<void> {
     this.db.repos.updateStatus(repoId, "cloning");
     try {
       const localPath = await this.git.cloneRepo(url, name);
       this.db.repos.updateStatus(repoId, "ready", localPath);
-    } catch (err: any) {
-      this.db.repos.updateStatus(repoId, "error", null, err.message);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      this.db.repos.updateStatus(repoId, "error", null, errMsg);
       throw err;
     }
   }

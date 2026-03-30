@@ -173,6 +173,13 @@ export type WsServerMessage =
   | { type: "task_updated"; task: Task }
   | { type: "repo_updated"; repo: Repository }
   | { type: "run_updated"; run: AgentRun }
-  | { type: "agent_log"; runId: string; taskId: string; stream: LogStream; content: string; timestamp: string }
+  | {
+      type: "agent_log";
+      runId: string;
+      taskId: string;
+      stream: LogStream;
+      content: string;
+      timestamp: string;
+    }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };

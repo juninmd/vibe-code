@@ -1,20 +1,28 @@
-import { useState } from "react";
-import type { Repository, EngineInfo } from "@vibe-code/shared";
-import { Dialog } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { Select } from "./ui/select";
-import { Combobox } from "./ui/combobox";
-import { PromptTemplatePicker } from "./PromptTemplatePicker";
+import type { EngineInfo, Repository } from "@vibe-code/shared";
+import { useEffect, useState } from "react";
+import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
+import { PromptTemplatePicker } from "./PromptTemplatePicker";
+import { Button } from "./ui/button";
+import { Combobox } from "./ui/combobox";
+import { Dialog } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Select } from "./ui/select";
+import { Textarea } from "./ui/textarea";
 
 interface NewTaskDialogProps {
   open: boolean;
   onClose: () => void;
   repos: Repository[];
   engines: EngineInfo[];
-  onSubmit: (data: { title: string; description: string; repoId: string; engine?: string; autoLaunch: boolean }) => void;
+  onSubmit: (data: {
+    title: string;
+    description: string;
+    repoId: string;
+    engine?: string;
+    model?: string;
+    autoLaunch: boolean;
+  }) => void;
 }
 
 export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTaskDialogProps) {
@@ -22,10 +30,29 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [description, setDescription] = useState("");
   const [repoId, setRepoId] = useState("");
   const [engine, setEngine] = useState("");
+  const [model, setModel] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
   const [autoLaunch, setAutoLaunch] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
+
+  // Fetch models when engine changes
+  useEffect(() => {
+    if (!engine) {
+      setModels([]);
+      setModel("");
+      return;
+    }
+    setLoadingModels(true);
+    setModel("");
+    api.engines
+      .models(engine)
+      .then((list) => setModels(list))
+      .catch(() => setModels([]))
+      .finally(() => setLoadingModels(false));
+  }, [engine]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,12 +62,15 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
       description: description.trim(),
       repoId,
       engine: engine || undefined,
+      model: model || undefined,
       autoLaunch,
     });
     setTitle("");
     setDescription("");
     setRepoId("");
     setEngine("");
+    setModel("");
+    setModels([]);
     onClose();
   };
 
@@ -98,15 +128,32 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
             <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
             <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
               <option value="">Auto-select</option>
-              {engines
-                .filter((e) => e.available)
-                .map((eng) => (
-                  <option key={eng.name} value={eng.name}>
-                    {eng.displayName}
-                  </option>
-                ))}
+              {engines.map((eng) => (
+                <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                  {eng.displayName}
+                  {!eng.available ? " (unavailable)" : ""}
+                </option>
+              ))}
             </Select>
           </div>
+
+          {engine && (models.length > 0 || loadingModels) && (
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Model</label>
+              <Select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={loadingModels}
+              >
+                <option value="">{loadingModels ? "Loading models..." : "Default"}</option>
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
 
           <label className="flex items-center gap-2 cursor-pointer">
             <input

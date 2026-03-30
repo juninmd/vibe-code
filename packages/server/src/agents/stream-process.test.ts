@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
-import { streamProcess } from "./stream-process";
+import { describe, expect, it } from "bun:test";
 import type { AgentEvent } from "./engine";
+import { streamProcess } from "./stream-process";
 
 type SpawnedProc = Parameters<typeof streamProcess>[0];
 
@@ -70,7 +70,8 @@ describe("streamProcess", () => {
       const proc = spawn(`process.exit(2)`);
       const events = await collect(proc, passthrough);
       const exitLog = events.find(
-        (e) => e.type === "log" && e.stream === "stderr" && e.content?.includes("Exited with code 2")
+        (e) =>
+          e.type === "log" && e.stream === "stderr" && e.content?.includes("Exited with code 2")
       );
       expect(exitLog).toBeDefined();
     });

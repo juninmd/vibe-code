@@ -1,10 +1,10 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
-import { Badge } from "./ui/badge";
-import { getProviderFromUrl } from "./ui/git-icons";
 import { useState } from "react";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskCardProps {
   task: TaskWithRun;
@@ -13,9 +13,11 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: task.id, data: { task } });
-  
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { task },
+  });
+
   const [retrying, setRetrying] = useState(false);
 
   const style = {
@@ -28,9 +30,9 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
     // Stop all propagation and prevent card click
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (retrying) return;
-    
+
     setRetrying(true);
     try {
       await onRetryPR(task.id);
@@ -57,7 +59,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
       {/* Title row */}
       <div className="flex items-start gap-2 mb-2">
         {ProviderIcon && (
-          <span className={`mt-0.5 shrink-0 ${provider!.color}`}>
+          <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
             <ProviderIcon size={13} />
           </span>
         )}
@@ -73,27 +75,31 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
 
       {/* Footer */}
       <div className="flex items-center gap-2 flex-wrap ml-[21px]">
-        {task.repo && (
-          <span className="text-xs text-zinc-500 font-medium">{task.repo.name}</span>
-        )}
+        {task.repo && <span className="text-xs text-zinc-500 font-medium">{task.repo.name}</span>}
         {task.branchName && (
           <code className="text-xs text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded hidden sm:inline">
             {task.branchName}
           </code>
         )}
         {task.engine && (
-          <Badge variant="purple" className="text-[10px] py-0 px-1.5">{task.engine}</Badge>
+          <Badge variant="purple" className="text-[10px] py-0 px-1.5">
+            {task.engine}
+          </Badge>
         )}
         {task.status === "failed" && (
-          <Badge variant="danger" className="text-[10px] py-0 px-1.5">Failed</Badge>
+          <Badge variant="danger" className="text-[10px] py-0 px-1.5">
+            Failed
+          </Badge>
         )}
         {task.status === "review" && !task.prUrl && (
-          <div className="relative z-10" 
-               onPointerDown={(e) => e.stopPropagation()} 
-               onMouseDown={(e) => e.stopPropagation()}>
-            <Button 
-              size="xs" 
-              variant="primary" 
+          <div
+            className="relative z-10"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <Button
+              size="xs"
+              variant="primary"
               className="h-6 text-[10px] px-2 shadow-sm shadow-black/20"
               onClick={handleRetryPR}
               disabled={retrying}
@@ -116,9 +122,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
         {task.latestRun?.status === "running" && (
           <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[120px]">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="truncate">
-              {task.latestRun.currentStatus || "Running..."}
-            </span>
+            <span className="truncate">{task.latestRun.currentStatus || "Running..."}</span>
           </span>
         )}
       </div>

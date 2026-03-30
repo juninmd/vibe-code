@@ -1,17 +1,16 @@
 import {
+  closestCorners,
   DndContext,
+  type DragEndEvent,
   DragOverlay,
+  type DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
-  type DragStartEvent,
-  type DragEndEvent,
-  type DragOverEvent,
-  closestCorners,
 } from "@dnd-kit/core";
-import { useState, useCallback } from "react";
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_COLUMNS } from "@vibe-code/shared";
+import { useCallback, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 
@@ -25,9 +24,7 @@ interface BoardProps {
 export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const tasksByColumn = TASK_COLUMNS.reduce(
     (acc, status) => {
@@ -75,9 +72,8 @@ export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps)
 
       // Calculate new order
       const targetTasks = tasksByColumn[targetStatus];
-      const newOrder = targetTasks.length > 0
-        ? Math.max(...targetTasks.map((t) => t.columnOrder)) + 1
-        : 0;
+      const newOrder =
+        targetTasks.length > 0 ? Math.max(...targetTasks.map((t) => t.columnOrder)) + 1 : 0;
 
       onTaskMove(taskId, targetStatus, newOrder);
     },

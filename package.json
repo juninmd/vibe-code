@@ -8,6 +8,12 @@
     "dev:web": "bun run --filter @vibe-code/web dev",
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun run --filter @vibe-code/server test"
+    "test": "bun run --filter @vibe-code/server test",
+    "lint": "bunx biome check packages/",
+    "lint:fix": "bunx biome check --write packages/",
+    "format": "bunx biome format --write packages/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.9"
   }
 }

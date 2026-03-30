@@ -1,5 +1,12 @@
+import {
+  createLogQueries,
+  createPromptTemplateQueries,
+  createRepoQueries,
+  createRunQueries,
+  createSettingsQueries,
+  createTaskQueries,
+} from "./queries";
 import { initDatabase } from "./schema";
-import { createRepoQueries, createTaskQueries, createRunQueries, createLogQueries, createSettingsQueries, createPromptTemplateQueries } from "./queries";
 
 export function createDb(dbPath: string) {
   const db = initDatabase(dbPath);

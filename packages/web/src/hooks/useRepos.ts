@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { Repository, CreateRepoRequest } from "@vibe-code/shared";
+import type { CreateRepoRequest, Repository } from "@vibe-code/shared";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 
 export function useRepos() {
@@ -39,16 +39,22 @@ export function useRepos() {
     };
   }, [repos, refresh]);
 
-  const addRepo = useCallback(async (data: CreateRepoRequest) => {
-    const repo = await api.repos.create(data);
-    await refresh();
-    return repo;
-  }, [refresh]);
+  const addRepo = useCallback(
+    async (data: CreateRepoRequest) => {
+      const repo = await api.repos.create(data);
+      await refresh();
+      return repo;
+    },
+    [refresh]
+  );
 
-  const removeRepo = useCallback(async (id: string) => {
-    await api.repos.remove(id);
-    await refresh();
-  }, [refresh]);
+  const removeRepo = useCallback(
+    async (id: string) => {
+      await api.repos.remove(id);
+      await refresh();
+    },
+    [refresh]
+  );
 
   const addOrUpdateRepo = useCallback((repo: Repository) => {
     setRepos((prev) => {

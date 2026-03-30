@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { GitService } from "./git-service";
-import { join } from "path";
-import { tmpdir } from "os";
-import { mkdtemp, rm, writeFile } from "fs/promises";
 
 // ─── Pure utility tests (no filesystem) ──────────────────────────────────────
 
@@ -50,7 +50,9 @@ async function addCommit(dir: string, message = "commit") {
 
 async function getCurrentBranch(dir: string): Promise<string> {
   const proc = Bun.spawn(["git", "branch", "--show-current"], {
-    cwd: dir, stdout: "pipe", stderr: "pipe",
+    cwd: dir,
+    stdout: "pipe",
+    stderr: "pipe",
   });
   const text = await new Response(proc.stdout).text();
   return text.trim() || "main";
@@ -81,12 +83,14 @@ describe("GitService.hasCommitsAhead", () => {
 
     // 2. Clone seed to a bare repo (our "origin")
     await Bun.spawn(["git", "clone", "--bare", seedDir, originDir], {
-      stdout: "pipe", stderr: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
     }).exited;
 
     // 3. Clone bare origin to workDir
     await Bun.spawn(["git", "clone", originDir, workDir], {
-      stdout: "pipe", stderr: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
     }).exited;
     await Bun.spawn(["git", "-C", workDir, "config", "user.email", "t@t.com"]).exited;
     await Bun.spawn(["git", "-C", workDir, "config", "user.name", "T"]).exited;
@@ -111,7 +115,9 @@ describe("GitService.hasCommitsAhead", () => {
 
   it("returns false after pushing the commit", async () => {
     await Bun.spawn(["git", "push"], {
-      cwd: workDir, stdout: "pipe", stderr: "pipe",
+      cwd: workDir,
+      stdout: "pipe",
+      stderr: "pipe",
     }).exited;
     const result = await git.hasCommitsAhead(workDir, baseBranch);
     expect(result).toBe(false);

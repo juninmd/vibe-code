@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentLog } from "@vibe-code/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 
 interface AgentOutputProps {
@@ -33,7 +33,7 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [allLogs.length]);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,19 +44,19 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
   };
 
   if (!runId && liveLogs.length === 0) {
-    return (
-      <div className="text-center text-zinc-600 py-8 text-sm">
-        No agent output yet
-      </div>
-    );
+    return <div className="text-center text-zinc-600 py-8 text-sm">No agent output yet</div>;
   }
 
   const streamColor = (stream: string) => {
     switch (stream) {
-      case "stderr": return "text-red-400";
-      case "system": return "text-zinc-500";
-      case "stdin": return "text-emerald-400";
-      default: return "text-zinc-300";
+      case "stderr":
+        return "text-red-400";
+      case "system":
+        return "text-zinc-500";
+      case "stdin":
+        return "text-emerald-400";
+      default:
+        return "text-zinc-300";
     }
   };
 
@@ -81,9 +81,7 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
             {log.content}
           </div>
         ))}
-        {allLogs.length === 0 && (
-          <div className="text-zinc-700">Waiting for output...</div>
-        )}
+        {allLogs.length === 0 && <div className="text-zinc-700">Waiting for output...</div>}
         {isRunning && (
           <div className="flex items-center gap-1 text-blue-400 mt-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
