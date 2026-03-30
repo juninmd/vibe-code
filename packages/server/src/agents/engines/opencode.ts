@@ -19,8 +19,21 @@ export class OpenCodeEngine implements AgentEngine {
     }
   }
 
+  async listModels(): Promise<string[]> {
+    try {
+      const proc = Bun.spawn(["opencode", "models"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode !== 0) return [];
+      const text = await new Response(proc.stdout).text();
+      return text.split("\n").map((l) => l.trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
   async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
-    yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir}` };
+    const model = options?.model ?? "opencode/minimax-m2.5-free";
+    yield { type: "log", stream: "system", content: `[opencode] Starting in ${workdir} (model: ${model})` };
 
     // Write stdout to a temp file to avoid Windows pipe block-buffering.
     // On Windows, subprocess stdout piped via Bun.spawn is block-buffered (64KB),
@@ -29,7 +42,7 @@ export class OpenCodeEngine implements AgentEngine {
     const tmpFile = join(tmpdir(), `opencode-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--format", "json", "--print-logs", "--model", "opencode/minimax-m2.5-free", prompt],
+      ["opencode", "run", "--format", "json", "--print-logs", "--model", model, prompt],
       { cwd: workdir, stdout: Bun.file(tmpFile), stderr: "pipe", stdin: "pipe" }
     );
 

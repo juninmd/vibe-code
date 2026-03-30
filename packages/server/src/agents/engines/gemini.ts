@@ -17,11 +17,20 @@ export class GeminiEngine implements AgentEngine {
     }
   }
 
+  async listModels(): Promise<string[]> {
+    // Gemini CLI does not provide a model listing command
+    return [];
+  }
+
   async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[gemini] Starting in ${workdir}` };
 
+    const args = ["gemini", "--yolo"];
+    if (options?.model) args.push("-m", options.model);
+    args.push("-p", prompt);
+
     const proc = Bun.spawn(
-      ["gemini", "--yolo", "-p", prompt],
+      args,
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 

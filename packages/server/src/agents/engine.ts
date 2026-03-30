@@ -8,6 +8,7 @@ export interface AgentEvent {
 export interface EngineOptions {
   runId: string;
   signal?: AbortSignal;
+  model?: string;
 }
 
 export interface AgentEngine {
@@ -19,6 +20,9 @@ export interface AgentEngine {
 
   /** Check if the CLI tool is installed and accessible */
   isAvailable(): Promise<boolean>;
+
+  /** List available models by querying the CLI. Returns [] if not supported. */
+  listModels(): Promise<string[]>;
 
   /**
    * Execute a task in the given directory.

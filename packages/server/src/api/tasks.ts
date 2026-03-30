@@ -10,6 +10,7 @@ const createTaskSchema = z.object({
   description: z.string().optional(),
   repoId: z.string().min(1),
   engine: z.string().optional(),
+  model: z.string().optional(),
   priority: z.number().optional(),
 });
 
@@ -19,10 +20,12 @@ const updateTaskSchema = z.object({
   status: z.enum(["backlog", "in_progress", "review", "done", "failed"]).optional(),
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
+  model: z.string().optional(),
 });
 
 const launchTaskSchema = z.object({
   engine: z.string().optional(),
+  model: z.string().optional(),
 });
 
 export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
@@ -97,9 +100,10 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const body = await c.req.json().catch(() => ({}));
     const parsed = launchTaskSchema.safeParse(body);
     const engineOverride = parsed.success ? parsed.data.engine : undefined;
+    const modelOverride = parsed.success ? parsed.data.model : undefined;
 
     try {
-      const run = await orchestrator.launch(task, engineOverride);
+      const run = await orchestrator.launch(task, engineOverride, modelOverride);
       return c.json({ data: run }, 202);
     } catch (err: any) {
       return c.json({ error: "launch_failed", message: err.message }, 500);

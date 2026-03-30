@@ -30,6 +30,7 @@ function makeEngine(events: AgentEvent[]): AgentEngine {
     name: "mock",
     displayName: "Mock",
     isAvailable: async () => true,
+    listModels: async () => [],
     async *execute() {
       for (const e of events) yield e;
     },
@@ -358,6 +359,7 @@ describe("Orchestrator — launch guards", () => {
       name: "slow",
       displayName: "Slow",
       isAvailable: async () => true,
+      listModels: async () => [],
       async *execute() {
         await new Promise(() => {}); // never resolves
       },

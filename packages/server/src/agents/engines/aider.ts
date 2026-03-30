@@ -17,11 +17,29 @@ export class AiderEngine implements AgentEngine {
     }
   }
 
+  async listModels(): Promise<string[]> {
+    try {
+      const proc = Bun.spawn(["aider", "--list-models", ""], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      const text = await new Response(proc.stdout).text();
+      return text
+        .split("\n")
+        .map((l) => l.replace(/^-\s*/, "").trim())
+        .filter((l) => l && !l.startsWith("Aider") && !l.startsWith("Model"));
+    } catch {
+      return [];
+    }
+  }
+
   async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[aider] Starting in ${workdir}` };
 
+    const args = ["aider", "--yes-always", "--no-auto-commits"];
+    if (options?.model) args.push("--model", options.model);
+    args.push("--message", prompt);
+
     const proc = Bun.spawn(
-      ["aider", "--yes-always", "--no-auto-commits", "--message", prompt],
+      args,
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 

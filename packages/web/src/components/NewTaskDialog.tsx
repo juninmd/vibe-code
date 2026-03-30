@@ -6,6 +6,8 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Select } from "./ui/select";
 import { Combobox } from "./ui/combobox";
+import { PromptTemplatePicker } from "./PromptTemplatePicker";
+import { usePromptTemplates } from "../hooks/usePromptTemplates";
 
 interface NewTaskDialogProps {
   open: boolean;
@@ -21,6 +23,9 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [repoId, setRepoId] = useState("");
   const [engine, setEngine] = useState("");
   const [autoLaunch, setAutoLaunch] = useState(true);
+  const [showPicker, setShowPicker] = useState(false);
+
+  const { templates, addTemplate, removeTemplate } = usePromptTemplates();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,78 +45,108 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="New Task">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">Title *</label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What should the agent do?"
-            required
-          />
-        </div>
+    <>
+      <Dialog open={open} onClose={onClose} title="New Task">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Title *</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What should the agent do?"
+              required
+            />
+          </div>
 
-        <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">Description</label>
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Detailed instructions for the AI agent..."
-            rows={4}
-          />
-        </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-zinc-400">Description</label>
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                className="text-[10px] font-medium text-violet-400 hover:text-violet-300 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                ⚡ Templates
+              </button>
+            </div>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Detailed instructions for the AI agent..."
+              rows={4}
+            />
+          </div>
 
-        <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">Repository *</label>
-          <Combobox
-            value={repoId}
-            onChange={setRepoId}
-            placeholder="Search repositories..."
-            required
-            options={repos
-              .filter((r) => r.status === "ready" || r.status === "pending")
-              .map((repo) => ({
-                value: repo.id,
-                label: repo.name,
-                sublabel: repo.status !== "ready" ? repo.status : undefined,
-              }))}
-          />
-        </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Repository *</label>
+            <Combobox
+              value={repoId}
+              onChange={setRepoId}
+              placeholder="Search repositories..."
+              required
+              options={repos
+                .filter((r) => r.status === "ready" || r.status === "pending")
+                .map((repo) => ({
+                  value: repo.id,
+                  label: repo.name,
+                  sublabel: repo.status !== "ready" ? repo.status : undefined,
+                }))}
+            />
+          </div>
 
-        <div>
-          <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
-          <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
-            <option value="">Auto-select</option>
-            {engines
-              .filter((e) => e.available)
-              .map((eng) => (
-                <option key={eng.name} value={eng.name}>
-                  {eng.displayName}
-                </option>
-              ))}
-          </Select>
-        </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
+            <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
+              <option value="">Auto-select</option>
+              {engines
+                .filter((e) => e.available)
+                .map((eng) => (
+                  <option key={eng.name} value={eng.name}>
+                    {eng.displayName}
+                  </option>
+                ))}
+            </Select>
+          </div>
 
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoLaunch}
-            onChange={(e) => setAutoLaunch(e.target.checked)}
-            className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
-          />
-          <span className="text-sm text-zinc-300">Launch agent immediately</span>
-        </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoLaunch}
+              onChange={(e) => setAutoLaunch(e.target.checked)}
+              className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
+            />
+            <span className="text-sm text-zinc-300">Launch agent immediately</span>
+          </label>
 
-        <div className="flex gap-2 justify-end pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={!title.trim() || !repoId}>
-            Create Task
-          </Button>
-        </div>
-      </form>
-    </Dialog>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={!title.trim() || !repoId}>
+              Create Task
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {showPicker && (
+        <PromptTemplatePicker
+          templates={templates}
+          currentContent={description}
+          onSelect={(t) => {
+            setDescription(t.content);
+            if (!title.trim()) setTitle(t.title);
+            setShowPicker(false);
+          }}
+          onClose={() => setShowPicker(false)}
+          onSaveNew={async (data) => {
+            await addTemplate(data);
+          }}
+          onDelete={async (id) => {
+            await removeTemplate(id);
+          }}
+        />
+      )}
+    </>
   );
 }

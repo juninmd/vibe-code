@@ -41,4 +41,10 @@ export class EngineRegistry {
     }
     return results;
   }
+
+  async listModels(engineName: string): Promise<string[]> {
+    const engine = this.engines.get(engineName);
+    if (!engine) return [];
+    return engine.listModels();
+  }
 }

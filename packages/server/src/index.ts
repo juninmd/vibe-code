@@ -10,6 +10,7 @@ import { createTasksRouter } from "./api/tasks";
 import { createRunsRouter } from "./api/runs";
 import { createEnginesRouter } from "./api/engines";
 import { createSettingsRouter } from "./api/settings";
+import { createPromptsRouter } from "./api/prompts";
 import { GitService } from "./git/git-service";
 import { EngineRegistry } from "./agents/registry";
 import { Orchestrator } from "./agents/orchestrator";
@@ -55,6 +56,7 @@ app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry));
 app.route("/api/settings", createSettingsRouter(db));
+app.route("/api/prompts", createPromptsRouter(db));
 
 // Health check
 app.get("/api/health", (c) => {

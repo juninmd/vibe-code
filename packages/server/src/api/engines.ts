@@ -9,5 +9,10 @@ export function createEnginesRouter(registry: EngineRegistry) {
     return c.json({ data: engines });
   });
 
+  router.get("/:name/models", async (c) => {
+    const models = await registry.listModels(c.req.param("name"));
+    return c.json({ data: models });
+  });
+
   return router;
 }

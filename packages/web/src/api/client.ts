@@ -7,10 +7,12 @@ import type {
   EngineInfo,
   GitHubRepo,
   DiffSummary,
+  PromptTemplate,
   CreateRepoRequest,
   CreateTaskRequest,
   UpdateTaskRequest,
   LaunchTaskRequest,
+  CreatePromptTemplateRequest,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
@@ -85,5 +87,15 @@ export const api = {
     get: () => request<{ githubToken: string; githubTokenSet: boolean }>("/settings"),
     update: (data: { githubToken?: string }) =>
       request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+  },
+
+  prompts: {
+    list: () => request<PromptTemplate[]>("/prompts"),
+    create: (data: CreatePromptTemplateRequest) =>
+      request<PromptTemplate>("/prompts", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<CreatePromptTemplateRequest>) =>
+      request<PromptTemplate>(`/prompts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: string) =>
+      request<{ ok: boolean }>(`/prompts/${id}`, { method: "DELETE" }),
   },
 };

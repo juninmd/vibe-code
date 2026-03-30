@@ -17,11 +17,20 @@ export class ClaudeCodeEngine implements AgentEngine {
     }
   }
 
+  async listModels(): Promise<string[]> {
+    // Claude CLI does not provide a model listing command
+    return [];
+  }
+
   async *execute(prompt: string, workdir: string, options?: EngineOptions): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[claude-code] Starting in ${workdir}` };
 
+    const args = ["claude", "--print", "--verbose", "--output-format", "stream-json"];
+    if (options?.model) args.push("--model", options.model);
+    args.push("-p", prompt);
+
     const proc = Bun.spawn(
-      ["claude", "--print", "--verbose", "--output-format", "stream-json", "-p", prompt],
+      args,
       { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" }
     );
 

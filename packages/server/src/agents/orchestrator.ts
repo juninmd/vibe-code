@@ -30,7 +30,7 @@ export class Orchestrator {
     return this.activeRuns.size;
   }
 
-  async launch(task: Task, engineOverride?: string): Promise<AgentRun> {
+  async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
     if (this.activeRuns.size >= this.maxConcurrent) {
       throw new Error(`Max concurrent agents (${this.maxConcurrent}) reached. Try again later.`);
     }
@@ -46,6 +46,9 @@ export class Orchestrator {
       engine = await this.registry.getFirstAvailable();
       if (!engine) throw new Error("No AI engines available. Install claude, aider, or opencode.");
     }
+
+    // Resolve model (override > task.model)
+    const model = modelOverride ?? task.model ?? undefined;
 
     // Get repo
     const repo = this.db.repos.getById(task.repoId);
@@ -72,7 +75,7 @@ export class Orchestrator {
     // Launch async (don't await)
     const abort = new AbortController();
     this.activeRuns.set(task.id, { runId: run.id, taskId: task.id, engineName: engine.name, abort });
-    this.runAgent(task, run, engine, repo, abort).catch((err) => {
+    this.runAgent(task, run, engine, repo, abort, model).catch((err) => {
       console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
     });
 
@@ -209,7 +212,8 @@ export class Orchestrator {
     run: AgentRun,
     engine: ReturnType<EngineRegistry["get"]> & {},
     repo: { id: string; name: string; url: string; defaultBranch: string; localPath: string | null },
-    abort: AbortController
+    abort: AbortController,
+    model?: string
   ): Promise<void> {
     const barePath = repo.localPath ?? (await this.git.getBarePath(repo.name));
     const slugTitle = task.title

@@ -36,6 +36,7 @@ export interface Task {
   repoId: string;
   status: TaskStatus;
   engine: string | null;
+  model: string | null;
   priority: number;
   columnOrder: number;
   branchName: string | null;
@@ -66,6 +67,26 @@ export interface AgentLog {
   timestamp: string;
 }
 
+// ─── Prompt Template ────────────────────────────────────────────────────────
+
+export interface PromptTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  content: string;
+  category: string | null;
+  isBuiltin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePromptTemplateRequest {
+  title: string;
+  description?: string;
+  content: string;
+  category?: string;
+}
+
 // ─── API Request Types ───────────────────────────────────────────────────────
 
 export interface CreateRepoRequest {
@@ -78,6 +99,7 @@ export interface CreateTaskRequest {
   description?: string;
   repoId: string;
   engine?: string;
+  model?: string;
   priority?: number;
 }
 
@@ -87,10 +109,12 @@ export interface UpdateTaskRequest {
   status?: TaskStatus;
   columnOrder?: number;
   engine?: string;
+  model?: string;
 }
 
 export interface LaunchTaskRequest {
   engine?: string;
+  model?: string;
 }
 
 // ─── API Response Types ──────────────────────────────────────────────────────
