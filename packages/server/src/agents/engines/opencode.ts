@@ -240,8 +240,10 @@ export class OpenCodeEngine implements AgentEngine {
 
     // ─── Task 1: stream stdout ─────────────────────────────────────────────
     // OpenCode writes JSON lines to stdout. We parse each line in real-time.
+    let stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     const stdoutTask = (async () => {
       const reader = proc.stdout.getReader();
+      stdoutReader = reader;
       const dec = new TextDecoder();
       let buf = "";
       try {
@@ -259,16 +261,31 @@ export class OpenCodeEngine implements AgentEngine {
         if (buf.trim()) {
           for (const event of this.parseLine(buf)) push(event);
         }
+      } catch {
+        // Reader was cancelled (e.g. child process keeping pipe open on Windows)
       } finally {
-        reader.releaseLock();
+        try { reader.releaseLock(); } catch { /* ignore */ }
         stdoutDone = true;
         notify();
       }
     })();
 
+    // On Windows, child processes spawned by OpenCode (git, bash tools) inherit the
+    // stdout pipe handle. After OpenCode exits its children may still hold the pipe
+    // open, so the reader never reaches EOF. Cancel the reader after the process
+    // exits + a short grace period so any final bytes are flushed first.
+    proc.exited.then(async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!stdoutDone && stdoutReader) {
+        try { await stdoutReader.cancel(); } catch { /* ignore */ }
+      }
+    });
+
     // ─── Task 2: stream stderr ─────────────────────────────────────────────
+    let stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     const stderrTask = (async () => {
       const reader = proc.stderr.getReader();
+      stderrReader = reader;
       const dec = new TextDecoder();
       let buf = "";
       try {
@@ -285,12 +302,22 @@ export class OpenCodeEngine implements AgentEngine {
         }
         const msg = humanizeStderr(buf);
         if (msg) push({ type: "log", stream: "stderr", content: msg });
+      } catch {
+        // Reader was cancelled
       } finally {
-        reader.releaseLock();
+        try { reader.releaseLock(); } catch { /* ignore */ }
         stderrDone = true;
         notify();
       }
     })();
+
+    // Same cancellation guard for stderr (child processes may hold it open on Windows).
+    proc.exited.then(async () => {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (!stderrDone && stderrReader) {
+        try { await stderrReader.cancel(); } catch { /* ignore */ }
+      }
+    });
 
     // ─── Task 3: heartbeat ─────────────────────────────────────────────────
     // Emits a "still running" log every heartbeatIntervalMs.
