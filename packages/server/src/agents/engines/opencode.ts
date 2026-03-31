@@ -225,9 +225,8 @@ export class OpenCodeEngine implements AgentEngine {
       options.signal.addEventListener("abort", () => proc.kill());
     }
 
-    // Stream stderr live while the process runs (stderr is not affected by block-buffering)
     const queue: AgentEvent[] = [];
-    let stderrDone = false;
+    let processDone = false;
     let wakeup: (() => void) | null = null;
     const notify = () => {
       if (wakeup) {
@@ -241,6 +240,7 @@ export class OpenCodeEngine implements AgentEngine {
       notify();
     };
 
+    // Task 1 — stream stderr live (stderr is not block-buffered)
     const stderrTask = (async () => {
       const reader = proc.stderr.getReader();
       const dec = new TextDecoder();
@@ -261,30 +261,61 @@ export class OpenCodeEngine implements AgentEngine {
         if (msg) push({ type: "log", stream: "stderr", content: msg });
       } finally {
         reader.releaseLock();
-        stderrDone = true;
-        notify();
       }
     })();
 
-    // Yield stderr events as they arrive, until process exits and stderr is fully drained
-    while (!stderrDone || queue.length > 0) {
-      // biome-ignore lint/style/noNonNullAssertion: length checked above
-      while (queue.length > 0) yield queue.shift()!;
-      if (!stderrDone)
-        await new Promise<void>((r) => {
-          wakeup = r;
-        });
-    }
+    // Task 2 — poll stdout file every 1.5 s for partial JSON events.
+    // OpenCode writes JSON lines to the file; even with OS buffering we get
+    // periodic flushes so the user sees tool calls as they happen.
+    let stdoutLinesProcessed = 0;
+    const stdoutPollTask = (async () => {
+      while (!processDone) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (processDone) break;
+        try {
+          const content = await Bun.file(tmpFile).text();
+          const lines = content.split("\n");
+          for (let i = stdoutLinesProcessed; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.trim()) continue;
+            for (const event of this.parseLine(line)) push(event);
+            stdoutLinesProcessed++;
+          }
+        } catch {
+          // File not flushed yet or doesn't exist
+        }
+      }
+    })();
 
+    // Task 3 — heartbeat every 30 s so the user knows the agent is alive
+    const startedAt = Date.now();
+    const heartbeatTask = (async () => {
+      while (!processDone) {
+        await new Promise((r) => setTimeout(r, 30_000));
+        if (processDone) break;
+        const secs = Math.round((Date.now() - startedAt) / 1000);
+        const mins = Math.floor(secs / 60);
+        const s = secs % 60;
+        const elapsed = mins > 0 ? `${mins}m ${s}s` : `${s}s`;
+        push({ type: "log", stream: "system", content: `  Still running... ${elapsed}` });
+      }
+    })();
+
+    // Yield all events as they arrive, until the process exits
     const exitCode = await proc.exited;
-    await stderrTask;
+    processDone = true;
+    notify();
 
-    // After process exits, read stdout file and parse all JSON events
+    await Promise.all([stderrTask, stdoutPollTask, heartbeatTask]);
+
+    // Final pass — read any remaining stdout lines not yet picked up by the poll
     try {
       const content = await Bun.file(tmpFile).text();
-      for (const line of content.split("\n")) {
+      const lines = content.split("\n");
+      for (let i = stdoutLinesProcessed; i < lines.length; i++) {
+        const line = lines[i];
         if (!line.trim()) continue;
-        for (const event of this.parseLine(line)) yield event;
+        for (const event of this.parseLine(line)) push(event);
       }
     } catch {
       // stdout file might not exist if process failed immediately before writing
@@ -292,6 +323,12 @@ export class OpenCodeEngine implements AgentEngine {
       try { await rm(tmpFile); } catch {}
       // Remove the config file we injected — don't include it in git commits
       try { await rm(configPath); } catch {}
+    }
+
+    // Drain remaining queue
+    while (queue.length > 0) {
+      // biome-ignore lint/style/noNonNullAssertion: length checked above
+      yield queue.shift()!;
     }
 
     if (options?.runId) this.processes.delete(options.runId);
