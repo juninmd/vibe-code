@@ -1,12 +1,12 @@
-import type { AgentLog, TaskWithRun } from "@vibe-code/shared";
-import { useState } from "react";
+import type { AgentLog, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
+import { useEffect, useState } from "react";
+import { api } from "../api/client";
+import { formatDateTime } from "../utils/date";
 import { AgentOutput } from "./AgentOutput";
 import { DiffViewer } from "./DiffViewer";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
-
-import { formatDateTime } from "../utils/date";
 
 interface TaskDetailProps {
   task: TaskWithRun;
@@ -18,12 +18,14 @@ interface TaskDetailProps {
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
+  onTaskRefresh?: () => void;
 }
 
 const statusVariant: Record<
   string,
   "default" | "success" | "warning" | "danger" | "info" | "purple"
 > = {
+  scheduled: "warning",
   backlog: "default",
   in_progress: "info",
   review: "purple",
@@ -32,12 +34,248 @@ const statusVariant: Record<
 };
 
 const statusLabel: Record<string, string> = {
+  scheduled: "⏰ Agendada",
   backlog: "Backlog",
   in_progress: "In Progress",
   review: "In Review",
   done: "Done",
   failed: "Failed",
 };
+
+const CRON_PRESETS = [
+  { label: "A cada hora", value: "0 * * * *" },
+  { label: "Diariamente (meia-noite)", value: "0 0 * * *" },
+  { label: "Diariamente (9h)", value: "0 9 * * *" },
+  { label: "Semanalmente (seg 9h)", value: "0 9 * * 1" },
+  { label: "Customizado...", value: "custom" },
+];
+
+function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefresh: () => void }) {
+  const [schedule, setSchedule] = useState<TaskSchedule | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const [preset, setPreset] = useState(CRON_PRESETS[2].value);
+  const [customExpr, setCustomExpr] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [runNowLoading, setRunNowLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.schedules.get(taskId).then(setSchedule).catch(() => setSchedule(null));
+  }, [taskId]);
+
+  const resolvedExpression = preset === "custom" ? customExpr : preset;
+
+  function openEdit() {
+    if (schedule) {
+      const matchedPreset = CRON_PRESETS.find((p) => p.value === schedule.cronExpression && p.value !== "custom");
+      setPreset(matchedPreset ? matchedPreset.value : "custom");
+      setCustomExpr(matchedPreset ? "" : schedule.cronExpression);
+      setDeadline(schedule.deadlineAt ? schedule.deadlineAt.slice(0, 10) : "");
+    }
+    setEditing(true);
+    setError(null);
+  }
+
+  async function handleSave() {
+    if (!resolvedExpression) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const s = await api.schedules.upsert(taskId, {
+        cronExpression: resolvedExpression,
+        enabled: true,
+        deadlineAt: deadline ? new Date(deadline).toISOString() : null,
+      });
+      setSchedule(s);
+      setEditing(false);
+      onTaskRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle() {
+    if (!schedule) return;
+    try {
+      const s = await api.schedules.toggle(taskId, !schedule.enabled);
+      setSchedule(s);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await api.schedules.remove(taskId);
+      setSchedule(null);
+      onTaskRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRunNow() {
+    setRunNowLoading(true);
+    setError(null);
+    try {
+      await api.schedules.runNow(taskId);
+      const s = await api.schedules.get(taskId);
+      setSchedule(s);
+      onTaskRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRunNowLoading(false);
+    }
+  }
+
+  if (schedule === undefined) return null;
+
+  const isExpired = schedule?.deadlineAt ? new Date(schedule.deadlineAt) <= new Date() : false;
+  const isNearDeadline =
+    schedule?.deadlineAt && !isExpired
+      ? new Date(schedule.deadlineAt).getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000
+      : false;
+
+  return (
+    <div className="border border-zinc-800 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+          ⏰ Agendamento
+        </h3>
+        {!editing && (
+          <Button variant="ghost" onClick={openEdit} className="text-xs h-6 px-2">
+            {schedule ? "Editar" : "Adicionar"}
+          </Button>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400 bg-red-950/30 border border-red-800/40 rounded px-2 py-1">{error}</p>
+      )}
+
+      {schedule && !editing && (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <code className="text-xs text-amber-400 bg-zinc-800 px-2 py-0.5 rounded font-mono">
+              {schedule.cronExpression}
+            </code>
+            {isExpired ? (
+              <Badge variant="danger" className="text-[10px] py-0 px-1.5">Expirado</Badge>
+            ) : (
+              <button
+                type="button"
+                onClick={handleToggle}
+                title={schedule.enabled ? "Desabilitar" : "Habilitar"}
+                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
+                  schedule.enabled ? "bg-amber-600" : "bg-zinc-700"
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    schedule.enabled ? "translate-x-3.5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            )}
+            <span className="text-xs text-zinc-500">
+              {isExpired ? "" : schedule.enabled ? "Ativo" : "Pausado"}
+            </span>
+          </div>
+
+          <div className="text-xs text-zinc-600 space-y-0.5">
+            {schedule.lastRunAt && (
+              <div>Último disparo: <span className="text-zinc-400">{formatDateTime(schedule.lastRunAt)}</span></div>
+            )}
+            {schedule.nextRunAt && schedule.enabled && !isExpired && (
+              <div>Próximo disparo: <span className="text-zinc-400">{formatDateTime(schedule.nextRunAt)}</span></div>
+            )}
+            {schedule.deadlineAt && (
+              <div className={isNearDeadline ? "text-amber-500" : ""}>
+                Prazo: <span className={isNearDeadline ? "text-amber-400 font-medium" : "text-zinc-400"}>
+                  {formatDateTime(schedule.deadlineAt)}
+                  {isNearDeadline && " ⚠️"}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              disabled={runNowLoading}
+              onClick={handleRunNow}
+              className="text-xs h-7 px-2.5"
+            >
+              {runNowLoading ? "Disparando..." : "▶ Executar agora"}
+            </Button>
+            <Button variant="ghost" onClick={handleDelete} className="text-xs h-7 px-2 text-red-500 hover:text-red-400">
+              Remover
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {editing && (
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Frequência</label>
+            <select
+              value={preset}
+              onChange={(e) => setPreset(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+            >
+              {CRON_PRESETS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {preset === "custom" && (
+            <div>
+              <label className="text-xs text-zinc-500 mb-1 block">Expressão cron</label>
+              <input
+                type="text"
+                placeholder="ex: 0 9 * * 1-5"
+                value={customExpr}
+                onChange={(e) => setCustomExpr(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[10px] text-zinc-600 mt-1">minuto hora dia mês dia-semana</p>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs text-zinc-500 mb-1 block">Prazo (opcional)</label>
+            <input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              disabled={saving || !resolvedExpression}
+              onClick={handleSave}
+              className="text-xs h-7 px-3"
+            >
+              {saving ? "Salvando..." : "Salvar"}
+            </Button>
+            <Button variant="ghost" onClick={() => { setEditing(false); setError(null); }} className="text-xs h-7 px-2">
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatDuration(start: string | null, end: string | null): string | null {
   if (!start) return null;
@@ -59,6 +297,7 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
+  onTaskRefresh,
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -326,6 +565,21 @@ export function TaskDetail({
               </Button>
             )}
           </div>
+
+          {/* Parent task link for derived tasks */}
+          {task.parentTaskId && (
+            <div className="text-xs text-zinc-500">
+              ↳ Derivada do template{" "}
+              <code className="text-zinc-400 bg-zinc-800 px-1 py-0.5 rounded font-mono">
+                {task.parentTaskId.slice(0, 8)}
+              </code>
+            </div>
+          )}
+
+          {/* Schedule section — shown for scheduled templates and backlog tasks (can be converted) */}
+          {(task.status === "scheduled" || task.status === "backlog") && (
+            <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
+          )}
 
           {/* Agent Output */}
           <div>

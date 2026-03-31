@@ -96,6 +96,16 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
             {task.engine}
           </Badge>
         )}
+        {task.status === "scheduled" && (
+          <Badge variant="warning" className="text-[10px] py-0 px-1.5">
+            ⏰ agendada
+          </Badge>
+        )}
+        {task.parentTaskId && (
+          <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-60">
+            ↳ derivada
+          </Badge>
+        )}
         {task.status === "failed" && (
           <Badge variant="danger" className="text-[10px] py-0 px-1.5">
             Failed

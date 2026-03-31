@@ -202,6 +202,36 @@ export class Orchestrator {
     }
   }
 
+  async triggerScheduled(templateTaskId: string): Promise<AgentRun> {
+    const template = this.db.tasks.getById(templateTaskId);
+    if (!template) throw new Error("Template task not found");
+    if (template.status !== "scheduled") throw new Error("Task is not a scheduled template");
+
+    // Skip if a derived task from this template is already in_progress
+    const alreadyRunning = this.activeRuns.has(templateTaskId) ||
+      Array.from(this.activeRuns.values()).some((r) => {
+        const t = this.db.tasks.getById(r.taskId);
+        return t?.parentTaskId === templateTaskId;
+      });
+    if (alreadyRunning) throw new Error("A derived task from this template is already running");
+
+    // Create derived task with same data as template
+    const derived = this.db.tasks.create({
+      title: template.title,
+      description: template.description,
+      repoId: template.repoId,
+      engine: template.engine ?? undefined,
+      model: template.model ?? undefined,
+      priority: template.priority,
+      status: "backlog",
+      parentTaskId: template.id,
+    });
+
+    this.hub.broadcastAll({ type: "task_updated", task: derived });
+
+    return this.launch(derived);
+  }
+
   sendInput(taskId: string, input: string): boolean {
     const active = this.activeRuns.get(taskId);
     if (!active) return false;

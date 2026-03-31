@@ -1,13 +1,14 @@
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-export type TaskStatus = "backlog" | "in_progress" | "review" | "done" | "failed" | "archived";
+export type TaskStatus = "scheduled" | "backlog" | "in_progress" | "review" | "done" | "failed" | "archived";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin";
 
-export const TASK_COLUMNS: TaskStatus[] = ["backlog", "in_progress", "review", "done"];
+export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  scheduled: "Agendadas",
   backlog: "Backlog",
   in_progress: "In Progress",
   review: "Review",
@@ -42,6 +43,7 @@ export interface Task {
   columnOrder: number;
   branchName: string | null;
   prUrl: string | null;
+  parentTaskId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,6 +88,26 @@ export interface CreatePromptTemplateRequest {
   description?: string;
   content: string;
   category?: string;
+}
+
+// ─── Task Schedule ────────────────────────────────────────────────────────────
+
+export interface TaskSchedule {
+  id: string;
+  taskId: string;
+  cronExpression: string;
+  enabled: boolean;
+  deadlineAt: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertScheduleRequest {
+  cronExpression: string;
+  enabled?: boolean;
+  deadlineAt?: string | null;
 }
 
 // ─── API Request Types ───────────────────────────────────────────────────────

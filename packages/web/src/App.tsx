@@ -16,6 +16,8 @@ import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
 
+import { api } from "./api/client";
+
 export default function App() {
   const toastCtx = useToastState();
   const { toast } = toastCtx;
@@ -409,6 +411,7 @@ export default function App() {
             onSendInput={(taskId, input) => {
               send({ type: "agent_input", taskId, input });
             }}
+            onTaskRefresh={refresh}
           />
         )}
 
@@ -443,12 +446,20 @@ export default function App() {
           onClose={() => setShowNewTask(false)}
           repos={repos}
           engines={engines}
-          onSubmit={async ({ autoLaunch, model, ...data }) => {
+          onSubmit={async ({ autoLaunch, model, schedule, ...data }) => {
             const task = await createTask(data);
-            if (autoLaunch && task) {
+            if (!task) return;
+
+            if (schedule) {
+              await api.schedules.upsert(task.id, {
+                cronExpression: schedule.cronExpression,
+                enabled: true,
+              });
+              toast(`"${data.title}" scheduled (${schedule.cronExpression})`, "success");
+            } else if (autoLaunch) {
               await launchTask(task.id, data.engine, model);
               toast(`"${data.title}" started`, "success");
-            } else if (task) {
+            } else {
               toast(`"${data.title}" added to backlog`, "success");
             }
           }}

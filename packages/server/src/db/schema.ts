@@ -72,6 +72,18 @@ export function initDatabase(dbPath: string): Database {
       updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS task_schedules (
+      id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      task_id         TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+      cron_expression TEXT NOT NULL,
+      enabled         INTEGER NOT NULL DEFAULT 1,
+      deadline_at     TEXT,
+      last_run_at     TEXT,
+      next_run_at     TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tasks_repo_id ON tasks(repo_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_task_id ON agent_runs(task_id);
@@ -89,6 +101,9 @@ export function initDatabase(dbPath: string): Database {
   const taskColNames = taskCols.map((c) => c.name);
   if (!taskColNames.includes("model")) {
     db.exec("ALTER TABLE tasks ADD COLUMN model TEXT");
+  }
+  if (!taskColNames.includes("parent_task_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL");
   }
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)

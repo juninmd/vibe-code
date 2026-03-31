@@ -11,8 +11,10 @@ import type {
   PromptTemplate,
   Repository,
   Task,
+  TaskSchedule,
   TaskWithRun,
   UpdateTaskRequest,
+  UpsertScheduleRequest,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
@@ -106,5 +108,24 @@ export const api = {
     update: (id: string, data: Partial<CreatePromptTemplateRequest>) =>
       request<PromptTemplate>(`/prompts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/prompts/${id}`, { method: "DELETE" }),
+  },
+
+  schedules: {
+    get: (taskId: string) =>
+      request<TaskSchedule | null>(`/tasks/${taskId}/schedule`),
+    upsert: (taskId: string, data: UpsertScheduleRequest) =>
+      request<TaskSchedule>(`/tasks/${taskId}/schedule`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    remove: (taskId: string) =>
+      request<{ ok: boolean }>(`/tasks/${taskId}/schedule`, { method: "DELETE" }),
+    toggle: (taskId: string, enabled: boolean) =>
+      request<TaskSchedule>(`/tasks/${taskId}/schedule/toggle`, {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      }),
+    runNow: (taskId: string) =>
+      request<AgentRun>(`/tasks/${taskId}/schedule/run-now`, { method: "POST" }),
   },
 };

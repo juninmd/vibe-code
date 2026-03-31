@@ -1,9 +1,18 @@
 import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
 import { Hono } from "hono";
+import { Cron } from "croner";
 import { z } from "zod";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+
+function computeNextRun(expression: string): string | null {
+  try {
+    return new Cron(expression).nextRun()?.toISOString() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const createTaskSchema = z.object({
   title: z.string().min(1),
@@ -17,7 +26,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  status: z.enum(["backlog", "in_progress", "review", "done", "failed", "archived"]).optional(),
+  status: z.enum(["scheduled", "backlog", "in_progress", "review", "done", "failed", "archived"]).optional(),
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
@@ -196,6 +205,91 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
   router.get("/:id/runs", (c) => {
     const runs = db.runs.listByTask(c.req.param("id"));
     return c.json({ data: runs });
+  });
+
+  // ─── Schedule Endpoints ─────────────────────────────────────────────────────
+
+  const upsertScheduleSchema = z.object({
+    cronExpression: z.string().min(1),
+    enabled: z.boolean().optional(),
+    deadlineAt: z.string().nullable().optional(),
+  });
+
+  router.get("/:id/schedule", (c) => {
+    const schedule = db.schedules.getByTaskId(c.req.param("id"));
+    return c.json({ data: schedule ?? null });
+  });
+
+  router.put("/:id/schedule", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    const body = await c.req.json();
+    const parsed = upsertScheduleSchema.safeParse(body);
+    if (!parsed.success)
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+
+    // Validate cron expression
+    let nextRunAt: string | null;
+    try {
+      nextRunAt = computeNextRun(parsed.data.cronExpression);
+      if (nextRunAt === null) throw new Error("Expression produces no future run");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "validation", message: `Invalid cron expression: ${msg}` }, 400);
+    }
+
+    let schedule = db.schedules.upsert(
+      task.id,
+      parsed.data.cronExpression,
+      parsed.data.deadlineAt ?? null,
+      nextRunAt
+    );
+
+    if (parsed.data.enabled === false) {
+      schedule = db.schedules.setEnabled(task.id, false) ?? schedule;
+    }
+
+    // Always move the task to "scheduled" template status
+    if (task.status !== "scheduled") {
+      db.tasks.update(task.id, { status: "scheduled" });
+    }
+
+    return c.json({ data: schedule });
+  });
+
+  router.delete("/:id/schedule", (c) => {
+    db.schedules.remove(c.req.param("id"));
+    return c.json({ data: { ok: true } });
+  });
+
+  router.post("/:id/schedule/toggle", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const enabled = typeof (body as any).enabled === "boolean" ? (body as any).enabled : true;
+    const schedule = db.schedules.setEnabled(c.req.param("id"), enabled);
+    if (!schedule) return c.json({ error: "not_found", message: "No schedule found" }, 404);
+    return c.json({ data: schedule });
+  });
+
+  router.post("/:id/schedule/run-now", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    try {
+      const run = await orchestrator.triggerScheduled(task.id);
+
+      // Advance next_run_at on the schedule if one exists
+      const schedule = db.schedules.getByTaskId(task.id);
+      if (schedule) {
+        const next = computeNextRun(schedule.cronExpression);
+        db.schedules.updateAfterRun(task.id, next);
+      }
+
+      return c.json({ data: run }, 202);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "run_now_failed", message: msg }, 500);
+    }
   });
 
   // ─── Diff Endpoints ─────────────────────────────────────────────────────────

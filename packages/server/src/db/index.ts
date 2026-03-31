@@ -3,6 +3,7 @@ import {
   createPromptTemplateQueries,
   createRepoQueries,
   createRunQueries,
+  createScheduleQueries,
   createSettingsQueries,
   createTaskQueries,
 } from "./queries";
@@ -19,6 +20,7 @@ export function createDb(dbPath: string) {
     logs: createLogQueries(db),
     settings: createSettingsQueries(db),
     prompts: createPromptTemplateQueries(db),
+    schedules: createScheduleQueries(db),
   };
 }
 

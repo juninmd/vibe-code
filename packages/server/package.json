@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vibe-code/shared": "workspace:*",
+    "croner": "^10.0.1",
     "hono": "^4.7.0",
     "zod": "^3.24.0"
   },

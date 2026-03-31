@@ -8,6 +8,8 @@ import type {
   PromptTemplate,
   Repository,
   Task,
+  TaskSchedule,
+  TaskStatus,
   UpdateTaskRequest,
 } from "@vibe-code/shared";
 
@@ -37,6 +39,7 @@ interface TaskRow {
   column_order: number;
   branch_name: string | null;
   pr_url: string | null;
+  parent_task_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +95,7 @@ function mapTask(row: TaskRow): Task {
     columnOrder: row.column_order,
     branchName: row.branch_name,
     prUrl: row.pr_url,
+    parentTaskId: row.parent_task_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -197,12 +201,13 @@ export function createTaskQueries(db: Database) {
       const row = stmts.getById.get(id);
       return row ? mapTask(row) : null;
     },
-    create: (req: CreateTaskRequest): Task => {
-      const maxOrderRow = stmts.maxOrder.get("backlog");
+    create: (req: CreateTaskRequest & { status?: TaskStatus; parentTaskId?: string }): Task => {
+      const status = req.status ?? "backlog";
+      const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
       const row = db
-        .prepare<TaskRow, [string, string, string, string | null, string | null, number, number]>(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, priority, column_order) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
+        .prepare<TaskRow, [string, string, string, string | null, string | null, number, number, string, string | null]>(
+          "INSERT INTO tasks (title, description, repo_id, engine, model, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -211,7 +216,9 @@ export function createTaskQueries(db: Database) {
           req.engine ?? null,
           req.model ?? null,
           req.priority ?? 0,
-          order
+          order,
+          status,
+          req.parentTaskId ?? null
         )!;
       return mapTask(row);
     },
@@ -493,6 +500,88 @@ export function createPromptTemplateQueries(db: Database) {
     remove: (id: string): boolean => {
       const info = stmts.remove.run(id);
       return (info as any).changes > 0;
+    },
+  };
+}
+
+// ─── Task Schedule Queries ───────────────────────────────────────────────────
+
+interface ScheduleRow {
+  id: string;
+  task_id: string;
+  cron_expression: string;
+  enabled: number;
+  deadline_at: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapSchedule(row: ScheduleRow): TaskSchedule {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    cronExpression: row.cron_expression,
+    enabled: row.enabled === 1,
+    deadlineAt: row.deadline_at,
+    lastRunAt: row.last_run_at,
+    nextRunAt: row.next_run_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function createScheduleQueries(db: Database) {
+  return {
+    getByTaskId: (taskId: string): TaskSchedule | null => {
+      const row = db.prepare<ScheduleRow, [string]>("SELECT * FROM task_schedules WHERE task_id = ?").get(taskId);
+      return row ? mapSchedule(row) : null;
+    },
+    upsert: (taskId: string, cronExpression: string, deadlineAt: string | null, nextRunAt: string | null): TaskSchedule => {
+      const row = db
+        .prepare<ScheduleRow, [string, string, string | null, string | null]>(
+          `INSERT INTO task_schedules (task_id, cron_expression, deadline_at, next_run_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(task_id) DO UPDATE SET
+             cron_expression = excluded.cron_expression,
+             deadline_at = excluded.deadline_at,
+             next_run_at = excluded.next_run_at,
+             enabled = 1,
+             updated_at = datetime('now')
+           RETURNING *`
+        )
+        .get(taskId, cronExpression, deadlineAt, nextRunAt)!;
+      return mapSchedule(row);
+    },
+    setEnabled: (taskId: string, enabled: boolean): TaskSchedule | null => {
+      const row = db
+        .prepare<ScheduleRow, [number, string]>(
+          "UPDATE task_schedules SET enabled = ?, updated_at = datetime('now') WHERE task_id = ? RETURNING *"
+        )
+        .get(enabled ? 1 : 0, taskId);
+      return row ? mapSchedule(row) : null;
+    },
+    remove: (taskId: string): void => {
+      db.prepare("DELETE FROM task_schedules WHERE task_id = ?").run(taskId);
+    },
+    updateAfterRun: (taskId: string, nextRunAt: string | null): void => {
+      db.prepare(
+        "UPDATE task_schedules SET last_run_at = datetime('now'), next_run_at = ?, updated_at = datetime('now') WHERE task_id = ?"
+      ).run(nextRunAt, taskId);
+    },
+    listDue: (): TaskSchedule[] => {
+      const rows = db
+        .prepare<ScheduleRow, []>(
+          "SELECT * FROM task_schedules WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= datetime('now') AND (deadline_at IS NULL OR deadline_at > datetime('now'))"
+        )
+        .all();
+      return rows.map(mapSchedule);
+    },
+    disableExpired: (): void => {
+      db.prepare(
+        "UPDATE task_schedules SET enabled = 0, updated_at = datetime('now') WHERE deadline_at IS NOT NULL AND deadline_at <= datetime('now') AND enabled = 1"
+      ).run();
     },
   };
 }

@@ -5,19 +5,23 @@ import { TASK_STATUS_LABELS } from "@vibe-code/shared";
 import { TaskCard } from "./TaskCard";
 
 const columnColors: Record<TaskStatus, string> = {
+  scheduled: "border-amber-500",
   backlog: "border-zinc-600",
   in_progress: "border-blue-500",
   review: "border-violet-500",
   done: "border-emerald-500",
   failed: "border-red-500",
+  archived: "border-zinc-700",
 };
 
 const columnDescriptions: Record<TaskStatus, string> = {
+  scheduled: "Tasks que disparam automaticamente conforme agendamento",
   backlog: "Tasks waiting to be picked up by an AI agent",
   in_progress: "An AI agent is actively working on these tasks",
   review: "Agent finished and a Pull Request is open for review",
   done: "PR merged or task completed",
   failed: "Agent encountered an error",
+  archived: "Archived tasks",
 };
 
 interface ColumnProps {

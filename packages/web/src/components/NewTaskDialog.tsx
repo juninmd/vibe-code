@@ -32,8 +32,19 @@ interface NewTaskDialogProps {
     engine?: string;
     model?: string;
     autoLaunch: boolean;
+    schedule?: {
+      cronExpression: string;
+    };
   }) => void;
 }
+
+const CRON_PRESETS = [
+  { label: "Daily (00:00)", value: "0 0 * * *" },
+  { label: "Weekly (Sunday 00:00)", value: "0 0 * * 0" },
+  { label: "Monthly (1st 00:00)", value: "0 0 1 * *" },
+  { label: "Every Hour", value: "0 * * * *" },
+  { label: "Every 15 Minutes", value: "*/15 * * * *" },
+];
 
 export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTaskDialogProps) {
   const [title, setTitle] = useState("");
@@ -45,6 +56,11 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [loadingModels, setLoadingModels] = useState(false);
   const [autoLaunch, setAutoLaunch] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
+
+  // Scheduling state
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [cronExpression, setCronExpression] = useState(CRON_PRESETS[0].value);
+  const [isCustomCron, setIsCustomCron] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
 
@@ -73,7 +89,8 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
       repoId,
       engine: engine || undefined,
       model: model || undefined,
-      autoLaunch,
+      autoLaunch: isScheduled ? false : autoLaunch, // Don't auto-launch if scheduling
+      schedule: isScheduled ? { cronExpression } : undefined,
     });
     setTitle("");
     setDescription("");
@@ -81,13 +98,14 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
     setEngine("");
     setModel("");
     setModels([]);
+    setIsScheduled(false);
     onClose();
   };
 
   return (
     <>
       <Dialog open={open} onClose={onClose} title="New Task">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">Title *</label>
             <Input
@@ -117,34 +135,36 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Repository *</label>
-            <Combobox
-              value={repoId}
-              onChange={setRepoId}
-              placeholder="Search repositories..."
-              required
-              options={repos
-                .filter((r) => r.status === "ready" || r.status === "pending")
-                .map((repo) => ({
-                  value: repo.id,
-                  label: repo.name,
-                  sublabel: repo.status !== "ready" ? repo.status : undefined,
-                }))}
-            />
-          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">Repository *</label>
+              <Combobox
+                value={repoId}
+                onChange={setRepoId}
+                placeholder="Search..."
+                required
+                options={repos
+                  .filter((r) => r.status === "ready" || r.status === "pending")
+                  .map((repo) => ({
+                    value: repo.id,
+                    label: repo.name,
+                    sublabel: repo.status !== "ready" ? repo.status : undefined,
+                  }))}
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
-            <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
-              <option value="">Auto-select</option>
-              {engines.map((eng) => (
-                <option key={eng.name} value={eng.name} disabled={!eng.available}>
-                  {eng.displayName}
-                  {!eng.available ? " (unavailable)" : ""}
-                </option>
-              ))}
-            </Select>
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
+              <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
+                <option value="">Auto-select</option>
+                {engines.map((eng) => (
+                  <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                    {eng.displayName}
+                    {!eng.available ? " (unavailable)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
           {engine && (models.length > 0 || loadingModels) && (
@@ -169,22 +189,70 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
             </div>
           )}
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoLaunch}
-              onChange={(e) => setAutoLaunch(e.target.checked)}
-              className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
-            />
-            <span className="text-sm text-zinc-300">Launch agent immediately</span>
-          </label>
+          <div className="pt-2 space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                onChange={(e) => setIsScheduled(e.target.checked)}
+                className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
+              />
+              <span className="text-sm font-medium text-zinc-200">Schedule Task (Recurring)</span>
+            </label>
 
-          <div className="flex gap-2 justify-end pt-2">
+            {isScheduled ? (
+              <div className="pl-6 space-y-3 border-l-2 border-zinc-700 animate-in slide-in-from-left-2">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">Frequency</label>
+                  <Select 
+                    value={isCustomCron ? "custom" : cronExpression} 
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        setIsCustomCron(true);
+                      } else {
+                        setIsCustomCron(false);
+                        setCronExpression(e.target.value);
+                      }
+                    }}
+                  >
+                    {CRON_PRESETS.map(p => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                    <option value="custom">Custom Cron Expression...</option>
+                  </Select>
+                </div>
+
+                {isCustomCron && (
+                  <div className="animate-in fade-in zoom-in-95 duration-200">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">Cron Expression</label>
+                    <Input
+                      value={cronExpression}
+                      onChange={(e) => setCronExpression(e.target.value)}
+                      placeholder="e.g. 0 12 * * 1-5"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-1">Format: min hour day month day-of-week</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer pl-0.5">
+                <input
+                  type="checkbox"
+                  checked={autoLaunch}
+                  onChange={(e) => setAutoLaunch(e.target.checked)}
+                  className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
+                />
+                <span className="text-sm text-zinc-400">Launch agent immediately</span>
+              </label>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end pt-4 border-t border-zinc-800">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={!title.trim() || !repoId}>
-              Create Task
+              {isScheduled ? "Create Schedule" : "Create Task"}
             </Button>
           </div>
         </form>

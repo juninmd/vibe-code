@@ -77,6 +77,8 @@ export function Board({
       }
 
       if (task.status === targetStatus) return;
+      // Scheduled template tasks cannot be dragged to other columns
+      if (task.status === "scheduled") return;
 
       // Calculate new order
       const targetTasks = tasksByColumn[targetStatus];

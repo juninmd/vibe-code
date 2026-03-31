@@ -6,6 +6,7 @@ import { createBunWebSocket } from "hono/bun";
 import { cors } from "hono/cors";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
+import { ScheduleRunner } from "./agents/schedule-runner";
 import { createEnginesRouter } from "./api/engines";
 import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
@@ -71,6 +72,9 @@ await git.init();
 
 const prPoller = new PrPoller(db, hub);
 prPoller.start();
+
+const scheduleRunner = new ScheduleRunner(db, orchestrator);
+scheduleRunner.start();
 
 // ─── Hono App ────────────────────────────────────────────────────────────────
 
