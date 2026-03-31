@@ -12,8 +12,10 @@ export function useWebSocket(onMessage: MessageHandler) {
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let attempts = 0;
+    let destroyed = false;
 
     function connect() {
+      if (destroyed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
       wsRef.current = ws;
@@ -35,6 +37,7 @@ export function useWebSocket(onMessage: MessageHandler) {
       ws.onclose = () => {
         setConnected(false);
         wsRef.current = null;
+        if (destroyed) return; // Explicit close — do not reconnect
         // Exponential backoff reconnect
         const delay = Math.min(1000 * 2 ** attempts, 30000);
         attempts++;
@@ -49,6 +52,7 @@ export function useWebSocket(onMessage: MessageHandler) {
     connect();
 
     return () => {
+      destroyed = true;
       clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };

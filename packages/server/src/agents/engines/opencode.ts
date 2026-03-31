@@ -189,12 +189,19 @@ export class OpenCodeEngine implements AgentEngine {
       content: `[opencode] Starting in ${workdir} (model: ${model})`,
     };
 
-    // Write opencode.json with all permissions pre-approved so OpenCode doesn't
-    // prompt for tool approval in non-interactive mode (which would cause a hang).
+    // Write opencode.json with permissions pre-configured for non-interactive mode.
+    // Allow all tool use but deny question/plan prompts that would wait for user input.
     const configPath = join(workdir, "opencode.json");
     await writeFile(
       configPath,
-      JSON.stringify({ permission: { "*": "allow" } }, null, 2),
+      JSON.stringify({
+        permission: {
+          "*": "allow",
+          question: "deny",
+          plan_enter: "deny",
+          plan_exit: "deny",
+        },
+      }, null, 2),
       "utf8"
     );
 
