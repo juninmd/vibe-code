@@ -4,6 +4,7 @@ import type { WsClientMessage } from "@vibe-code/shared";
 import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/bun";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
@@ -92,6 +93,10 @@ app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry));
 app.route("/api/settings", createSettingsRouter(db));
 app.route("/api/prompts", createPromptsRouter(db));
+
+// Serve static frontend files
+app.get("/*", serveStatic({ root: "../web/dist" }));
+app.get("*", serveStatic({ path: "../web/dist/index.html" }));
 
 // Health check
 app.get("/api/health", (c) => {
