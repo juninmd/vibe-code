@@ -1,8 +1,149 @@
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+
+// Maps raw tool names to readable labels and extracts the most useful arg
+function humanizeToolCall(tool: string, input: Record<string, unknown>): string {
+  const t = tool.toLowerCase();
+  const path = str(input.path ?? input.file_path ?? input.file ?? input.filename);
+  const cmd = str(input.command ?? input.cmd);
+  const query = str(input.query ?? input.pattern ?? input.glob ?? input.search);
+  const url = str(input.url);
+
+  if (t.includes("read") || t === "view_file" || t === "cat") return `  Reading ${path || "file"}`;
+  if (t.includes("write") || t.includes("create_file") || t === "touch")
+    return `  Writing ${path || "file"}`;
+  if (t.includes("edit") || t.includes("str_replace") || t.includes("patch"))
+    return `  Editing ${path || "file"}`;
+  if (t.includes("delete") || t.includes("remove_file")) return `  Deleting ${path || "file"}`;
+  if (t.includes("move") || t.includes("rename")) return `  Moving ${path || "file"}`;
+  if (t === "bash" || t.includes("run_command") || t.includes("execute") || t.includes("shell"))
+    return `  Running: ${cmd || "(command)"}`;
+  if (t.includes("list") || t.includes("ls") || t.includes("directory"))
+    return `  Listing ${path || "directory"}`;
+  if (t.includes("grep") || t.includes("search") || t.includes("find") || t.includes("glob"))
+    return `  Searching ${query ? `"${query}"` : ""}${path ? ` in ${path}` : ""}`;
+  if (t.includes("web") || t.includes("browser") || t.includes("fetch"))
+    return `  Fetching ${url || "URL"}`;
+  if (t.includes("git")) return `  Git: ${cmd || t}`;
+
+  // Generic fallback — show tool name in readable form
+  const readable = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const detail = path || cmd || query || url;
+  return `  ${readable}${detail ? `: ${detail}` : ""}`;
+}
+
+function humanizeToolResult(tool: string, output: unknown): string | null {
+  if (output == null) return null;
+  const t = tool.toLowerCase();
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  const lines = text.split("\n").filter((l) => l.trim()).length;
+  const preview = text.slice(0, 120).replace(/\n/g, " ").trim();
+
+  if (t === "bash" || t.includes("run_command") || t.includes("execute")) {
+    if (!text.trim()) return "    Done (no output)";
+    return `    ${preview}${text.length > 120 ? ` … (${lines} lines)` : ""}`;
+  }
+  if (t.includes("read") || t === "view_file") {
+    return `    ${lines} line${lines !== 1 ? "s" : ""} read`;
+  }
+  if (t.includes("search") || t.includes("grep") || t.includes("glob")) {
+    return `    ${lines} match${lines !== 1 ? "es" : ""}`;
+  }
+  if (
+    t.includes("write") ||
+    t.includes("edit") ||
+    t.includes("create") ||
+    t.includes("str_replace")
+  ) {
+    return `    Saved`;
+  }
+  if (t.includes("web") || t.includes("fetch")) {
+    return `    ${lines} line${lines !== 1 ? "s" : ""} fetched`;
+  }
+  // For others, show a brief preview only if it's short
+  if (text.length <= 80) return `    ${preview}`;
+  return null; // suppress long noisy outputs
+}
+
+function str(v: unknown): string {
+  return v != null ? String(v) : "";
+}
+
+// Filter/humanize stderr — OpenCode emits internal debug logs and JSON to stderr.
+// Return null to suppress, or a human-readable string to show.
+function humanizeStderr(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  // Try to parse as JSON — internal structured logs from the CLI
+  try {
+    const obj = JSON.parse(trimmed) as Record<string, unknown>;
+    const level = str(obj.level ?? obj.severity ?? "").toLowerCase();
+    const msg = str(obj.message ?? obj.msg ?? obj.text ?? "");
+
+    // Suppress debug/trace level noise
+    if (level === "debug" || level === "trace" || level === "verbose") return null;
+
+    // Suppress internal OpenCode lifecycle messages
+    if (
+      msg.includes("session") ||
+      msg.includes("provider") ||
+      msg.includes("model loaded") ||
+      msg.includes("initialized") ||
+      msg.includes("cleanup")
+    )
+      return null;
+
+    if (msg) return msg;
+    return null;
+  } catch {
+    // Plain text stderr
+  }
+
+  // Suppress common debug patterns
+  if (
+    trimmed.startsWith("DEBUG") ||
+    trimmed.startsWith("TRACE") ||
+    trimmed.match(/^\d{4}-\d{2}-\d{2}T.*\[DEBUG\]/) ||
+    trimmed.match(/^\[debug\]/i) ||
+    trimmed.match(/^INF /) ||
+    trimmed.match(/^DBG /)
+  )
+    return null;
+
+  // Handle OpenCode structured log format: INFO  <ISO-date> +<ms>ms service=<name> [key=value...] <message>
+  // e.g. "INFO  2026-03-30T21:06:05 +283ms service=default version=1.2.26 opencode"
+  const opencodeLogMatch = trimmed.match(/^INFO\s+\S+\s+\+\d+ms\s+service=(\S+)\s+(.*)/);
+  if (opencodeLogMatch) {
+    const service = opencodeLogMatch[1];
+    const rest = opencodeLogMatch[2];
+    // Only surface meaningful user-visible events
+    if (service === "llm") {
+      const modelMatch = rest.match(/modelID=(\S+)/);
+      if (modelMatch) return `  Using model: ${modelMatch[1]}`;
+    }
+    if (service === "tools") {
+      const toolMatch = rest.match(/tool=(\S+)/);
+      if (toolMatch) return `  Tool: ${toolMatch[1]}`;
+    }
+    // Suppress all other internal service noise
+    return null;
+  }
+
+  // Handle WARN/ERROR lines from OpenCode structured logs
+  const opencodeWarnMatch = trimmed.match(/^(WARN|ERROR)\s+\S+\s+\+\d+ms\s+service=\S+\s+(.*)/);
+  if (opencodeWarnMatch) {
+    const level = opencodeWarnMatch[1];
+    const msg = opencodeWarnMatch[2].replace(/\w+=\S+\s*/g, "").trim();
+    if (msg) return `[${level}] ${msg}`;
+    return null;
+  }
+
+  return trimmed;
+}
 
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
@@ -46,6 +187,15 @@ export class OpenCodeEngine implements AgentEngine {
       content: `[opencode] Starting in ${workdir} (model: ${model})`,
     };
 
+    // Write opencode.json with all permissions pre-approved so OpenCode doesn't
+    // prompt for tool approval in non-interactive mode (which would cause a hang).
+    const configPath = join(workdir, "opencode.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({ permission: { "*": "allow" } }, null, 2),
+      "utf8"
+    );
+
     // Write stdout to a temp file to avoid Windows pipe block-buffering.
     // On Windows, subprocess stdout piped via Bun.spawn is block-buffered (64KB),
     // meaning no data flows until the buffer fills or the process exits.
@@ -56,7 +206,7 @@ export class OpenCodeEngine implements AgentEngine {
     );
 
     const proc = Bun.spawn(
-      ["opencode", "run", "--format", "json", "--print-logs", "--model", model, prompt],
+      ["opencode", "run", "--format", "json", "--model", model, prompt],
       { cwd: workdir, stdout: Bun.file(tmpFile), stderr: "pipe", stdin: "pipe" }
     );
 
@@ -102,10 +252,13 @@ export class OpenCodeEngine implements AgentEngine {
           buf += dec.decode(value, { stream: true });
           const lines = buf.split("\n");
           buf = lines.pop() ?? "";
-          for (const line of lines)
-            if (line.trim()) push({ type: "log", stream: "stderr", content: line });
+          for (const line of lines) {
+            const msg = humanizeStderr(line);
+            if (msg) push({ type: "log", stream: "stderr", content: msg });
+          }
         }
-        if (buf.trim()) push({ type: "log", stream: "stderr", content: buf });
+        const msg = humanizeStderr(buf);
+        if (msg) push({ type: "log", stream: "stderr", content: msg });
       } finally {
         reader.releaseLock();
         stderrDone = true;
@@ -136,9 +289,9 @@ export class OpenCodeEngine implements AgentEngine {
     } catch {
       // stdout file might not exist if process failed immediately before writing
     } finally {
-      try {
-        await rm(tmpFile);
-      } catch {}
+      try { await rm(tmpFile); } catch {}
+      // Remove the config file we injected — don't include it in git commits
+      try { await rm(configPath); } catch {}
     }
 
     if (options?.runId) this.processes.delete(options.runId);
@@ -184,7 +337,7 @@ export class OpenCodeEngine implements AgentEngine {
         const part = event.part ?? {};
         const partType = String(part.type ?? event.type);
 
-        // Text output from the model
+        // Text output from the model — show as-is
         if (event.type === "text" && (part.text || part.content)) {
           results.push({
             type: "log",
@@ -199,56 +352,40 @@ export class OpenCodeEngine implements AgentEngine {
           const toolName = String(part.tool ?? part.name ?? "unknown");
           const state = (part.state ?? {}) as Record<string, unknown>;
           const status = state.status ?? "calling";
-          const input = state.input ?? part.input;
+          const input = (state.input ?? part.input ?? {}) as Record<string, unknown>;
           const output = state.output ?? part.output ?? part.content;
 
           if (status === "calling" || !status) {
-            const inputStr = input ? ` ${JSON.stringify(input).slice(0, 200)}` : "";
-            results.push({ type: "status", content: `Tool: ${toolName}` });
-            results.push({
-              type: "log",
-              stream: "stdout",
-              content: `[tool] ${toolName}${inputStr}`,
-            });
+            const label = humanizeToolCall(toolName, input);
+            results.push({ type: "status", content: label });
+            results.push({ type: "log", stream: "stdout", content: label });
           } else if (status === "completed") {
-            const outputStr = output
-              ? `: ${typeof output === "string" ? output : JSON.stringify(output)}`
-              : " (done)";
-            results.push({
-              type: "log",
-              stream: "stdout",
-              content: `[tool result] ${toolName}${outputStr.slice(0, 500)}`,
-            });
+            const label = humanizeToolResult(toolName, output);
+            if (label) results.push({ type: "log", stream: "stdout", content: label });
           }
           continue;
         }
 
-        // Thinking / reasoning
+        // Thinking / reasoning — show a brief indicator, not the full blob
         if ((event.type === "thinking" || partType === "thinking") && part.text) {
           results.push({ type: "status", content: "Thinking..." });
-          results.push({
-            type: "log",
-            stream: "system",
-            content: `[thinking] ${String(part.text).trim()}`,
-          });
           continue;
         }
 
         // Step boundaries
         if (event.type === "step_start" || partType === "step-start") {
-          results.push({ type: "status", content: "Agent is thinking..." });
-          results.push({ type: "log", stream: "system", content: "[opencode] Step started" });
+          results.push({ type: "status", content: "Working..." });
           continue;
         }
         if (event.type === "step_finish" || partType === "step-finish") {
-          const reason = part.reason ? ` (${String(part.reason)})` : "";
           const tokens = part.tokens as Record<string, number> | undefined;
-          const tokenInfo = tokens?.total ? ` — ${tokens.total} tokens` : "";
-          results.push({
-            type: "log",
-            stream: "system",
-            content: `[opencode] Step finished${reason}${tokenInfo}`,
-          });
+          if (tokens?.total) {
+            results.push({
+              type: "log",
+              stream: "system",
+              content: `  tokens used: ${tokens.total.toLocaleString()}`,
+            });
+          }
           continue;
         }
 
@@ -257,7 +394,7 @@ export class OpenCodeEngine implements AgentEngine {
           results.push({
             type: "log",
             stream: "stderr",
-            content: String(part.message ?? part.error ?? jsonStr),
+            content: String(part.message ?? part.error ?? "Unknown error"),
           });
           continue;
         }
@@ -266,21 +403,16 @@ export class OpenCodeEngine implements AgentEngine {
         if (event.type === "progress" || partType === "progress") {
           const msg = String(part.message ?? "Working...");
           results.push({ type: "status", content: msg });
-          results.push({ type: "log", stream: "system", content: `[progress] ${msg}` });
-          continue;
+          results.push({ type: "log", stream: "system", content: `  ${msg}` });
         }
 
-        // Fallback: don't silently drop unknown events
-        if (event.type !== "heartbeat") {
-          results.push({
-            type: "log",
-            stream: "system",
-            content: `[${partType}] ${JSON.stringify(part).slice(0, 200)}`,
-          });
-        }
+        // Silently drop heartbeats and other noise
       } catch {
-        // Not JSON — show as raw output
-        results.push({ type: "log", stream: "stdout", content: jsonStr });
+        // Not JSON — show as raw output only if it looks meaningful
+        const trimmed = jsonStr.trim();
+        if (trimmed && !trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+          results.push({ type: "log", stream: "stdout", content: trimmed });
+        }
       }
     }
     return results;

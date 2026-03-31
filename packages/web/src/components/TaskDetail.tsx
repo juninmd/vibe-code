@@ -10,11 +10,11 @@ interface TaskDetailProps {
   task: TaskWithRun;
   liveLogs: AgentLog[];
   onClose: () => void;
-  onLaunch: (taskId: string, engine?: string) => void;
-  onCancel: (taskId: string) => void;
-  onRetry: (taskId: string) => void;
-  onRetryPR: (taskId: string) => void;
-  onDelete: (taskId: string) => void;
+  onLaunch: (taskId: string, engine?: string) => Promise<void>;
+  onCancel: (taskId: string) => Promise<void>;
+  onRetry: (taskId: string) => Promise<void>;
+  onRetryPR: (taskId: string) => Promise<void>;
+  onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
 }
 
@@ -110,7 +110,19 @@ export function TaskDetail({
             <Badge variant={statusVariant[task.status] ?? "default"}>
               {statusLabel[task.status] ?? task.status}
             </Badge>
-            {task.engine && <Badge variant="purple">{task.engine}</Badge>}
+            {task.engine && (
+              <Badge variant="purple">
+                {task.engine}
+                {task.model && (
+                  <span className="opacity-70 ml-1 font-normal">
+                    ·{" "}
+                    {task.model.includes("/")
+                      ? task.model.split("/").slice(1).join("/")
+                      : task.model}
+                  </span>
+                )}
+              </Badge>
+            )}
             {isRunning && (
               <span className="flex items-center gap-1.5 text-xs text-blue-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />

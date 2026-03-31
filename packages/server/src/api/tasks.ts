@@ -219,6 +219,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const filePath = c.req.query("path");
     if (!filePath)
       return c.json({ error: "validation", message: "Missing 'path' query parameter" }, 400);
+    if (filePath.includes(".."))
+      return c.json({ error: "validation", message: "Invalid file path" }, 400);
 
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);

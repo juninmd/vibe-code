@@ -38,6 +38,25 @@ const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
 
 await git.init();
 
+// ─── Recover stuck tasks ─────────────────────────────────────────────────────
+// Tasks left as "in_progress" from a previous server session will never finish.
+// Reset them to "failed" so the user can retry.
+{
+  const stuck = db.tasks.list(undefined, "in_progress");
+  for (const task of stuck) {
+    db.tasks.update(task.id, { status: "failed" });
+    // Mark the latest run as failed too
+    const run = db.runs.getLatestByTask(task.id);
+    if (run && run.status === "running") {
+      db.runs.updateStatus(run.id, "failed", {
+        finished_at: new Date().toISOString(),
+        error_message: "Server restarted while task was running",
+      });
+    }
+    console.log(`  ↩ Recovered stuck task: "${task.title}" → failed`);
+  }
+}
+
 const prPoller = new PrPoller(db, hub);
 prPoller.start();
 

@@ -65,8 +65,12 @@ export class Orchestrator {
     // Create run record
     const run = this.db.runs.create(task.id, engine.name);
 
-    // Update task status
-    this.db.tasks.update(task.id, { status: "in_progress" });
+    // Update task status (and persist engine/model overrides if provided)
+    this.db.tasks.update(task.id, {
+      status: "in_progress",
+      ...(engineOverride ? { engine: engineOverride } : {}),
+      ...(model && model !== task.model ? { model } : {}),
+    });
     this.hub.broadcastAll({
       type: "task_updated",
       task: { ...task, status: "in_progress" },
@@ -240,6 +244,14 @@ export class Orchestrator {
       .slice(0, 40);
     const branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
 
+    // Agent timeout — default 20 minutes, override with env var
+    const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 20 * 60 * 1000;
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      abort.abort();
+    }, TIMEOUT_MS);
+
     let wtPath: string | undefined;
 
     try {
@@ -252,6 +264,7 @@ export class Orchestrator {
       }
 
       // Create worktree
+      this.sysLog(run.id, task.id, "Setting up workspace...");
       wtPath = await this.git.createWorktree(
         barePath,
         branch,
@@ -273,11 +286,14 @@ export class Orchestrator {
         await this.handleEvent(event, run.id, task.id);
       }
 
-      if (abort.signal.aborted) return;
+      if (abort.signal.aborted) {
+        throw new Error(timedOut ? `Agent timed out after ${Math.round(TIMEOUT_MS / 60000)} minutes` : "Cancelled");
+      }
 
       // Commit any uncommitted changes left by the agent
       const hasChanges = await this.git.hasChanges(wtPath);
       if (hasChanges) {
+        this.sysLog(run.id, task.id, "Committing changes...");
         await this.git.commitAll(wtPath, `vibe-code: ${task.title}`);
       }
 
@@ -289,9 +305,10 @@ export class Orchestrator {
 
       // Push branch and create PR
       try {
+        this.sysLog(run.id, task.id, "Pushing branch to origin...");
         await this.git.push(wtPath, branch);
 
-        // Create PR
+        this.sysLog(run.id, task.id, "Creating Pull Request...");
         const prBody = `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`;
         const prUrl = await this.git.createPR(wtPath, repo.url, branch, task.title, prBody);
 
@@ -309,21 +326,14 @@ export class Orchestrator {
           this.hub.broadcastAll({ type: "task_updated", task: updatedTask });
         }
 
-        this.db.logs.create(run.id, "system", `PR created: ${prUrl}`);
-        this.hub.broadcastToTask(task.id, {
-          type: "agent_log",
-          runId: run.id,
-          taskId: task.id,
-          stream: "system",
-          content: `PR created: ${prUrl}`,
-          timestamp: new Date().toISOString(),
-        });
+        this.sysLog(run.id, task.id, `PR created: ${prUrl}`);
       } catch (pushErr) {
-        // Push failed - still mark as completed but without PR
+        // Push/PR failed — task still moves to review so the user can retry the PR
         const pushErrMsg = pushErr instanceof Error ? pushErr.message : String(pushErr);
+        this.sysLog(run.id, task.id, `Push/PR failed: ${pushErrMsg}`);
         this.db.runs.updateStatus(run.id, "completed", {
           finished_at: new Date().toISOString(),
-          exit_code: 0,
+          exit_code: 1,
           error_message: `Push/PR failed: ${pushErrMsg}`,
         });
         this.db.tasks.updateField(task.id, "branch_name", branch);
@@ -333,22 +343,27 @@ export class Orchestrator {
         }
       }
     } catch (err) {
-      // Agent failed
       const errMsg = err instanceof Error ? err.message : String(err);
+      // Distinguish timeout/cancel from real failures
+      const isCancelled = !timedOut && abort.signal.aborted;
+      if (!isCancelled) {
+        this.sysLog(run.id, task.id, `Failed: ${errMsg}`);
+      }
       const updatedRun = this.db.runs.updateStatus(run.id, "failed", {
         finished_at: new Date().toISOString(),
         error_message: errMsg,
       });
-      this.db.tasks.update(task.id, { status: "failed" });
+      this.db.tasks.update(task.id, { status: isCancelled ? "backlog" : "failed" });
 
-      const failedTask = this.db.tasks.getById(task.id);
-      if (failedTask) {
-        this.hub.broadcastAll({ type: "task_updated", task: failedTask });
+      const finalTask = this.db.tasks.getById(task.id);
+      if (finalTask) {
+        this.hub.broadcastAll({ type: "task_updated", task: finalTask });
       }
       if (updatedRun) {
         this.hub.broadcastAll({ type: "run_updated", run: updatedRun });
       }
     } finally {
+      clearTimeout(timeoutId);
       this.activeRuns.delete(task.id);
 
       // Cleanup worktree
@@ -360,6 +375,19 @@ export class Orchestrator {
         }
       }
     }
+  }
+
+  /** Broadcast and persist a system log line. */
+  private sysLog(runId: string, taskId: string, content: string): void {
+    this.db.logs.create(runId, "system", content);
+    this.hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId,
+      taskId,
+      stream: "system" as LogStream,
+      content,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async handleEvent(event: AgentEvent, runId: string, taskId: string): Promise<void> {

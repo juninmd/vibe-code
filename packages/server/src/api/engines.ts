@@ -10,8 +10,13 @@ export function createEnginesRouter(registry: EngineRegistry) {
   });
 
   router.get("/:name/models", async (c) => {
-    const models = await registry.listModels(c.req.param("name"));
-    return c.json({ data: models });
+    try {
+      const models = await registry.listModels(c.req.param("name"));
+      return c.json({ data: models });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "list_models_failed", message: msg }, 500);
+    }
   });
 
   return router;

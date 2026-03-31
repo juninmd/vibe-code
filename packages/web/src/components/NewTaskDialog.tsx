@@ -10,6 +10,16 @@ import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Textarea } from "./ui/textarea";
 
+function groupModelsByProvider(models: string[]): { provider: string; models: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const m of models) {
+    const provider = m.includes("/") ? m.split("/")[0] : "other";
+    if (!groups.has(provider)) groups.set(provider, []);
+    groups.get(provider)!.push(m);
+  }
+  return Array.from(groups.entries()).map(([provider, models]) => ({ provider, models }));
+}
+
 interface NewTaskDialogProps {
   open: boolean;
   onClose: () => void;
@@ -145,11 +155,15 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
                 onChange={(e) => setModel(e.target.value)}
                 disabled={loadingModels}
               >
-                <option value="">{loadingModels ? "Loading models..." : "Default"}</option>
-                {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
+                <option value="">{loadingModels ? "Carregando models..." : "Default"}</option>
+                {groupModelsByProvider(models).map(({ provider, models: providerModels }) => (
+                  <optgroup key={provider} label={provider}>
+                    {providerModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m.includes("/") ? m.split("/").slice(1).join("/") : m}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </Select>
             </div>

@@ -10,6 +10,9 @@ import {
 } from "@dnd-kit/core";
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_COLUMNS } from "@vibe-code/shared";
+
+const BOARD_COLUMNS: TaskStatus[] = [...TASK_COLUMNS, "failed"];
+
 import { useCallback, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
@@ -26,7 +29,7 @@ export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const tasksByColumn = TASK_COLUMNS.reduce(
+  const tasksByColumn = BOARD_COLUMNS.reduce(
     (acc, status) => {
       acc[status] = tasks
         .filter((t) => t.status === status)
@@ -35,12 +38,6 @@ export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps)
     },
     {} as Record<TaskStatus, TaskWithRun[]>
   );
-
-  // Also show failed tasks in backlog column
-  const failedTasks = tasks.filter((t) => t.status === "failed");
-  if (failedTasks.length > 0) {
-    tasksByColumn.backlog = [...tasksByColumn.backlog, ...failedTasks];
-  }
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const task = (event.active.data.current as any)?.task as TaskWithRun;
@@ -88,7 +85,9 @@ export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps)
       onDragEnd={handleDragEnd}
     >
       <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {TASK_COLUMNS.map((status) => (
+        {BOARD_COLUMNS.filter(
+          (status) => status !== "failed" || tasksByColumn[status].length > 0
+        ).map((status) => (
           <Column
             key={status}
             status={status}

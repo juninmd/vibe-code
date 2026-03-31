@@ -68,6 +68,15 @@ export class GitService {
 
     await this.exec(args);
 
+    // Ensure git identity is set in the worktree so commits never fail.
+    // Only set locally if not already configured globally.
+    try {
+      await this.exec(["git", "config", "user.email"], { cwd: wtPath });
+    } catch {
+      await this.exec(["git", "config", "--local", "user.email", "vibe-code@localhost"], { cwd: wtPath });
+      await this.exec(["git", "config", "--local", "user.name", "vibe-code"], { cwd: wtPath });
+    }
+
     return wtPath;
   }
 

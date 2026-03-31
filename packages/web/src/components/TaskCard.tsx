@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
 import { useState } from "react";
+import { useElapsedTime } from "../hooks/useElapsedTime";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -19,6 +20,9 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
   });
 
   const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const isRunning = task.latestRun?.status === "running";
+  const elapsed = useElapsedTime(task.latestRun?.startedAt, isRunning);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -34,11 +38,11 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
     if (retrying) return;
 
     setRetrying(true);
+    setRetryError(null);
     try {
       await onRetryPR(task.id);
     } catch (err) {
-      console.error("Failed to retry PR:", err);
-      alert(`PR Retry failed: ${err instanceof Error ? err.message : String(err)}`);
+      setRetryError(err instanceof Error ? err.message : String(err));
     } finally {
       setRetrying(false);
     }
@@ -66,6 +70,12 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
         <h3 className="text-sm font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
           {task.title}
         </h3>
+        <span
+          title={task.id}
+          className="shrink-0 text-[9px] font-mono text-zinc-600 select-all leading-snug mt-px"
+        >
+          {task.id.slice(0, 8)}
+        </span>
       </div>
 
       {/* Description */}
@@ -106,6 +116,11 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
             >
               {retrying ? "Retrying..." : "Retry PR"}
             </Button>
+            {retryError && (
+              <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-red-400 bg-zinc-900 border border-red-900/50 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
+                {retryError}
+              </span>
+            )}
           </div>
         )}
         {task.prUrl && (
@@ -119,10 +134,11 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
             PR
           </a>
         )}
-        {task.latestRun?.status === "running" && (
-          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[120px]">
+        {isRunning && (
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[140px]">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="truncate">{task.latestRun.currentStatus || "Running..."}</span>
+            <span className="truncate">{task.latestRun?.currentStatus || "Running..."}</span>
+            {elapsed && <span className="shrink-0 text-blue-500 tabular-nums">{elapsed}</span>}
           </span>
         )}
       </div>
