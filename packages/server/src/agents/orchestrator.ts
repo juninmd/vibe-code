@@ -444,10 +444,16 @@ export class Orchestrator {
 }
 
 function buildPrompt(task: Task): string {
-  let prompt = task.title;
-  if (task.description) {
-    prompt += `\n\n${task.description}`;
+  const lines: string[] = [];
+  lines.push(`# ${task.title}`);
+  if (task.description?.trim()) {
+    lines.push(`## Requirements\n${task.description.trim()}`);
   }
-  prompt += "\n\nPlease implement the changes described above. Commit your changes when done.";
-  return prompt;
+  lines.push(
+    "## Instructions\n" +
+      "Implement ALL requirements listed above exactly as described. " +
+      "Create, edit, or delete files as needed — including full file content when asked to create a file. " +
+      "Do not ask clarifying questions. Commit your changes when done."
+  );
+  return lines.join("\n\n");
 }
