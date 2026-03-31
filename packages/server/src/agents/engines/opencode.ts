@@ -197,7 +197,7 @@ export class OpenCodeEngine implements AgentEngine {
       JSON.stringify({
         permission: {
           "*": "allow",
-          question: "deny",
+          question: "allow",
           plan_enter: "deny",
           plan_exit: "deny",
         },
@@ -402,7 +402,52 @@ export class OpenCodeEngine implements AgentEngine {
 
   parseLine(line: string): AgentEvent[] {
     const results: AgentEvent[] = [];
-    const jsonObjects = line.split(/(?<=\})\s*(?=\{)/);
+    const jsonObjects: string[] = [];
+
+    // Robust JSON object extraction: count braces and track quotes
+    let braceCount = 0;
+    let inString = false;
+    let escape = false;
+    let start = -1;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (char === "\\") {
+          escape = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === "{") {
+        if (braceCount === 0) start = i;
+        braceCount++;
+      } else if (char === "}") {
+        braceCount--;
+        if (braceCount === 0 && start !== -1) {
+          jsonObjects.push(line.slice(start, i + 1));
+          start = -1;
+        }
+      }
+    }
+
+    // If nothing was found via brace counting, try treating as plain text
+    if (jsonObjects.length === 0) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        results.push({ type: "log", stream: "stdout", content: trimmed });
+      }
+    }
 
     for (const jsonStr of jsonObjects) {
       try {
@@ -429,14 +474,34 @@ export class OpenCodeEngine implements AgentEngine {
           const status = state.status ?? "calling";
           const input = (state.input ?? part.input ?? {}) as Record<string, unknown>;
           const output = state.output ?? part.output ?? part.content;
+          const error = state.error ?? part.error;
 
           if (status === "calling" || !status) {
             const label = humanizeToolCall(toolName, input);
             results.push({ type: "status", content: label });
             results.push({ type: "log", stream: "stdout", content: label });
           } else if (status === "completed") {
+            const metadata = (state.metadata ?? part.metadata ?? {}) as Record<string, unknown>;
+            const exitCode = metadata.exitCode ?? metadata.exit;
             const label = humanizeToolResult(toolName, output);
+            
             if (label) results.push({ type: "log", stream: "stdout", content: label });
+            
+            // If it completed but with a non-zero exit code, it's effectively an error
+            if (exitCode != null && Number(exitCode) !== 0) {
+              results.push({
+                type: "log",
+                stream: "stderr",
+                content: `  Command exited with code ${exitCode}`,
+              });
+            }
+          } else if (status === "failed" || error) {
+            const msg = error ? String(error) : "Failed";
+            results.push({
+              type: "log",
+              stream: "stderr",
+              content: `  Error in ${toolName}: ${msg}`,
+            });
           }
           continue;
         }
@@ -468,6 +533,13 @@ export class OpenCodeEngine implements AgentEngine {
             stream: "stderr",
             content: String(part.message ?? part.error ?? "Unknown error"),
           });
+          continue;
+        }
+
+        if (event.type === "question" || partType === "question") {
+          const msg = String(part.text ?? part.content ?? "Waiting for input...");
+          results.push({ type: "status", content: "Awaiting input..." });
+          results.push({ type: "log", stream: "stdout", content: `\n[Question] ${msg}` });
           continue;
         }
 

@@ -158,6 +158,157 @@ describe("OpenCodeEngine.parseLine", () => {
   it("ignores lines starting with { that are invalid JSON", () => {
     expect(engine.parseLine("{broken json}")).toHaveLength(0);
   });
+
+  it("handles JSON content containing braces and quotes correctly (brace counting)", () => {
+    const trickyLine = JSON.stringify({
+      type: "text",
+      part: { text: 'Content with } and { and "quotes" and \\"escaped quotes\\"' }
+    });
+    const events = engine.parseLine(trickyLine);
+    expect(events).toHaveLength(1);
+    expect(events[0].content).toBe('Content with } and { and "quotes" and \\"escaped quotes\\"');
+    });
+
+    it("surfaces tool failures with error message", () => {
+    const errorLine = JSON.stringify({
+      type: "tool_use",
+      part: {
+        name: "bash",
+        state: { status: "failed", error: "Command not found" }
+      }
+    });
+    const events = engine.parseLine(errorLine);
+    expect(events.find((e) => e.stream === "stderr")?.content).toContain(
+      "Error in bash: Command not found"
+    );
+    });
+
+    it("handles multiple JSON objects on a single line", () => {
+    const line =
+      JSON.stringify({ type: "text", part: { text: "One" } }) +
+      JSON.stringify({ type: "text", part: { text: "Two" } });
+    const events = engine.parseLine(line);
+    expect(events).toHaveLength(2);
+    expect(events[0].content).toBe("One");
+    expect(events[1].content).toBe("Two");
+    });
+
+    it("handles deeply nested braces and escaped quotes in strings", () => {
+    const complex = {
+      type: "text",
+      part: { text: 'Nested { { { } } } and "escaped \\" quote" with }' },
+    };
+    const events = engine.parseLine(JSON.stringify(complex));
+    expect(events[0].content).toContain("Nested { { { } } }");
+    expect(events[0].content).toContain('\\" quote');
+    });
+
+    it("parses progress events into status + system log", () => {
+    const events = engine.parseLine(
+      JSON.stringify({
+        type: "progress",
+        part: { message: "Analyzing repo..." },
+      })
+    );
+    expect(events.find((e) => e.type === "status")?.content).toBe("Analyzing repo...");
+    expect(events.find((e) => e.type === "log" && e.stream === "system")?.content).toBe(
+      "  Analyzing repo..."
+    );
+    });
+
+    it("parses step_finish with token usage", () => {
+      const events = engine.parseLine(
+        JSON.stringify({
+          type: "step_finish",
+          part: { tokens: { total: 12345 } },
+        })
+      );
+      expect(events[0].content).toMatch(/tokens used: 12[.,]345/);
+    });
+    it("humanizes various tool calls correctly", () => {
+    const testTools = [
+      { name: "read_file", input: { path: "a.txt" }, expected: "Reading a.txt" },
+      { name: "write_file", input: { file_path: "b.ts" }, expected: "Writing b.ts" },
+      { name: "bash", input: { command: "ls -la" }, expected: "Running: ls -la" },
+      { name: "git", input: { cmd: "commit" }, expected: "Git: commit" },
+      { name: "google_search", input: { query: "bun test" }, expected: 'Searching "bun test"' },
+    ];
+
+    for (const tool of testTools) {
+      const events = engine.parseLine(
+        JSON.stringify({
+          type: "tool_use",
+          part: { name: tool.name, state: { status: "calling", input: tool.input } },
+        })
+      );
+      const status = events.find((e) => e.type === "status")?.content;
+      expect(status).toContain(tool.expected);
+    }
+    });
+
+    it("humanizes tool results correctly", () => {
+    const testResults = [
+      { name: "read_file", output: "line1\nline2", expected: "2 lines read" },
+      { name: "bash", output: "Success output", expected: "Success output" },
+      { name: "write_file", output: "saved", expected: "Saved" },
+    ];
+
+    for (const res of testResults) {
+      const events = engine.parseLine(
+        JSON.stringify({
+          type: "tool_use",
+          part: { name: res.name, state: { status: "completed", output: res.output } },
+        })
+      );
+      const log = events.find((e) => e.type === "log" && e.stream === "stdout")?.content;
+      expect(log).toContain(res.expected);
+    }
+  });
+
+  it("parses real 'text' event correctly (contract snapshot)", () => {
+    const line = JSON.stringify({
+      type: "text",
+      part: { type: "text", text: "teste" }
+    });
+    const events = engine.parseLine(line);
+    expect(events[0].content).toBe("teste");
+  });
+
+  it("parses real 'tool_use' (bash) event correctly (contract snapshot)", () => {
+    const line = JSON.stringify({
+      type: "tool_use",
+      part: {
+        type: "tool",
+        tool: "bash",
+        state: {
+          status: "completed",
+          input: { command: "ls -la" },
+          output: "total 94"
+        }
+      }
+    });
+    const events = engine.parseLine(line);
+    expect(events.find(e => e.content?.includes("total 94"))).toBeDefined();
+  });
+
+  it("parses real 'step_finish' (tokens) event correctly (contract snapshot)", () => {
+    const line = JSON.stringify({
+      type: "step_finish",
+      part: { type: "step-finish", tokens: { total: 14570 } }
+    });
+    const events = engine.parseLine(line);
+    expect(events.find(e => e.content?.match(/tokens used: 14[.,]570/))).toBeDefined();
+  });
+
+  it("parses interactive question events correctly", () => {
+    const line = JSON.stringify({
+      type: "question",
+      part: { text: "Are you sure?" }
+    });
+    const events = engine.parseLine(line);
+    expect(events.find(e => e.type === "status")?.content).toBe("Awaiting input...");
+    expect(events.find(e => e.content?.includes("Question"))).toBeDefined();
+  });
 });
 
 // ─── execute: opencode.json lifecycle ─────────────────────────────────────────
