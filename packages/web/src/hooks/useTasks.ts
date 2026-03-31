@@ -47,6 +47,21 @@ export function useTasks(repoFilter?: string) {
     [refresh]
   );
 
+  const archiveDone = useCallback(async () => {
+    await api.tasks.archiveDone(repoFilter);
+    await refresh();
+  }, [refresh, repoFilter]);
+
+  const clearFailed = useCallback(async () => {
+    await api.tasks.clearFailed(repoFilter);
+    await refresh();
+  }, [refresh, repoFilter]);
+
+  const retryAllFailed = useCallback(async () => {
+    await api.tasks.retryFailed(repoFilter);
+    await refresh();
+  }, [refresh, repoFilter]);
+
   const launchTask = useCallback(
     async (id: string, engine?: string, model?: string) => {
       const payload = engine || model ? { engine, model } : undefined;
@@ -99,6 +114,9 @@ export function useTasks(repoFilter?: string) {
     createTask,
     updateTask,
     removeTask,
+    archiveDone,
+    clearFailed,
+    retryAllFailed,
     launchTask,
     cancelTask,
     retryTask,

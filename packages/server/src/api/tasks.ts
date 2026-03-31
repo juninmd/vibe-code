@@ -17,7 +17,7 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  status: z.enum(["backlog", "in_progress", "review", "done", "failed"]).optional(),
+  status: z.enum(["backlog", "in_progress", "review", "done", "failed", "archived"]).optional(),
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
@@ -44,6 +44,33 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     });
 
     return c.json({ data: tasksWithRuns });
+  });
+
+  router.post("/archive-done", (c) => {
+    const repoId = c.req.query("repo_id");
+    const count = db.tasks.archiveDone(repoId);
+    return c.json({ data: { archived: count } });
+  });
+
+  router.post("/clear-failed", (c) => {
+    const repoId = c.req.query("repo_id");
+    const count = db.tasks.clearFailed(repoId);
+    return c.json({ data: { deleted: count } });
+  });
+
+  router.post("/retry-failed", async (c) => {
+    const repoId = c.req.query("repo_id");
+    const failedTasks = db.tasks.list(repoId, "failed");
+    let count = 0;
+    for (const task of failedTasks) {
+      try {
+        await orchestrator.launch(task);
+        count++;
+      } catch (err) {
+        /* ignore individual failures */
+      }
+    }
+    return c.json({ data: { retried: count } });
   });
 
   router.post("/", async (c) => {

@@ -57,6 +57,18 @@ await git.init();
   }
 }
 
+// ─── Auto-cleanup (30 days) ──────────────────────────────────────────────────
+{
+  const cleaned = db.tasks.cleanupArchived(30);
+  if (cleaned > 0) {
+    console.log(`  🗑️ Auto-cleanup: Removed ${cleaned} archived tasks older than 30 days`);
+  }
+  // Schedule daily cleanup
+  setInterval(() => {
+    db.tasks.cleanupArchived(30);
+  }, 24 * 60 * 60 * 1000);
+}
+
 const prPoller = new PrPoller(db, hub);
 prPoller.start();
 

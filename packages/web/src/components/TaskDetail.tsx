@@ -6,6 +6,8 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
 
+import { formatDateTime } from "../utils/date";
+
 interface TaskDetailProps {
   task: TaskWithRun;
   liveLogs: AgentLog[];
@@ -220,7 +222,7 @@ export function TaskDetail({
               {task.latestRun.startedAt && (
                 <div>
                   <span className="text-zinc-600">Started </span>
-                  {new Date(task.latestRun.startedAt).toLocaleString()}
+                  {formatDateTime(task.latestRun.startedAt)}
                 </div>
               )}
               {duration && (
@@ -346,8 +348,8 @@ export function TaskDetail({
 
           {/* Timestamps */}
           <div className="text-xs text-zinc-600 space-y-1 pt-2 border-t border-zinc-800">
-            <div>Created: {new Date(task.createdAt).toLocaleString()}</div>
-            <div>Updated: {new Date(task.updatedAt).toLocaleString()}</div>
+            <div>Created: {formatDateTime(task.createdAt)}</div>
+            <div>Updated: {formatDateTime(task.updatedAt)}</div>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import type { AgentLog } from "@vibe-code/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { formatTime } from "../utils/date";
 
 interface AgentOutputProps {
   runId: string | null;
@@ -88,7 +89,7 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
 
   const copyLogs = () => {
     const text = allLogs
-      .map((l) => `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.content}`)
+      .map((l) => `[${formatTime(l.timestamp)}] ${l.content}`)
       .join("\n");
     navigator.clipboard.writeText(text).catch(console.error);
   };
@@ -256,7 +257,7 @@ export function AgentOutput({ runId, liveLogs, isRunning, onSendInput }: AgentOu
               className={`${streamColor(log.stream)} ${isActive ? "bg-yellow-900/20 rounded" : ""}`}
             >
               <span className="text-zinc-700 select-none">
-                {new Date(log.timestamp).toLocaleTimeString()}{" "}
+                {formatTime(log.timestamp)}{" "}
               </span>
               {log.stream === "stdin" && <span className="text-emerald-500">$ </span>}
               {content}

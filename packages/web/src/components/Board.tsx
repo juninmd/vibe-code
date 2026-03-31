@@ -22,9 +22,20 @@ interface BoardProps {
   onTaskClick: (task: TaskWithRun) => void;
   onTaskMove: (taskId: string, newStatus: TaskStatus, newOrder: number) => void;
   onRetryPR: (taskId: string) => void;
+  onArchiveDone?: () => void;
+  onClearFailed?: () => void;
+  onRetryAllFailed?: () => void;
 }
 
-export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps) {
+export function Board({
+  tasks,
+  onTaskClick,
+  onTaskMove,
+  onRetryPR,
+  onArchiveDone,
+  onClearFailed,
+  onRetryAllFailed,
+}: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -94,6 +105,9 @@ export function Board({ tasks, onTaskClick, onTaskMove, onRetryPR }: BoardProps)
             tasks={tasksByColumn[status]}
             onTaskClick={onTaskClick}
             onRetryPR={onRetryPR}
+            onArchiveDone={onArchiveDone}
+            onClearFailed={onClearFailed}
+            onRetryAllFailed={onRetryAllFailed}
           />
         ))}
       </div>

@@ -21,6 +21,8 @@ export default function App() {
   const { toast } = toastCtx;
 
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
@@ -36,6 +38,9 @@ export default function App() {
     createTask,
     updateTask,
     removeTask,
+    archiveDone,
+    clearFailed,
+    retryAllFailed,
     launchTask,
     cancelTask,
     retryTask,
@@ -144,16 +149,26 @@ export default function App() {
 
   // ─── Filtered tasks ──────────────────────────────────────────────────────────
   const filteredTasks = useMemo(() => {
-    if (!search.trim()) return tasks;
+    let result = tasks.filter((t) => t.status !== "archived");
+
+    if (selectedAgent) {
+      result = result.filter((t) => t.engine === selectedAgent);
+    }
+    if (selectedModel) {
+      result = result.filter((t) => t.model === selectedModel);
+    }
+
+    if (!search.trim()) return result;
+
     const q = search.toLowerCase();
-    return tasks.filter(
+    return result.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
         t.description?.toLowerCase().includes(q) ||
         t.repo?.name.toLowerCase().includes(q) ||
         t.branchName?.toLowerCase().includes(q)
     );
-  }, [tasks, search]);
+  }, [tasks, search, selectedAgent, selectedModel]);
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -267,6 +282,35 @@ export default function App() {
               </p>
             </div>
 
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedAgent ?? ""}
+                onChange={(e) => setSelectedAgent(e.target.value || null)}
+                className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
+              >
+                <option value="">All Engines</option>
+                {engines.map((e) => (
+                  <option key={e.name} value={e.name}>
+                    {e.displayName}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedModel ?? ""}
+                onChange={(e) => setSelectedModel(e.target.value || null)}
+                className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
+              >
+                <option value="">All Models</option>
+                {Array.from(new Set(tasks.map((t) => t.model).filter(Boolean))).map((m) => (
+                  <option key={m} value={m!}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Search */}
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs pointer-events-none">
@@ -317,6 +361,18 @@ export default function App() {
               onTaskClick={handleTaskClick}
               onTaskMove={handleTaskMove}
               onRetryPR={retryPR}
+              onArchiveDone={async () => {
+                await archiveDone();
+                toast("Completed tasks archived", "info");
+              }}
+              onClearFailed={async () => {
+                await clearFailed();
+                toast("Failed tasks cleared", "info");
+              }}
+              onRetryAllFailed={async () => {
+                await retryAllFailed();
+                toast("Retrying all failed tasks", "info");
+              }}
             />
           </main>
         </div>

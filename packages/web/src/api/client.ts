@@ -51,6 +51,18 @@ export const api = {
       const qs = params.toString();
       return request<TaskWithRun[]>(`/tasks${qs ? `?${qs}` : ""}`);
     },
+    archiveDone: (repoId?: string) => {
+      const qs = repoId ? `?repo_id=${repoId}` : "";
+      return request<{ archived: number }>(`/tasks/archive-done${qs}`, { method: "POST" });
+    },
+    clearFailed: (repoId?: string) => {
+      const qs = repoId ? `?repo_id=${repoId}` : "";
+      return request<{ deleted: number }>(`/tasks/clear-failed${qs}`, { method: "POST" });
+    },
+    retryFailed: (repoId?: string) => {
+      const qs = repoId ? `?repo_id=${repoId}` : "";
+      return request<{ retried: number }>(`/tasks/retry-failed${qs}`, { method: "POST" });
+    },
     get: (id: string) => request<TaskWithRun>(`/tasks/${id}`),
     create: (data: CreateTaskRequest) =>
       request<Task>("/tasks", { method: "POST", body: JSON.stringify(data) }),

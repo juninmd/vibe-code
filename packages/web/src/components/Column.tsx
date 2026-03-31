@@ -25,9 +25,20 @@ interface ColumnProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
+  onArchiveDone?: () => void;
+  onClearFailed?: () => void;
+  onRetryAllFailed?: () => void;
 }
 
-export function Column({ status, tasks, onTaskClick, onRetryPR }: ColumnProps) {
+export function Column({
+  status,
+  tasks,
+  onTaskClick,
+  onRetryPR,
+  onArchiveDone,
+  onClearFailed,
+  onRetryAllFailed,
+}: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
 
@@ -38,10 +49,94 @@ export function Column({ status, tasks, onTaskClick, onRetryPR }: ColumnProps) {
     >
       <div className="px-4 py-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-300">{TASK_STATUS_LABELS[status]}</h2>
-          <span className="text-xs text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
-            {tasks.length}
-          </span>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-300">{TASK_STATUS_LABELS[status]}</h2>
+            <span className="text-xs text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
+              {tasks.length}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {status === "done" && tasks.length > 0 && onArchiveDone && (
+              <button
+                type="button"
+                onClick={onArchiveDone}
+                title="Archive all done tasks"
+                className="p-1 text-zinc-600 hover:text-emerald-500 transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m3 9 9 7 9-7" />
+                  <path d="M3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
+                  <path d="M12 3v3" />
+                </svg>
+              </button>
+            )}
+            {status === "failed" && tasks.length > 0 && (
+              <>
+                {onRetryAllFailed && (
+                  <button
+                    type="button"
+                    onClick={onRetryAllFailed}
+                    title="Retry all failed tasks"
+                    className="p-1 text-zinc-600 hover:text-blue-500 transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                      <path d="M21 3v5h-5" />
+                      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                      <path d="M3 21v-5h5" />
+                    </svg>
+                  </button>
+                )}
+                {onClearFailed && (
+                  <button
+                    type="button"
+                    onClick={onClearFailed}
+                    title="Clear all failed tasks"
+                    className="p-1 text-zinc-600 hover:text-red-500 transition-colors"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
         <p className="text-[11px] text-zinc-600 mt-1 leading-tight">{columnDescriptions[status]}</p>
       </div>

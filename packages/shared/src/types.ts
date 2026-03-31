@@ -1,6 +1,6 @@
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-export type TaskStatus = "backlog" | "in_progress" | "review" | "done" | "failed";
+export type TaskStatus = "backlog" | "in_progress" | "review" | "done" | "failed" | "archived";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin";
@@ -13,6 +13,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   review: "Review",
   done: "Done",
   failed: "Failed",
+  archived: "Archived",
 };
 
 // ─── Entities ────────────────────────────────────────────────────────────────

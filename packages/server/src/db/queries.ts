@@ -264,6 +264,32 @@ export function createTaskQueries(db: Database) {
     remove: (id: string): void => {
       stmts.remove.run(id);
     },
+    archiveDone: (repoId?: string): number => {
+      const sql = repoId
+        ? "UPDATE tasks SET status = 'archived', updated_at = datetime('now') WHERE status = 'done' AND repo_id = ?"
+        : "UPDATE tasks SET status = 'archived', updated_at = datetime('now') WHERE status = 'done'";
+      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
+      return (info as any).changes;
+    },
+    clearFailed: (repoId?: string): number => {
+      const sql = repoId
+        ? "DELETE FROM tasks WHERE status = 'failed' AND repo_id = ?"
+        : "DELETE FROM tasks WHERE status = 'failed'";
+      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
+      return (info as any).changes;
+    },
+    retryFailed: (repoId?: string): number => {
+      const sql = repoId
+        ? "UPDATE tasks SET status = 'backlog', updated_at = datetime('now') WHERE status = 'failed' AND repo_id = ?"
+        : "UPDATE tasks SET status = 'backlog', updated_at = datetime('now') WHERE status = 'failed'";
+      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
+      return (info as any).changes;
+    },
+    cleanupArchived: (days = 30): number => {
+      const sql = "DELETE FROM tasks WHERE status = 'archived' AND updated_at < datetime('now', '-' || ? || ' days')";
+      const info = db.prepare(sql).run(days);
+      return (info as any).changes;
+    },
   };
 }
 
