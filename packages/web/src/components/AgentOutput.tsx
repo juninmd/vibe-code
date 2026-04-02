@@ -130,7 +130,6 @@ export function AgentOutput({
   }, [awaitingQuestion, isRunning]);
 
   // Scroll to highlighted match
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to match when index changes
   useEffect(() => {
     if (!showSearch || !searchQuery) return;
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-match="${matchIdx}"]`);
@@ -169,7 +168,13 @@ export function AgentOutput({
   // Build filtered/highlighted log lines
   const { renderedLogs, totalMatches } = useMemo(() => {
     if (!showSearch || !searchQuery.trim()) {
-      return { renderedLogs: allLogs.map((l) => ({ log: l, matchNumber: -1 })), totalMatches: 0 };
+      // Limit visible logs to last 500 + buffer for scroll performance
+      const maxVisible = 500;
+      const logsToShow = allLogs.length > maxVisible ? allLogs.slice(-maxVisible) : allLogs;
+      return {
+        renderedLogs: logsToShow.map((l) => ({ log: l, matchNumber: -1 })),
+        totalMatches: 0,
+      };
     }
     const q = searchQuery.toLowerCase();
     let counter = 0;
@@ -186,17 +191,13 @@ export function AgentOutput({
 
   if (!runId && liveLogs.length === 0) {
     return (
-      <div className="text-center text-zinc-600 py-8 text-sm">
-        Nenhuma saída do agente ainda
-      </div>
+      <div className="text-center text-zinc-600 py-8 text-sm">Nenhuma saída do agente ainda</div>
     );
   }
 
   return (
     <div className={containerClass}>
-      {isFullscreen && (
-        <div className="absolute inset-0 bg-zinc-950/95 -z-10 rounded-xl" />
-      )}
+      {isFullscreen && <div className="absolute inset-0 bg-zinc-950/95 -z-10 rounded-xl" />}
 
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800">
@@ -311,11 +312,15 @@ export function AgentOutput({
         onScroll={handleScroll}
         onClick={() => inputRef.current?.focus()}
         className={`bg-zinc-950 p-3 font-mono text-xs overflow-y-auto cursor-text ${
-          isFullscreen || fullHeight
-            ? "flex-1"
-            : "max-h-[480px] min-h-[140px]"
+          isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
         } space-y-0.5`}
       >
+        {allLogs.length > 500 && !showSearch && (
+          <div className="text-zinc-600 text-[9px] mb-2 p-1 bg-zinc-900/50 rounded">
+            📋 Mostrando últimos 500 logs de {allLogs.length} total (
+            {((500 / allLogs.length) * 100).toFixed(0)}%)
+          </div>
+        )}
         {renderedLogs.map(({ log, matchNumber }, i) => {
           const isActive = matchNumber === matchIdx && showSearch && searchQuery;
           const q = searchQuery.toLowerCase();
@@ -341,18 +346,18 @@ export function AgentOutput({
           }
 
           const isReviewHeader = log.stream === "review" && log.content.startsWith("[REVIEW:");
-          const isQuestion =
-            log.stream === "stdout" && log.content.includes("[Question]");
+          const isQuestion = log.stream === "stdout" && log.content.includes("[Question]");
 
           return (
             <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no stable id
               key={log.id ?? `live-${i}`}
               data-match={matchNumber >= 0 ? matchNumber : undefined}
               className={`${streamColor(log.stream, log.content)} ${
                 isActive ? "bg-yellow-900/20 rounded" : ""
               } ${isReviewHeader ? "mt-2" : ""} ${
-                isQuestion ? "bg-amber-950/30 border-l-2 border-amber-600 pl-2 py-0.5 rounded-r" : ""
+                isQuestion
+                  ? "bg-amber-950/30 border-l-2 border-amber-600 pl-2 py-0.5 rounded-r"
+                  : ""
               } leading-relaxed`}
             >
               <span className="text-zinc-700 select-none">{formatTime(log.timestamp)} </span>
@@ -381,20 +386,18 @@ export function AgentOutput({
         <form
           onSubmit={handleSubmit}
           className={`flex border-t bg-zinc-900 transition-all ${
-            awaitingQuestion
-              ? "border-amber-700/60 bg-amber-950/20"
-              : "border-zinc-800"
+            awaitingQuestion ? "border-amber-700/60 bg-amber-950/20" : "border-zinc-800"
           }`}
         >
           {awaitingQuestion && (
             <div className="w-full px-3 pt-2 pb-0">
-              <p className="text-[10px] text-amber-400 font-mono truncate">
-                ⚡ {awaitingQuestion}
-              </p>
+              <p className="text-[10px] text-amber-400 font-mono truncate">⚡ {awaitingQuestion}</p>
             </div>
           )}
           <div className={`flex w-full ${awaitingQuestion ? "pt-1" : ""}`}>
-            <span className={`pl-3 py-2 text-xs font-mono select-none ${awaitingQuestion ? "text-amber-400" : "text-emerald-500"}`}>
+            <span
+              className={`pl-3 py-2 text-xs font-mono select-none ${awaitingQuestion ? "text-amber-400" : "text-emerald-500"}`}
+            >
               {awaitingQuestion ? "?" : "$"}
             </span>
             <input
@@ -402,12 +405,13 @@ export function AgentOutput({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={awaitingQuestion ? "Digite sua resposta..." : "Enviar input ao agente..."}
+              placeholder={
+                awaitingQuestion ? "Digite sua resposta..." : "Enviar input ao agente..."
+              }
               className={`flex-1 bg-transparent px-2 py-2 text-xs font-mono placeholder:text-zinc-600 focus:outline-none ${
                 awaitingQuestion ? "text-amber-100" : "text-zinc-100"
               }`}
               autoComplete="off"
-              autoFocus={!!awaitingQuestion}
             />
             <button
               type="submit"

@@ -290,13 +290,30 @@ export class Orchestrator {
       .slice(0, 40);
     const branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
 
-    // Agent timeout — default 20 minutes, override with env var
-    const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 20 * 60 * 1000;
+    // Agent timeout — default 2 hours, override with env var
+    // Also enforce max heartbeat silence: if no activity for 5 mins, assume hung and timeout
+    const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 2 * 60 * 60 * 1000;
+    const MAX_HEARTBEAT_SILENCE = 5 * 60 * 1000; // 5 minutes
     let timedOut = false;
+    let lastActivity = Date.now();
+
     const timeoutId = setTimeout(() => {
       timedOut = true;
       abort.abort();
     }, TIMEOUT_MS);
+
+    // Monitor for heartbeat silence (stalled agent detection)
+    const activityMonitorId = setInterval(() => {
+      const silent = Date.now() - lastActivity;
+      if (silent > MAX_HEARTBEAT_SILENCE) {
+        console.warn(
+          `[orchestrator] Task ${task.id}: agent hung (no activity for ${Math.round(silent / 1000)}s)`
+        );
+        timedOut = true;
+        abort.abort();
+        clearInterval(activityMonitorId);
+      }
+    }, 30 * 1000); // Check every 30s
 
     let wtPath: string | undefined;
 
@@ -330,7 +347,9 @@ export class Orchestrator {
         model: model ?? undefined,
       })) {
         if (abort.signal.aborted) break;
-        await this.handleEvent(event, run.id, task.id);
+        await this.handleEvent(event, run.id, task.id, () => {
+          lastActivity = Date.now();
+        });
       }
 
       if (abort.signal.aborted) {
@@ -429,6 +448,7 @@ export class Orchestrator {
       }
     } finally {
       clearTimeout(timeoutId);
+      clearInterval(activityMonitorId);
       this.activeRuns.delete(task.id);
 
       // Cleanup worktree
@@ -455,7 +475,20 @@ export class Orchestrator {
     });
   }
 
-  private async handleEvent(event: AgentEvent, runId: string, taskId: string): Promise<void> {
+  private async handleEvent(
+    event: AgentEvent,
+    runId: string,
+    taskId: string,
+    onActivity?: () => void
+  ): Promise<void> {
+    // Record any activity (log, error, status)
+    if (
+      (event.type === "log" || event.type === "error" || event.type === "status") &&
+      event.content
+    ) {
+      onActivity?.();
+    }
+
     if (event.type === "log" && event.content) {
       this.db.logs.create(runId, event.stream ?? "stdout", event.content);
       this.hub.broadcastAll({

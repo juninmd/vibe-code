@@ -153,9 +153,8 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
 
   useEffect(() => {
     fetchEngines();
-    // Auto-refresh every 30s
-    const interval = setInterval(fetchEngines, 30_000);
-    return () => clearInterval(interval);
+    // Note: Removed auto-refresh polling. Use manual refresh button or WebSocket for updates.
+    // Auto-polling every 30s was creating unnecessary requests.
   }, [fetchEngines]);
 
   const availableCount = engines.filter((e) => e.available).length;
@@ -222,7 +221,7 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
             Atualizado{" "}
             {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </span>
-          <span>Auto-refresh a cada 30s</span>
+          <span>Use o botão ↻ para atualizar</span>
         </div>
       </div>
     </div>
