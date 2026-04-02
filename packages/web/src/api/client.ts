@@ -111,8 +111,7 @@ export const api = {
   },
 
   schedules: {
-    get: (taskId: string) =>
-      request<TaskSchedule | null>(`/tasks/${taskId}/schedule`),
+    get: (taskId: string) => request<TaskSchedule | null>(`/tasks/${taskId}/schedule`),
     upsert: (taskId: string, data: UpsertScheduleRequest) =>
       request<TaskSchedule>(`/tasks/${taskId}/schedule`, {
         method: "PUT",

@@ -17,6 +17,18 @@ export class ClaudeCodeEngine implements AgentEngine {
     }
   }
 
+  async getVersion(): Promise<string | null> {
+    try {
+      const proc = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode !== 0) return null;
+      const text = await new Response(proc.stdout).text();
+      return text.trim().split("\n")[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
   async listModels(): Promise<string[]> {
     // Claude CLI does not provide a model listing command
     return [];

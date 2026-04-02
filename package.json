@@ -1,19 +1,31 @@
 {
   "name": "vibe-code",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "dev:server": "bun run --filter @vibe-code/server dev",
     "dev:web": "bun run --filter @vibe-code/web dev",
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun run --filter @vibe-code/server test",
+    "test": "bun run --filter '*' test",
     "lint": "bunx biome check packages/",
     "lint:fix": "bunx biome check --write packages/",
-    "format": "bunx biome format --write packages/"
+    "format": "bunx biome format --write packages/",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "packages/**/*.{ts,tsx}": [
+      "bunx biome check --write --no-errors-on-unmatched"
+    ]
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.9"
+    "@biomejs/biome": "^2.4.9",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0"
   }
 }

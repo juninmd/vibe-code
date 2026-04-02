@@ -1,12 +1,12 @@
 import type { EngineInfo } from "@vibe-code/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 
-export function useEngines() {
+export function useEngines(refreshIntervalMs = 30_000) {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     api.engines
       .list()
       .then(setEngines)
@@ -14,5 +14,14 @@ export function useEngines() {
       .finally(() => setLoading(false));
   }, []);
 
-  return { engines, loading };
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, refreshIntervalMs);
+    return () => clearInterval(interval);
+  }, [refresh, refreshIntervalMs]);
+
+  const availableCount = engines.filter((e) => e.available).length;
+  const totalActiveRuns = engines.reduce((sum, e) => sum + e.activeRuns, 0);
+
+  return { engines, loading, refresh, availableCount, totalActiveRuns };
 }

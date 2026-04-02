@@ -1,6 +1,6 @@
 import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
-import { Hono } from "hono";
 import { Cron } from "croner";
+import { Hono } from "hono";
 import { z } from "zod";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
@@ -26,7 +26,9 @@ const createTaskSchema = z.object({
 const updateTaskSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
-  status: z.enum(["scheduled", "backlog", "in_progress", "review", "done", "failed", "archived"]).optional(),
+  status: z
+    .enum(["scheduled", "backlog", "in_progress", "review", "done", "failed", "archived"])
+    .optional(),
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
@@ -226,8 +228,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     const body = await c.req.json();
     const parsed = upsertScheduleSchema.safeParse(body);
-    if (!parsed.success)
-      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    if (!parsed.success) return c.json({ error: "validation", message: parsed.error.message }, 400);
 
     // Validate cron expression
     let nextRunAt: string | null;
@@ -340,7 +341,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const filePath = c.req.query("path");
     if (!filePath)
       return c.json({ error: "validation", message: "Missing 'path' query parameter" }, 400);
-    if (filePath.includes(".."))
+    // Guard against path traversal (literal ".." and URL-encoded variants)
+    const decoded = decodeURIComponent(filePath);
+    if (decoded.includes("..") || decoded.startsWith("/") || decoded.includes("\0"))
       return c.json({ error: "validation", message: "Invalid file path" }, 400);
 
     const task = db.tasks.getById(c.req.param("id"));

@@ -2,9 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { WsClientMessage } from "@vibe-code/shared";
 import { Hono } from "hono";
-import { createBunWebSocket } from "hono/bun";
+import { createBunWebSocket, serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
-import { serveStatic } from "hono/bun";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
@@ -66,9 +65,12 @@ await git.init();
     console.log(`  🗑️ Auto-cleanup: Removed ${cleaned} archived tasks older than 30 days`);
   }
   // Schedule daily cleanup
-  setInterval(() => {
-    db.tasks.cleanupArchived(30);
-  }, 24 * 60 * 60 * 1000);
+  setInterval(
+    () => {
+      db.tasks.cleanupArchived(30);
+    },
+    24 * 60 * 60 * 1000
+  );
 }
 
 const prPoller = new PrPoller(db, hub);
@@ -90,7 +92,7 @@ app.use("/api/*", cors({ origin: "*" }));
 app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
-app.route("/api/engines", createEnginesRouter(registry));
+app.route("/api/engines", createEnginesRouter(registry, orchestrator));
 app.route("/api/settings", createSettingsRouter(db));
 app.route("/api/prompts", createPromptsRouter(db));
 

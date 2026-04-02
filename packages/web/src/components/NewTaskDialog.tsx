@@ -105,7 +105,10 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   return (
     <>
       <Dialog open={open} onClose={onClose} title="New Task">
-        <form onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4 max-h-[80vh] overflow-y-auto pr-2 custom-scrollbar"
+        >
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1">Title *</label>
             <Input
@@ -203,9 +206,11 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
             {isScheduled ? (
               <div className="pl-6 space-y-3 border-l-2 border-zinc-700 animate-in slide-in-from-left-2">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">Frequency</label>
-                  <Select 
-                    value={isCustomCron ? "custom" : cronExpression} 
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                    Frequency
+                  </label>
+                  <Select
+                    value={isCustomCron ? "custom" : cronExpression}
                     onChange={(e) => {
                       if (e.target.value === "custom") {
                         setIsCustomCron(true);
@@ -215,8 +220,10 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
                       }
                     }}
                   >
-                    {CRON_PRESETS.map(p => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
+                    {CRON_PRESETS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
                     ))}
                     <option value="custom">Custom Cron Expression...</option>
                   </Select>
@@ -224,13 +231,17 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
 
                 {isCustomCron && (
                   <div className="animate-in fade-in zoom-in-95 duration-200">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">Cron Expression</label>
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-500 mb-1.5">
+                      Cron Expression
+                    </label>
                     <Input
                       value={cronExpression}
                       onChange={(e) => setCronExpression(e.target.value)}
                       placeholder="e.g. 0 12 * * 1-5"
                     />
-                    <p className="text-[10px] text-zinc-500 mt-1">Format: min hour day month day-of-week</p>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      Format: min hour day month day-of-week
+                    </p>
                   </div>
                 )}
               </div>

@@ -3,7 +3,13 @@ import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
 import type { AgentEngine, AgentEvent } from "./engine";
+import { PERSONA_LABELS, type ReviewPersona, runPersonaReview } from "./engines/reviewer";
 import type { EngineRegistry } from "./registry";
+
+const ALL_PERSONAS: ReviewPersona[] = ["frontend", "backend", "security", "quality"];
+const REVIEW_ENABLED = process.env.VIBE_CODE_REVIEW_ENABLED !== "false";
+// Set VIBE_CODE_REVIEW_STRICT=true to block PR on review failures (default: advisory only)
+const REVIEW_STRICT = process.env.VIBE_CODE_REVIEW_STRICT === "true";
 
 interface ActiveRun {
   runId: string;
@@ -28,6 +34,15 @@ export class Orchestrator {
 
   get activeCount(): number {
     return this.activeRuns.size;
+  }
+
+  /** Returns a Map<taskId, engineName> for all currently running tasks */
+  getActiveRunEngines(): Map<string, string> {
+    const result = new Map<string, string>();
+    for (const [taskId, active] of this.activeRuns) {
+      result.set(taskId, active.engineName);
+    }
+    return result;
   }
 
   async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
@@ -208,7 +223,8 @@ export class Orchestrator {
     if (template.status !== "scheduled") throw new Error("Task is not a scheduled template");
 
     // Skip if a derived task from this template is already in_progress
-    const alreadyRunning = this.activeRuns.has(templateTaskId) ||
+    const alreadyRunning =
+      this.activeRuns.has(templateTaskId) ||
       Array.from(this.activeRuns.values()).some((r) => {
         const t = this.db.tasks.getById(r.taskId);
         return t?.parentTaskId === templateTaskId;
@@ -265,7 +281,7 @@ export class Orchestrator {
       localPath: string | null;
     },
     abort: AbortController,
-    _model?: string
+    model?: string
   ): Promise<void> {
     const barePath = repo.localPath ?? (await this.git.getBarePath(repo.name));
     const slugTitle = task.title
@@ -311,13 +327,16 @@ export class Orchestrator {
       for await (const event of engine.execute(prompt, wtPath, {
         runId: run.id,
         signal: abort.signal,
+        model: model ?? undefined,
       })) {
         if (abort.signal.aborted) break;
         await this.handleEvent(event, run.id, task.id);
       }
 
       if (abort.signal.aborted) {
-        throw new Error(timedOut ? `Agent timed out after ${Math.round(TIMEOUT_MS / 60000)} minutes` : "Cancelled");
+        throw new Error(
+          timedOut ? `Agent timed out after ${Math.round(TIMEOUT_MS / 60000)} minutes` : "Cancelled"
+        );
       }
 
       // Commit any uncommitted changes left by the agent
@@ -331,6 +350,22 @@ export class Orchestrator {
       const hasCommits = await this.git.hasCommitsAhead(wtPath, repo.defaultBranch);
       if (!hasCommits) {
         throw new Error("Agent completed but made no changes");
+      }
+
+      // ── Review pipeline ────────────────────────────────────────────────────
+      if (REVIEW_ENABLED) {
+        const blockers = await this.runReviewPipeline(task, run, wtPath, repo.defaultBranch);
+        if (blockers.length > 0 && REVIEW_STRICT) {
+          throw new Error(
+            `Review pipeline found ${blockers.length} blocker(s):\n${blockers.join("\n")}`
+          );
+        } else if (blockers.length > 0) {
+          this.sysLog(
+            run.id,
+            task.id,
+            `⚠ Review found ${blockers.length} issue(s) — proceeding (non-strict mode)`
+          );
+        }
       }
 
       // Push branch and create PR
@@ -453,6 +488,75 @@ export class Orchestrator {
         }
       }
     }
+  }
+
+  /**
+   * Run 4 specialized review agents (frontend, backend, security, quality) in parallel.
+   * Returns an array of BLOCKER messages. Empty array means all reviews passed.
+   */
+  private async runReviewPipeline(
+    task: Task,
+    run: AgentRun,
+    wtPath: string,
+    defaultBranch: string
+  ): Promise<string[]> {
+    this.sysLog(run.id, task.id, "Starting review pipeline (4 agents)...");
+
+    const results = await Promise.all(
+      ALL_PERSONAS.map((persona) =>
+        runPersonaReview({
+          persona,
+          worktreePath: wtPath,
+          taskTitle: task.title,
+          taskDescription: task.description,
+          defaultBranch,
+        })
+      )
+    );
+
+    const blockers: string[] = [];
+
+    for (const result of results) {
+      const label = PERSONA_LABELS[result.persona];
+      const header = `[REVIEW:${result.persona}] ${label} Review`;
+      const separator = "─".repeat(50);
+
+      // Log header + content as review stream
+      this.reviewLog(run.id, task.id, `${header}\n${separator}`);
+      for (const line of result.content.split("\n")) {
+        this.reviewLog(run.id, task.id, line);
+      }
+      this.reviewLog(run.id, task.id, separator);
+
+      if (result.hasBlocker) {
+        const blockerLines = result.content
+          .split("\n")
+          .filter((l) => l.startsWith("BLOCKER:"))
+          .map((l) => `[${label}] ${l}`);
+        blockers.push(...blockerLines);
+      }
+    }
+
+    if (blockers.length === 0) {
+      this.sysLog(run.id, task.id, "Review pipeline passed — no blockers found.");
+    } else {
+      this.sysLog(run.id, task.id, `Review pipeline failed — ${blockers.length} blocker(s) found.`);
+    }
+
+    return blockers;
+  }
+
+  /** Broadcast and persist a review log line. */
+  private reviewLog(runId: string, taskId: string, content: string): void {
+    this.db.logs.create(runId, "review", content);
+    this.hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId,
+      taskId,
+      stream: "review" as LogStream,
+      content,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async cloneRepo(

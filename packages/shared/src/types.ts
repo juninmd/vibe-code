@@ -1,9 +1,16 @@
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-export type TaskStatus = "scheduled" | "backlog" | "in_progress" | "review" | "done" | "failed" | "archived";
+export type TaskStatus =
+  | "scheduled"
+  | "backlog"
+  | "in_progress"
+  | "review"
+  | "done"
+  | "failed"
+  | "archived";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-export type LogStream = "stdout" | "stderr" | "system" | "stdin";
+export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
 
 export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
 
@@ -155,6 +162,8 @@ export interface EngineInfo {
   name: string;
   displayName: string;
   available: boolean;
+  version: string | null;
+  activeRuns: number;
 }
 
 export interface GitHubRepo {

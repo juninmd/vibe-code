@@ -206,7 +206,20 @@ export function createTaskQueries(db: Database) {
       const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
       const row = db
-        .prepare<TaskRow, [string, string, string, string | null, string | null, number, number, string, string | null]>(
+        .prepare<
+          TaskRow,
+          [
+            string,
+            string,
+            string,
+            string | null,
+            string | null,
+            number,
+            number,
+            string,
+            string | null,
+          ]
+        >(
           "INSERT INTO tasks (title, description, repo_id, engine, model, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
@@ -293,7 +306,8 @@ export function createTaskQueries(db: Database) {
       return (info as any).changes;
     },
     cleanupArchived: (days = 30): number => {
-      const sql = "DELETE FROM tasks WHERE status = 'archived' AND updated_at < datetime('now', '-' || ? || ' days')";
+      const sql =
+        "DELETE FROM tasks WHERE status = 'archived' AND updated_at < datetime('now', '-' || ? || ' days')";
       const info = db.prepare(sql).run(days);
       return (info as any).changes;
     },
@@ -535,10 +549,17 @@ function mapSchedule(row: ScheduleRow): TaskSchedule {
 export function createScheduleQueries(db: Database) {
   return {
     getByTaskId: (taskId: string): TaskSchedule | null => {
-      const row = db.prepare<ScheduleRow, [string]>("SELECT * FROM task_schedules WHERE task_id = ?").get(taskId);
+      const row = db
+        .prepare<ScheduleRow, [string]>("SELECT * FROM task_schedules WHERE task_id = ?")
+        .get(taskId);
       return row ? mapSchedule(row) : null;
     },
-    upsert: (taskId: string, cronExpression: string, deadlineAt: string | null, nextRunAt: string | null): TaskSchedule => {
+    upsert: (
+      taskId: string,
+      cronExpression: string,
+      deadlineAt: string | null,
+      nextRunAt: string | null
+    ): TaskSchedule => {
       const row = db
         .prepare<ScheduleRow, [string, string, string | null, string | null]>(
           `INSERT INTO task_schedules (task_id, cron_expression, deadline_at, next_run_at)

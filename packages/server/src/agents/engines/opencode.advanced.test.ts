@@ -15,15 +15,15 @@ describe("OpenCodeEngine Advanced Contract Tests", () => {
           status: "completed",
           input: { command: "del test.txt" },
           output: "bash: del: command not found",
-          metadata: { exit: 127 }
-        }
-      }
+          metadata: { exit: 127 },
+        },
+      },
     });
 
     const events = engine.parseLine(line);
-    
+
     // Check that we captured the exit code error
-    const stderrLog = events.find(e => e.stream === "stderr" && e.content?.includes("127"));
+    const stderrLog = events.find((e) => e.stream === "stderr" && e.content?.includes("127"));
     expect(stderrLog).toBeDefined();
     expect(stderrLog?.content).toBe("  Command exited with code 127");
   });
@@ -38,12 +38,12 @@ describe("OpenCodeEngine Advanced Contract Tests", () => {
         state: {
           status: "completed",
           input: { filePath: "test.txt", content: "DNA" },
-          output: "Wrote file successfully."
-        }
-      }
+          output: "Wrote file successfully.",
+        },
+      },
     });
 
     const events = engine.parseLine(line);
-    expect(events.find(e => e.content?.includes("Saved"))).toBeDefined();
+    expect(events.find((e) => e.content?.includes("Saved"))).toBeDefined();
   });
 });

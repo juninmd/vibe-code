@@ -1,8 +1,10 @@
 import type { AgentLog, TaskStatus, TaskWithRun, WsServerMessage } from "@vibe-code/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "./api/client";
 import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
+import { EnginesPanel } from "./components/EnginesPanel";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -16,20 +18,18 @@ import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
 
-import { api } from "./api/client";
-
 export default function App() {
   const toastCtx = useToastState();
   const { toast } = toastCtx;
 
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -50,7 +50,7 @@ export default function App() {
     updateTaskLocal,
     refresh,
   } = useTasks(selectedRepoId ?? undefined);
-  const { engines } = useEngines();
+  const { engines, availableCount, totalActiveRuns, refresh: refreshEngines } = useEngines(15_000);
   const { notify } = useBrowserNotifications();
 
   // Track previous task statuses for notifications
@@ -69,11 +69,11 @@ export default function App() {
           // Browser notification on terminal status change
           if (prev && prev !== updated.status) {
             if (updated.status === "done")
-              notify(`✓ Task done: ${updated.title}`, "Agent completed successfully");
+              notify(`✓ Tarefa concluída: ${updated.title}`, "Agente executou com sucesso");
             else if (updated.status === "failed")
-              notify(`✕ Task failed: ${updated.title}`, "Agent run failed");
+              notify(`✕ Tarefa falhou: ${updated.title}`, "Execução do agente falhou");
             else if (updated.status === "review")
-              notify(`◎ PR ready: ${updated.title}`, "Agent pushed a pull request");
+              notify(`◎ PR pronto: ${updated.title}`, "Agente abriu um pull request");
           }
           prevStatusRef.current[updated.id] = updated.status;
           updateTaskLocal(updated);
@@ -81,6 +81,8 @@ export default function App() {
             sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
           );
           refresh();
+          // Refresh engine active runs when task changes
+          refreshEngines();
           break;
         }
         case "repo_updated":
@@ -104,10 +106,11 @@ export default function App() {
         case "run_status":
         case "run_updated":
           refresh();
+          refreshEngines();
           break;
       }
     },
-    [updateTaskLocal, refresh, addOrUpdateRepo]
+    [updateTaskLocal, refresh, addOrUpdateRepo, refreshEngines]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
@@ -115,10 +118,10 @@ export default function App() {
   // Show toast on disconnect / reconnect
   useEffect(() => {
     if (!connected && wasConnected.current) {
-      toast("Connection lost. Reconnecting...", "error");
+      toast("Conexão perdida. Reconectando...", "error");
     }
     if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
-      toast("Reconnected!", "success");
+      toast("Reconectado!", "success");
     }
     wasConnected.current = connected;
   }, [connected, toast]);
@@ -156,9 +159,6 @@ export default function App() {
     if (selectedAgent) {
       result = result.filter((t) => t.engine === selectedAgent);
     }
-    if (selectedModel) {
-      result = result.filter((t) => t.model === selectedModel);
-    }
 
     if (!search.trim()) return result;
 
@@ -170,7 +170,7 @@ export default function App() {
         t.repo?.name.toLowerCase().includes(q) ||
         t.branchName?.toLowerCase().includes(q)
     );
-  }, [tasks, search, selectedAgent, selectedModel]);
+  }, [tasks, search, selectedAgent]);
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -190,55 +190,32 @@ export default function App() {
 
       // Escape — close open panels/dialogs (in cascading order)
       if (e.key === "Escape") {
-        if (showCommandPalette) {
-          setShowCommandPalette(false);
-          return;
-        }
-        if (showNewTask) {
-          setShowNewTask(false);
-          return;
-        }
-        if (showAddRepo) {
-          setShowAddRepo(false);
-          return;
-        }
-        if (showSettings) {
-          setShowSettings(false);
-          return;
-        }
-        if (selectedTask) {
-          handleCloseDetail();
-          return;
-        }
-        if (search) {
-          setSearch("");
-          return;
-        }
+        if (showCommandPalette) { setShowCommandPalette(false); return; }
+        if (showEnginesPanel) { setShowEnginesPanel(false); return; }
+        if (showNewTask) { setShowNewTask(false); return; }
+        if (showAddRepo) { setShowAddRepo(false); return; }
+        if (showSettings) { setShowSettings(false); return; }
+        if (selectedTask) { handleCloseDetail(); return; }
+        if (search) { setSearch(""); return; }
       }
 
       if (isTyping) return;
 
       // N — new task
-      if (e.key === "n" || e.key === "N") {
-        e.preventDefault();
-        setShowNewTask(true);
-      }
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); setShowNewTask(true); }
       // / — focus search
-      if (e.key === "/") {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
+      if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
       // R — add repo
-      if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        setShowAddRepo(true);
-      }
+      if (e.key === "r" || e.key === "R") { e.preventDefault(); setShowAddRepo(true); }
+      // E — engines panel
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); setShowEnginesPanel(true); }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [
     showCommandPalette,
+    showEnginesPanel,
     showNewTask,
     showAddRepo,
     showSettings,
@@ -265,24 +242,52 @@ export default function App() {
           {!connected && (
             <div className="bg-amber-950/80 border-b border-amber-800/60 px-4 py-1.5 text-xs text-amber-300 flex items-center gap-2 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              Disconnected — trying to reconnect...
+              Desconectado — tentando reconectar...
             </div>
           )}
 
           {/* Header */}
-          <header className="border-b border-zinc-800 px-6 py-3 flex items-center gap-4 shrink-0">
+          <header className="border-b border-zinc-800 px-4 py-3 flex items-center gap-3 shrink-0">
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-zinc-300 truncate">
                 {selectedRepoId
-                  ? (repos.find((r) => r.id === selectedRepoId)?.name ?? "Repository")
-                  : "All Repositories"}
+                  ? (repos.find((r) => r.id === selectedRepoId)?.name ?? "Repositório")
+                  : "Todos os Repositórios"}
               </h2>
               <p className="text-xs text-zinc-600">
                 {filteredTasks.length !== tasks.length
-                  ? `${filteredTasks.length} of ${tasks.length} tasks`
-                  : `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`}
+                  ? `${filteredTasks.length} de ${tasks.length} tarefas`
+                  : `${tasks.length} tarefa${tasks.length !== 1 ? "s" : ""}`}
               </p>
             </div>
+
+            {/* Engine status indicator */}
+            <button
+              type="button"
+              onClick={() => setShowEnginesPanel(true)}
+              title="Gerenciar serviços de IA (E)"
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 cursor-pointer transition-colors group"
+            >
+              <div className="flex items-center gap-1">
+                {engines.slice(0, 4).map((e) => (
+                  <span
+                    key={e.name}
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      e.available ? "bg-emerald-400" : "bg-zinc-600"
+                    } ${e.activeRuns > 0 ? "animate-pulse" : ""}`}
+                    title={`${e.displayName}: ${e.available ? "disponível" : "não instalado"}${e.activeRuns > 0 ? ` · ${e.activeRuns} rodando` : ""}`}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">
+                {availableCount}/{engines.length}
+              </span>
+              {totalActiveRuns > 0 && (
+                <span className="text-xs bg-blue-900/50 text-blue-300 border border-blue-700/40 rounded-full px-1.5 py-0.5 leading-none font-medium">
+                  {totalActiveRuns} ativo{totalActiveRuns !== 1 ? "s" : ""}
+                </span>
+              )}
+            </button>
 
             {/* Filters */}
             <div className="flex items-center gap-2">
@@ -291,23 +296,10 @@ export default function App() {
                 onChange={(e) => setSelectedAgent(e.target.value || null)}
                 className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
               >
-                <option value="">All Engines</option>
-                {engines.map((e) => (
+                <option value="">Todos Engines</option>
+                {engines.filter((e) => e.available).map((e) => (
                   <option key={e.name} value={e.name}>
                     {e.displayName}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={selectedModel ?? ""}
-                onChange={(e) => setSelectedModel(e.target.value || null)}
-                className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
-              >
-                <option value="">All Models</option>
-                {Array.from(new Set(tasks.map((t) => t.model).filter(Boolean))).map((m) => (
-                  <option key={m} value={m!}>
-                    {m}
                   </option>
                 ))}
               </select>
@@ -323,8 +315,8 @@ export default function App() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search tasks..."
-                className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-44 focus:w-56 transition-all"
+                placeholder="Buscar tarefas..."
+                className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
               />
               {search && (
                 <button
@@ -350,9 +342,9 @@ export default function App() {
               variant="primary"
               size="sm"
               onClick={() => setShowNewTask(true)}
-              title="New task (N)"
+              title="Nova tarefa (N)"
             >
-              + New Task
+              + Tarefa
             </Button>
           </header>
 
@@ -365,15 +357,15 @@ export default function App() {
               onRetryPR={retryPR}
               onArchiveDone={async () => {
                 await archiveDone();
-                toast("Completed tasks archived", "info");
+                toast("Tarefas concluídas arquivadas", "info");
               }}
               onClearFailed={async () => {
                 await clearFailed();
-                toast("Failed tasks cleared", "info");
+                toast("Tarefas com falha removidas", "info");
               }}
               onRetryAllFailed={async () => {
                 await retryAllFailed();
-                toast("Retrying all failed tasks", "info");
+                toast("Reiniciando tarefas com falha", "info");
               }}
             />
           </main>
@@ -388,31 +380,36 @@ export default function App() {
             onLaunch={async (id, engine) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
               await launchTask(id, engine);
-              toast("Agent launched", "success");
+              toast("Agente iniciado", "success");
             }}
             onCancel={async (id) => {
               await cancelTask(id);
-              toast("Agent cancelled", "info");
+              toast("Agente cancelado", "info");
             }}
             onRetry={async (id) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
               await retryTask(id);
-              toast("Agent restarted", "success");
+              toast("Agente reiniciado", "success");
             }}
             onRetryPR={async (id) => {
               await retryPR(id);
-              toast("PR retry initiated", "info");
+              toast("Criando PR...", "info");
             }}
             onDelete={async (id) => {
               await removeTask(id);
               handleCloseDetail();
-              toast("Task deleted", "info");
+              toast("Tarefa deletada", "info");
             }}
             onSendInput={(taskId, input) => {
               send({ type: "agent_input", taskId, input });
             }}
             onTaskRefresh={refresh}
           />
+        )}
+
+        {/* Engines Panel */}
+        {showEnginesPanel && (
+          <EnginesPanel onClose={() => setShowEnginesPanel(false)} />
         )}
 
         {/* Command Palette */}
@@ -455,12 +452,12 @@ export default function App() {
                 cronExpression: schedule.cronExpression,
                 enabled: true,
               });
-              toast(`"${data.title}" scheduled (${schedule.cronExpression})`, "success");
+              toast(`"${data.title}" agendada (${schedule.cronExpression})`, "success");
             } else if (autoLaunch) {
               await launchTask(task.id, data.engine, model);
-              toast(`"${data.title}" started`, "success");
+              toast(`"${data.title}" iniciada`, "success");
             } else {
-              toast(`"${data.title}" added to backlog`, "success");
+              toast(`"${data.title}" adicionada ao backlog`, "success");
             }
           }}
         />
@@ -470,7 +467,7 @@ export default function App() {
           onClose={() => setShowAddRepo(false)}
           onSubmit={async (data) => {
             await addRepo(data);
-            toast("Repository added — cloning...", "success");
+            toast("Repositório adicionado — clonando...", "success");
           }}
         />
 

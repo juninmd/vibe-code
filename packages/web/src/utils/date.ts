@@ -4,9 +4,9 @@
  */
 export function formatDateTime(date: string | Date | null): string {
   if (!date) return "-";
-  
+
   const d = typeof date === "string" ? new Date(date) : date;
-  
+
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
     day: "2-digit",
@@ -25,9 +25,9 @@ export function formatDateTime(date: string | Date | null): string {
  */
 export function formatTime(date: string | Date | number | null): string {
   if (!date) return "--:--:--";
-  
+
   const d = new Date(date);
-  
+
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
     hour: "2-digit",
@@ -36,4 +36,3 @@ export function formatTime(date: string | Date | number | null): string {
     hour12: false,
   }).format(d);
 }
-

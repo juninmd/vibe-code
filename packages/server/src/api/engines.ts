@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import type { Orchestrator } from "../agents/orchestrator";
 import type { EngineRegistry } from "../agents/registry";
 
-export function createEnginesRouter(registry: EngineRegistry) {
+export function createEnginesRouter(registry: EngineRegistry, orchestrator: Orchestrator) {
   const router = new Hono();
 
   router.get("/", async (c) => {
-    const engines = await registry.listEngines();
+    const activeRuns = orchestrator.getActiveRunEngines();
+    const engines = await registry.listEngines(activeRuns);
     return c.json({ data: engines });
   });
 

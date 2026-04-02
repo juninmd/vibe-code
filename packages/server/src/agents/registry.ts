@@ -30,13 +30,24 @@ export class EngineRegistry {
     return undefined;
   }
 
-  async listEngines(): Promise<EngineInfo[]> {
+  async listEngines(activeRuns?: Map<string, string>): Promise<EngineInfo[]> {
     const results: EngineInfo[] = [];
     for (const engine of this.engines.values()) {
+      const available = await engine.isAvailable();
+      const version = available && engine.getVersion ? await engine.getVersion() : null;
+      // Count active runs for this engine
+      let runCount = 0;
+      if (activeRuns) {
+        for (const engineName of activeRuns.values()) {
+          if (engineName === engine.name) runCount++;
+        }
+      }
       results.push({
         name: engine.name,
         displayName: engine.displayName,
-        available: await engine.isAvailable(),
+        available,
+        version,
+        activeRuns: runCount,
       });
     }
     return results;

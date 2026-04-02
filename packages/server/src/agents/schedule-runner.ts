@@ -34,7 +34,9 @@ export class ScheduleRunner {
         // Always advance next_run_at to avoid hammering a broken/busy task
         const next = new Cron(schedule.cronExpression).nextRun();
         this.db.schedules.updateAfterRun(schedule.taskId, next ? next.toISOString() : null);
-        console.log(`  ↻ Scheduled task ${schedule.taskId} triggered, next: ${next?.toISOString() ?? "none"}`);
+        console.log(
+          `  ↻ Scheduled task ${schedule.taskId} triggered, next: ${next?.toISOString() ?? "none"}`
+        );
       }
     }
   }

@@ -21,6 +21,9 @@ export interface AgentEngine {
   /** Check if the CLI tool is installed and accessible */
   isAvailable(): Promise<boolean>;
 
+  /** Get CLI version string, e.g. "1.2.3". Returns null if not available. */
+  getVersion?(): Promise<string | null>;
+
   /** List available models by querying the CLI. Returns [] if not supported. */
   listModels(): Promise<string[]>;
 

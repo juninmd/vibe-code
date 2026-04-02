@@ -1,9 +1,9 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { AgentEvent } from "../engine";
-import { OpenCodeEngine, humanizeStderr } from "./opencode";
+import { humanizeStderr, OpenCodeEngine } from "./opencode";
 
 // ─── Test helper ──────────────────────────────────────────────────────────────
 // Replaces the opencode CLI with an inline Bun script for deterministic tests.
@@ -34,10 +34,7 @@ async function collectAll(engine: OpenCodeEngine, workdir: string): Promise<Agen
 let workdir: string;
 
 beforeEach(async () => {
-  workdir = join(
-    tmpdir(),
-    `opencode-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  workdir = join(tmpdir(), `opencode-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(workdir, { recursive: true });
 });
 
@@ -68,9 +65,7 @@ describe("humanizeStderr", () => {
 
   it("suppresses INFO for non-meaningful services", () => {
     expect(
-      humanizeStderr(
-        "INFO  2026-03-30T21:06:06 +0ms service=permission permission=skill evaluate"
-      )
+      humanizeStderr("INFO  2026-03-30T21:06:06 +0ms service=permission permission=skill evaluate")
     ).toBeNull();
   });
 
@@ -117,9 +112,9 @@ describe("OpenCodeEngine.parseLine", () => {
       })
     );
     expect(events.find((e) => e.type === "status")?.content).toContain("Reading");
-    expect(
-      events.find((e) => e.type === "log" && e.stream === "stdout")?.content
-    ).toContain("src/index.ts");
+    expect(events.find((e) => e.type === "log" && e.stream === "stdout")?.content).toContain(
+      "src/index.ts"
+    );
   });
 
   it("parses a step_start event into Working... status", () => {
@@ -162,28 +157,28 @@ describe("OpenCodeEngine.parseLine", () => {
   it("handles JSON content containing braces and quotes correctly (brace counting)", () => {
     const trickyLine = JSON.stringify({
       type: "text",
-      part: { text: 'Content with } and { and "quotes" and \\"escaped quotes\\"' }
+      part: { text: 'Content with } and { and "quotes" and \\"escaped quotes\\"' },
     });
     const events = engine.parseLine(trickyLine);
     expect(events).toHaveLength(1);
     expect(events[0].content).toBe('Content with } and { and "quotes" and \\"escaped quotes\\"');
-    });
+  });
 
-    it("surfaces tool failures with error message", () => {
+  it("surfaces tool failures with error message", () => {
     const errorLine = JSON.stringify({
       type: "tool_use",
       part: {
         name: "bash",
-        state: { status: "failed", error: "Command not found" }
-      }
+        state: { status: "failed", error: "Command not found" },
+      },
     });
     const events = engine.parseLine(errorLine);
     expect(events.find((e) => e.stream === "stderr")?.content).toContain(
       "Error in bash: Command not found"
     );
-    });
+  });
 
-    it("handles multiple JSON objects on a single line", () => {
+  it("handles multiple JSON objects on a single line", () => {
     const line =
       JSON.stringify({ type: "text", part: { text: "One" } }) +
       JSON.stringify({ type: "text", part: { text: "Two" } });
@@ -191,9 +186,9 @@ describe("OpenCodeEngine.parseLine", () => {
     expect(events).toHaveLength(2);
     expect(events[0].content).toBe("One");
     expect(events[1].content).toBe("Two");
-    });
+  });
 
-    it("handles deeply nested braces and escaped quotes in strings", () => {
+  it("handles deeply nested braces and escaped quotes in strings", () => {
     const complex = {
       type: "text",
       part: { text: 'Nested { { { } } } and "escaped \\" quote" with }' },
@@ -201,9 +196,9 @@ describe("OpenCodeEngine.parseLine", () => {
     const events = engine.parseLine(JSON.stringify(complex));
     expect(events[0].content).toContain("Nested { { { } } }");
     expect(events[0].content).toContain('\\" quote');
-    });
+  });
 
-    it("parses progress events into status + system log", () => {
+  it("parses progress events into status + system log", () => {
     const events = engine.parseLine(
       JSON.stringify({
         type: "progress",
@@ -214,18 +209,18 @@ describe("OpenCodeEngine.parseLine", () => {
     expect(events.find((e) => e.type === "log" && e.stream === "system")?.content).toBe(
       "  Analyzing repo..."
     );
-    });
+  });
 
-    it("parses step_finish with token usage", () => {
-      const events = engine.parseLine(
-        JSON.stringify({
-          type: "step_finish",
-          part: { tokens: { total: 12345 } },
-        })
-      );
-      expect(events[0].content).toMatch(/tokens used: 12[.,]345/);
-    });
-    it("humanizes various tool calls correctly", () => {
+  it("parses step_finish with token usage", () => {
+    const events = engine.parseLine(
+      JSON.stringify({
+        type: "step_finish",
+        part: { tokens: { total: 12345 } },
+      })
+    );
+    expect(events[0].content).toMatch(/tokens used: 12[.,]345/);
+  });
+  it("humanizes various tool calls correctly", () => {
     const testTools = [
       { name: "read_file", input: { path: "a.txt" }, expected: "Reading a.txt" },
       { name: "write_file", input: { file_path: "b.ts" }, expected: "Writing b.ts" },
@@ -244,9 +239,9 @@ describe("OpenCodeEngine.parseLine", () => {
       const status = events.find((e) => e.type === "status")?.content;
       expect(status).toContain(tool.expected);
     }
-    });
+  });
 
-    it("humanizes tool results correctly", () => {
+  it("humanizes tool results correctly", () => {
     const testResults = [
       { name: "read_file", output: "line1\nline2", expected: "2 lines read" },
       { name: "bash", output: "Success output", expected: "Success output" },
@@ -268,7 +263,7 @@ describe("OpenCodeEngine.parseLine", () => {
   it("parses real 'text' event correctly (contract snapshot)", () => {
     const line = JSON.stringify({
       type: "text",
-      part: { type: "text", text: "teste" }
+      part: { type: "text", text: "teste" },
     });
     const events = engine.parseLine(line);
     expect(events[0].content).toBe("teste");
@@ -283,31 +278,31 @@ describe("OpenCodeEngine.parseLine", () => {
         state: {
           status: "completed",
           input: { command: "ls -la" },
-          output: "total 94"
-        }
-      }
+          output: "total 94",
+        },
+      },
     });
     const events = engine.parseLine(line);
-    expect(events.find(e => e.content?.includes("total 94"))).toBeDefined();
+    expect(events.find((e) => e.content?.includes("total 94"))).toBeDefined();
   });
 
   it("parses real 'step_finish' (tokens) event correctly (contract snapshot)", () => {
     const line = JSON.stringify({
       type: "step_finish",
-      part: { type: "step-finish", tokens: { total: 14570 } }
+      part: { type: "step-finish", tokens: { total: 14570 } },
     });
     const events = engine.parseLine(line);
-    expect(events.find(e => e.content?.match(/tokens used: 14[.,]570/))).toBeDefined();
+    expect(events.find((e) => e.content?.match(/tokens used: 14[.,]570/))).toBeDefined();
   });
 
   it("parses interactive question events correctly", () => {
     const line = JSON.stringify({
       type: "question",
-      part: { text: "Are you sure?" }
+      part: { text: "Are you sure?" },
     });
     const events = engine.parseLine(line);
-    expect(events.find(e => e.type === "status")?.content).toBe("Awaiting input...");
-    expect(events.find(e => e.content?.includes("Question"))).toBeDefined();
+    expect(events.find((e) => e.type === "status")?.content).toBe("Awaiting input...");
+    expect(events.find((e) => e.content?.includes("Question"))).toBeDefined();
   });
 });
 
@@ -372,10 +367,7 @@ describe("execute: complete event", () => {
     const engine = new FakeOpenCodeEngine("process.exit(1)");
     const events = await collectAll(engine, workdir);
     const exitLog = events.find(
-      (e) =>
-        e.type === "log" &&
-        e.stream === "stderr" &&
-        e.content?.includes("Exited with code 1")
+      (e) => e.type === "log" && e.stream === "stderr" && e.content?.includes("Exited with code 1")
     );
     expect(exitLog).toBeDefined();
   }, 10_000);
@@ -442,7 +434,11 @@ describe("execute: real-time streaming", () => {
     const textEvents: string[] = [];
 
     for await (const event of engine.execute("test", workdir)) {
-      if (event.type === "log" && event.stream === "stdout" && event.content?.startsWith("event-")) {
+      if (
+        event.type === "log" &&
+        event.stream === "stdout" &&
+        event.content?.startsWith("event-")
+      ) {
         textEvents.push(event.content);
       }
       if (event.type === "complete") break;
@@ -479,18 +475,17 @@ describe("execute: real-time streaming", () => {
 
 describe("execute: stderr passthrough", () => {
   it("surfaces plain text stderr lines", async () => {
-    const engine = new FakeOpenCodeEngine(
-      `process.stderr.write("something went wrong\\n")`
-    );
+    const engine = new FakeOpenCodeEngine(`process.stderr.write("something went wrong\\n")`);
     const events = await collectAll(engine, workdir);
     expect(
-      events.find((e) => e.type === "log" && e.stream === "stderr" && e.content === "something went wrong")
+      events.find(
+        (e) => e.type === "log" && e.stream === "stderr" && e.content === "something went wrong"
+      )
     ).toBeDefined();
   }, 10_000);
 
   it("suppresses OpenCode INFO structured log lines from stderr", async () => {
-    const noisyLine =
-      "INFO  2026-03-30T21:06:05 +283ms service=default version=1.2.26 opencode";
+    const noisyLine = "INFO  2026-03-30T21:06:05 +283ms service=default version=1.2.26 opencode";
     const engine = new FakeOpenCodeEngine(
       `process.stderr.write(${JSON.stringify(noisyLine + "\\n")})`
     );

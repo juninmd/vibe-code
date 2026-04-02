@@ -162,6 +162,18 @@ export class OpenCodeEngine implements AgentEngine {
     }
   }
 
+  async getVersion(): Promise<string | null> {
+    try {
+      const proc = Bun.spawn(["opencode", "--version"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode !== 0) return null;
+      const text = await new Response(proc.stdout).text();
+      return text.trim().split("\n")[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
   async listModels(): Promise<string[]> {
     try {
       const proc = Bun.spawn(["opencode", "models"], { stdout: "pipe", stderr: "pipe" });
@@ -194,14 +206,18 @@ export class OpenCodeEngine implements AgentEngine {
     const configPath = join(workdir, "opencode.json");
     await writeFile(
       configPath,
-      JSON.stringify({
-        permission: {
-          "*": "allow",
-          question: "allow",
-          plan_enter: "deny",
-          plan_exit: "deny",
+      JSON.stringify(
+        {
+          permission: {
+            "*": "allow",
+            question: "allow",
+            plan_enter: "deny",
+            plan_exit: "deny",
+          },
         },
-      }, null, 2),
+        null,
+        2
+      ),
       "utf8"
     );
 
@@ -214,13 +230,8 @@ export class OpenCodeEngine implements AgentEngine {
       stdin: "pipe",
     });
 
-    // Close stdin immediately — non-interactive mode.
-    try {
-      const sink = proc.stdin as import("bun").FileSink;
-      await sink.end();
-    } catch {
-      /* ignore */
-    }
+    // Keep stdin open so sendInput() works when the agent asks a question.
+    // We do NOT close stdin here — it will close naturally when the process exits.
 
     if (options?.runId) this.processes.set(options.runId, proc);
     if (options?.signal) {
@@ -271,7 +282,11 @@ export class OpenCodeEngine implements AgentEngine {
       } catch {
         // Reader was cancelled (e.g. child process keeping pipe open on Windows)
       } finally {
-        try { reader.releaseLock(); } catch { /* ignore */ }
+        try {
+          reader.releaseLock();
+        } catch {
+          /* ignore */
+        }
         stdoutDone = true;
         notify();
       }
@@ -284,7 +299,11 @@ export class OpenCodeEngine implements AgentEngine {
     proc.exited.then(async () => {
       await new Promise((r) => setTimeout(r, 1500));
       if (!stdoutDone && stdoutReader) {
-        try { await stdoutReader.cancel(); } catch { /* ignore */ }
+        try {
+          await stdoutReader.cancel();
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -312,7 +331,11 @@ export class OpenCodeEngine implements AgentEngine {
       } catch {
         // Reader was cancelled
       } finally {
-        try { reader.releaseLock(); } catch { /* ignore */ }
+        try {
+          reader.releaseLock();
+        } catch {
+          /* ignore */
+        }
         stderrDone = true;
         notify();
       }
@@ -322,7 +345,11 @@ export class OpenCodeEngine implements AgentEngine {
     proc.exited.then(async () => {
       await new Promise((r) => setTimeout(r, 1500));
       if (!stderrDone && stderrReader) {
-        try { await stderrReader.cancel(); } catch { /* ignore */ }
+        try {
+          await stderrReader.cancel();
+        } catch {
+          /* ignore */
+        }
       }
     });
 
@@ -407,17 +434,17 @@ export class OpenCodeEngine implements AgentEngine {
     // Robust JSON object extraction: count braces and track quotes
     let braceCount = 0;
     let inString = false;
-    let escape = false;
+    let escaped = false;
     let start = -1;
 
     for (let i = 0; i < line.length; i++) {
       const char = line[i];
 
       if (inString) {
-        if (escape) {
-          escape = false;
+        if (escaped) {
+          escaped = false;
         } else if (char === "\\") {
-          escape = true;
+          escaped = true;
         } else if (char === '"') {
           inString = false;
         }
@@ -484,9 +511,9 @@ export class OpenCodeEngine implements AgentEngine {
             const metadata = (state.metadata ?? part.metadata ?? {}) as Record<string, unknown>;
             const exitCode = metadata.exitCode ?? metadata.exit;
             const label = humanizeToolResult(toolName, output);
-            
+
             if (label) results.push({ type: "log", stream: "stdout", content: label });
-            
+
             // If it completed but with a non-zero exit code, it's effectively an error
             if (exitCode != null && Number(exitCode) !== 0) {
               results.push({

@@ -103,7 +103,9 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE tasks ADD COLUMN model TEXT");
   }
   if (!taskColNames.includes("parent_task_id")) {
-    db.exec("ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL");
+    db.exec(
+      "ALTER TABLE tasks ADD COLUMN parent_task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL"
+    );
   }
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
