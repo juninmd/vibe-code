@@ -4,24 +4,61 @@ import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_STATUS_LABELS } from "@vibe-code/shared";
 import { TaskCard } from "./TaskCard";
 
-const columnColors: Record<TaskStatus, string> = {
-  scheduled: "border-amber-500",
-  backlog: "border-zinc-600",
-  in_progress: "border-blue-500",
-  review: "border-violet-500",
-  done: "border-emerald-500",
-  failed: "border-red-500",
-  archived: "border-zinc-700",
-};
+// ─── Column visual config ──────────────────────────────────────────────────────
 
-const columnDescriptions: Record<TaskStatus, string> = {
-  scheduled: "Tasks que disparam automaticamente conforme agendamento",
-  backlog: "Tasks waiting to be picked up by an AI agent",
-  in_progress: "An AI agent is actively working on these tasks",
-  review: "Agent finished and a Pull Request is open for review",
-  done: "PR merged or task completed",
-  failed: "Agent encountered an error",
-  archived: "Archived tasks",
+const columnConfig: Record<
+  TaskStatus,
+  { dot: string; countBg: string; countText: string; emptyIcon: string; emptyText: string }
+> = {
+  scheduled: {
+    dot: "bg-amber-400",
+    countBg: "bg-amber-950/60 border-amber-800/40",
+    countText: "text-amber-300",
+    emptyIcon: "⏰",
+    emptyText: "Nenhuma tarefa agendada",
+  },
+  backlog: {
+    dot: "bg-zinc-500",
+    countBg: "bg-zinc-800/60 border-zinc-700/40",
+    countText: "text-zinc-400",
+    emptyIcon: "📋",
+    emptyText: "Adicione tarefas aqui",
+  },
+  in_progress: {
+    dot: "bg-blue-400",
+    countBg: "bg-blue-950/60 border-blue-800/40",
+    countText: "text-blue-300",
+    emptyIcon: "▶",
+    emptyText: "Nenhum agente rodando",
+  },
+  review: {
+    dot: "bg-violet-400",
+    countBg: "bg-violet-950/60 border-violet-800/40",
+    countText: "text-violet-300",
+    emptyIcon: "👁",
+    emptyText: "Nada aguardando revisão",
+  },
+  done: {
+    dot: "bg-emerald-400",
+    countBg: "bg-emerald-950/60 border-emerald-800/40",
+    countText: "text-emerald-300",
+    emptyIcon: "✓",
+    emptyText: "Nenhuma tarefa concluída",
+  },
+  failed: {
+    dot: "bg-red-400",
+    countBg: "bg-red-950/60 border-red-800/40",
+    countText: "text-red-300",
+    emptyIcon: "✕",
+    emptyText: "Sem falhas",
+  },
+  archived: {
+    dot: "bg-zinc-600",
+    countBg: "bg-zinc-800/60 border-zinc-700/40",
+    countText: "text-zinc-500",
+    emptyIcon: "📦",
+    emptyText: "Nenhum arquivo",
+  },
 };
 
 interface ColumnProps {
@@ -45,33 +82,43 @@ export function Column({
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
+  const cfg = columnConfig[status];
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-w-[280px] w-[280px] shrink-0 rounded-xl bg-zinc-900/50 border-t-2 ${columnColors[status]} ${isOver ? "ring-2 ring-violet-500/40" : ""}`}
+      className={`flex flex-col min-w-[272px] w-[272px] shrink-0 rounded-2xl glass-card border transition-all duration-200 ${
+        isOver ? "ring-2 ring-violet-500/40 brightness-105" : ""
+      }`}
     >
-      <div className="px-4 py-3">
+      {/* Column header */}
+      <div className="px-4 pt-3.5 pb-3 border-b border-white/[0.05]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-300">{TASK_STATUS_LABELS[status]}</h2>
-            <span className="text-xs text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+            <h2 className="text-[13px] font-semibold text-zinc-200 tracking-tight">
+              {TASK_STATUS_LABELS[status]}
+            </h2>
+            <span
+              className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full border ${cfg.countBg} ${cfg.countText}`}
+            >
               {tasks.length}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          {/* Action buttons */}
+          <div className="flex items-center gap-0.5">
             {status === "done" && tasks.length > 0 && onArchiveDone && (
               <button
                 type="button"
                 onClick={onArchiveDone}
-                title="Archive all done tasks"
-                className="p-1 text-zinc-600 hover:text-emerald-500 transition-colors"
+                title="Arquivar concluídas"
+                className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-950/30 transition-all cursor-pointer"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
+                  width="13"
+                  height="13"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -91,13 +138,13 @@ export function Column({
                   <button
                     type="button"
                     onClick={onRetryAllFailed}
-                    title="Retry all failed tasks"
-                    className="p-1 text-zinc-600 hover:text-blue-500 transition-colors"
+                    title="Retry todas as falhas"
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-950/30 transition-all cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
+                      width="13"
+                      height="13"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -116,13 +163,13 @@ export function Column({
                   <button
                     type="button"
                     onClick={onClearFailed}
-                    title="Clear all failed tasks"
-                    className="p-1 text-zinc-600 hover:text-red-500 transition-colors"
+                    title="Limpar falhas"
+                    className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
+                      width="13"
+                      height="13"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -142,10 +189,10 @@ export function Column({
             )}
           </div>
         </div>
-        <p className="text-[11px] text-zinc-600 mt-1 leading-tight">{columnDescriptions[status]}</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
+      {/* Cards area */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-[80px]">
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
             <TaskCard
@@ -158,7 +205,10 @@ export function Column({
         </SortableContext>
 
         {tasks.length === 0 && (
-          <div className="text-center py-8 text-zinc-700 text-xs">Drop tasks here</div>
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-700 select-none">
+            <span className="text-2xl opacity-40">{cfg.emptyIcon}</span>
+            <span className="text-[11px]">{cfg.emptyText}</span>
+          </div>
         )}
       </div>
     </div>

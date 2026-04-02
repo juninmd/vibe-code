@@ -21,8 +21,8 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-zinc-900 text-zinc-100 rounded-xl border border-zinc-800 p-6 w-full max-w-md shadow-2xl">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative glass-dialog text-zinc-100 rounded-xl border p-6 w-full max-w-md shadow-2xl shadow-black/50">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button

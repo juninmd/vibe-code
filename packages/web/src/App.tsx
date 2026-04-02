@@ -266,7 +266,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={toastCtx}>
-      <div className="h-screen flex overflow-hidden bg-zinc-950 text-zinc-100">
+      <div className="h-screen flex overflow-hidden bg-zinc-950/30 text-zinc-100">
         <Sidebar
           repos={repos}
           selectedRepoId={selectedRepoId}
@@ -287,7 +287,7 @@ export default function App() {
           )}
 
           {/* Header */}
-          <header className="border-b border-zinc-800 px-4 py-3 flex items-center gap-3 shrink-0">
+          <header className="glass-panel border-b px-4 py-3 flex items-center gap-3 shrink-0">
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-zinc-300 truncate">
                 {selectedRepoId

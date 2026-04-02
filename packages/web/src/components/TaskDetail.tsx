@@ -53,7 +53,15 @@ const CRON_PRESETS = [
 // Pipeline step for PR creation flow
 type PipelineStep = "running" | "review" | "pushing" | "pr_created";
 
-function PipelineSteps({ task, isRunning, currentStatus }: { task: TaskWithRun; isRunning: boolean; currentStatus: string | null }) {
+function PipelineSteps({
+  task,
+  isRunning,
+  currentStatus,
+}: {
+  task: TaskWithRun;
+  isRunning: boolean;
+  currentStatus: string | null;
+}) {
   const steps: { id: PipelineStep; label: string; icon: string }[] = [
     { id: "running", label: "Executando", icon: "⚙" },
     { id: "review", label: "Revisão", icon: "◎" },
@@ -89,7 +97,12 @@ function PipelineSteps({ task, isRunning, currentStatus }: { task: TaskWithRun; 
     if (task.branchName) completedSteps = ["running", "review"];
   }
 
-  if (task.status !== "in_progress" && task.status !== "review" && task.status !== "done" && task.status !== "failed") {
+  if (
+    task.status !== "in_progress" &&
+    task.status !== "review" &&
+    task.status !== "done" &&
+    task.status !== "failed"
+  ) {
     return null;
   }
 
@@ -114,11 +127,7 @@ function PipelineSteps({ task, isRunning, currentStatus }: { task: TaskWithRun; 
               </div>
               <span
                 className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
-                  isCompleted
-                    ? "text-emerald-400"
-                    : isActive
-                      ? "text-blue-300"
-                      : "text-zinc-600"
+                  isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
                 }`}
               >
                 {step.label}
@@ -442,9 +451,9 @@ export function TaskDetail({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-zinc-900 border-l border-zinc-800 overflow-y-auto shadow-2xl">
+      <div className="relative w-full max-w-xl glass-panel border-l overflow-y-auto shadow-2xl shadow-black/40">
         {/* Header */}
-        <div className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-zinc-800 px-5 py-4 z-10">
+        <div className="sticky top-0 glass-panel border-b px-5 py-4 z-10">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5 min-w-0">
               {ProviderIcon && (
@@ -453,7 +462,9 @@ export function TaskDetail({
                 </div>
               )}
               <div className="min-w-0">
-                <h2 className="text-base font-semibold leading-tight text-zinc-100">{task.title}</h2>
+                <h2 className="text-base font-semibold leading-tight text-zinc-100">
+                  {task.title}
+                </h2>
                 {task.repo && (
                   <a
                     href={task.repo.url}
@@ -538,7 +549,9 @@ export function TaskDetail({
                   </a>
                 </div>
               </div>
-              <code className="text-[11px] text-violet-300/80 font-mono break-all">{task.prUrl}</code>
+              <code className="text-[11px] text-violet-300/80 font-mono break-all">
+                {task.prUrl}
+              </code>
             </div>
           )}
 
@@ -588,12 +601,16 @@ export function TaskDetail({
               <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
                 <div className="flex items-center gap-1.5">
                   <span className="text-zinc-600">base:</span>
-                  <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px]">{task.repo.defaultBranch}</code>
+                  <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px]">
+                    {task.repo.defaultBranch}
+                  </code>
                 </div>
                 {task.branchName && (
                   <div className="flex items-center gap-1.5">
                     <span className="text-zinc-600">branch:</span>
-                    <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px] max-w-[200px] truncate">{task.branchName}</code>
+                    <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px] max-w-[200px] truncate">
+                      {task.branchName}
+                    </code>
                   </div>
                 )}
               </div>

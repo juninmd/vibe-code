@@ -164,9 +164,9 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative h-full w-full max-w-md bg-zinc-950 border-l border-zinc-800 flex flex-col overflow-hidden shadow-2xl">
+      <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
           <div>
             <h2 className="text-base font-semibold text-zinc-100">Serviços de IA</h2>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -217,7 +217,7 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-zinc-800 text-[10px] text-zinc-600 shrink-0 flex items-center justify-between">
+        <div className="px-4 py-3 border-t border-white/[0.06] text-[10px] text-zinc-600 shrink-0 flex items-center justify-between">
           <span>
             Atualizado{" "}
             {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
