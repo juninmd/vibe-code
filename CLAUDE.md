@@ -70,3 +70,29 @@ POST /api/tasks/{id}/launch
 | `VIBE_CODE_MAX_AGENTS` | `4` |
 
 Data is stored at `~/.vibe-code/`: SQLite DB, bare repos (`repos/`), and task worktrees (`workspaces/`).
+
+## Custom Commands (`.claude/commands/`)
+
+| Comando | Descrição |
+|---|---|
+| `/health` | Roda lint + typecheck + testes + build e reporta resultados |
+| `/fix` | Encontra e corrige todos os erros de TypeScript e lint |
+| `/pr` | Valida qualidade e gera título + body do PR |
+| `/new-engine <nome>` | Scaffolda novo adaptador de engine seguindo o padrão do projeto |
+| `/add-migration <desc>` | Adiciona migração SQLite segura com rollback documentado |
+
+## Sub-Agents (`.claude/agents/`)
+
+| Agente | Persona |
+|---|---|
+| `code-reviewer` | Revisa código buscando bugs, segurança e padrões do projeto |
+| `test-writer` | Escreve testes de integração (server) e componentes/hooks (web) |
+| `db-admin` | Projeta schemas, otimiza queries SQLite e gerencia migrações |
+
+## Convenções de código
+
+- **Commits**: Conventional Commits (`feat:`, `fix:`, `chore:`, etc.)
+- **Lint/Format**: Biome (`bun biome check . --write`)
+- **Novos endpoints**: sempre com validação Zod, nunca string interpolation em SQL
+- **Engines**: manter stdin aberto para interatividade; implementar `getVersion()`
+- **Review pipeline**: advisory por padrão; só bloqueia com `VIBE_CODE_REVIEW_STRICT=true`
