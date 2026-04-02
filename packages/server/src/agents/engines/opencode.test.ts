@@ -16,7 +16,7 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     super(heartbeatIntervalMs);
   }
 
-  protected override buildCommand(_model: string, _prompt: string): string[] {
+  protected override buildCommand(_model: string, _prompt: string, _workdir: string): string[] {
     return ["bun", "-e", this.script];
   }
 }

@@ -103,7 +103,9 @@ export async function* streamProcess(
       // biome-ignore lint/style/noNonNullAssertion: length checked above
       yield eventQueue.shift()!;
     }
-    if (aborted || (stdoutDone && stderrDone && eventQueue.length === 0)) break;
+    if (stdoutDone && stderrDone && eventQueue.length === 0) break;
+    if (aborted) break;
+
     await new Promise<void>((r) => {
       waiting.resolve = r;
     });

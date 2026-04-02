@@ -148,8 +148,19 @@ export class OpenCodeEngine implements AgentEngine {
    * Returns the CLI command to spawn.
    * Override in tests to inject a fake subprocess.
    */
-  protected buildCommand(model: string, prompt: string): string[] {
-    return ["opencode", "run", "--format", "json", "--model", model, prompt];
+  protected buildCommand(model: string, prompt: string, workdir: string): string[] {
+    return [
+      "opencode",
+      "run",
+      "--format",
+      "json",
+      "--model",
+      model,
+      "--dir",
+      workdir,
+      "--prompt",
+      prompt,
+    ];
   }
 
   async isAvailable(): Promise<boolean> {
@@ -202,7 +213,7 @@ export class OpenCodeEngine implements AgentEngine {
     };
 
     // Write opencode.json with permissions pre-configured for non-interactive mode.
-    // Allow all tool use but deny question/plan prompts that would wait for user input.
+    // Allow all tool use and planning phases to prevent hanging.
     const configPath = join(workdir, "opencode.json");
     await writeFile(
       configPath,
@@ -211,8 +222,8 @@ export class OpenCodeEngine implements AgentEngine {
           permission: {
             "*": "allow",
             question: "allow",
-            plan_enter: "deny",
-            plan_exit: "deny",
+            plan_enter: "allow",
+            plan_exit: "allow",
           },
         },
         null,
@@ -223,7 +234,7 @@ export class OpenCodeEngine implements AgentEngine {
 
     // Use stdout: "pipe" so proc.exited resolves correctly and events stream in
     // real-time. (Using Bun.file() as stdout breaks proc.exited on Windows.)
-    const proc = Bun.spawn(this.buildCommand(model, prompt), {
+    const proc = Bun.spawn(this.buildCommand(model, prompt, workdir), {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
@@ -242,13 +253,12 @@ export class OpenCodeEngine implements AgentEngine {
     const queue: AgentEvent[] = [];
     let stdoutDone = false;
     let stderrDone = false;
-    let wakeup: (() => void) | null = null;
+    const waiting: { resolve: (() => void) | null } = { resolve: null };
 
     const notify = () => {
-      if (wakeup) {
-        const fn = wakeup;
-        wakeup = null;
-        fn();
+      if (waiting.resolve) {
+        waiting.resolve();
+        waiting.resolve = null;
       }
     };
     const push = (e: AgentEvent) => {
@@ -373,16 +383,16 @@ export class OpenCodeEngine implements AgentEngine {
 
     // ─── Main yield loop ───────────────────────────────────────────────────
     // Runs until BOTH stdout AND stderr reach EOF (which happens on process exit).
-    while (!allDone() || queue.length > 0) {
+    while (true) {
       while (queue.length > 0) {
         // biome-ignore lint/style/noNonNullAssertion: length checked above
         yield queue.shift()!;
       }
-      if (!allDone()) {
-        await new Promise<void>((r) => {
-          wakeup = r;
-        });
-      }
+      if (allDone() && queue.length === 0) break;
+
+      await new Promise<void>((r) => {
+        waiting.resolve = r;
+      });
     }
 
     // Stop the heartbeat before awaiting — it might be sleeping for up to
