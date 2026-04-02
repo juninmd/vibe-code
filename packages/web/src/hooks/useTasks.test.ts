@@ -13,6 +13,7 @@ const mockTask: TaskWithRun = {
   model: null,
   priority: 0,
   columnOrder: 0,
+  baseBranch: null,
   branchName: null,
   prUrl: null,
   parentTaskId: null,

@@ -170,6 +170,58 @@ export class GitService {
     return match ? match[1] : url;
   }
 
+  async listBranches(barePath: string): Promise<string[]> {
+    try {
+      const result = await this.exec([
+        "git",
+        "--git-dir",
+        barePath,
+        "branch",
+        "-r",
+        "--format=%(refname:short)",
+      ]);
+      return result.stdout
+        .trim()
+        .split("\n")
+        .map((b) => b.trim().replace(/^origin\//, ""))
+        .filter((b) => b && b !== "HEAD");
+    } catch {
+      return [];
+    }
+  }
+
+  async createGitHubRepo(
+    name: string,
+    description: string,
+    isPrivate: boolean
+  ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }> {
+    const args = [
+      "gh",
+      "repo",
+      "create",
+      name,
+      "--json",
+      "name,url,description,isPrivate",
+      isPrivate ? "--private" : "--public",
+    ];
+    if (description) {
+      args.push("--description", description);
+    }
+    const result = await this.exec(args);
+    const repo = JSON.parse(result.stdout) as {
+      name: string;
+      url: string;
+      description: string | null;
+      isPrivate: boolean;
+    };
+    return {
+      name: repo.name,
+      url: repo.url,
+      description: repo.description ?? "",
+      isPrivate: repo.isPrivate,
+    };
+  }
+
   async listGitHubRepos(
     limit = 200
   ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {

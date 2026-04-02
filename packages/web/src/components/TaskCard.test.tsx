@@ -30,6 +30,7 @@ const baseTask: TaskWithRun = {
   model: null,
   priority: 0,
   columnOrder: 0,
+  baseBranch: null,
   branchName: "feat/my-branch",
   prUrl: null,
   parentTaskId: null,
@@ -75,7 +76,7 @@ describe("TaskCard", () => {
   it("shows PR link when prUrl is set", () => {
     const task = { ...baseTask, prUrl: "https://github.com/org/repo/pull/1" };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    const link = screen.getByRole("link", { name: "PR" });
+    const link = screen.getByRole("link", { name: /↗ PR/i });
     expect(link).toHaveAttribute("href", "https://github.com/org/repo/pull/1");
   });
 

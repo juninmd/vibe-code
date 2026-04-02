@@ -25,12 +25,15 @@ interface NewTaskDialogProps {
   onClose: () => void;
   repos: Repository[];
   engines: EngineInfo[];
+  enginesLoading?: boolean;
+  enginesError?: string | null;
   onSubmit: (data: {
     title: string;
     description: string;
     repoId: string;
     engine?: string;
     model?: string;
+    baseBranch?: string;
     autoLaunch: boolean;
     schedule?: {
       cronExpression: string;
@@ -46,7 +49,15 @@ const CRON_PRESETS = [
   { label: "Every 15 Minutes", value: "*/15 * * * *" },
 ];
 
-export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTaskDialogProps) {
+export function NewTaskDialog({
+  open,
+  onClose,
+  repos,
+  engines,
+  enginesLoading,
+  enginesError,
+  onSubmit,
+}: NewTaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [repoId, setRepoId] = useState("");
@@ -56,6 +67,9 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [loadingModels, setLoadingModels] = useState(false);
   const [autoLaunch, setAutoLaunch] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
+  const [baseBranch, setBaseBranch] = useState("");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
 
   // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
@@ -63,6 +77,23 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
   const [isCustomCron, setIsCustomCron] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
+
+  // Set baseBranch and fetch branches when repoId changes
+  useEffect(() => {
+    if (!repoId) {
+      setBaseBranch("");
+      setBranches([]);
+      return;
+    }
+    const repo = repos.find((r) => r.id === repoId);
+    setBaseBranch(repo?.defaultBranch ?? "main");
+    setLoadingBranches(true);
+    api.repos
+      .branches(repoId)
+      .then(setBranches)
+      .catch(() => setBranches([]))
+      .finally(() => setLoadingBranches(false));
+  }, [repoId, repos]);
 
   // Fetch models when engine changes
   useEffect(() => {
@@ -89,6 +120,7 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
       repoId,
       engine: engine || undefined,
       model: model || undefined,
+      baseBranch: baseBranch || undefined,
       autoLaunch: isScheduled ? false : autoLaunch, // Don't auto-launch if scheduling
       schedule: isScheduled ? { cronExpression } : undefined,
     });
@@ -98,6 +130,8 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
     setEngine("");
     setModel("");
     setModels([]);
+    setBaseBranch("");
+    setBranches([]);
     setIsScheduled(false);
     onClose();
   };
@@ -157,7 +191,15 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-400 mb-1">AI Engine</label>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">
+                AI Engine
+                {enginesLoading && <span className="ml-1 text-zinc-600">(carregando...)</span>}
+                {enginesError && (
+                  <span className="ml-1 text-red-500" title={enginesError}>
+                    ⚠ erro
+                  </span>
+                )}
+              </label>
               <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
                 <option value="">Auto-select</option>
                 {engines.map((eng) => (
@@ -169,6 +211,43 @@ export function NewTaskDialog({ open, onClose, repos, engines, onSubmit }: NewTa
               </Select>
             </div>
           </div>
+
+          {repoId && (
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1">
+                Branch base
+                <span className="ml-1 text-zinc-600 font-normal">
+                  — branch de origem para o agente trabalhar
+                </span>
+                {loadingBranches && (
+                  <span className="ml-1 text-zinc-600 animate-pulse">carregando...</span>
+                )}
+              </label>
+              <Input
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
+                placeholder="main"
+              />
+              {branches.length > 0 && (
+                <div className="flex gap-1 flex-wrap mt-1.5">
+                  {branches.slice(0, 6).map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBaseBranch(b)}
+                      className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer transition-colors ${
+                        baseBranch === b
+                          ? "bg-violet-600/20 border-violet-500/60 text-violet-300"
+                          : "border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {engine && (models.length > 0 || loadingModels) && (
             <div>

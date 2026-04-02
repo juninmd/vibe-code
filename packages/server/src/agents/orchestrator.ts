@@ -316,7 +316,7 @@ export class Orchestrator {
         branch,
         repo.name,
         run.id,
-        repo.defaultBranch
+        task.baseBranch || repo.defaultBranch
       );
       this.db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
 

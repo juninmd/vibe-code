@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { getEngineMeta } from "./ui/engine-icons";
 import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskCardProps {
@@ -85,17 +86,37 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
 
       {/* Footer */}
       <div className="flex items-center gap-2 flex-wrap ml-[21px]">
-        {task.repo && <span className="text-xs text-zinc-500 font-medium">{task.repo.name}</span>}
+        {task.repo &&
+          (task.repo.url ? (
+            <a
+              href={task.repo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs text-zinc-500 font-medium hover:text-zinc-300 transition-colors"
+              title={task.repo.url}
+            >
+              {task.repo.name}
+            </a>
+          ) : (
+            <span className="text-xs text-zinc-500 font-medium">{task.repo.name}</span>
+          ))}
         {task.branchName && (
           <code className="text-xs text-zinc-600 bg-zinc-900/50 px-1.5 py-0.5 rounded hidden sm:inline">
             {task.branchName}
           </code>
         )}
-        {task.engine && (
-          <Badge variant="purple" className="text-[10px] py-0 px-1.5">
-            {task.engine}
-          </Badge>
-        )}
+        {task.engine &&
+          (() => {
+            const eng = getEngineMeta(task.engine);
+            const EngIcon = eng.icon;
+            return (
+              <Badge variant="purple" className="text-[10px] py-0 px-1.5 flex items-center gap-1">
+                <EngIcon size={10} className={eng.color} />
+                {task.engine}
+              </Badge>
+            );
+          })()}
         {task.status === "scheduled" && (
           <Badge variant="warning" className="text-[10px] py-0 px-1.5">
             ⏰ agendada
@@ -139,9 +160,14 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="text-xs text-violet-400 hover:text-violet-300 underline font-medium"
+            className="inline-flex items-center gap-0.5"
           >
-            PR
+            <Badge
+              variant="success"
+              className="text-[10px] py-0 px-1.5 hover:opacity-80 transition-opacity"
+            >
+              ↗ PR
+            </Badge>
           </a>
         )}
         {isRunning && (

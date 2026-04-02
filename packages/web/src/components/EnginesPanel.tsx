@@ -1,62 +1,7 @@
 import type { EngineInfo } from "@vibe-code/shared";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
-
-// Engine-specific metadata (install instructions, icon styles, docs url)
-const ENGINE_META: Record<
-  string,
-  {
-    icon: string;
-    color: string;
-    bgColor: string;
-    borderColor: string;
-    install: string;
-    docsUrl: string;
-    description: string;
-    provider: string;
-  }
-> = {
-  "claude-code": {
-    icon: "◆",
-    color: "text-amber-300",
-    bgColor: "bg-amber-950/30",
-    borderColor: "border-amber-800/40",
-    install: "npm install -g @anthropic-ai/claude-code",
-    docsUrl: "https://claude.ai/code",
-    description: "Anthropic's Claude, expert in code architecture and security",
-    provider: "Anthropic",
-  },
-  opencode: {
-    icon: "⬡",
-    color: "text-violet-300",
-    bgColor: "bg-violet-950/30",
-    borderColor: "border-violet-800/40",
-    install: "npm install -g opencode-ai",
-    docsUrl: "https://opencode.ai",
-    description: "Open-source AI coder supporting multiple models and providers",
-    provider: "OpenCode",
-  },
-  aider: {
-    icon: "✦",
-    color: "text-emerald-300",
-    bgColor: "bg-emerald-950/30",
-    borderColor: "border-emerald-800/40",
-    install: "pip install aider-install && aider-install",
-    docsUrl: "https://aider.chat",
-    description: "AI pair programming in your terminal with git integration",
-    provider: "Aider",
-  },
-  gemini: {
-    icon: "✧",
-    color: "text-blue-300",
-    bgColor: "bg-blue-950/30",
-    borderColor: "border-blue-800/40",
-    install: "npm install -g @google/gemini-cli",
-    docsUrl: "https://github.com/google-gemini/gemini-cli",
-    description: "Google's Gemini AI for coding, analysis and reasoning",
-    provider: "Google",
-  },
-};
+import { getEngineMeta } from "./ui/engine-icons";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -79,17 +24,9 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function EngineCard({ engine, onRefresh }: { engine: EngineInfo; onRefresh: () => void }) {
-  const meta = ENGINE_META[engine.name] ?? {
-    icon: "○",
-    color: "text-zinc-300",
-    bgColor: "bg-zinc-800/30",
-    borderColor: "border-zinc-700/40",
-    install: "",
-    docsUrl: "",
-    description: "",
-    provider: "",
-  };
+function EngineCard({ engine }: { engine: EngineInfo }) {
+  const meta = getEngineMeta(engine.name);
+  const Icon = meta.icon;
 
   const [showInstall, setShowInstall] = useState(false);
 
@@ -104,11 +41,11 @@ function EngineCard({ engine, onRefresh }: { engine: EngineInfo; onRefresh: () =
       <div className="flex items-start gap-3">
         {/* Icon */}
         <div
-          className={`text-2xl w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
             engine.available ? meta.bgColor : "bg-zinc-800/50"
           } border ${engine.available ? meta.borderColor : "border-zinc-700/30"}`}
         >
-          <span className={engine.available ? meta.color : "text-zinc-600"}>{meta.icon}</span>
+          <Icon size={20} className={engine.available ? meta.color : "text-zinc-600"} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -273,13 +210,9 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
               ))}
             </div>
           ) : engines.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 text-sm">
-              Nenhum engine registrado
-            </div>
+            <div className="text-center py-12 text-zinc-600 text-sm">Nenhum engine registrado</div>
           ) : (
-            engines.map((engine) => (
-              <EngineCard key={engine.name} engine={engine} onRefresh={fetchEngines} />
-            ))
+            engines.map((engine) => <EngineCard key={engine.name} engine={engine} />)
           )}
         </div>
 

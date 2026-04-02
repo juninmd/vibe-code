@@ -20,6 +20,7 @@ const createTaskSchema = z.object({
   repoId: z.string().min(1),
   engine: z.string().optional(),
   model: z.string().optional(),
+  baseBranch: z.string().optional(),
   priority: z.number().optional(),
 });
 

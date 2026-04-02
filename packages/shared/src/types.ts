@@ -48,6 +48,7 @@ export interface Task {
   model: string | null;
   priority: number;
   columnOrder: number;
+  baseBranch: string | null;
   branchName: string | null;
   prUrl: string | null;
   parentTaskId: string | null;
@@ -130,6 +131,7 @@ export interface CreateTaskRequest {
   repoId: string;
   engine?: string;
   model?: string;
+  baseBranch?: string;
   priority?: number;
 }
 

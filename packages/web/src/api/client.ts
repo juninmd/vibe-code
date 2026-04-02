@@ -43,6 +43,9 @@ export const api = {
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
     refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
     listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
+    createGitHub: (data: { name: string; description: string; isPrivate: boolean }) =>
+      request<GitHubRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
+    branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
   },
 
   tasks: {

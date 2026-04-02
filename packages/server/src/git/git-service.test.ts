@@ -60,19 +60,22 @@ async function getCurrentBranch(dir: string): Promise<string> {
 
 describe("GitService.hasCommitsAhead", () => {
   let tmpDir: string;
-  let originDir: string;
+  let bareDir: string;
   let workDir: string;
   let baseBranch: string;
   let git: GitService;
 
   beforeAll(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "vibe-git-test-"));
-    originDir = join(tmpDir, "origin.git"); // bare repo as origin
+    bareDir = join(tmpDir, "repo.git");
     workDir = join(tmpDir, "work");
     const seedDir = join(tmpDir, "seed");
 
-    // 1. Seed repo: create initial commit
-    await Bun.spawn(["git", "init", seedDir], { stdout: "pipe", stderr: "pipe" }).exited;
+    // 1. Create seed repo with one commit
+    await Bun.spawn(["git", "init", "--initial-branch=main", seedDir], {
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited;
     await Bun.spawn(["git", "-C", seedDir, "config", "user.email", "t@t.com"]).exited;
     await Bun.spawn(["git", "-C", seedDir, "config", "user.name", "T"]).exited;
     await writeFile(join(seedDir, "readme.txt"), "initial");
@@ -81,17 +84,17 @@ describe("GitService.hasCommitsAhead", () => {
 
     baseBranch = await getCurrentBranch(seedDir);
 
-    // 2. Clone seed to a bare repo (our "origin")
-    await Bun.spawn(["git", "clone", "--bare", seedDir, originDir], {
+    // 2. Clone to a bare repo (simulates vibe-code's stored repo)
+    await Bun.spawn(["git", "clone", "--bare", seedDir, bareDir], {
       stdout: "pipe",
       stderr: "pipe",
     }).exited;
 
-    // 3. Clone bare origin to workDir
-    await Bun.spawn(["git", "clone", originDir, workDir], {
-      stdout: "pipe",
-      stderr: "pipe",
-    }).exited;
+    // 3. Create a linked worktree on a new branch (simulates the agent's workspace)
+    await Bun.spawn(
+      ["git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/test", workDir, baseBranch],
+      { stdout: "pipe", stderr: "pipe" }
+    ).exited;
     await Bun.spawn(["git", "-C", workDir, "config", "user.email", "t@t.com"]).exited;
     await Bun.spawn(["git", "-C", workDir, "config", "user.name", "T"]).exited;
 
@@ -107,15 +110,15 @@ describe("GitService.hasCommitsAhead", () => {
     expect(result).toBe(false);
   });
 
-  it("returns true after adding a new local commit (not pushed)", async () => {
+  it("returns true after adding a new commit on the feature branch", async () => {
     await addCommit(workDir, "new feature");
     const result = await git.hasCommitsAhead(workDir, baseBranch);
     expect(result).toBe(true);
   });
 
-  it("returns false after pushing the commit", async () => {
-    await Bun.spawn(["git", "push"], {
-      cwd: workDir,
+  it("returns false when baseBranch is fast-forwarded to the same commit", async () => {
+    // Simulate main catching up by fast-forwarding the bare repo's main
+    await Bun.spawn(["git", "--git-dir", bareDir, "branch", "-f", baseBranch, "feature/test"], {
       stdout: "pipe",
       stderr: "pipe",
     }).exited;

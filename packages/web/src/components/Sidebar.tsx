@@ -70,7 +70,7 @@ export function Sidebar({
           </Button>
         </div>
 
-        {repos.length > 3 && (
+        {repos.length > 1 && (
           <input
             type="text"
             value={search}

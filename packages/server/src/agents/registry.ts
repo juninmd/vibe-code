@@ -31,25 +31,31 @@ export class EngineRegistry {
   }
 
   async listEngines(activeRuns?: Map<string, string>): Promise<EngineInfo[]> {
-    const results: EngineInfo[] = [];
-    for (const engine of this.engines.values()) {
-      const available = await engine.isAvailable();
-      const version = available && engine.getVersion ? await engine.getVersion() : null;
-      // Count active runs for this engine
-      let runCount = 0;
-      if (activeRuns) {
-        for (const engineName of activeRuns.values()) {
-          if (engineName === engine.name) runCount++;
+    const results = await Promise.all(
+      Array.from(this.engines.values()).map(async (engine) => {
+        const available = await engine.isAvailable().catch(() => false);
+        let version: string | null = null;
+        if (available && engine.getVersion) {
+          version = await Promise.race<string | null>([
+            engine.getVersion().catch(() => null),
+            new Promise<null>((res) => setTimeout(() => res(null), 3000)),
+          ]);
         }
-      }
-      results.push({
-        name: engine.name,
-        displayName: engine.displayName,
-        available,
-        version,
-        activeRuns: runCount,
-      });
-    }
+        let runCount = 0;
+        if (activeRuns) {
+          for (const eng of activeRuns.values()) {
+            if (eng === engine.name) runCount++;
+          }
+        }
+        return {
+          name: engine.name,
+          displayName: engine.displayName,
+          available,
+          version,
+          activeRuns: runCount,
+        } satisfies EngineInfo;
+      })
+    );
     return results;
   }
 

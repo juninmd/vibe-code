@@ -8,6 +8,12 @@ const createRepoSchema = z.object({
   url: z.string().url("Must be a valid URL").min(1),
 });
 
+const createGitHubRepoSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().default(""),
+  isPrivate: z.boolean().default(false),
+});
+
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
@@ -57,10 +63,39 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     return c.json({ data: repos });
   });
 
+  router.post("/github/create", async (c) => {
+    const body = await c.req.json();
+    const parsed = createGitHubRepoSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+    try {
+      const ghRepo = await git.createGitHubRepo(
+        parsed.data.name,
+        parsed.data.description,
+        parsed.data.isPrivate
+      );
+      return c.json({ data: ghRepo });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "github_error", message: msg }, 500);
+    }
+  });
+
   router.get("/:id", (c) => {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
     return c.json({ data: repo });
+  });
+
+  router.get("/:id/branches", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath) return c.json({ data: [repo.defaultBranch] });
+    const branches = await git.listBranches(repo.localPath);
+    // Ensure default branch is always first
+    const sorted = [repo.defaultBranch, ...branches.filter((b) => b !== repo.defaultBranch)];
+    return c.json({ data: sorted });
   });
 
   router.delete("/:id", (c) => {

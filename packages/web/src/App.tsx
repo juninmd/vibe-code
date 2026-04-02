@@ -50,7 +50,14 @@ export default function App() {
     updateTaskLocal,
     refresh,
   } = useTasks(selectedRepoId ?? undefined);
-  const { engines, availableCount, totalActiveRuns, refresh: refreshEngines } = useEngines(15_000);
+  const {
+    engines,
+    loading: enginesLoading,
+    error: enginesError,
+    availableCount,
+    totalActiveRuns,
+    refresh: refreshEngines,
+  } = useEngines(15_000);
   const { notify } = useBrowserNotifications();
 
   // Track previous task statuses for notifications
@@ -190,25 +197,58 @@ export default function App() {
 
       // Escape — close open panels/dialogs (in cascading order)
       if (e.key === "Escape") {
-        if (showCommandPalette) { setShowCommandPalette(false); return; }
-        if (showEnginesPanel) { setShowEnginesPanel(false); return; }
-        if (showNewTask) { setShowNewTask(false); return; }
-        if (showAddRepo) { setShowAddRepo(false); return; }
-        if (showSettings) { setShowSettings(false); return; }
-        if (selectedTask) { handleCloseDetail(); return; }
-        if (search) { setSearch(""); return; }
+        if (showCommandPalette) {
+          setShowCommandPalette(false);
+          return;
+        }
+        if (showEnginesPanel) {
+          setShowEnginesPanel(false);
+          return;
+        }
+        if (showNewTask) {
+          setShowNewTask(false);
+          return;
+        }
+        if (showAddRepo) {
+          setShowAddRepo(false);
+          return;
+        }
+        if (showSettings) {
+          setShowSettings(false);
+          return;
+        }
+        if (selectedTask) {
+          handleCloseDetail();
+          return;
+        }
+        if (search) {
+          setSearch("");
+          return;
+        }
       }
 
       if (isTyping) return;
 
       // N — new task
-      if (e.key === "n" || e.key === "N") { e.preventDefault(); setShowNewTask(true); }
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setShowNewTask(true);
+      }
       // / — focus search
-      if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
       // R — add repo
-      if (e.key === "r" || e.key === "R") { e.preventDefault(); setShowAddRepo(true); }
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        setShowAddRepo(true);
+      }
       // E — engines panel
-      if (e.key === "e" || e.key === "E") { e.preventDefault(); setShowEnginesPanel(true); }
+      if (e.key === "e" || e.key === "E") {
+        e.preventDefault();
+        setShowEnginesPanel(true);
+      }
     };
 
     window.addEventListener("keydown", handler);
@@ -238,8 +278,8 @@ export default function App() {
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Reconnect banner */}
-          {!connected && (
+          {/* Reconnect banner — only show after first successful connection is lost */}
+          {!connected && wasConnected.current && (
             <div className="bg-amber-950/80 border-b border-amber-800/60 px-4 py-1.5 text-xs text-amber-300 flex items-center gap-2 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
               Desconectado — tentando reconectar...
@@ -297,11 +337,13 @@ export default function App() {
                 className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
               >
                 <option value="">Todos Engines</option>
-                {engines.filter((e) => e.available).map((e) => (
-                  <option key={e.name} value={e.name}>
-                    {e.displayName}
-                  </option>
-                ))}
+                {engines
+                  .filter((e) => e.available)
+                  .map((e) => (
+                    <option key={e.name} value={e.name}>
+                      {e.displayName}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -408,9 +450,7 @@ export default function App() {
         )}
 
         {/* Engines Panel */}
-        {showEnginesPanel && (
-          <EnginesPanel onClose={() => setShowEnginesPanel(false)} />
-        )}
+        {showEnginesPanel && <EnginesPanel onClose={() => setShowEnginesPanel(false)} />}
 
         {/* Command Palette */}
         {showCommandPalette && (
@@ -443,8 +483,10 @@ export default function App() {
           onClose={() => setShowNewTask(false)}
           repos={repos}
           engines={engines}
-          onSubmit={async ({ autoLaunch, model, schedule, ...data }) => {
-            const task = await createTask(data);
+          enginesLoading={enginesLoading}
+          enginesError={enginesError}
+          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, ...data }) => {
+            const task = await createTask({ ...data, baseBranch });
             if (!task) return;
 
             if (schedule) {

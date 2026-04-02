@@ -37,6 +37,7 @@ interface TaskRow {
   model: string | null;
   priority: number;
   column_order: number;
+  base_branch: string | null;
   branch_name: string | null;
   pr_url: string | null;
   parent_task_id: string | null;
@@ -93,6 +94,7 @@ function mapTask(row: TaskRow): Task {
     model: row.model,
     priority: row.priority,
     columnOrder: row.column_order,
+    baseBranch: row.base_branch,
     branchName: row.branch_name,
     prUrl: row.pr_url,
     parentTaskId: row.parent_task_id,
@@ -214,13 +216,14 @@ export function createTaskQueries(db: Database) {
             string,
             string | null,
             string | null,
+            string | null,
             number,
             number,
             string,
             string | null,
           ]
         >(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -228,6 +231,7 @@ export function createTaskQueries(db: Database) {
           req.repoId,
           req.engine ?? null,
           req.model ?? null,
+          req.baseBranch ?? null,
           req.priority ?? 0,
           order,
           status,
