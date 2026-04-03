@@ -20,6 +20,8 @@ interface SidebarProps {
   onSelectRepo: (id: string | null) => void;
   onAddRepo: () => void;
   onRemoveRepo: (id: string) => void;
+  onDeleteLocalClone: (id: string) => void;
+  onDeleteAllLocalClones: () => void;
   onOpenSettings: () => void;
   connected: boolean;
 }
@@ -30,10 +32,13 @@ export function Sidebar({
   onSelectRepo,
   onAddRepo,
   onRemoveRepo,
+  onDeleteLocalClone,
+  onDeleteAllLocalClones,
   onOpenSettings,
   connected,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
+  const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
 
   const filtered = search
     ? repos.filter(
@@ -92,10 +97,42 @@ export function Sidebar({
           <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-0.5">
             Repositórios
           </h2>
-          <Button size="sm" variant="ghost" onClick={onAddRepo} title="Adicionar repositório">
-            +
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDeleteAllLocalClones}
+              title="Apagar todos os clones locais"
+            >
+              ⌫
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onAddRepo}
+              title="Adicionar repositório (Ctrl+O)"
+            >
+              +
+            </Button>
+          </div>
         </div>
+
+        {selectedRepo && (
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2 py-1.5">
+            <span className="truncate flex-1 text-[11px] text-zinc-500">
+              Clone local: {selectedRepo.localPath ? "pronto" : "ausente"}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDeleteLocalClone(selectedRepo.id)}
+              title="Apagar clone local do repositório selecionado"
+              disabled={!selectedRepo.localPath}
+            >
+              Apagar clone
+            </Button>
+          </div>
+        )}
 
         {/* Filter input */}
         {repos.length > 1 && (

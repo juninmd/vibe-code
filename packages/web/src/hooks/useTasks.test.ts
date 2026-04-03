@@ -79,7 +79,7 @@ describe("useTasks", () => {
     expect(api.tasks.list).toHaveBeenCalledTimes(1);
   });
 
-  it("createTask calls api and refreshes", async () => {
+  it("createTask appends the new task without refetching", async () => {
     vi.mocked(api.tasks.create).mockResolvedValue(mockTask);
     const { result } = renderHook(() => useTasks());
     await act(async () => {});
@@ -92,6 +92,7 @@ describe("useTasks", () => {
     });
 
     expect(api.tasks.create).toHaveBeenCalledOnce();
-    expect(api.tasks.list).toHaveBeenCalledTimes(2);
+    expect(api.tasks.list).toHaveBeenCalledTimes(1);
+    expect(result.current.tasks[0].id).toBe("task-1");
   });
 });

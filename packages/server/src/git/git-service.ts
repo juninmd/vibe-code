@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -95,6 +95,11 @@ export class GitService {
         // Best effort cleanup
       }
     }
+  }
+
+  async deleteLocalRepo(barePath: string, repoName: string): Promise<void> {
+    await rm(join(this.workspacesDir, repoName), { recursive: true, force: true });
+    await rm(barePath, { recursive: true, force: true });
   }
 
   async hasChanges(wtPath: string): Promise<boolean> {

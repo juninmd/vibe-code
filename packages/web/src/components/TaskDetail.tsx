@@ -106,45 +106,71 @@ function PipelineSteps({
     return null;
   }
 
+  const progressValue = activeStep
+    ? Math.max(12, (steps.findIndex((step) => step.id === activeStep) / (steps.length - 1)) * 100)
+    : completedSteps.length > 0
+      ? (completedSteps.length / steps.length) * 100
+      : 0;
+
   return (
-    <div className="flex items-center gap-0 bg-zinc-800/30 rounded-lg p-3">
-      {steps.map((step, i) => {
-        const isCompleted = completedSteps.includes(step.id);
-        const isActive = activeStep === step.id;
-        return (
-          <div key={step.id} className="flex items-center flex-1 min-w-0">
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                  isCompleted
-                    ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                    : isActive
-                      ? "bg-blue-900/60 border-blue-500 text-blue-300 animate-pulse"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-600"
-                }`}
-              >
-                {isCompleted ? "✓" : isActive ? <span className="animate-spin">⟳</span> : step.icon}
+    <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+      <div>
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <span>Execução</span>
+          <span>{Math.round(progressValue)}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-[width] duration-500"
+            style={{ width: `${progressValue}%` }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-0">
+        {steps.map((step, i) => {
+          const isCompleted = completedSteps.includes(step.id);
+          const isActive = activeStep === step.id;
+          return (
+            <div key={step.id} className="flex items-center flex-1 min-w-0">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                    isCompleted
+                      ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                      : isActive
+                        ? "bg-blue-900/60 border-blue-500 text-blue-300 animate-pulse"
+                        : "bg-zinc-800 border-zinc-700 text-zinc-600"
+                  }`}
+                >
+                  {isCompleted ? (
+                    "✓"
+                  ) : isActive ? (
+                    <span className="animate-spin">⟳</span>
+                  ) : (
+                    step.icon
+                  )}
+                </div>
+                <span
+                  className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
+                    isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
+                  }`}
+                >
+                  {step.label}
+                </span>
               </div>
-              <span
-                className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
-                  isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
-                }`}
-              >
-                {step.label}
-              </span>
+              {i < steps.length - 1 && (
+                <div
+                  className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded ${
+                    completedSteps.includes(steps[i + 1].id) || isCompleted
+                      ? "bg-emerald-700"
+                      : "bg-zinc-700"
+                  }`}
+                />
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <div
-                className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded ${
-                  completedSteps.includes(steps[i + 1].id) || isCompleted
-                    ? "bg-emerald-700"
-                    : "bg-zinc-700"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

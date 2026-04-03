@@ -13,7 +13,7 @@ import { TASK_COLUMNS } from "@vibe-code/shared";
 
 const BOARD_COLUMNS: TaskStatus[] = [...TASK_COLUMNS, "failed"];
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 
@@ -37,17 +37,22 @@ export function Board({
   onRetryAllFailed,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
+  const noopTaskClick = useCallback(() => {}, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const tasksByColumn = BOARD_COLUMNS.reduce(
-    (acc, status) => {
-      acc[status] = tasks
-        .filter((t) => t.status === status)
-        .sort((a, b) => a.columnOrder - b.columnOrder);
-      return acc;
-    },
-    {} as Record<TaskStatus, TaskWithRun[]>
+  const tasksByColumn = useMemo(
+    () =>
+      BOARD_COLUMNS.reduce(
+        (acc, status) => {
+          acc[status] = tasks
+            .filter((t) => t.status === status)
+            .sort((a, b) => a.columnOrder - b.columnOrder);
+          return acc;
+        },
+        {} as Record<TaskStatus, TaskWithRun[]>
+      ),
+    [tasks]
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -117,7 +122,7 @@ export function Board({
       <DragOverlay>
         {activeTask ? (
           <div className="rotate-2 opacity-90">
-            <TaskCard task={activeTask} onClick={() => {}} onRetryPR={onRetryPR} />
+            <TaskCard task={activeTask} onClick={noopTaskClick} onRetryPR={onRetryPR} />
           </div>
         ) : null}
       </DragOverlay>

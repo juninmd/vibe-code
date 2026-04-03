@@ -2,6 +2,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_STATUS_LABELS } from "@vibe-code/shared";
+import { memo } from "react";
 import { TaskCard } from "./TaskCard";
 
 // ─── Column visual config ──────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ interface ColumnProps {
   onRetryAllFailed?: () => void;
 }
 
-export function Column({
+function ColumnComponent({
   status,
   tasks,
   onTaskClick,
@@ -195,12 +196,7 @@ export function Column({
       <div className="flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-[80px]">
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onClick={() => onTaskClick(task)}
-              onRetryPR={onRetryPR}
-            />
+            <TaskCard key={task.id} task={task} onClick={onTaskClick} onRetryPR={onRetryPR} />
           ))}
         </SortableContext>
 
@@ -214,3 +210,15 @@ export function Column({
     </div>
   );
 }
+
+export const Column = memo(ColumnComponent, (prev, next) => {
+  return (
+    prev.status === next.status &&
+    prev.tasks === next.tasks &&
+    prev.onTaskClick === next.onTaskClick &&
+    prev.onRetryPR === next.onRetryPR &&
+    prev.onArchiveDone === next.onArchiveDone &&
+    prev.onClearFailed === next.onClearFailed &&
+    prev.onRetryAllFailed === next.onRetryAllFailed
+  );
+});

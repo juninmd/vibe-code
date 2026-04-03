@@ -1,5 +1,13 @@
 import type { AgentLog, TaskStatus, TaskWithRun, WsServerMessage } from "@vibe-code/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api } from "./api/client";
 import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
@@ -34,7 +42,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
+  const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
+    useRepos();
   const {
     tasks,
     createTask,
@@ -48,8 +57,12 @@ export default function App() {
     retryTask,
     retryPR,
     updateTaskLocal,
+    updateRunLocal,
     refresh,
   } = useTasks(selectedRepoId ?? undefined);
+  const deferredTasks = useDeferredValue(tasks);
+  const deferredSearch = useDeferredValue(search);
+
   const {
     engines,
     loading: enginesLoading,
@@ -83,44 +96,79 @@ export default function App() {
               notify(`◎ PR pronto: ${updated.title}`, "Agente abriu um pull request");
           }
           prevStatusRef.current[updated.id] = updated.status;
-          updateTaskLocal(updated);
-          setSelectedTask((sel) =>
-            sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
-          );
-          refresh();
-          // Refresh engine active runs when task changes
-          refreshEngines();
+          startTransition(() => {
+            updateTaskLocal(updated);
+            setSelectedTask((sel) =>
+              sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
+            );
+          });
           break;
         }
         case "repo_updated":
           addOrUpdateRepo(msg.repo);
           break;
         case "agent_log":
-          setLiveLogs((prev) => ({
-            ...prev,
-            [msg.taskId]: [
-              ...(prev[msg.taskId] ?? []),
-              {
-                id: Date.now(),
-                runId: msg.runId,
-                stream: msg.stream,
-                content: msg.content,
-                timestamp: msg.timestamp,
-              },
-            ],
-          }));
+          startTransition(() => {
+            setLiveLogs((prev) => ({
+              ...prev,
+              [msg.taskId]: [
+                ...(prev[msg.taskId] ?? []),
+                {
+                  id: Date.now(),
+                  runId: msg.runId,
+                  stream: msg.stream,
+                  content: msg.content,
+                  timestamp: msg.timestamp,
+                },
+              ],
+            }));
+          });
+          break;
+        case "run_updated":
+          startTransition(() => {
+            updateRunLocal(msg.run.taskId, msg.run);
+            setSelectedTask((sel) =>
+              sel?.id === msg.run.taskId ? { ...sel, latestRun: msg.run } : sel
+            );
+          });
+          refreshEngines();
           break;
         case "run_status":
-        case "run_updated":
-          refresh();
+          startTransition(() => {
+            updateRunLocal(msg.taskId, {
+              id: msg.runId,
+              taskId: msg.taskId,
+              engine: selectedTask?.latestRun?.engine ?? "unknown",
+              status: msg.status,
+              currentStatus: selectedTask?.latestRun?.currentStatus ?? null,
+              worktreePath: selectedTask?.latestRun?.worktreePath ?? null,
+              startedAt: selectedTask?.latestRun?.startedAt ?? null,
+              finishedAt: selectedTask?.latestRun?.finishedAt ?? null,
+              exitCode: selectedTask?.latestRun?.exitCode ?? null,
+              errorMessage: selectedTask?.latestRun?.errorMessage ?? null,
+              createdAt: selectedTask?.latestRun?.createdAt ?? new Date().toISOString(),
+            });
+          });
           refreshEngines();
           break;
       }
     },
-    [updateTaskLocal, refresh, addOrUpdateRepo, refreshEngines]
+    [
+      addOrUpdateRepo,
+      notify,
+      refreshEngines,
+      selectedTask?.latestRun,
+      updateRunLocal,
+      updateTaskLocal,
+    ]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
+
+  const selectedRepo = useMemo(
+    () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
+    [repos, selectedRepoId]
+  );
 
   // Show toast on disconnect / reconnect
   useEffect(() => {
@@ -161,15 +209,15 @@ export default function App() {
 
   // ─── Filtered tasks ──────────────────────────────────────────────────────────
   const filteredTasks = useMemo(() => {
-    let result = tasks.filter((t) => t.status !== "archived");
+    let result = deferredTasks.filter((t) => t.status !== "archived");
 
     if (selectedAgent) {
       result = result.filter((t) => t.engine === selectedAgent);
     }
 
-    if (!search.trim()) return result;
+    if (!deferredSearch.trim()) return result;
 
-    const q = search.toLowerCase();
+    const q = deferredSearch.toLowerCase();
     return result.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
@@ -177,7 +225,7 @@ export default function App() {
         t.repo?.name.toLowerCase().includes(q) ||
         t.branchName?.toLowerCase().includes(q)
     );
-  }, [tasks, search, selectedAgent]);
+  }, [deferredTasks, deferredSearch, selectedAgent]);
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -239,8 +287,8 @@ export default function App() {
         e.preventDefault();
         searchRef.current?.focus();
       }
-      // R — add repo
-      if (e.key === "r" || e.key === "R") {
+      // O — add repo
+      if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
         e.preventDefault();
         setShowAddRepo(true);
       }
@@ -273,6 +321,26 @@ export default function App() {
           onSelectRepo={setSelectedRepoId}
           onAddRepo={() => setShowAddRepo(true)}
           onRemoveRepo={removeRepo}
+          onDeleteLocalClone={async (repoId) => {
+            const repo = repos.find((item) => item.id === repoId);
+            if (!repo) return;
+            if (!window.confirm(`Apagar o clone local de ${repo.name}?`)) return;
+            try {
+              await deleteLocalClone(repoId);
+              toast(`Clone local de ${repo.name} apagado.`, "success");
+            } catch (err) {
+              toast(err instanceof Error ? err.message : String(err), "error");
+            }
+          }}
+          onDeleteAllLocalClones={async () => {
+            if (!window.confirm("Apagar todos os clones locais ociosos?")) return;
+            try {
+              const result = await purgeLocalClones();
+              toast(`Clones limpos: ${result.deleted}. Pulados: ${result.skipped}.`, "success");
+            } catch (err) {
+              toast(err instanceof Error ? err.message : String(err), "error");
+            }
+          }}
           onOpenSettings={() => setShowSettings(true)}
           connected={connected}
         />
@@ -290,14 +358,23 @@ export default function App() {
           <header className="glass-panel border-b px-4 py-3 flex items-center gap-3 shrink-0">
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-zinc-300 truncate">
-                {selectedRepoId
-                  ? (repos.find((r) => r.id === selectedRepoId)?.name ?? "Repositório")
-                  : "Todos os Repositórios"}
+                {selectedRepoId ? (selectedRepo?.name ?? "Repositório") : "Todos os Repositórios"}
               </h2>
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-zinc-600 flex items-center gap-2">
                 {filteredTasks.length !== tasks.length
                   ? `${filteredTasks.length} de ${tasks.length} tarefas`
                   : `${tasks.length} tarefa${tasks.length !== 1 ? "s" : ""}`}
+                {selectedRepo?.url && (
+                  <a
+                    href={selectedRepo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title={selectedRepo.url}
+                  >
+                    abrir repo
+                  </a>
+                )}
               </p>
             </div>
 

@@ -14,6 +14,10 @@ const createGitHubRepoSchema = z.object({
   isPrivate: z.boolean().default(false),
 });
 
+const purgeLocalClonesSchema = z.object({
+  confirm: z.literal(true),
+});
+
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
@@ -96,6 +100,59 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     // Ensure default branch is always first
     const sorted = [repo.defaultBranch, ...branches.filter((b) => b !== repo.defaultBranch)];
     return c.json({ data: sorted });
+  });
+
+  router.delete("/:id/local-clone", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath) {
+      return c.json({ error: "invalid_state", message: "Repository has no local clone" }, 400);
+    }
+
+    const runningTask = db.tasks.list(repo.id).find((task) => task.status === "in_progress");
+    if (runningTask) {
+      return c.json(
+        { error: "conflict", message: "Cannot delete local clone while tasks are running" },
+        409
+      );
+    }
+
+    await git.deleteLocalRepo(repo.localPath, repo.name);
+    const updated = db.repos.updateStatus(repo.id, "pending", null, null);
+    if (updated) hub.broadcastAll({ type: "repo_updated", repo: updated });
+    return c.json({ data: updated });
+  });
+
+  router.post("/local-clones/purge", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = purgeLocalClonesSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+
+    const repos = db.repos.list();
+    let deleted = 0;
+    let skipped = 0;
+
+    for (const repo of repos) {
+      if (!repo.localPath) {
+        skipped++;
+        continue;
+      }
+
+      const hasRunningTask = db.tasks.list(repo.id).some((task) => task.status === "in_progress");
+      if (hasRunningTask) {
+        skipped++;
+        continue;
+      }
+
+      await git.deleteLocalRepo(repo.localPath, repo.name);
+      const updated = db.repos.updateStatus(repo.id, "pending", null, null);
+      if (updated) hub.broadcastAll({ type: "repo_updated", repo: updated });
+      deleted++;
+    }
+
+    return c.json({ data: { deleted, skipped } });
   });
 
   router.delete("/:id", (c) => {

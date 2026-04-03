@@ -151,6 +151,14 @@ export function createRepoQueries(db: Database) {
       const row = stmts.getById.get(id);
       return row ? mapRepo(row) : null;
     },
+    listByIds: (ids: string[]): Repository[] => {
+      if (ids.length === 0) return [];
+      const placeholders = ids.map(() => "?").join(", ");
+      const rows = db
+        .prepare(`SELECT * FROM repositories WHERE id IN (${placeholders})`)
+        .all(...ids) as RepoRow[];
+      return rows.map(mapRepo);
+    },
     create: (req: CreateRepoRequest): Repository => {
       const name = extractRepoName(req.url);
       const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main")!;
@@ -339,6 +347,24 @@ export function createRunQueries(db: Database) {
     getById: (id: string): AgentRun | null => {
       const row = stmts.getById.get(id);
       return row ? mapRun(row) : null;
+    },
+    listLatestByTaskIds: (taskIds: string[]): AgentRun[] => {
+      if (taskIds.length === 0) return [];
+      const placeholders = taskIds.map(() => "?").join(", ");
+      const rows = db
+        .prepare(
+          `SELECT * FROM agent_runs WHERE id IN (
+            SELECT id FROM (
+              SELECT id, task_id, row_number() OVER (
+                PARTITION BY task_id ORDER BY created_at DESC, rowid DESC
+              ) AS rank
+              FROM agent_runs
+              WHERE task_id IN (${placeholders})
+            ) ranked WHERE rank = 1
+          )`
+        )
+        .all(...taskIds) as RunRow[];
+      return rows.map(mapRun);
     },
     getLatestByTask: (taskId: string): AgentRun | null => {
       const row = stmts.getLatestByTask.get(taskId);

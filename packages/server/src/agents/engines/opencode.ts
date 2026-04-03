@@ -149,18 +149,13 @@ export class OpenCodeEngine implements AgentEngine {
    * Override in tests to inject a fake subprocess.
    */
   protected buildCommand(model: string, prompt: string, workdir: string): string[] {
-    return [
-      "opencode",
-      "run",
-      "--format",
-      "json",
-      "--model",
-      model,
-      "--dir",
-      workdir,
-      "--prompt",
-      prompt,
-    ];
+    return ["opencode", "run", "--format", "json", "--model", model, "--dir", workdir, prompt];
+  }
+
+  protected getStdinMode(): "pipe" | "ignore" {
+    // Bun + Windows can deadlock OpenCode when stdin stays open as a pipe.
+    // Prefer process completion over interactive stdin on this platform.
+    return process.platform === "win32" ? "ignore" : "pipe";
   }
 
   async isAvailable(): Promise<boolean> {
@@ -238,11 +233,16 @@ export class OpenCodeEngine implements AgentEngine {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
-      stdin: "pipe",
+      stdin: this.getStdinMode(),
     });
 
-    // Keep stdin open so sendInput() works when the agent asks a question.
-    // We do NOT close stdin here — it will close naturally when the process exits.
+    if (this.getStdinMode() === "ignore") {
+      yield {
+        type: "log",
+        stream: "system",
+        content: "[opencode] Interactive stdin disabled on Windows to avoid Bun pipe deadlocks",
+      };
+    }
 
     if (options?.runId) this.processes.set(options.runId, proc);
     if (options?.signal) {

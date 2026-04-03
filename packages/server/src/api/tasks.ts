@@ -47,11 +47,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const repoId = c.req.query("repo_id");
     const status = c.req.query("status");
     const tasks = db.tasks.list(repoId, status);
+    const latestRunsByTaskId = new Map(
+      db.runs.listLatestByTaskIds(tasks.map((task) => task.id)).map((run) => [run.taskId, run])
+    );
+    const reposById = new Map(
+      db.repos
+        .listByIds(Array.from(new Set(tasks.map((task) => task.repoId))))
+        .map((repo) => [repo.id, repo])
+    );
 
-    // Attach latest run info
     const tasksWithRuns = tasks.map((task) => {
-      const latestRun = db.runs.getLatestByTask(task.id);
-      const repo = db.repos.getById(task.repoId);
+      const latestRun = latestRunsByTaskId.get(task.id);
+      const repo = reposById.get(task.repoId);
       return { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined };
     });
 

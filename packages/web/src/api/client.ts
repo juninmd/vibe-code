@@ -41,6 +41,13 @@ export const api = {
     create: (data: CreateRepoRequest) =>
       request<Repository>("/repos", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
+    deleteLocalClone: (id: string) =>
+      request<Repository>(`/repos/${id}/local-clone`, { method: "DELETE" }),
+    purgeLocalClones: () =>
+      request<{ deleted: number; skipped: number }>(`/repos/local-clones/purge`, {
+        method: "POST",
+        body: JSON.stringify({ confirm: true }),
+      }),
     refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
     listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
     createGitHub: (data: { name: string; description: string; isPrivate: boolean }) =>

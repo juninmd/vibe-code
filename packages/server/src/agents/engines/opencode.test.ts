@@ -21,6 +21,16 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
   }
 }
 
+class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
+  getCommand(model: string, prompt: string, workdir: string): string[] {
+    return this.buildCommand(model, prompt, workdir);
+  }
+
+  getStdinModeForTest(): "pipe" | "ignore" {
+    return this.getStdinMode();
+  }
+}
+
 async function collectAll(engine: OpenCodeEngine, workdir: string): Promise<AgentEvent[]> {
   const events: AgentEvent[] = [];
   for await (const event of engine.execute("test prompt", workdir)) {
@@ -303,6 +313,35 @@ describe("OpenCodeEngine.parseLine", () => {
     const events = engine.parseLine(line);
     expect(events.find((e) => e.type === "status")?.content).toBe("Awaiting input...");
     expect(events.find((e) => e.content?.includes("Question"))).toBeDefined();
+  });
+});
+
+describe("OpenCodeEngine.buildCommand", () => {
+  it("passes the prompt as a positional message argument", () => {
+    const engine = new CommandInspectingOpenCodeEngine();
+    const command = engine.getCommand(
+      "opencode/minimax-m2.5-free",
+      "Create a file named hello.txt",
+      "/tmp/workdir"
+    );
+
+    expect(command).toEqual([
+      "opencode",
+      "run",
+      "--format",
+      "json",
+      "--model",
+      "opencode/minimax-m2.5-free",
+      "--dir",
+      "/tmp/workdir",
+      "Create a file named hello.txt",
+    ]);
+    expect(command).not.toContain("--prompt");
+  });
+
+  it("uses a safe stdin mode for the current platform", () => {
+    const engine = new CommandInspectingOpenCodeEngine();
+    expect(engine.getStdinModeForTest()).toBe(process.platform === "win32" ? "ignore" : "pipe");
   });
 });
 

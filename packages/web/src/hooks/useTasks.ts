@@ -1,4 +1,9 @@
-import type { CreateTaskRequest, TaskWithRun, UpdateTaskRequest } from "@vibe-code/shared";
+import type {
+  AgentRun,
+  CreateTaskRequest,
+  TaskWithRun,
+  UpdateTaskRequest,
+} from "@vibe-code/shared";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 
@@ -25,6 +30,10 @@ export function useTasks(repoFilter?: string) {
   // Update a single task in-place (from WebSocket or optimistic updates)
   const updateTaskLocal = useCallback((updatedTask: TaskWithRun) => {
     setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)));
+  }, []);
+
+  const updateRunLocal = useCallback((taskId: string, latestRun: AgentRun) => {
+    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, latestRun } : task)));
   }, []);
 
   const createTask = useCallback(async (data: CreateTaskRequest) => {
@@ -71,10 +80,9 @@ export function useTasks(repoFilter?: string) {
     async (id: string, engine?: string, model?: string) => {
       const payload = engine || model ? { engine, model } : undefined;
       const run = await api.tasks.launch(id, payload);
-      // Update task status to in_progress optimistically
       const task = tasks.find((t) => t.id === id);
       if (task) {
-        updateTaskLocal({ ...task, status: "in_progress" });
+        updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
       }
       return run;
     },
@@ -102,7 +110,7 @@ export function useTasks(repoFilter?: string) {
       const run = await api.tasks.retry(id);
       const task = tasks.find((t) => t.id === id);
       if (task) {
-        updateTaskLocal({ ...task, status: "in_progress" });
+        updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
       }
       return run;
     },
@@ -129,5 +137,6 @@ export function useTasks(repoFilter?: string) {
     retryTask,
     retryPR,
     updateTaskLocal,
+    updateRunLocal,
   };
 }

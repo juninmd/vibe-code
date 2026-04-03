@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -10,11 +10,11 @@ import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskCardProps {
   task: TaskWithRun;
-  onClick: () => void;
+  onClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
 }
 
-export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
+function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -55,7 +55,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
       style={style}
       {...attributes}
       {...listeners}
-      onClick={onClick}
+      onClick={() => onClick(task)}
       className={`glass-card border rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-sm shadow-black/20 ${
         isRunning
           ? "border-blue-500/30 shadow-blue-500/10 shadow-md running-glow"
@@ -64,7 +64,12 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
     >
       {/* Running accent bar */}
       {isRunning && (
-        <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-blue-400 animate-pulse" />
+        <>
+          <div className="absolute inset-x-3 top-0 h-px overflow-hidden rounded-full bg-blue-500/20">
+            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-[pulse_1.4s_ease-in-out_infinite]" />
+          </div>
+          <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-blue-400 animate-pulse" />
+        </>
       )}
 
       {/* Title row */}
@@ -204,3 +209,9 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
     </div>
   );
 }
+
+export const TaskCard = memo(TaskCardComponent, (prev, next) => {
+  return (
+    prev.task === next.task && prev.onClick === next.onClick && prev.onRetryPR === next.onRetryPR
+  );
+});
