@@ -31,9 +31,9 @@ describe("OpenCodeEngine replay fixtures", () => {
     expect(readLog?.content).toBe("    5 lines read");
     expect(finalText?.content).toContain("No changes needed.");
 
-    const stderrIndex = events.findIndex((event) => event === stderrLog);
-    const readIndex = events.findIndex((event) => event === readLog);
-    const finalTextIndex = events.findIndex((event) => event === finalText);
+    const stderrIndex = stderrLog ? events.indexOf(stderrLog) : -1;
+    const readIndex = readLog ? events.indexOf(readLog) : -1;
+    const finalTextIndex = finalText ? events.indexOf(finalText) : -1;
 
     expect(stderrIndex).toBeGreaterThanOrEqual(0);
     expect(readIndex).toBeGreaterThan(stderrIndex);

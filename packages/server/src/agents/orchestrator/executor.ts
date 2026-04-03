@@ -1,12 +1,90 @@
+import { appendFile, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
 import { handleAgentEvent } from "./event-handler";
-import { buildPrompt } from "./prompt";
+import { buildPromptAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
+import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
 import { verifyWorktree } from "./verify";
+
+/** Appends to .gitignore in the worktree, creating it if needed. */
+async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
+  const gitignorePath = join(wtPath, ".gitignore");
+  try {
+    const content = await readFile(gitignorePath, "utf8").catch(() => "");
+    const lines = content.split("\n").map((l) => l.trim());
+    if (!lines.includes(entry)) {
+      await appendFile(gitignorePath, `\n${entry}\n`, "utf8");
+    }
+  } catch {
+    // Best effort — don't block execution if .gitignore write fails
+  }
+}
+
+/** Builds a rich PR body with changed files summary. */
+async function buildPRBody(
+  task: Task,
+  engineName: string,
+  wtPath: string,
+  baseBranch: string,
+  git: GitService,
+  _barePath: string
+): Promise<string> {
+  const lines: string[] = [];
+
+  if (task.description?.trim()) {
+    lines.push(`## Description\n${task.description.trim()}`);
+  }
+
+  // Try to add changed files summary
+  try {
+    const files = await git.diffSummary(baseBranch, "HEAD", { cwd: wtPath });
+    if (files.length > 0) {
+      const added = files.filter((f) => f.status === "added").length;
+      const modified = files.filter((f) => f.status === "modified").length;
+      const deleted = files.filter((f) => f.status === "deleted").length;
+      const totalAdd = files.reduce((s, f) => s + f.additions, 0);
+      const totalDel = files.reduce((s, f) => s + f.deletions, 0);
+
+      lines.push(
+        `## Changes\n` +
+          `**${files.length} file(s)** changed ` +
+          `(+${totalAdd} / -${totalDel} lines)` +
+          (added ? ` · ${added} added` : "") +
+          (modified ? ` · ${modified} modified` : "") +
+          (deleted ? ` · ${deleted} deleted` : "")
+      );
+
+      const fileList = files
+        .slice(0, 20)
+        .map((f) => {
+          const icon =
+            f.status === "added"
+              ? "🆕"
+              : f.status === "deleted"
+                ? "🗑"
+                : f.status === "renamed"
+                  ? "📝"
+                  : "✏️";
+          return `- ${icon} \`${f.path}\` (+${f.additions}/-${f.deletions})`;
+        })
+        .join("\n");
+      lines.push(fileList);
+      if (files.length > 20) {
+        lines.push(`_...and ${files.length - 20} more files_`);
+      }
+    }
+  } catch {
+    // Non-fatal — diff summary is best-effort
+  }
+
+  lines.push(`---\n_Created by vibe-code agent using **${engineName}**_ 🤖`);
+  return lines.join("\n\n");
+}
 
 export async function executeAgent(
   task: Task,
@@ -29,19 +107,33 @@ export async function executeAgent(
   const branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
 
   const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 2 * 60 * 60 * 1000;
+  const INACTIVITY_MS = Number(process.env.VIBE_CODE_INACTIVITY_MS) || 10 * 60 * 1000;
   let timedOut = false;
   let lastActivity = Date.now();
 
+  const effectiveModel = model ?? "opencode/minimax-m2.5-free";
+  logAgentStart(task.id, engine.name, effectiveModel, repo.name);
+
   const timeoutId = setTimeout(() => {
     timedOut = true;
+    logOrchestratorEvent(
+      `Task ${task.id.slice(0, 8)} timed out after ${TIMEOUT_MS / 60000}m`,
+      "warn"
+    );
     abort.abort();
   }, TIMEOUT_MS);
+
   const monitorId = setInterval(() => {
-    if (Date.now() - lastActivity > 5 * 60 * 1000) {
+    const inactiveSecs = Math.round((Date.now() - lastActivity) / 1000);
+    if (Date.now() - lastActivity > INACTIVITY_MS) {
       timedOut = true;
+      logOrchestratorEvent(
+        `Task ${task.id.slice(0, 8)} inactive for ${inactiveSecs}s — aborting`,
+        "warn"
+      );
       abort.abort();
     }
-  }, 30 * 1000);
+  }, 30_000);
 
   let wtPath: string | undefined;
   try {
@@ -56,7 +148,14 @@ export async function executeAgent(
     );
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
 
-    for await (const event of engine.execute(buildPrompt(task), wtPath, {
+    // Ensure opencode.json won't pollute git history
+    await ensureGitignoreEntry(wtPath, "opencode.json");
+
+    sysLog(`Workspace ready at ${wtPath}`);
+    sysLog(`Branch: ${branch}`);
+
+    const prompt = await buildPromptAsync(task, wtPath);
+    for await (const event of engine.execute(prompt, wtPath, {
       runId: run.id,
       signal: abort.signal,
       model,
@@ -71,7 +170,8 @@ export async function executeAgent(
 
     if (await git.hasChanges(wtPath)) {
       sysLog("Committing changes...");
-      await git.commitAll(wtPath, `vibe-code: ${task.title}`);
+      await git.commitAll(wtPath, `feat: ${task.title}`);
+      sysLog("Changes committed ✓");
     }
 
     if (!(await git.hasCommitsAhead(wtPath, repo.defaultBranch)))
@@ -80,6 +180,7 @@ export async function executeAgent(
     await verifyWorktree(wtPath, sysLog);
 
     if (REVIEW_ENABLED) {
+      sysLog("Running review pipeline...");
       const blockers = await runReviewPipeline(
         task,
         run,
@@ -87,7 +188,7 @@ export async function executeAgent(
         repo.defaultBranch,
         db,
         hub,
-        (rid, tid, c) => sysLog(c)
+        (_rid, _tid, content) => sysLog(content)
       );
       if (blockers.length > 0 && REVIEW_STRICT)
         throw new Error(`Review blockers: ${blockers.join(", ")}`);
@@ -97,15 +198,20 @@ export async function executeAgent(
     let prUrl: string | null = null;
 
     try {
-      sysLog("Pushing branch and creating PR...");
+      sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
-      prUrl = await git.createPR(
+      sysLog("Branch pushed ✓");
+
+      sysLog("Creating pull request...");
+      const prBody = await buildPRBody(
+        task,
+        engine.name,
         wtPath,
-        repo.url,
-        branch,
-        task.title,
-        `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`
+        repo.defaultBranch,
+        git,
+        barePath
       );
+      prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody);
       db.tasks.updateField(task.id, "pr_url", prUrl);
       sysLog(`PR created: ${prUrl}`);
     } catch (err: any) {
@@ -118,6 +224,7 @@ export async function executeAgent(
       exit_code: 0,
     });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
+    logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
   } catch (err: any) {
     const errMsg = err.message || String(err);
     const isCancelled = !timedOut && abort.signal.aborted;
@@ -129,6 +236,7 @@ export async function executeAgent(
     db.tasks.update(task.id, { status: isCancelled ? "backlog" : "failed" });
     const finalTask = db.tasks.getById(task.id);
     if (finalTask) hub.broadcastAll({ type: "task_updated", task: finalTask });
+    logAgentFinish(task.id, isCancelled ? "cancelled" : "failed", errMsg);
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);

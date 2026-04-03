@@ -339,9 +339,9 @@ describe("OpenCodeEngine.buildCommand", () => {
     expect(command).not.toContain("--prompt");
   });
 
-  it("uses a safe stdin mode for the current platform", () => {
+  it("uses pipe stdin mode on all platforms (stdin is closed immediately on Windows)", () => {
     const engine = new CommandInspectingOpenCodeEngine();
-    expect(engine.getStdinModeForTest()).toBe(process.platform === "win32" ? "ignore" : "pipe");
+    expect(engine.getStdinModeForTest()).toBe("pipe");
   });
 });
 
@@ -368,8 +368,8 @@ describe("execute: opencode.json lifecycle", () => {
       (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("CONFIG_EXISTS")
     );
     expect(textEvent).toBeDefined();
-    expect(textEvent!.content).toContain('"*"');
-    expect(textEvent!.content).toContain('"allow"');
+    expect(textEvent?.content).toContain('"*"');
+    expect(textEvent?.content).toContain('"allow"');
   }, 10_000);
 
   it("deletes opencode.json after execution completes", async () => {
@@ -526,7 +526,7 @@ describe("execute: stderr passthrough", () => {
   it("suppresses OpenCode INFO structured log lines from stderr", async () => {
     const noisyLine = "INFO  2026-03-30T21:06:05 +283ms service=default version=1.2.26 opencode";
     const engine = new FakeOpenCodeEngine(
-      `process.stderr.write(${JSON.stringify(noisyLine + "\\n")})`
+      `process.stderr.write(${JSON.stringify(`${noisyLine}\\n`)})`
     );
     const events = await collectAll(engine, workdir);
     expect(

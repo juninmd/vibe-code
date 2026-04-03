@@ -14,6 +14,27 @@ interface TaskCardProps {
   onRetryPR: (taskId: string) => void;
 }
 
+const PRIORITY_CONFIG = [
+  { label: "P3", color: "text-zinc-600", bg: "bg-zinc-700/60", dot: "bg-zinc-600" },
+  { label: "P2", color: "text-sky-500", bg: "bg-sky-900/40", dot: "bg-sky-500" },
+  { label: "P1", color: "text-amber-400", bg: "bg-amber-900/40", dot: "bg-amber-400" },
+  { label: "P0", color: "text-red-400", bg: "bg-red-900/40", dot: "bg-red-400" },
+];
+
+function PriorityDot({ priority }: { priority: number }) {
+  const cfg = PRIORITY_CONFIG[Math.min(priority, 3)] ?? PRIORITY_CONFIG[0];
+  if (priority === 0) return null;
+  return (
+    <span
+      title={`Priority ${priority}`}
+      className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
 function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -59,8 +80,10 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       className={`glass-card border rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-sm shadow-black/20 ${
         isRunning
           ? "border-blue-500/30 shadow-blue-500/10 shadow-md running-glow"
-          : "hover:border-white/10 hover:brightness-110"
-      } ${task.status === "failed" ? "border-red-500/20" : ""}`}
+          : task.status === "failed"
+            ? "border-red-500/20 hover:border-red-500/30"
+            : "hover:border-white/10 hover:brightness-110"
+      }`}
     >
       {/* Running accent bar */}
       {isRunning && (
@@ -73,7 +96,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       )}
 
       {/* Title row */}
-      <div className="flex items-start gap-2 mb-2">
+      <div className="flex items-start gap-2 mb-1.5">
         {ProviderIcon && (
           <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
             <ProviderIcon size={13} />
@@ -82,12 +105,15 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         <h3 className="text-[13px] font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
           {task.title}
         </h3>
-        <span
-          title={task.id}
-          className="shrink-0 text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
-        >
-          {task.id.slice(0, 8)}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <PriorityDot priority={task.priority} />
+          <span
+            title={task.id}
+            className="text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
+          >
+            {task.id.slice(0, 8)}
+          </span>
+        </div>
       </div>
 
       {/* Description */}
@@ -126,7 +152,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             >
               <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 3.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 12.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 13.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM5 6.25V7.5A2.5 2.5 0 0 0 7.5 10H9v1.75A2.25 2.25 0 1 0 3 11.75V6.25A2.25 2.25 0 1 0 5 6.25z" />
             </svg>
-            {task.branchName}
+            {task.branchName.replace("vibe-code/", "vc/")}
           </span>
         )}
 
@@ -138,6 +164,14 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               <Badge variant="purple" className="text-[10px] py-0 px-1.5 flex items-center gap-1">
                 <EngIcon size={9} className={eng.color} />
                 {task.engine}
+                {task.model && (
+                  <span
+                    className="text-[9px] opacity-60 font-mono ml-0.5 max-w-[80px] truncate"
+                    title={task.model}
+                  >
+                    /{task.model.split("/").pop()?.replace(":free", "")}
+                  </span>
+                )}
               </Badge>
             );
           })()}
@@ -199,7 +233,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
 
         {isRunning && (
-          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[140px]">
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[160px]">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
             <span className="truncate">{task.latestRun?.currentStatus || "Running…"}</span>
             {elapsed && <span className="shrink-0 text-blue-500/80 tabular-nums">{elapsed}</span>}

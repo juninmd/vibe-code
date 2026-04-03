@@ -117,7 +117,72 @@ export function initDatabase(dbPath: string): Database {
     ('generate-agents-md', 'Gerar AGENTS.md', 'Analisa o código e gera instruções para agentes de IA', 'Analise todo o código deste projeto e gere um arquivo AGENTS.md na raiz com instruções claras para agentes de IA: arquitetura do projeto, convenções de código, comandos de build/test/lint, áreas sensíveis e guias de contribuição. O arquivo deve ser objetivo e útil para que futuros agentes entendam rapidamente o projeto.', 'docs', 1),
     ('security-review', 'Revisão de Segurança', 'Identifica e corrige vulnerabilidades de segurança', 'Realize uma revisão completa de segurança neste projeto. Identifique e corrija: injeção SQL/NoSQL, XSS, CSRF, exposição de credenciais ou segredos no código, dependências com vulnerabilidades conhecidas, autenticação/autorização fraca, validação insuficiente de inputs e dados sensíveis expostos em logs. Para cada problema encontrado, aplique a correção e adicione um comentário explicando o risco.', 'security', 1),
     ('performance-focus', 'Foco em Performance', 'Identifica e corrige gargalos de performance', 'Analise este projeto focando em performance. Identifique e corrija: queries N+1 ou sem índices, operações síncronas desnecessárias que bloqueiam a thread, bundles frontend grandes sem code splitting, re-renders desnecessários em componentes React, alocações de memória excessivas e processamento redundante. Priorize as otimizações de maior impacto e documente as mudanças realizadas.', 'perf', 1),
-    ('ui-review', 'Revisão de UI/UX', 'Melhora a interface e experiência do usuário', 'Revise a interface deste projeto com foco em qualidade e usabilidade. Melhore: consistência visual entre componentes, acessibilidade (ARIA labels, contraste de cores, navegação por teclado, semântica HTML), responsividade em mobile, loading states e skeleton screens, empty states informativos, mensagens de erro claras e acionáveis, e UX geral dos fluxos principais. Implemente as melhorias diretamente no código.', 'ui', 1)
+    ('ui-review', 'Revisão de UI/UX', 'Melhora a interface e experiência do usuário', 'Revise a interface deste projeto com foco em qualidade e usabilidade. Melhore: consistência visual entre componentes, acessibilidade (ARIA labels, contraste de cores, navegação por teclado, semântica HTML), responsividade em mobile, loading states e skeleton screens, empty states informativos, mensagens de erro claras e acionáveis, e UX geral dos fluxos principais. Implemente as melhorias diretamente no código.', 'ui', 1),
+    ('kanban-trello-clone', 'Kanban — Clone do Trello', 'Cria um clone completo do Trello do zero', 'Crie um clone completo do Trello chamado KanbanFlow usando as seguintes especificações:
+
+## Stack
+- React 18 + TypeScript + Vite
+- TailwindCSS (dark theme principal)
+- @dnd-kit/core + @dnd-kit/sortable para drag-and-drop
+- Zustand para gerenciamento de estado global
+- Persistência em localStorage (sem backend necessário)
+
+## Estrutura de arquivos
+src/
+  components/
+    Board/        — BoardView, BoardHeader, BoardMenu
+    Column/       — ColumnView, ColumnHeader, AddCardButton
+    Card/         — CardView, CardDetail, CardBadges
+    ui/           — Button, Input, Textarea, Modal, Badge, Tooltip
+  store/
+    boardStore.ts — Zustand store principal
+    types.ts      — Todas as interfaces TypeScript
+  hooks/
+    useDnD.ts     — Drag-and-drop handlers
+    useLocalStorage.ts
+  App.tsx
+  main.tsx
+
+## Funcionalidades obrigatórias
+
+### Boards
+- Criar, renomear e deletar boards
+- Selecionar board ativo via sidebar
+- Board padrão "My Board" na inicialização
+
+### Colunas (Lists)
+- Criar, renomear, reordenar e deletar colunas
+- Drag-and-drop de colunas entre si
+- Contador de cards no header da coluna
+
+### Cards
+- Criar card com título (inline quick-add)
+- Reordenar cards dentro da coluna
+- Mover cards entre colunas (drag-and-drop)
+- Modal de detalhes ao clicar no card com:
+  - Título editável
+  - Descrição (markdown preview básico)
+  - Labels coloridas (vermelho, laranja, amarelo, verde, azul, roxo)
+  - Data de vencimento com indicador de atraso
+  - Checklist com progresso (barra + %)
+  - Comentários com timestamp
+  - Botão "Arquivar" e "Mover para coluna"
+
+### UX
+- Tema escuro moderno (zinc/slate palette)
+- Animações suaves no drag-and-drop
+- Tooltip nos ícones
+- Kbd shortcuts: N = novo card, Esc = fechar modal
+- Empty state com ilustração simples em SVG inline
+- Responsive (funciona em tablet/mobile)
+
+## Qualidade
+- Zero any no TypeScript
+- Todos os componentes com React.memo quando aplicável
+- Acessibilidade: aria-labels, role corretos, foco visível
+- README.md com print screen em ASCII art e instruções
+
+Ao terminar, rode "npm run build" para garantir zero erros de compilação.', 'app', 1)
   `);
 
   return db;

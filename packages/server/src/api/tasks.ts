@@ -117,7 +117,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       try {
         await orchestrator.launch(task);
         count++;
-      } catch (err) {
+      } catch (_err) {
         /* ignore individual failures */
       }
     }

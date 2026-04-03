@@ -132,6 +132,44 @@ export function humanizeStderr(line: string): string | null {
   return trimmed;
 }
 
+/**
+ * Best free models ranked by coding capability.
+ * These work without paid API keys when configured in OpenCode.
+ */
+/**
+ * Free models available via OpenCode's built-in platform or GitHub Copilot.
+ * Verified by running `opencode models` — these IDs must match exactly.
+ */
+export const FREE_MODELS = [
+  {
+    id: "github-copilot/claude-sonnet-4.6",
+    label: "Claude Sonnet 4.6 (Copilot · Best quality)",
+    quality: "excellent",
+  },
+  {
+    id: "github-copilot/gpt-4.1",
+    label: "GPT-4.1 (Copilot · Fast)",
+    quality: "excellent",
+  },
+  {
+    id: "opencode/qwen3.6-plus-free",
+    label: "Qwen 3.6 Plus (Free · Great coding)",
+    quality: "good",
+  },
+  {
+    id: "opencode/nemotron-3-super-free",
+    label: "Nemotron 3 Super (Free · NVIDIA)",
+    quality: "good",
+  },
+  {
+    id: "opencode/minimax-m2.5-free",
+    label: "MiniMax M2.5 (Free · via OpenCode)",
+    quality: "good",
+  },
+] as const;
+
+export const DEFAULT_FREE_MODEL = "github-copilot/claude-sonnet-4.6";
+
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
   displayName = "OpenCode";
@@ -153,9 +191,9 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   protected getStdinMode(): "pipe" | "ignore" {
-    // Bun + Windows can deadlock OpenCode when stdin stays open as a pipe.
-    // Prefer process completion over interactive stdin on this platform.
-    return process.platform === "win32" ? "ignore" : "pipe";
+    // Always use pipe — we close stdin immediately on Windows to send EOF.
+    // This avoids deadlocks while still signaling "no more input" to OpenCode.
+    return "pipe";
   }
 
   async isAvailable(): Promise<boolean> {
@@ -181,17 +219,25 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
+    // Always include free models first so they appear at top of dropdown
+    const freePrefixed: string[] = FREE_MODELS.map((m) => m.id);
+
     try {
       const proc = Bun.spawn(["opencode", "models"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
-      if (proc.exitCode !== 0) return [];
+      if (proc.exitCode !== 0) return freePrefixed;
       const text = await new Response(proc.stdout).text();
-      return text
+      const cliModels = text
         .split("\n")
         .map((l) => l.trim())
         .filter(Boolean);
+
+      // Deduplicate: free models first, then CLI models not already listed
+      const seen = new Set(freePrefixed);
+      const extra = cliModels.filter((m) => !seen.has(m));
+      return [...freePrefixed, ...extra];
     } catch {
-      return [];
+      return freePrefixed;
     }
   }
 
@@ -200,7 +246,7 @@ export class OpenCodeEngine implements AgentEngine {
     workdir: string,
     options?: EngineOptions
   ): AsyncGenerator<AgentEvent> {
-    const model = options?.model ?? "opencode/minimax-m2.5-free";
+    const model = options?.model ?? DEFAULT_FREE_MODEL;
     yield {
       type: "log",
       stream: "system",
@@ -236,11 +282,18 @@ export class OpenCodeEngine implements AgentEngine {
       stdin: this.getStdinMode(),
     });
 
-    if (this.getStdinMode() === "ignore") {
+    if (process.platform === "win32") {
+      // Close stdin immediately on Windows to send EOF — prevents deadlocks
+      // while letting OpenCode know there's no more user input.
+      try {
+        proc.stdin?.end();
+      } catch {
+        // stdin may already be closed
+      }
       yield {
         type: "log",
         stream: "system",
-        content: "[opencode] Interactive stdin disabled on Windows to avoid Bun pipe deadlocks",
+        content: "[opencode] stdin closed (Windows: non-interactive mode)",
       };
     }
 
@@ -369,7 +422,7 @@ export class OpenCodeEngine implements AgentEngine {
     let heartbeatActive = true;
     const allDone = () => stdoutDone && stderrDone;
     const startedAt = Date.now();
-    const heartbeatTask = (async () => {
+    const _heartbeatTask = (async () => {
       while (heartbeatActive && !allDone()) {
         await new Promise((r) => setTimeout(r, this.heartbeatIntervalMs));
         if (!heartbeatActive || allDone()) break;

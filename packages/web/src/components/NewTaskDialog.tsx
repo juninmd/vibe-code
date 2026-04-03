@@ -15,7 +15,7 @@ function groupModelsByProvider(models: string[]): { provider: string; models: st
   for (const m of models) {
     const provider = m.includes("/") ? m.split("/")[0] : "other";
     if (!groups.has(provider)) groups.set(provider, []);
-    groups.get(provider)!.push(m);
+    groups.get(provider)?.push(m);
   }
   return Array.from(groups.entries()).map(([provider, models]) => ({ provider, models }));
 }

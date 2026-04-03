@@ -2,9 +2,9 @@ import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
-import type { AgentEngine } from "./engine";
 import { executeAgent } from "./orchestrator/executor";
 import { retryPR } from "./orchestrator/pr-retry";
+import { logOrchestratorEvent } from "./orchestrator/terminal-logger";
 import type { EngineRegistry } from "./registry";
 
 interface ActiveRun {
@@ -41,8 +41,10 @@ export class Orchestrator {
   }
 
   async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
-    if (this.activeRuns.size >= this.maxConcurrent)
+    if (this.activeRuns.size >= this.maxConcurrent) {
+      logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
       throw new Error("Max concurrent agents reached.");
+    }
 
     const engineName = engineOverride ?? task.engine;
     const engine = engineName
@@ -61,6 +63,10 @@ export class Orchestrator {
     else if (repo.status !== "ready") throw new Error(`Repository is in "${repo.status}" state`);
 
     const run = this.db.runs.create(task.id, engine.name);
+    logOrchestratorEvent(
+      `Launching task "${task.title.slice(0, 50)}" [${task.id.slice(0, 8)}] ` +
+        `engine=${engine.name} model=${model ?? "default"} repo=${repo.name}`
+    );
     this.db.tasks.update(task.id, {
       status: "in_progress",
       ...(engineOverride ? { engine: engineOverride } : {}),
