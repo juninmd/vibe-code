@@ -41,6 +41,7 @@ export default function App() {
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const focusedLogCursorRef = useRef(0);
 
   const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
     useRepos();
@@ -58,6 +59,7 @@ export default function App() {
     retryPR,
     updateTaskLocal,
     updateRunLocal,
+    setTasksSnapshot,
     refresh,
   } = useTasks(selectedRepoId ?? undefined);
   const deferredTasks = useDeferredValue(tasks);
@@ -169,6 +171,68 @@ export default function App() {
     () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
     [repos, selectedRepoId]
   );
+
+  // Backend-driven polling: refresh all statuses every minute.
+  useEffect(() => {
+    const pollBackground = async () => {
+      try {
+        const data = await api.tasks.poll(selectedRepoId ?? undefined);
+        startTransition(() => {
+          setTasksSnapshot(data.tasks);
+          if (selectedTask?.id) {
+            const refreshedSelected = data.tasks.find((task) => task.id === selectedTask.id);
+            if (refreshedSelected) setSelectedTask(refreshedSelected);
+          }
+        });
+      } catch {
+        // best effort: websocket/local state still updates the UI
+      }
+    };
+
+    pollBackground();
+    const id = setInterval(pollBackground, 60_000);
+    return () => clearInterval(id);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot]);
+
+  // Focused task polling: fast updates for run status + incremental logs.
+  useEffect(() => {
+    if (!selectedTask?.id) {
+      focusedLogCursorRef.current = 0;
+      return;
+    }
+
+    const pollFocused = async () => {
+      try {
+        const data = await api.tasks.poll(
+          selectedRepoId ?? undefined,
+          selectedTask.id,
+          focusedLogCursorRef.current
+        );
+
+        startTransition(() => {
+          setTasksSnapshot(data.tasks);
+          if (data.focusedTask) {
+            setSelectedTask(data.focusedTask);
+          }
+          if (data.focusedLogs.length > 0) {
+            const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
+            focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
+            setLiveLogs((prev) => ({
+              ...prev,
+              [selectedTask.id]: [...(prev[selectedTask.id] ?? []), ...data.focusedLogs],
+            }));
+          }
+        });
+      } catch {
+        // best effort: websocket/local state still updates the UI
+      }
+    };
+
+    focusedLogCursorRef.current = 0;
+    pollFocused();
+    const id = setInterval(pollFocused, 3_000);
+    return () => clearInterval(id);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot]);
 
   // Show toast on disconnect / reconnect
   useEffect(() => {

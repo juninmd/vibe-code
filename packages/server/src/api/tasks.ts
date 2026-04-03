@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
+import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -43,9 +43,7 @@ const launchTaskSchema = z.object({
 export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
   const router = new Hono();
 
-  router.get("/", (c) => {
-    const repoId = c.req.query("repo_id");
-    const status = c.req.query("status");
+  function mapTasksWithRuns(repoId?: string, status?: string): TaskWithRun[] {
     const tasks = db.tasks.list(repoId, status);
     const latestRunsByTaskId = new Map(
       db.runs.listLatestByTaskIds(tasks.map((task) => task.id)).map((run) => [run.taskId, run])
@@ -55,14 +53,48 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
         .listByIds(Array.from(new Set(tasks.map((task) => task.repoId))))
         .map((repo) => [repo.id, repo])
     );
+    return tasks.map((task) => ({
+      ...task,
+      latestRun: latestRunsByTaskId.get(task.id) ?? undefined,
+      repo: reposById.get(task.repoId) ?? undefined,
+    }));
+  }
 
-    const tasksWithRuns = tasks.map((task) => {
-      const latestRun = latestRunsByTaskId.get(task.id);
-      const repo = reposById.get(task.repoId);
-      return { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined };
+  router.get("/", (c) => {
+    const repoId = c.req.query("repo_id");
+    const status = c.req.query("status");
+    return c.json({ data: mapTasksWithRuns(repoId, status) });
+  });
+
+  router.get("/poll", (c) => {
+    const repoId = c.req.query("repo_id");
+    const focusedTaskId = c.req.query("focused_task_id") ?? undefined;
+    const focusedLogsAfterIdRaw = c.req.query("focused_logs_after_id") ?? "0";
+    const focusedLogsAfterId = Number.parseInt(focusedLogsAfterIdRaw, 10);
+
+    const tasks = mapTasksWithRuns(repoId);
+    let focusedTask: TaskWithRun | null = null;
+    let focusedLogs: ReturnType<typeof db.logs.listByRun> = [];
+
+    if (focusedTaskId) {
+      focusedTask = tasks.find((task) => task.id === focusedTaskId) ?? null;
+      if (focusedTask?.latestRun?.id) {
+        focusedLogs = db.logs.listByRunAfter(
+          focusedTask.latestRun.id,
+          Number.isNaN(focusedLogsAfterId) ? 0 : focusedLogsAfterId,
+          400
+        );
+      }
+    }
+
+    return c.json({
+      data: {
+        tasks,
+        focusedTask,
+        focusedLogs,
+        serverTime: new Date().toISOString(),
+      },
     });
-
-    return c.json({ data: tasksWithRuns });
   });
 
   router.post("/archive-done", (c) => {

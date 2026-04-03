@@ -36,6 +36,10 @@ export function useTasks(repoFilter?: string) {
     setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, latestRun } : task)));
   }, []);
 
+  const setTasksSnapshot = useCallback((nextTasks: TaskWithRun[]) => {
+    setTasks(nextTasks);
+  }, []);
+
   const createTask = useCallback(async (data: CreateTaskRequest) => {
     const task = await api.tasks.create(data);
     // Add to list instead of full refresh
@@ -138,5 +142,6 @@ export function useTasks(repoFilter?: string) {
     retryPR,
     updateTaskLocal,
     updateRunLocal,
+    setTasksSnapshot,
   };
 }

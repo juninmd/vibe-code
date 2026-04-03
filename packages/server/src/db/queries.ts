@@ -422,6 +422,9 @@ export function createLogQueries(db: Database) {
     listByRun: db.prepare<LogRow, [string]>(
       "SELECT * FROM agent_logs WHERE run_id = ? ORDER BY id ASC"
     ),
+    listByRunAfter: db.prepare<LogRow, [string, number, number]>(
+      "SELECT * FROM agent_logs WHERE run_id = ? AND id > ? ORDER BY id ASC LIMIT ?"
+    ),
     insert: db.prepare<LogRow, [string, string, string]>(
       "INSERT INTO agent_logs (run_id, stream, content) VALUES (?, ?, ?) RETURNING *"
     ),
@@ -429,6 +432,8 @@ export function createLogQueries(db: Database) {
 
   return {
     listByRun: (runId: string): AgentLog[] => stmts.listByRun.all(runId).map(mapLog),
+    listByRunAfter: (runId: string, afterId: number, limit = 300): AgentLog[] =>
+      stmts.listByRunAfter.all(runId, afterId, limit).map(mapLog),
     create: (runId: string, stream: string, content: string): AgentLog => {
       const row = stmts.insert.get(runId, stream, content)!;
       return mapLog(row);

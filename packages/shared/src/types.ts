@@ -180,6 +180,13 @@ export interface TaskWithRun extends Task {
   repo?: Repository;
 }
 
+export interface TaskPollResponse {
+  tasks: TaskWithRun[];
+  focusedTask: TaskWithRun | null;
+  focusedLogs: AgentLog[];
+  serverTime: string;
+}
+
 // ─── Diff Types ─────────────────────────────────────────────────────────────
 
 export interface DiffFileSummary {

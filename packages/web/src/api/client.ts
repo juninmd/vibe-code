@@ -11,6 +11,7 @@ import type {
   PromptTemplate,
   Repository,
   Task,
+  TaskPollResponse,
   TaskSchedule,
   TaskWithRun,
   UpdateTaskRequest,
@@ -62,6 +63,16 @@ export const api = {
       if (status) params.set("status", status);
       const qs = params.toString();
       return request<TaskWithRun[]>(`/tasks${qs ? `?${qs}` : ""}`);
+    },
+    poll: (repoId?: string, focusedTaskId?: string, focusedLogsAfterId?: number) => {
+      const params = new URLSearchParams();
+      if (repoId) params.set("repo_id", repoId);
+      if (focusedTaskId) params.set("focused_task_id", focusedTaskId);
+      if (focusedLogsAfterId && focusedLogsAfterId > 0) {
+        params.set("focused_logs_after_id", String(focusedLogsAfterId));
+      }
+      const qs = params.toString();
+      return request<TaskPollResponse>(`/tasks/poll${qs ? `?${qs}` : ""}`);
     },
     archiveDone: (repoId?: string) => {
       const qs = repoId ? `?repo_id=${repoId}` : "";
