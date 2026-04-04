@@ -41,6 +41,8 @@ interface TaskRow {
   branch_name: string | null;
   pr_url: string | null;
   parent_task_id: string | null;
+  tags: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +100,8 @@ function mapTask(row: TaskRow): Task {
     branchName: row.branch_name,
     prUrl: row.pr_url,
     parentTaskId: row.parent_task_id,
+    tags: JSON.parse(row.tags || "[]") as string[],
+    notes: row.notes ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -215,6 +219,7 @@ export function createTaskQueries(db: Database) {
       const status = req.status ?? "backlog";
       const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
+      const tagsJson = JSON.stringify(req.tags ?? []);
       const row = db
         .prepare<
           TaskRow,
@@ -229,9 +234,10 @@ export function createTaskQueries(db: Database) {
             number,
             string,
             string | null,
+            string,
           ]
         >(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -243,7 +249,8 @@ export function createTaskQueries(db: Database) {
           req.priority ?? 0,
           order,
           status,
-          req.parentTaskId ?? null
+          req.parentTaskId ?? null,
+          tagsJson
         )!;
       return mapTask(row);
     },
@@ -273,6 +280,14 @@ export function createTaskQueries(db: Database) {
       if (req.model !== undefined) {
         sets.push("model = ?");
         values.push(req.model ?? null);
+      }
+      if (req.tags !== undefined) {
+        sets.push("tags = ?");
+        values.push(JSON.stringify(req.tags));
+      }
+      if (req.notes !== undefined) {
+        sets.push("notes = ?");
+        values.push(req.notes);
       }
       if (sets.length === 0) return stmts.getById.get(id) ? mapTask(stmts.getById.get(id)!) : null;
       sets.push("updated_at = datetime('now')");

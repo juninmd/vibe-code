@@ -22,6 +22,7 @@ const createTaskSchema = z.object({
   model: z.string().optional(),
   baseBranch: z.string().optional(),
   priority: z.number().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -33,6 +34,8 @@ const updateTaskSchema = z.object({
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().optional(),
 });
 
 const launchTaskSchema = z.object({
@@ -167,6 +170,22 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     db.tasks.remove(c.req.param("id"));
     return c.json({ data: { ok: true } });
+  });
+
+  router.post("/:id/clone", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    const cloned = db.tasks.create({
+      title: `${task.title} (copy)`,
+      description: task.description,
+      repoId: task.repoId,
+      engine: task.engine ?? undefined,
+      model: task.model ?? undefined,
+      baseBranch: task.baseBranch ?? undefined,
+      priority: task.priority,
+      tags: task.tags,
+    });
+    return c.json({ data: cloned }, 201);
   });
 
   router.post("/:id/launch", async (c) => {

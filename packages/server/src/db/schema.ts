@@ -110,6 +110,12 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("base_branch")) {
     db.exec("ALTER TABLE tasks ADD COLUMN base_branch TEXT");
   }
+  if (!taskColNames.includes("tags")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN tags TEXT DEFAULT '[]'");
+  }
+  if (!taskColNames.includes("notes")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN notes TEXT DEFAULT ''");
+  }
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
   db.exec(`

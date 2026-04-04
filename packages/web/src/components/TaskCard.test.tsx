@@ -34,6 +34,8 @@ const baseTask: TaskWithRun = {
   branchName: "feat/my-branch",
   prUrl: null,
   parentTaskId: null,
+  tags: [],
+  notes: "",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   latestRun: undefined,

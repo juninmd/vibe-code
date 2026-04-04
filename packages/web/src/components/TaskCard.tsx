@@ -3,6 +3,8 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
 import { memo, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
+import { formatDuration } from "../utils/date";
+import { TaskTagsDisplay } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getEngineMeta } from "./ui/engine-icons";
@@ -123,6 +125,13 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         </p>
       )}
 
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="mb-2 ml-[21px]">
+          <TaskTagsDisplay tags={task.tags} small />
+        </div>
+      )}
+
       {/* Footer */}
       <div className="flex items-center gap-1.5 flex-wrap ml-[21px]">
         {task.repo &&
@@ -239,6 +248,15 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             {elapsed && <span className="shrink-0 text-blue-500/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
+        {!isRunning &&
+          task.latestRun?.startedAt &&
+          task.latestRun?.finishedAt &&
+          (() => {
+            const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
+            return dur ? (
+              <span className="text-[10px] text-zinc-600 ml-auto tabular-nums">⏱ {dur}</span>
+            ) : null;
+          })()}
       </div>
     </div>
   );

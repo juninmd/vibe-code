@@ -24,6 +24,7 @@ interface SidebarProps {
   onDeleteAllLocalClones: () => void;
   onOpenSettings: () => void;
   connected: boolean;
+  repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
 
 export function Sidebar({
@@ -36,6 +37,7 @@ export function Sidebar({
   onDeleteAllLocalClones,
   onOpenSettings,
   connected,
+  repoStats,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
@@ -209,6 +211,13 @@ export function Sidebar({
                   <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
                     {meta.label}
                   </Badge>
+                )}
+                {repoStats?.[repo.id] && repo.status === "ready" && (
+                  <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums">
+                    {repoStats[repo.id].total > 0 &&
+                      `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
+                    {repoStats[repo.id].running > 0 && ` ⚡`}
+                  </span>
                 )}
                 <button
                   type="button"

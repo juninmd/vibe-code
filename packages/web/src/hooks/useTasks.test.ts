@@ -17,6 +17,8 @@ const mockTask: TaskWithRun = {
   branchName: null,
   prUrl: null,
   parentTaskId: null,
+  tags: [],
+  notes: "",
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   latestRun: undefined,
@@ -27,6 +29,7 @@ vi.mock("../api/client", () => ({
   api: {
     tasks: {
       list: vi.fn(),
+      get: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       remove: vi.fn(),
@@ -37,6 +40,7 @@ vi.mock("../api/client", () => ({
       cancel: vi.fn(),
       retry: vi.fn(),
       retryPR: vi.fn(),
+      clone: vi.fn(),
     },
   },
 }));
@@ -81,6 +85,7 @@ describe("useTasks", () => {
 
   it("createTask appends the new task without refetching", async () => {
     vi.mocked(api.tasks.create).mockResolvedValue(mockTask);
+    vi.mocked(api.tasks.get).mockResolvedValue(mockTask);
     const { result } = renderHook(() => useTasks());
     await act(async () => {});
 
@@ -92,6 +97,7 @@ describe("useTasks", () => {
     });
 
     expect(api.tasks.create).toHaveBeenCalledOnce();
+    expect(api.tasks.get).toHaveBeenCalledOnce();
     expect(api.tasks.list).toHaveBeenCalledTimes(1);
     expect(result.current.tasks[0].id).toBe("task-1");
   });

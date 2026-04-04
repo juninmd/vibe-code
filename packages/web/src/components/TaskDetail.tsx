@@ -1,9 +1,10 @@
 import type { AgentLog, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { formatDateTime } from "../utils/date";
+import { formatDateTime, formatDuration } from "../utils/date";
 import { AgentOutput } from "./AgentOutput";
 import { DiffViewer } from "./DiffViewer";
+import { TaskTagsEditor } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -18,6 +19,8 @@ interface TaskDetailProps {
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
+  onClone?: (taskId: string) => Promise<void>;
+  onUpdateTask?: (taskId: string, data: { tags?: string[]; notes?: string }) => Promise<void>;
   onTaskRefresh?: () => void;
 }
 
@@ -431,16 +434,6 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
   );
 }
 
-function formatDuration(start: string | null, end: string | null): string | null {
-  if (!start) return null;
-  const ms = new Date(end ?? Date.now()).getTime() - new Date(start).getTime();
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
 export function TaskDetail({
   task,
   liveLogs,
@@ -451,11 +444,15 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
+  onClone,
+  onUpdateTask,
   onTaskRefresh,
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
+  const [notesValue, setNotesValue] = useState(task.notes ?? "");
+  const [notesSaved, setNotesSaved] = useState(false);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -464,6 +461,25 @@ export function TaskDetail({
     task.latestRun?.startedAt ?? null,
     task.latestRun?.finishedAt ?? null
   );
+
+  // Sync notes when task changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional sync when task.id changes
+  useEffect(() => {
+    setNotesValue(task.notes ?? "");
+  }, [task.id]);
+
+  const handleNotesBlur = () => {
+    if (!onUpdateTask) return;
+    if (notesValue === (task.notes ?? "")) return;
+    onUpdateTask(task.id, { notes: notesValue }).then(() => {
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    });
+  };
+
+  const handleTagsChange = (tags: string[]) => {
+    onUpdateTask?.(task.id, { tags });
+  };
 
   const handleCopyPR = () => {
     if (task.prUrl) {
@@ -503,13 +519,34 @@ export function TaskDetail({
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {onClone && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLoadingAction("clone");
+                    try {
+                      await onClone(task.id);
+                      onClose();
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                  disabled={!!loadingAction}
+                  title="Clonar tarefa"
+                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+                >
+                  ⎘
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Status row */}
@@ -652,6 +689,28 @@ export function TaskDetail({
               </p>
             </div>
           )}
+
+          {/* Tags */}
+          <div>
+            <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Tags</h3>
+            <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className="text-xs font-medium text-zinc-500">Notas internas</h3>
+              {notesSaved && <span className="text-[10px] text-emerald-400">✓ salvo</span>}
+            </div>
+            <textarea
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
+              onBlur={handleNotesBlur}
+              placeholder="Anotações pessoais (não enviadas ao agente)…"
+              rows={3}
+              className="w-full bg-zinc-800/60 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+            />
+          </div>
 
           {/* Error message */}
           {task.latestRun?.errorMessage && (

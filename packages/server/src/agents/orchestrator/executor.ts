@@ -168,14 +168,15 @@ export async function executeAgent(
 
     if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
 
+    const baseBranch = task.baseBranch || repo.defaultBranch;
+
     if (await git.hasChanges(wtPath)) {
       sysLog("Committing changes...");
       await git.commitAll(wtPath, `feat: ${task.title}`);
       sysLog("Changes committed ✓");
     }
 
-    if (!(await git.hasCommitsAhead(wtPath, repo.defaultBranch)))
-      throw new Error("Agent made no changes");
+    if (!(await git.hasCommitsAhead(wtPath, baseBranch))) throw new Error("Agent made no changes");
 
     await verifyWorktree(wtPath, sysLog);
 
@@ -185,7 +186,7 @@ export async function executeAgent(
         task,
         run,
         wtPath,
-        repo.defaultBranch,
+        baseBranch,
         db,
         hub,
         (_rid, _tid, content) => sysLog(content)
@@ -203,15 +204,8 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = await buildPRBody(
-        task,
-        engine.name,
-        wtPath,
-        repo.defaultBranch,
-        git,
-        barePath
-      );
-      prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody);
+      const prBody = await buildPRBody(task, engine.name, wtPath, baseBranch, git, barePath);
+      prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
       sysLog(`PR created: ${prUrl}`);
     } catch (err: any) {

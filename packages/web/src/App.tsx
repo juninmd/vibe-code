@@ -13,8 +13,10 @@ import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
+import { FilterBar, type Filters } from "./components/FilterBar";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
 import { TaskDetail } from "./components/TaskDetail";
 import { Button } from "./components/ui/button";
@@ -38,6 +40,14 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showFilterBar, setShowFilterBar] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    engine: null,
+    priority: null,
+    hasPR: false,
+    tags: [],
+  });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -48,6 +58,7 @@ export default function App() {
   const {
     tasks,
     createTask,
+    cloneTask,
     updateTask,
     removeTask,
     archiveDone,
@@ -81,7 +92,6 @@ export default function App() {
   // ─── WebSocket ──────────────────────────────────────────────────────────────
   const wasConnected = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: notify and prevStatusRef are stable refs
   const handleWsMessage = useCallback(
     (msg: WsServerMessage) => {
       switch (msg.type) {
@@ -110,29 +120,35 @@ export default function App() {
           addOrUpdateRepo(msg.repo);
           break;
         case "agent_log":
-          startTransition(() => {
-            setLiveLogs((prev) => ({
-              ...prev,
-              [msg.taskId]: [
-                ...(prev[msg.taskId] ?? []),
-                {
-                  id: Date.now(),
-                  runId: msg.runId,
-                  stream: msg.stream,
-                  content: msg.content,
-                  timestamp: msg.timestamp,
-                },
-              ],
-            }));
-          });
+          // Only update state if this is the task the user is currently looking at.
+          // This avoids re-rendering the whole App for every background task log.
+          if (selectedTask?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: [
+                  ...(prev[msg.taskId] ?? []),
+                  {
+                    id: Date.now(),
+                    runId: msg.runId,
+                    stream: msg.stream,
+                    content: msg.content,
+                    timestamp: msg.timestamp,
+                  },
+                ],
+              }));
+            });
+          }
           break;
         case "run_updated":
           startTransition(() => {
             updateRunLocal(msg.run.taskId, msg.run);
             setSelectedTask((sel) =>
-              sel?.id === msg.run.taskId ? { ...sel, latestRun: msg.run } : sel
+              sel?.id === msg.run.taskId ? ({ ...sel, latestRun: msg.run } as TaskWithRun) : sel
             );
           });
+          // Debounced engine refresh would be better, but for now we'll just keep it
+          // as it's less frequent than logs.
           refreshEngines();
           break;
         case "run_status":
@@ -159,6 +175,7 @@ export default function App() {
       addOrUpdateRepo,
       notify,
       refreshEngines,
+      selectedTask?.id,
       selectedTask?.latestRun,
       updateRunLocal,
       updateTaskLocal,
@@ -174,6 +191,8 @@ export default function App() {
 
   // Backend-driven polling: refresh all statuses every minute.
   useEffect(() => {
+    if (connected) return; // when WS is available rely on push
+
     const pollBackground = async () => {
       try {
         const data = await api.tasks.poll(selectedRepoId ?? undefined);
@@ -192,11 +211,16 @@ export default function App() {
     pollBackground();
     const id = setInterval(pollBackground, 60_000);
     return () => clearInterval(id);
-  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot]);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot, connected]);
 
   // Focused task polling: fast updates for run status + incremental logs.
   useEffect(() => {
     if (!selectedTask?.id) {
+      focusedLogCursorRef.current = 0;
+      return;
+    }
+    if (connected) {
+      // WS will push focused logs when subscribed
       focusedLogCursorRef.current = 0;
       return;
     }
@@ -232,18 +256,47 @@ export default function App() {
     pollFocused();
     const id = setInterval(pollFocused, 3_000);
     return () => clearInterval(id);
-  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot]);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot, connected]);
 
   // Show toast on disconnect / reconnect
   useEffect(() => {
+    let canceled = false;
+
     if (!connected && wasConnected.current) {
       toast("Conexão perdida. Reconectando...", "error");
     }
     if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
       toast("Reconectado!", "success");
+      // Resync state after reconnect: refresh tasks and focused logs once
+      (async () => {
+        try {
+          await refresh();
+          if (selectedTask?.id) {
+            const data = await api.tasks.poll(selectedRepoId ?? undefined, selectedTask.id, 0);
+            if (canceled) return;
+            startTransition(() => {
+              setTasksSnapshot(data.tasks);
+              if (data.focusedTask) setSelectedTask(data.focusedTask);
+              if (data.focusedLogs.length > 0) {
+                const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
+                focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
+                setLiveLogs((prev) => ({
+                  ...prev,
+                  [selectedTask.id]: [...(prev[selectedTask.id] ?? []), ...data.focusedLogs],
+                }));
+              }
+            });
+          }
+        } catch {
+          // ignore
+        }
+      })();
     }
     wasConnected.current = connected;
-  }, [connected, toast]);
+    return () => {
+      canceled = true;
+    };
+  }, [connected, toast, refresh, selectedRepoId, selectedTask, setTasksSnapshot]);
 
   // ─── Task interactions ───────────────────────────────────────────────────────
   const handleTaskClick = useCallback(
@@ -279,6 +332,19 @@ export default function App() {
       result = result.filter((t) => t.engine === selectedAgent);
     }
 
+    if (filters.engine) {
+      result = result.filter((t) => t.engine === filters.engine);
+    }
+    if (filters.priority !== null) {
+      result = result.filter((t) => t.priority === filters.priority);
+    }
+    if (filters.hasPR) {
+      result = result.filter((t) => !!t.prUrl);
+    }
+    if (filters.tags.length > 0) {
+      result = result.filter((t) => filters.tags.every((tag) => t.tags?.includes(tag)));
+    }
+
     if (!deferredSearch.trim()) return result;
 
     const q = deferredSearch.toLowerCase();
@@ -289,7 +355,59 @@ export default function App() {
         t.repo?.name.toLowerCase().includes(q) ||
         t.branchName?.toLowerCase().includes(q)
     );
-  }, [deferredTasks, deferredSearch, selectedAgent]);
+  }, [deferredTasks, deferredSearch, selectedAgent, filters]);
+
+  // ─── Repo stats ──────────────────────────────────────────────────────────────
+  const repoStats = useMemo(() => {
+    const stats: Record<string, { total: number; done: number; failed: number; running: number }> =
+      {};
+    for (const task of tasks) {
+      if (!stats[task.repoId]) stats[task.repoId] = { total: 0, done: 0, failed: 0, running: 0 };
+      stats[task.repoId].total++;
+      if (task.status === "done") stats[task.repoId].done++;
+      if (task.status === "failed") stats[task.repoId].failed++;
+      if (task.status === "in_progress") stats[task.repoId].running++;
+    }
+    return stats;
+  }, [tasks]);
+
+  // ─── Available tags from tasks ───────────────────────────────────────────────
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const task of tasks) {
+      for (const tag of task.tags ?? []) tagSet.add(tag);
+    }
+    return Array.from(tagSet).sort();
+  }, [tasks]);
+
+  // ─── Export board ────────────────────────────────────────────────────────────
+  const exportBoard = useCallback(() => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      repo: repos.find((r) => r.id === selectedRepoId) ?? null,
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        engine: t.engine,
+        model: t.model,
+        tags: t.tags,
+        branchName: t.branchName,
+        prUrl: t.prUrl,
+        priority: t.priority,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibe-code-board-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [tasks, repos, selectedRepoId]);
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -311,6 +429,10 @@ export default function App() {
       if (e.key === "Escape") {
         if (showCommandPalette) {
           setShowCommandPalette(false);
+          return;
+        }
+        if (showShortcuts) {
+          setShowShortcuts(false);
           return;
         }
         if (showEnginesPanel) {
@@ -361,6 +483,16 @@ export default function App() {
         e.preventDefault();
         setShowEnginesPanel(true);
       }
+      // ? — shortcuts modal
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
+      // F — toggle filter bar
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setShowFilterBar((v) => !v);
+      }
     };
 
     window.addEventListener("keydown", handler);
@@ -371,6 +503,7 @@ export default function App() {
     showNewTask,
     showAddRepo,
     showSettings,
+    showShortcuts,
     selectedTask,
     search,
     handleCloseDetail,
@@ -385,6 +518,7 @@ export default function App() {
           onSelectRepo={setSelectedRepoId}
           onAddRepo={() => setShowAddRepo(true)}
           onRemoveRepo={removeRepo}
+          repoStats={repoStats}
           onDeleteLocalClone={async (repoId) => {
             const repo = repos.find((item) => item.id === repoId);
             if (!repo) return;
@@ -521,6 +655,24 @@ export default function App() {
               <span>⌘K</span>
             </button>
 
+            <button
+              type="button"
+              onClick={exportBoard}
+              title="Exportar board como JSON"
+              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+            >
+              ↓ Export
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowShortcuts(true)}
+              title="Atalhos (?) "
+              className="hidden sm:flex items-center px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+            >
+              ?
+            </button>
+
             <Button
               variant="primary"
               size="sm"
@@ -530,6 +682,16 @@ export default function App() {
               + Tarefa
             </Button>
           </header>
+
+          {/* Filter Bar */}
+          {showFilterBar && (
+            <FilterBar
+              filters={filters}
+              onFilterChange={setFilters}
+              availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
+              availableTags={availableTags}
+            />
+          )}
 
           {/* Board */}
           <main className="flex-1 overflow-hidden p-4">
@@ -579,19 +741,47 @@ export default function App() {
               toast("Criando PR...", "info");
             }}
             onDelete={async (id) => {
+              const taskToDelete = tasks.find((t) => t.id === id);
               await removeTask(id);
               handleCloseDetail();
-              toast("Tarefa deletada", "info");
+              toast(
+                "Tarefa deletada",
+                "info",
+                taskToDelete
+                  ? {
+                      label: "Desfazer",
+                      onClick: async () => {
+                        await createTask({
+                          title: taskToDelete.title,
+                          description: taskToDelete.description,
+                          repoId: taskToDelete.repoId,
+                          engine: taskToDelete.engine ?? undefined,
+                          tags: taskToDelete.tags,
+                        });
+                        toast("Tarefa restaurada", "success");
+                      },
+                    }
+                  : undefined
+              );
             }}
             onSendInput={(taskId, input) => {
               send({ type: "agent_input", taskId, input });
+            }}
+            onClone={async (id) => {
+              const cloned = await cloneTask(id);
+              toast(`"${cloned.title}" clonada`, "success");
+            }}
+            onUpdateTask={async (id, data) => {
+              await updateTask(id, data);
             }}
             onTaskRefresh={refresh}
           />
         )}
 
-        {/* Engines Panel */}
         {showEnginesPanel && <EnginesPanel onClose={() => setShowEnginesPanel(false)} />}
+
+        {/* Shortcuts Modal */}
+        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
         {/* Command Palette */}
         {showCommandPalette && (
@@ -626,8 +816,8 @@ export default function App() {
           engines={engines}
           enginesLoading={enginesLoading}
           enginesError={enginesError}
-          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, ...data }) => {
-            const task = await createTask({ ...data, baseBranch });
+          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, tags, ...data }) => {
+            const task = await createTask({ ...data, baseBranch, tags });
             if (!task) return;
 
             if (schedule) {

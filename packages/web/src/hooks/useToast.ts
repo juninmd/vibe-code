@@ -2,15 +2,21 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 
 export type ToastType = "success" | "error" | "info";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: number;
   message: string;
   type: ToastType;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
   toasts: Toast[];
-  toast: (message: string, type?: ToastType) => void;
+  toast: (message: string, type?: ToastType, action?: ToastAction) => void;
   dismiss: (id: number) => void;
 }
 
@@ -33,10 +39,10 @@ export function useToastState(): ToastContextValue {
   }, []);
 
   const toast = useCallback(
-    (message: string, type: ToastType = "info") => {
+    (message: string, type: ToastType = "info", action?: ToastAction) => {
       const id = ++counter.current;
-      setToasts((prev) => [...prev, { id, message, type }]);
-      setTimeout(() => dismiss(id), type === "error" ? 6000 : 3500);
+      setToasts((prev) => [...prev, { id, message, type, action }]);
+      setTimeout(() => dismiss(id), type === "error" ? 6000 : action ? 5000 : 3500);
     },
     [dismiss]
   );

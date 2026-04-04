@@ -147,25 +147,29 @@ export class GitService {
     repoUrl: string,
     branch: string,
     title: string,
-    body: string
+    body: string,
+    base?: string
   ): Promise<string> {
     const repoInfo = this.getRepoOwnerAndName(repoUrl);
-    const result = await this.exec(
-      [
-        "gh",
-        "pr",
-        "create",
-        "--repo",
-        repoInfo,
-        "--title",
-        title,
-        "--body",
-        body,
-        "--head",
-        branch,
-      ],
-      { cwd: wtPath }
-    );
+    const args = [
+      "gh",
+      "pr",
+      "create",
+      "--repo",
+      repoInfo,
+      "--title",
+      title,
+      "--body",
+      body,
+      "--head",
+      branch,
+    ];
+
+    if (base) {
+      args.push("--base", base);
+    }
+
+    const result = await this.exec(args, { cwd: wtPath });
     return result.stdout.trim();
   }
 

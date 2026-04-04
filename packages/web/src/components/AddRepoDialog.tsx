@@ -22,7 +22,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
   // Create new repo state
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newIsPrivate, setNewIsPrivate] = useState(false);
+  const [newIsPrivate, setNewIsPrivate] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -82,7 +82,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     setMode("github");
     setNewName("");
     setNewDescription("");
-    setNewIsPrivate(false);
+    setNewIsPrivate(true);
     setCreateError(null);
     onClose();
   };
@@ -193,14 +193,17 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
             />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer group">
             <input
               type="checkbox"
               checked={newIsPrivate}
               onChange={(e) => setNewIsPrivate(e.target.checked)}
               className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
             />
-            <span className="text-sm text-zinc-400">Private repository</span>
+            <span className="text-sm text-zinc-400 flex items-center gap-1.5">
+              {newIsPrivate ? "🔒" : "🔓"}
+              {newIsPrivate ? "Private (recommended)" : "Public"}
+            </span>
           </label>
 
           {createError && (

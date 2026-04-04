@@ -185,6 +185,7 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
     "",
     "**Code quality rules:**",
     "- No hardcoded secrets, credentials or API keys — use environment variables.",
+    "- **CRITICAL: Respect `.gitignore`. Do NOT create, modify, or read files that are ignored by git.**",
     "- Validate user inputs. Handle errors gracefully with meaningful messages.",
     "- Keep functions small and focused (single responsibility).",
     "- Add comments only where logic is non-obvious.",

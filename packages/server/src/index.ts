@@ -96,10 +96,6 @@ app.route("/api/engines", createEnginesRouter(registry, orchestrator));
 app.route("/api/settings", createSettingsRouter(db));
 app.route("/api/prompts", createPromptsRouter(db));
 
-// Serve static frontend files
-app.get("/*", serveStatic({ root: "../web/dist" }));
-app.get("*", serveStatic({ path: "../web/dist/index.html" }));
-
 // Health check
 app.get("/api/health", (c) => {
   return c.json({
@@ -108,6 +104,10 @@ app.get("/api/health", (c) => {
     maxAgents: MAX_AGENTS,
   });
 });
+
+// Serve static frontend files
+app.get("/*", serveStatic({ root: "../web/dist" }));
+app.get("*", serveStatic({ path: "../web/dist/index.html" }));
 
 // WebSocket
 const wsClients = new Map<unknown, ReturnType<BroadcastHub["addClient"]>>();

@@ -101,6 +101,7 @@ export const api = {
     retry: (id: string) => request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
     retryPR: (id: string) =>
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
+    clone: (id: string) => request<Task>(`/tasks/${id}/clone`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
     diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
     diffFile: (id: string, path: string) =>

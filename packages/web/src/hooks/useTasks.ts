@@ -28,8 +28,10 @@ export function useTasks(repoFilter?: string) {
   }, [refresh]);
 
   // Update a single task in-place (from WebSocket or optimistic updates)
-  const updateTaskLocal = useCallback((updatedTask: TaskWithRun) => {
-    setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t)));
+  const updateTaskLocal = useCallback((updatedTask: Partial<TaskWithRun> & { id: string }) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === updatedTask.id ? ({ ...t, ...updatedTask } as TaskWithRun) : t))
+    );
   }, []);
 
   const updateRunLocal = useCallback((taskId: string, latestRun: AgentRun) => {
@@ -41,19 +43,36 @@ export function useTasks(repoFilter?: string) {
   }, []);
 
   const createTask = useCallback(async (data: CreateTaskRequest) => {
-    const task = await api.tasks.create(data);
-    // Add to list instead of full refresh
+    const created = await api.tasks.create(data);
+    // Fetch full TaskWithRun (includes repo) to avoid undefined repo on TaskCard
+    const task = await api.tasks.get(created.id);
+    setTasks((prev) => [task, ...prev]);
+    return task;
+  }, []);
+
+  const cloneTask = useCallback(async (id: string) => {
+    const created = await api.tasks.clone(id);
+    const task = await api.tasks.get(created.id);
     setTasks((prev) => [task, ...prev]);
     return task;
   }, []);
 
   const updateTask = useCallback(
     async (id: string, data: UpdateTaskRequest) => {
-      const task = await api.tasks.update(id, data);
-      updateTaskLocal(task);
-      return task;
+      // Optimistic update
+      setTasks((prev) => prev.map((t) => (t.id === id ? ({ ...t, ...data } as TaskWithRun) : t)));
+      try {
+        const task = await api.tasks.update(id, data);
+        updateTaskLocal(task);
+        return task;
+      } catch (err) {
+        // Rollback on error? We'd need the original task.
+        // For now, let's just refresh to be safe if it fails.
+        refresh();
+        throw err;
+      }
     },
-    [updateTaskLocal]
+    [updateTaskLocal, refresh]
   );
 
   const removeTask = useCallback(async (id: string) => {
@@ -131,6 +150,7 @@ export function useTasks(repoFilter?: string) {
     loading,
     refresh,
     createTask,
+    cloneTask,
     updateTask,
     removeTask,
     archiveDone,

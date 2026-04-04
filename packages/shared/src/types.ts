@@ -52,6 +52,8 @@ export interface Task {
   branchName: string | null;
   prUrl: string | null;
   parentTaskId: string | null;
+  tags: string[];
+  notes: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +135,7 @@ export interface CreateTaskRequest {
   model?: string;
   baseBranch?: string;
   priority?: number;
+  tags?: string[];
 }
 
 export interface UpdateTaskRequest {
@@ -142,6 +145,8 @@ export interface UpdateTaskRequest {
   columnOrder?: number;
   engine?: string;
   model?: string;
+  tags?: string[];
+  notes?: string;
 }
 
 export interface LaunchTaskRequest {

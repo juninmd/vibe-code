@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
 import { PromptTemplatePicker } from "./PromptTemplatePicker";
+import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
@@ -34,6 +35,7 @@ interface NewTaskDialogProps {
     engine?: string;
     model?: string;
     baseBranch?: string;
+    tags?: string[];
     autoLaunch: boolean;
     schedule?: {
       cronExpression: string;
@@ -70,6 +72,7 @@ export function NewTaskDialog({
   const [baseBranch, setBaseBranch] = useState("");
   const [branches, setBranches] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
 
   // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
@@ -121,7 +124,8 @@ export function NewTaskDialog({
       engine: engine || undefined,
       model: model || undefined,
       baseBranch: baseBranch || undefined,
-      autoLaunch: isScheduled ? false : autoLaunch, // Don't auto-launch if scheduling
+      tags: tags.length > 0 ? tags : undefined,
+      autoLaunch: isScheduled ? false : autoLaunch,
       schedule: isScheduled ? { cronExpression } : undefined,
     });
     setTitle("");
@@ -132,6 +136,7 @@ export function NewTaskDialog({
     setModels([]);
     setBaseBranch("");
     setBranches([]);
+    setTags([]);
     setIsScheduled(false);
     onClose();
   };
@@ -170,6 +175,11 @@ export function NewTaskDialog({
               placeholder="Detailed instructions for the AI agent..."
               rows={4}
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">Tags</label>
+            <TaskTagsEditor tags={tags} onChange={setTags} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
