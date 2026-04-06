@@ -10,29 +10,90 @@ import type {
   PromptTemplate,
   RemoteRepo,
   Repository,
+  SettingsResponse,
   StatsResponse,
   Task,
   TaskPollResponse,
   TaskSchedule,
   TaskWithRun,
   TestConnectionResult,
+  UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export class ApiError extends Error {
+  status: number;
+  path: string;
+  method: string;
+
+  constructor(message: string, status: number, path: string, method: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.method = method;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message ?? json.error ?? "Request failed");
-  return json.data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const method = options?.method ?? "GET";
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...options,
+      signal: options?.signal ?? controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    const text = await res.text();
+    let json: any = null;
+
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        if (!res.ok) {
+          throw new ApiError(`Erro ${res.status} em ${method} ${path}`, res.status, path, method);
+        }
+        throw new ApiError(`Resposta inválida em ${method} ${path}`, res.status, path, method);
+      }
+    }
+
+    if (!res.ok) {
+      const message = json?.message ?? json?.error ?? `Erro ${res.status} em ${method} ${path}`;
+      throw new ApiError(message, res.status, path, method);
+    }
+
+    return (json?.data ?? null) as T;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new ApiError(
+        `Timeout de ${REQUEST_TIMEOUT_MS / 1000}s em ${method} ${path}`,
+        408,
+        path,
+        method
+      );
+    }
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(
+      (err as Error)?.message || `Falha de rede em ${method} ${path}`,
+      0,
+      path,
+      method
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─── Repositories ────────────────────────────────────────────────────────────
@@ -123,13 +184,9 @@ export const api = {
   },
 
   settings: {
-    get: () => request<any>("/settings"),
-    update: (data: {
-      githubToken?: string;
-      gitlabToken?: string;
-      gitlabBaseUrl?: string;
-      theme?: string;
-    }) => request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+    get: () => request<SettingsResponse>("/settings"),
+    update: (data: UpdateSettingsRequest) =>
+      request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
     testConnection: (provider: "github" | "gitlab") =>
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
   },

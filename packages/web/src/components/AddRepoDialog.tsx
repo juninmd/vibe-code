@@ -15,7 +15,10 @@ interface AddRepoDialogProps {
 export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
   const [ghRepos, setGhRepos] = useState<RemoteRepo[]>([]);
   const [glRepos, setGlRepos] = useState<RemoteRepo[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [ghLoading, setGhLoading] = useState(false);
+  const [glLoading, setGlLoading] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [glError, setGlError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [mode, setMode] = useState<"github" | "gitlab" | "manual" | "create">("github");
@@ -30,20 +33,27 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
+    setGhLoading(true);
+    setGhError(null);
     api.repos
       .listGitHub()
       .then(setGhRepos)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-    // Also load GitLab repos in background
+      .catch((err) => setGhError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setGhLoading(false));
+
+    setGlLoading(true);
+    setGlError(null);
     api.repos
       .listGitLab()
       .then(setGlRepos)
-      .catch(() => {});
+      .catch((err) => setGlError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setGlLoading(false));
   }, [open]);
 
   const activeRepos = mode === "gitlab" ? glRepos : ghRepos;
+  const activeLoading = mode === "gitlab" ? glLoading : ghLoading;
+  const activeError = mode === "gitlab" ? glError : ghError;
+  const activeProviderLabel = mode === "gitlab" ? "GitLab" : "GitHub";
   const filtered = search
     ? activeRepos.filter(
         (r) =>
@@ -94,6 +104,8 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     setNewDescription("");
     setNewIsPrivate(true);
     setCreateError(null);
+    setGhError(null);
+    setGlError(null);
     onClose();
   };
 
@@ -133,15 +145,23 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           />
 
           <div className="max-h-72 overflow-y-auto rounded-md border border-zinc-800">
-            {loading ? (
+            {activeLoading ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
-                Carregando repositórios...
+                Carregando repositórios do {activeProviderLabel}...
+              </div>
+            ) : activeError ? (
+              <div className="px-3 py-8 text-center text-xs text-red-400 space-y-2">
+                <p>Não foi possível carregar os repositórios do {activeProviderLabel}.</p>
+                <p className="text-zinc-500">{activeError}</p>
+                <p className="text-zinc-500">
+                  Verifique a configuração do provider em Configurações.
+                </p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
                 {search
                   ? "Nenhum repositório corresponde à busca"
-                  : "Nenhum repositório encontrado. Verifique o token do provedor em Configurações."}
+                  : `Nenhum repositório encontrado no ${activeProviderLabel}.`}
               </div>
             ) : (
               filtered.map((repo) => (

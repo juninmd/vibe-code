@@ -1,3 +1,4 @@
+import type { SettingsResponse } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
@@ -11,7 +12,7 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = "github" | "gitlab" | "general";
+type Tab = "github" | "gitlab" | "gemini" | "general";
 
 function ProviderTab({
   provider,
@@ -32,6 +33,7 @@ function ProviderTab({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     username?: string;
@@ -42,10 +44,11 @@ function ProviderTab({
     setToken("");
     setShowToken(false);
     setSaved(false);
+    setError(null);
     setTestResult(null);
     api.settings
       .get()
-      .then((s: any) => {
+      .then((s: SettingsResponse) => {
         const p = s[provider];
         if (p) {
           setTokenSet(p.tokenSet);
@@ -59,6 +62,7 @@ function ProviderTab({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       const data: any = {};
       if (provider === "github") data.githubToken = token;
@@ -72,7 +76,7 @@ function ProviderTab({
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -80,6 +84,7 @@ function ProviderTab({
 
   const handleClear = async () => {
     setSaving(true);
+    setError(null);
     try {
       const data: any = {};
       if (provider === "github") data.githubToken = "";
@@ -92,7 +97,7 @@ function ProviderTab({
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -122,7 +127,7 @@ function ProviderTab({
         <span className={`w-2 h-2 rounded-full ${tokenSet ? "bg-emerald-400" : "bg-zinc-600"}`} />
         <div className="flex-1">
           <span className="text-sm" style={{ color: "var(--text-primary)" }}>
-            {tokenSet ? "Connected" : "Not connected"}
+            {tokenSet ? "Conectado" : "Não conectado"}
           </span>
           {username && (
             <span className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>
@@ -132,7 +137,7 @@ function ProviderTab({
         </div>
         {tokenSet && (
           <Button type="button" variant="ghost" size="sm" onClick={handleTest} disabled={testing}>
-            {testing ? "Testing..." : "Test"}
+            {testing ? "Testando..." : "Testar"}
           </Button>
         )}
       </div>
@@ -145,14 +150,20 @@ function ProviderTab({
               : "border-red-800/40 bg-red-950/30 text-red-400"
           }`}
         >
-          {testResult.ok ? `✓ Connected as @${testResult.username}` : `✕ ${testResult.error}`}
+          {testResult.ok ? `✓ Conectado como @${testResult.username}` : `✕ ${testResult.error}`}
+        </div>
+      )}
+
+      {error && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+          {error}
         </div>
       )}
 
       {showBaseUrl && (
         <div>
           <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
-            Base URL
+            URL base
           </label>
           <Input
             value={baseUrl}
@@ -160,7 +171,7 @@ function ProviderTab({
             placeholder="https://gitlab.com"
           />
           <p className="text-xs mt-1" style={{ color: "var(--text-dimmed)" }}>
-            Self-hosted GitLab? Enter your instance URL.
+            GitLab self-hosted? Informe a URL da sua instância.
           </p>
         </div>
       )}
@@ -176,7 +187,7 @@ function ProviderTab({
               type={showToken ? "text" : "password"}
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              placeholder={tokenSet ? "••••••••••••  (token saved)" : tokenPlaceholder}
+              placeholder={tokenSet ? "••••••••••••  (token salvo)" : tokenPlaceholder}
               autoComplete="off"
             />
             <button
@@ -185,25 +196,25 @@ function ProviderTab({
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs cursor-pointer"
               style={{ color: "var(--text-dimmed)" }}
             >
-              {showToken ? "hide" : "show"}
+              {showToken ? "ocultar" : "mostrar"}
             </button>
           </div>
           {tokenSet && (
             <Button type="button" variant="ghost" onClick={handleClear} disabled={saving}>
-              Clear
+              Limpar
             </Button>
           )}
         </div>
         <p className="text-xs mt-1.5" style={{ color: "var(--text-dimmed)" }}>
           {provider === "github" ? (
             <>
-              Used for PR creation and merge polling. Requires{" "}
-              <code style={{ color: "var(--text-muted)" }}>repo</code> scope.
+              Usado para criar PR e consultar merge. Requer escopo{" "}
+              <code style={{ color: "var(--text-muted)" }}>repo</code>.
             </>
           ) : (
             <>
-              Used for Merge Requests and project listing. Requires{" "}
-              <code style={{ color: "var(--text-muted)" }}>api</code> scope.
+              Usado para Merge Requests e listagem de projetos. Requer escopo{" "}
+              <code style={{ color: "var(--text-muted)" }}>api</code>.
             </>
           )}
         </p>
@@ -211,10 +222,133 @@ function ProviderTab({
 
       <div className="flex items-center justify-between pt-1">
         <div className="text-xs h-4" style={{ color: "var(--success)" }}>
-          {saved && "Saved!"}
+          {saved && "Salvo!"}
         </div>
         <Button type="submit" variant="primary" disabled={saving || !token.trim()}>
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Salvando..." : "Salvar"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function GeminiTab() {
+  const [apiKey, setApiKey] = useState("");
+  const [keySet, setKeySet] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApiKey("");
+    setShowKey(false);
+    setSaved(false);
+    setError(null);
+    api.settings
+      .get()
+      .then((settings) => {
+        setKeySet(settings.gemini.keySet);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.settings.update({ geminiApiKey: apiKey });
+      setKeySet(!!apiKey);
+      setApiKey("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.settings.update({ geminiApiKey: "" });
+      setKeySet(false);
+      setApiKey("");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSave} className="space-y-4">
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+        style={{ background: "var(--bg-card)" }}
+      >
+        <span className={`w-2 h-2 rounded-full ${keySet ? "bg-emerald-400" : "bg-zinc-600"}`} />
+        <div className="flex-1">
+          <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {keySet ? "Chave configurada" : "Chave não configurada"}
+          </span>
+          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            O Gemini só fica realmente pronto quando a `GEMINI_API_KEY` está salva no servidor.
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+          GEMINI_API_KEY
+        </label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Input
+              type={showKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={keySet ? "••••••••••••  (chave salva)" : "AIza..."}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs cursor-pointer"
+              style={{ color: "var(--text-dimmed)" }}
+            >
+              {showKey ? "ocultar" : "mostrar"}
+            </button>
+          </div>
+          {keySet && (
+            <Button type="button" variant="ghost" onClick={handleClear} disabled={saving}>
+              Limpar
+            </Button>
+          )}
+        </div>
+        <p className="text-xs mt-1.5" style={{ color: "var(--text-dimmed)" }}>
+          Usada pelo fluxo principal e também pela pipeline de review quando a tarefa roda com
+          Gemini.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between pt-1">
+        <div className="text-xs h-4" style={{ color: "var(--success)" }}>
+          {saved && "Salvo!"}
+        </div>
+        <Button type="submit" variant="primary" disabled={saving || !apiKey.trim()}>
+          {saving ? "Salvando..." : "Salvar"}
         </Button>
       </div>
     </form>
@@ -226,10 +360,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const { themeName, setTheme } = useTheme();
 
   return (
-    <Dialog open={open} onClose={onClose} title="Settings">
+    <Dialog open={open} onClose={onClose} title="Configurações">
       {/* Tabs */}
       <div className="flex gap-1 mb-5 rounded-lg p-1" style={{ background: "var(--bg-input)" }}>
-        {(["github", "gitlab", "general"] as Tab[]).map((t) => (
+        {(["github", "gitlab", "gemini", "general"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -242,7 +376,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               color: tab === t ? "var(--text-primary)" : "var(--text-muted)",
             }}
           >
-            {t === "github" ? "GitHub" : t === "gitlab" ? "GitLab" : "Geral"}
+            {t === "github"
+              ? "GitHub"
+              : t === "gitlab"
+                ? "GitLab"
+                : t === "gemini"
+                  ? "Gemini"
+                  : "Geral"}
           </button>
         ))}
       </div>
@@ -263,6 +403,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           showBaseUrl
         />
       )}
+
+      {tab === "gemini" && <GeminiTab />}
 
       {tab === "general" && (
         <div className="space-y-5">
@@ -314,7 +456,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
           <div className="pt-2 flex justify-end">
             <Button type="button" variant="ghost" onClick={onClose}>
-              Close
+              Fechar
             </Button>
           </div>
         </div>

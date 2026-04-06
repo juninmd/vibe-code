@@ -8,10 +8,21 @@ function maskToken(token: string | null | undefined): string {
   return "•".repeat(token.length - 4) + token.slice(-4);
 }
 
+function normalizeGeminiApiKey(raw: string | undefined): string {
+  const value = (raw ?? "").trim();
+  if (!value) return "";
+  // Support pasted "GEMINI_API_KEY=..." values from .env examples.
+  if (value.startsWith("GEMINI_API_KEY=")) {
+    return value.slice("GEMINI_API_KEY=".length).trim();
+  }
+  return value;
+}
+
 const updateSettingsSchema = z.object({
   githubToken: z.string().optional(),
   gitlabToken: z.string().optional(),
   gitlabBaseUrl: z.string().optional(),
+  geminiApiKey: z.string().optional(),
   theme: z.string().optional(),
 });
 
@@ -22,6 +33,7 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
   app.get("/", (c) => {
     const ghToken = db.settings.get("github_token");
     const glToken = db.settings.get("gitlab_token");
+    const geminiApiKey = db.settings.get("gemini_api_key") || process.env.GEMINI_API_KEY || null;
     const glBaseUrl = db.settings.get("gitlab_base_url") || "https://gitlab.com";
     const theme = db.settings.get("theme") || "dark";
 
@@ -37,6 +49,10 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
           tokenSet: !!glToken,
           baseUrl: glBaseUrl,
           username: db.settings.get("gitlab_username") || undefined,
+        },
+        gemini: {
+          apiKey: maskToken(geminiApiKey),
+          keySet: !!geminiApiKey,
         },
         theme,
         // Legacy compat
@@ -90,6 +106,19 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
     if (parsed.data.gitlabBaseUrl !== undefined) {
       db.settings.set("gitlab_base_url", parsed.data.gitlabBaseUrl);
       if (providerRegistry) providerRegistry.rebuildGitLab();
+    }
+    if (parsed.data.geminiApiKey !== undefined) {
+      const geminiApiKey = normalizeGeminiApiKey(parsed.data.geminiApiKey);
+      db.settings.set("gemini_api_key", geminiApiKey);
+      if (geminiApiKey) {
+        process.env.GEMINI_API_KEY = geminiApiKey;
+        console.info(
+          `[settings] Gemini API key atualizada via API (len=${geminiApiKey.length}, masked=${maskToken(geminiApiKey)})`
+        );
+      } else {
+        delete process.env.GEMINI_API_KEY;
+        console.info("[settings] Gemini API key removida via API");
+      }
     }
     if (parsed.data.theme !== undefined) {
       db.settings.set("theme", parsed.data.theme);

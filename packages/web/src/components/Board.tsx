@@ -17,6 +17,8 @@ import { useCallback, useMemo, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 
+const SCHEDULED_COLLAPSED_KEY = "vibe-code-scheduled-collapsed";
+
 interface BoardProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
@@ -37,6 +39,10 @@ export function Board({
   onRetryAllFailed,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
+  const [scheduledCollapsed, setScheduledCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SCHEDULED_COLLAPSED_KEY) === "1";
+  });
   const noopTaskClick = useCallback(() => {}, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -111,6 +117,17 @@ export function Board({
           onTaskClick={onTaskClick}
           onRetryPR={onRetryPR}
           horizontal
+          collapsible
+          collapsed={scheduledCollapsed}
+          onToggleCollapse={() => {
+            setScheduledCollapsed((prev) => {
+              const next = !prev;
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem(SCHEDULED_COLLAPSED_KEY, next ? "1" : "0");
+              }
+              return next;
+            });
+          }}
         />
 
         <div className="flex gap-4 overflow-x-auto min-h-0">

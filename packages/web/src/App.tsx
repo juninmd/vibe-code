@@ -29,6 +29,14 @@ import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
 
+const MAX_LIVE_LOGS_PER_TASK = 1500;
+
+function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog[] {
+  const merged = [...existing, ...incoming];
+  if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
+  return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
+}
+
 export default function App() {
   const toastCtx = useToastState();
   const { toast } = toastCtx;
@@ -54,6 +62,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedLogCursorRef = useRef(0);
+  const refreshEnginesThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
     useRepos();
@@ -94,6 +103,22 @@ export default function App() {
   // ─── WebSocket ──────────────────────────────────────────────────────────────
   const wasConnected = useRef(false);
 
+  const refreshEnginesThrottled = useCallback(() => {
+    if (refreshEnginesThrottleRef.current) return;
+    refreshEnginesThrottleRef.current = setTimeout(() => {
+      refreshEnginesThrottleRef.current = null;
+      refreshEngines();
+    }, 1500);
+  }, [refreshEngines]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshEnginesThrottleRef.current) {
+        clearTimeout(refreshEnginesThrottleRef.current);
+      }
+    };
+  }, []);
+
   const handleWsMessage = useCallback(
     (msg: WsServerMessage) => {
       switch (msg.type) {
@@ -128,8 +153,7 @@ export default function App() {
             startTransition(() => {
               setLiveLogs((prev) => ({
                 ...prev,
-                [msg.taskId]: [
-                  ...(prev[msg.taskId] ?? []),
+                [msg.taskId]: appendLogsLimited(prev[msg.taskId] ?? [], [
                   {
                     id: Date.now(),
                     runId: msg.runId,
@@ -137,7 +161,7 @@ export default function App() {
                     content: msg.content,
                     timestamp: msg.timestamp,
                   },
-                ],
+                ]),
               }));
             });
           }
@@ -148,16 +172,16 @@ export default function App() {
             startTransition(() => {
               setLiveLogs((prev) => ({
                 ...prev,
-                [msg.taskId]: [
-                  ...(prev[msg.taskId] ?? []),
-                  ...msg.logs.map((l, i) => ({
+                [msg.taskId]: appendLogsLimited(
+                  prev[msg.taskId] ?? [],
+                  msg.logs.map((l, i) => ({
                     id: Date.now() + i,
                     runId: l.runId,
                     stream: l.stream,
                     content: l.content,
                     timestamp: l.timestamp,
-                  })),
-                ],
+                  }))
+                ),
               }));
             });
           }
@@ -169,9 +193,7 @@ export default function App() {
               sel?.id === msg.run.taskId ? ({ ...sel, latestRun: msg.run } as TaskWithRun) : sel
             );
           });
-          // Debounced engine refresh would be better, but for now we'll just keep it
-          // as it's less frequent than logs.
-          refreshEngines();
+          refreshEnginesThrottled();
           break;
         case "run_status":
           startTransition(() => {
@@ -189,14 +211,14 @@ export default function App() {
               createdAt: selectedTask?.latestRun?.createdAt ?? new Date().toISOString(),
             });
           });
-          refreshEngines();
+          refreshEnginesThrottled();
           break;
       }
     },
     [
       addOrUpdateRepo,
       notify,
-      refreshEngines,
+      refreshEnginesThrottled,
       selectedTask?.id,
       selectedTask?.latestRun,
       updateRunLocal,
@@ -265,7 +287,7 @@ export default function App() {
             focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
             setLiveLogs((prev) => ({
               ...prev,
-              [selectedTask.id]: [...(prev[selectedTask.id] ?? []), ...data.focusedLogs],
+              [selectedTask.id]: appendLogsLimited(prev[selectedTask.id] ?? [], data.focusedLogs),
             }));
           }
         });
@@ -304,7 +326,10 @@ export default function App() {
                 focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
                 setLiveLogs((prev) => ({
                   ...prev,
-                  [selectedTask.id]: [...(prev[selectedTask.id] ?? []), ...data.focusedLogs],
+                  [selectedTask.id]: appendLogsLimited(
+                    prev[selectedTask.id] ?? [],
+                    data.focusedLogs
+                  ),
                 }));
               }
             });

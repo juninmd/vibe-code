@@ -11,9 +11,39 @@ import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
 import { verifyWorktree } from "./verify";
 
+const REVIEW_AUTO_APPLY = process.env.VIBE_CODE_REVIEW_AUTO_APPLY !== "false";
+
+function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
+  const formattedFindings = findings
+    .slice(0, 30)
+    .map((f, i) => `${i + 1}. ${f}`)
+    .join("\n");
+  return [
+    "You are continuing an existing coding task after review feedback.",
+    "Apply the actionable review suggestions below directly in the repository.",
+    "",
+    "Rules:",
+    "- Implement concrete fixes in code and tests when relevant.",
+    "- Do NOT rewrite unrelated files.",
+    "- Keep fixes minimal and aligned with the existing stack.",
+    "- If a suggestion is not applicable, skip it and continue with the rest.",
+    "- Do not open PRs or perform git push; only change files.",
+    "",
+    "Task context:",
+    `Title: ${task.title}`,
+    task.description ? `Description: ${task.description}` : "",
+    "",
+    "Actionable review findings:",
+    formattedFindings,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Appends to .gitignore in the worktree, creating it if needed. */
 async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
-  const gitignorePath = join(wtPath, ".gitignore");
+  // Use .git/info/exclude instead of .gitignore to avoid generating tracked file changes.
+  const gitignorePath = join(wtPath, ".git", "info", "exclude");
   try {
     const content = await readFile(gitignorePath, "utf8").catch(() => "");
     const lines = content.split("\n").map((l) => l.trim());
@@ -154,6 +184,7 @@ export async function executeAgent(
     sysLog(`Workspace ready at ${wtPath}`);
     sysLog(`Branch: ${branch}`);
 
+    let agentExitCode: number | null = null;
     const prompt = await buildPromptAsync(task, wtPath);
     for await (const event of engine.execute(prompt, wtPath, {
       runId: run.id,
@@ -161,12 +192,20 @@ export async function executeAgent(
       model,
     })) {
       if (abort.signal.aborted) break;
+      if (event.type === "complete") {
+        agentExitCode = event.exitCode ?? 0;
+        continue;
+      }
       await handleAgentEvent(event, run.id, task.id, db, hub, () => {
         lastActivity = Date.now();
       });
     }
 
     if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+
+    if (agentExitCode !== null && agentExitCode !== 0) {
+      throw new Error(`Agent exited with code ${agentExitCode}`);
+    }
 
     const baseBranch = task.baseBranch || repo.defaultBranch;
 
@@ -182,17 +221,56 @@ export async function executeAgent(
 
     if (REVIEW_ENABLED) {
       sysLog("Running review pipeline...");
-      const blockers = await runReviewPipeline(
+      const reviewResult = await runReviewPipeline(
         task,
         run,
         wtPath,
         baseBranch,
         db,
         hub,
-        (_rid, _tid, content) => sysLog(content)
+        (_rid, _tid, content) => sysLog(content),
+        engine.name,
+        model
       );
-      if (blockers.length > 0 && REVIEW_STRICT)
-        throw new Error(`Review blockers: ${blockers.join(", ")}`);
+
+      if (REVIEW_AUTO_APPLY && reviewResult.actionableFindings.length > 0) {
+        sysLog(
+          `Applying ${reviewResult.actionableFindings.length} review suggestion(s) automatically...`
+        );
+        let autofixExitCode: number | null = null;
+        const autofixPrompt = buildReviewAutofixPrompt(task, reviewResult.actionableFindings);
+        for await (const event of engine.execute(autofixPrompt, wtPath, {
+          runId: run.id,
+          signal: abort.signal,
+          model,
+        })) {
+          if (abort.signal.aborted) break;
+          if (event.type === "complete") {
+            autofixExitCode = event.exitCode ?? 0;
+            continue;
+          }
+          await handleAgentEvent(event, run.id, task.id, db, hub, () => {
+            lastActivity = Date.now();
+          });
+        }
+
+        if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+
+        if (autofixExitCode !== null && autofixExitCode !== 0) {
+          throw new Error(`Review auto-apply exited with code ${autofixExitCode}`);
+        }
+
+        if (await git.hasChanges(wtPath)) {
+          await git.commitAll(wtPath, `chore: apply review suggestions for ${task.title}`);
+          sysLog("Review suggestions applied and committed ✓");
+          await verifyWorktree(wtPath, sysLog);
+        } else {
+          sysLog("No file changes produced by review auto-apply.");
+        }
+      }
+
+      if (reviewResult.blockers.length > 0 && REVIEW_STRICT)
+        throw new Error(`Review blockers: ${reviewResult.blockers.join(", ")}`);
     }
 
     db.tasks.updateField(task.id, "branch_name", branch);

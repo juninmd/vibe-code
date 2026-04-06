@@ -8,6 +8,11 @@ export const REVIEW_ENABLED = process.env.VIBE_CODE_REVIEW_ENABLED !== "false";
 // Set VIBE_CODE_REVIEW_STRICT=true to block PR on review failures (default: advisory only)
 export const REVIEW_STRICT = process.env.VIBE_CODE_REVIEW_STRICT === "true";
 
+export interface ReviewPipelineResult {
+  blockers: string[];
+  actionableFindings: string[];
+}
+
 export async function runReviewPipeline(
   task: Task,
   run: AgentRun,
@@ -15,8 +20,10 @@ export async function runReviewPipeline(
   defaultBranch: string,
   db: Db,
   hub: BroadcastHub,
-  sysLog: (runId: string, taskId: string, content: string) => void
-): Promise<string[]> {
+  sysLog: (runId: string, taskId: string, content: string) => void,
+  reviewEngine?: string,
+  reviewModel?: string
+): Promise<ReviewPipelineResult> {
   sysLog(run.id, task.id, "Starting review pipeline (4 agents)...");
 
   const results = await Promise.all(
@@ -27,11 +34,14 @@ export async function runReviewPipeline(
         taskTitle: task.title,
         taskDescription: task.description,
         defaultBranch,
+        reviewEngine,
+        reviewModel,
       })
     )
   );
 
   const blockers: string[] = [];
+  const actionableFindings: string[] = [];
 
   for (const result of results) {
     const label = PERSONA_LABELS[result.persona];
@@ -52,15 +62,29 @@ export async function runReviewPipeline(
         .map((l) => `[${label}] ${l}`);
       blockers.push(...blockerLines);
     }
+
+    const actionableLines = result.content
+      .split("\n")
+      .filter(
+        (l) =>
+          (l.startsWith("WARNING:") || l.startsWith("INFO:")) &&
+          !l.includes("[reviewer:") &&
+          !l.includes(":stderr")
+      )
+      .map((l) => `[${label}] ${l}`);
+    actionableFindings.push(...actionableLines);
   }
 
   if (blockers.length === 0) {
     sysLog(run.id, task.id, "Review pipeline passed — no blockers found.");
   } else {
-    sysLog(run.id, task.id, `Review pipeline failed — ${blockers.length} blocker(s) found.`);
+    sysLog(run.id, task.id, `Review pipeline finished with ${blockers.length} blocker(s).`);
   }
 
-  return blockers;
+  return {
+    blockers,
+    actionableFindings,
+  };
 }
 
 /** Broadcast and persist a review log line. */

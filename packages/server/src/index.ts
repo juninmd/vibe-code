@@ -34,6 +34,16 @@ import { mkdir } from "node:fs/promises";
 await mkdir(DATA_DIR, { recursive: true });
 
 const db = createDb(DB_PATH);
+const persistedGeminiApiKey = db.settings.get("gemini_api_key");
+if (!process.env.GEMINI_API_KEY && persistedGeminiApiKey) {
+  const normalized = persistedGeminiApiKey.trim().startsWith("GEMINI_API_KEY=")
+    ? persistedGeminiApiKey.trim().slice("GEMINI_API_KEY=".length).trim()
+    : persistedGeminiApiKey.trim();
+  if (normalized) {
+    process.env.GEMINI_API_KEY = normalized;
+    console.info(`[startup] Loaded persisted GEMINI_API_KEY (len=${normalized.length})`);
+  }
+}
 const git = new GitService(DATA_DIR);
 const registry = new EngineRegistry();
 const hub = new BroadcastHub();
