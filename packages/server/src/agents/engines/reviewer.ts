@@ -6,7 +6,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export type ReviewPersona = "frontend" | "backend" | "security" | "quality";
+export type ReviewPersona = "frontend" | "backend" | "security" | "quality" | "docs";
 
 interface ReviewEvent {
   persona: ReviewPersona;
@@ -62,6 +62,20 @@ Format each issue as one of:
   INFO: <description>
 If there are no issues, write: LGTM
 Be concise, specific, and actionable. Reference file names when relevant.`,
+
+  docs: `You are a technical documentation reviewer for a pull request diff.
+Review ONLY the code changes shown in the diff below.
+Focus on: missing developer documentation, unclear architecture decisions, behavior changes not captured in docs, migration notes, and operational impacts.
+Format each issue as one of:
+  BLOCKER: <description>  (documentation gaps that can break rollout/operation)
+  WARNING: <description>
+  INFO: <description>
+When useful, include specific suggestions for:
+- merge request description sections
+- docs file structure under docs/
+- README.md and AGENTS.md updates
+If there are no issues, write: LGTM
+Be concise, specific, and actionable. Reference file names when relevant.`,
 };
 
 const PERSONA_LABELS: Record<ReviewPersona, string> = {
@@ -69,6 +83,7 @@ const PERSONA_LABELS: Record<ReviewPersona, string> = {
   backend: "Backend",
   security: "Security",
   quality: "Quality",
+  docs: "Docs",
 };
 
 /** Get the git diff for all changes on the current branch vs the base branch. */

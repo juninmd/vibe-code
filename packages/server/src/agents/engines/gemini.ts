@@ -46,6 +46,21 @@ export class GeminiEngine implements AgentEngine {
     }
   }
 
+  private parseProviderLoadSignals(line: string): {
+    skills?: number;
+    agents?: number;
+    tools?: number;
+  } {
+    const out: { skills?: number; agents?: number; tools?: number } = {};
+    const skillMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+skills?/i);
+    const agentMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+agents?/i);
+    const toolMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+tools?/i);
+    if (skillMatch?.[1]) out.skills = Number(skillMatch[1]);
+    if (agentMatch?.[1]) out.agents = Number(agentMatch[1]);
+    if (toolMatch?.[1]) out.tools = Number(toolMatch[1]);
+    return out;
+  }
+
   async isAvailable(): Promise<boolean> {
     return this.hasCli();
   }
@@ -122,7 +137,13 @@ export class GeminiEngine implements AgentEngine {
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(
+    const providerLoad = {
+      skills: null as number | null,
+      agents: null as number | null,
+      tools: null as number | null,
+    };
+
+    for await (const event of streamProcess(
       proc,
       (line) => {
         const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
@@ -137,7 +158,25 @@ export class GeminiEngine implements AgentEngine {
         return events;
       },
       options?.signal
-    );
+    )) {
+      if (event.type === "log" && event.content) {
+        const parsed = this.parseProviderLoadSignals(event.content);
+        if (parsed.skills !== undefined) providerLoad.skills = parsed.skills;
+        if (parsed.agents !== undefined) providerLoad.agents = parsed.agents;
+        if (parsed.tools !== undefined) providerLoad.tools = parsed.tools;
+      }
+      yield event;
+    }
+
+    yield {
+      type: "log",
+      stream: "system",
+      content:
+        `[gemini] Provider load summary: ` +
+        `skills=${providerLoad.skills ?? "n/a"}, ` +
+        `agents=${providerLoad.agents ?? "n/a"}, ` +
+        `tools=${providerLoad.tools ?? "n/a"}`,
+    };
 
     if (options?.runId) this.processes.delete(options.runId);
   }

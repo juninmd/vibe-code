@@ -3,7 +3,7 @@ import type { Db } from "../../db";
 import type { BroadcastHub } from "../../ws/broadcast";
 import { PERSONA_LABELS, type ReviewPersona, runPersonaReview } from "../engines/reviewer";
 
-const ALL_PERSONAS: ReviewPersona[] = ["frontend", "backend", "security", "quality"];
+const ALL_PERSONAS: ReviewPersona[] = ["frontend", "backend", "security", "quality", "docs"];
 export const REVIEW_ENABLED = process.env.VIBE_CODE_REVIEW_ENABLED !== "false";
 // Set VIBE_CODE_REVIEW_STRICT=true to block PR on review failures (default: advisory only)
 export const REVIEW_STRICT = process.env.VIBE_CODE_REVIEW_STRICT === "true";
@@ -11,6 +11,7 @@ export const REVIEW_STRICT = process.env.VIBE_CODE_REVIEW_STRICT === "true";
 export interface ReviewPipelineResult {
   blockers: string[];
   actionableFindings: string[];
+  docsFindings: string[];
 }
 
 export async function runReviewPipeline(
@@ -24,24 +25,26 @@ export async function runReviewPipeline(
   reviewEngine?: string,
   reviewModel?: string
 ): Promise<ReviewPipelineResult> {
-  sysLog(run.id, task.id, "Starting review pipeline (4 agents)...");
+  sysLog(run.id, task.id, `Starting review pipeline (${ALL_PERSONAS.length} agents)...`);
 
-  const results = await Promise.all(
-    ALL_PERSONAS.map((persona) =>
-      runPersonaReview({
-        persona,
-        worktreePath: wtPath,
-        taskTitle: task.title,
-        taskDescription: task.description,
-        defaultBranch,
-        reviewEngine,
-        reviewModel,
-      })
-    )
-  );
+  const results = [];
+  for (const persona of ALL_PERSONAS) {
+    // Keep deterministic order and ensure docs always runs last.
+    const result = await runPersonaReview({
+      persona,
+      worktreePath: wtPath,
+      taskTitle: task.title,
+      taskDescription: task.description,
+      defaultBranch,
+      reviewEngine,
+      reviewModel,
+    });
+    results.push(result);
+  }
 
   const blockers: string[] = [];
   const actionableFindings: string[] = [];
+  const docsFindings: string[] = [];
 
   for (const result of results) {
     const label = PERSONA_LABELS[result.persona];
@@ -72,7 +75,11 @@ export async function runReviewPipeline(
           !l.includes(":stderr")
       )
       .map((l) => `[${label}] ${l}`);
-    actionableFindings.push(...actionableLines);
+    if (result.persona === "docs") {
+      docsFindings.push(...actionableLines);
+    } else {
+      actionableFindings.push(...actionableLines);
+    }
   }
 
   if (blockers.length === 0) {
@@ -84,6 +91,7 @@ export async function runReviewPipeline(
   return {
     blockers,
     actionableFindings,
+    docsFindings,
   };
 }
 

@@ -12,6 +12,20 @@ import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-
 import { verifyWorktree } from "./verify";
 
 const REVIEW_AUTO_APPLY = process.env.VIBE_CODE_REVIEW_AUTO_APPLY !== "false";
+const DOCS_AUTO_APPLY = process.env.VIBE_CODE_DOCS_AUTO_APPLY !== "false";
+
+function taskSlug(task: Task): string {
+  return task.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 48);
+}
+
+function docsRelativePath(task: Task): string {
+  const slug = taskSlug(task);
+  return `docs/tasks/${task.id}-${slug || "task"}.md`;
+}
 
 function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
   const formattedFindings = findings
@@ -24,6 +38,8 @@ function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
     "",
     "Rules:",
     "- Implement concrete fixes in code and tests when relevant.",
+    "- If changed logic has no tests, add automated tests.",
+    "- If the task creates a new frontend project, use React + Vite (prefer TypeScript) instead of plain HTML/JS.",
     "- Do NOT rewrite unrelated files.",
     "- Keep fixes minimal and aligned with the existing stack.",
     "- If a suggestion is not applicable, skip it and continue with the rest.",
@@ -35,6 +51,37 @@ function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
     "",
     "Actionable review findings:",
     formattedFindings,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
+  const docsFile = docsRelativePath(task);
+  const formattedFindings = findings
+    .slice(0, 30)
+    .map((f, i) => `${i + 1}. ${f}`)
+    .join("\n");
+  return [
+    "You are the documentation finisher for this task.",
+    "Implement documentation updates directly in the repository.",
+    "",
+    "Required actions:",
+    `1) Create or update ${docsFile} with detailed content.`,
+    "2) Include clear sections: Contexto, Funcionalidades entregues, Decisões de arquitetura, Impactos e riscos, Como validar, Rollback, Próximos passos.",
+    "3) If behavior/contracts/workflow changed, update README.md and/or AGENTS.md accordingly.",
+    "4) Ensure docs explicitly mention testing strategy and commands used.",
+    "5) If frontend was created from scratch, document why React + Vite was used and project structure.",
+    "4) Keep text factual and based only on current repository changes.",
+    "6) Do not push or open PR; only modify files.",
+    "",
+    "Task context:",
+    `Title: ${task.title}`,
+    task.description ? `Description: ${task.description}` : "",
+    "",
+    "Documentation review findings:",
+    formattedFindings ||
+      "(no explicit findings; still create detailed docs file based on current diff)",
   ]
     .filter(Boolean)
     .join("\n");
@@ -64,6 +111,8 @@ async function buildPRBody(
   git: GitService,
   _barePath: string
 ): Promise<string> {
+  const docsRel = docsRelativePath(task);
+  const docsFile = join(wtPath, docsRel);
   const lines: string[] = [];
 
   if (task.description?.trim()) {
@@ -110,6 +159,18 @@ async function buildPRBody(
     }
   } catch {
     // Non-fatal — diff summary is best-effort
+  }
+
+  // If docs file was generated, include it to keep PR description detailed and traceable.
+  try {
+    const docsText = (await readFile(docsFile, "utf8")).trim();
+    if (docsText) {
+      const clipped =
+        docsText.length > 8000 ? `${docsText.slice(0, 8000)}\n\n...[truncated]` : docsText;
+      lines.push(`## Detailed Notes (from ${docsRel})\n${clipped}`);
+    }
+  } catch {
+    // Optional docs file
   }
 
   lines.push(`---\n_Created by vibe-code agent using **${engineName}**_ 🤖`);
@@ -266,6 +327,39 @@ export async function executeAgent(
           await verifyWorktree(wtPath, sysLog);
         } else {
           sysLog("No file changes produced by review auto-apply.");
+        }
+      }
+
+      if (DOCS_AUTO_APPLY) {
+        sysLog("Running docs finishing step...");
+        let docsExitCode: number | null = null;
+        const docsPrompt = buildDocsAutofixPrompt(task, reviewResult.docsFindings);
+        for await (const event of engine.execute(docsPrompt, wtPath, {
+          runId: run.id,
+          signal: abort.signal,
+          model,
+        })) {
+          if (abort.signal.aborted) break;
+          if (event.type === "complete") {
+            docsExitCode = event.exitCode ?? 0;
+            continue;
+          }
+          await handleAgentEvent(event, run.id, task.id, db, hub, () => {
+            lastActivity = Date.now();
+          });
+        }
+
+        if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+        if (docsExitCode !== null && docsExitCode !== 0) {
+          throw new Error(`Docs step exited with code ${docsExitCode}`);
+        }
+
+        if (await git.hasChanges(wtPath)) {
+          await git.commitAll(wtPath, `docs: add implementation notes for ${task.title}`);
+          sysLog("Docs step applied and committed ✓");
+          await verifyWorktree(wtPath, sysLog);
+        } else {
+          sysLog("Docs step finished with no file changes.");
         }
       }
 

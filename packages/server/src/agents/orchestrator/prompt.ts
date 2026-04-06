@@ -189,6 +189,8 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
     "- Never delete remote repositories (GitHub/GitLab).",
     "",
     "**Code quality rules:**",
+    "- Add or update automated tests for every changed behavior. If no test setup exists, create minimal runnable tests.",
+    "- For net-new frontend projects, use React + Vite (prefer TypeScript) instead of plain HTML/JS.",
     "- No hardcoded secrets, credentials or API keys — use environment variables.",
     "- **CRITICAL: Respect `.gitignore`. Do NOT create, modify, or read files that are ignored by git.**",
     "- Validate user inputs. Handle errors gracefully with meaningful messages.",
