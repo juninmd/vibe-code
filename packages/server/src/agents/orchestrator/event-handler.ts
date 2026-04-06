@@ -24,26 +24,12 @@ export async function handleAgentEvent(
     db.logs.create(runId, stream, event.content);
     // Log to server terminal in real-time
     logAgentEvent(taskId, stream, event.content);
-    // Only broadcast to clients subscribed to this task
-    hub.broadcastToTask(taskId, {
-      type: "agent_log",
-      runId,
-      taskId,
-      stream,
-      content: event.content,
-      timestamp: new Date().toISOString(),
-    });
+    // Batch log delivery to reduce WS message volume during heavy output
+    hub.batchLog(taskId, runId, stream, event.content, new Date().toISOString());
   } else if (event.type === "error" && event.content) {
     db.logs.create(runId, "stderr", event.content);
     logAgentEvent(taskId, "stderr", event.content);
-    hub.broadcastToTask(taskId, {
-      type: "agent_log",
-      runId,
-      taskId,
-      stream: "stderr",
-      content: event.content,
-      timestamp: new Date().toISOString(),
-    });
+    hub.batchLog(taskId, runId, "stderr", event.content, new Date().toISOString());
   } else if (event.type === "status" && event.content) {
     // Status updates go to all clients (kanban board reflects live status)
     const run = db.runs.getById(runId);
