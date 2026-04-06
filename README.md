@@ -34,7 +34,7 @@
 | **Bug Fixes** | Resolver issues usando agentes de IA |
 | **Documentação** | Gerar ou atualizar docs, READMEs automaticamente |
 | **CI/CD Customizado** | Orquestrar workflows complexos com controle fino |
-| **Code Review Automático** | Pipeline de review com múltiplas personas (frontend, backend, security, quality) |
+| **Code Review Automático** | Pipeline de review com múltiplas personas (frontend, backend, security, quality, docs) |
 
 ---
 
@@ -254,7 +254,8 @@ O repositório será clonado como **bare clone** em `~/.vibe-code/repos/`
 4. Agent vai:
    - ✅ Criar uma branch `vibe-code/{id}/{title}`
    - 🔧 Fazer commits com suas mudanças
-   - 📊 Passar pelo pipeline de review (se habilitado)
+  - 📊 Passar pelo pipeline de review (se habilitado)
+  - 📝 Executar etapa final de docs (gera `docs/tasks/<task-id>.md` e atualiza README/AGENTS quando necessário)
    - 📤 Push para origin e criar PR
 5. Task mostra status: **In Progress** → **Review** → **Done**
 
@@ -274,6 +275,8 @@ VIBE_CODE_MAX_AGENTS=4                        # Max concurrent runs
 VIBE_CODE_AGENT_TIMEOUT_MS=7200000            # 2h timeout (default: 2h)
 VIBE_CODE_REVIEW_ENABLED=true                 # Enable review pipeline
 VIBE_CODE_REVIEW_STRICT=false                 # Block PR on review failures
+VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/quality suggestions
+VIBE_CODE_DOCS_AUTO_APPLY=true                # Run docs finisher step before PR creation
 
 # GitHub (Para criar PRs automaticamente)
 GITHUB_TOKEN=ghp_xxxxx...                     # (required para PRs)
