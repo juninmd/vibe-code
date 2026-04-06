@@ -34,8 +34,11 @@ export class EngineRegistry {
     const results = await Promise.all(
       Array.from(this.engines.values()).map(async (engine) => {
         const available = await engine.isAvailable().catch(() => false);
+        const setupIssue = engine.getSetupIssue
+          ? await engine.getSetupIssue().catch(() => null)
+          : null;
         let version: string | null = null;
-        if (available && engine.getVersion) {
+        if (engine.getVersion) {
           version = await Promise.race<string | null>([
             engine.getVersion().catch(() => null),
             new Promise<null>((res) => setTimeout(() => res(null), 3000)),
@@ -53,6 +56,7 @@ export class EngineRegistry {
           available,
           version,
           activeRuns: runCount,
+          setupIssue,
         } satisfies EngineInfo;
       })
     );

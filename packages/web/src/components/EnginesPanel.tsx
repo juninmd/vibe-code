@@ -29,6 +29,8 @@ function EngineCard({ engine }: { engine: EngineInfo }) {
   const Icon = meta.icon;
 
   const [showInstall, setShowInstall] = useState(false);
+  const needsConfig = !!engine.setupIssue && engine.setupIssue !== "Gemini CLI não instalado";
+  const unavailableLabel = needsConfig ? "precisa configurar" : "não instalado";
 
   return (
     <div
@@ -57,13 +59,21 @@ function EngineCard({ engine }: { engine: EngineInfo }) {
               className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                 engine.available
                   ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700/40"
-                  : "bg-zinc-800 text-zinc-500 border border-zinc-700/40"
+                  : needsConfig
+                    ? "bg-amber-900/40 text-amber-300 border border-amber-700/40"
+                    : "bg-zinc-800 text-zinc-500 border border-zinc-700/40"
               }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${engine.available ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`}
+                className={`w-1.5 h-1.5 rounded-full ${
+                  engine.available
+                    ? "bg-emerald-400 animate-pulse"
+                    : needsConfig
+                      ? "bg-amber-400"
+                      : "bg-zinc-600"
+                }`}
               />
-              {engine.available ? "disponível" : "não instalado"}
+              {engine.available ? "disponível" : unavailableLabel}
             </span>
 
             {/* Active runs */}
@@ -105,8 +115,25 @@ function EngineCard({ engine }: { engine: EngineInfo }) {
         <p className="text-xs text-zinc-500 mt-2.5 leading-relaxed">{meta.description}</p>
       )}
 
+      {engine.setupIssue && (
+        <div
+          className={`mt-3 text-xs rounded-lg px-3 py-2 border ${
+            needsConfig
+              ? "border-amber-800/40 bg-amber-950/30 text-amber-300"
+              : "border-zinc-800/60 bg-zinc-900/50 text-zinc-500"
+          }`}
+        >
+          {engine.setupIssue}
+          {needsConfig && (
+            <span className="block mt-1 text-[11px]">
+              Abra Configurações para concluir a configuração.
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Not installed: install instructions */}
-      {!engine.available && meta.install && (
+      {!engine.available && !needsConfig && meta.install && (
         <div className="mt-3">
           <button
             type="button"

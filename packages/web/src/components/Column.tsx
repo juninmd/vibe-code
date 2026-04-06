@@ -81,6 +81,9 @@ interface ColumnProps {
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
   horizontal?: boolean;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
@@ -163,6 +166,9 @@ function ColumnComponent({
   onClearFailed,
   onRetryAllFailed,
   horizontal = false,
+  collapsible = false,
+  collapsed = false,
+  onToggleCollapse,
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
@@ -192,6 +198,28 @@ function ColumnComponent({
 
           {/* Action buttons */}
           <div className="flex items-center gap-0.5">
+            {collapsible && onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                title={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
+                className="p-1.5 rounded-lg text-zinc-600 hover:text-amber-300 hover:bg-amber-950/30 transition-all cursor-pointer"
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={collapsed ? "" : "rotate-180"}
+                >
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </button>
+            )}
             {status === "done" && tasks.length > 0 && onArchiveDone && (
               <button
                 type="button"
@@ -276,35 +304,44 @@ function ColumnComponent({
       </div>
 
       {/* Cards area */}
-      <div
-        className={
-          horizontal
-            ? "overflow-x-auto px-2.5 py-2.5 min-h-[80px]"
-            : "flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-[80px]"
-        }
-      >
-        <SortableContext
-          items={taskIds}
-          strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
+      {!collapsed && (
+        <div
+          className={
+            horizontal
+              ? "overflow-x-auto px-2.5 py-2.5 min-h-[80px]"
+              : "flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-[80px]"
+          }
         >
-          <div className={horizontal ? "flex gap-2" : "space-y-2"}>
-            {tasks.map((task) => (
-              <div key={task.id} className={horizontal ? "w-[320px] shrink-0" : undefined}>
-                <TaskCard task={task} onClick={onTaskClick} onRetryPR={onRetryPR} />
-              </div>
-            ))}
-          </div>
-        </SortableContext>
+          <SortableContext
+            items={taskIds}
+            strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
+          >
+            <div className={horizontal ? "flex gap-2" : "space-y-2"}>
+              {tasks.map((task) => (
+                <div key={task.id} className={horizontal ? "w-[320px] shrink-0" : undefined}>
+                  <TaskCard task={task} onClick={onTaskClick} onRetryPR={onRetryPR} />
+                </div>
+              ))}
+            </div>
+          </SortableContext>
 
-        {tasks.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-700 select-none">
-            <span className="opacity-50">
-              <EmptyStateIcon icon={cfg.emptyIcon} />
-            </span>
-            <span className="text-[11px]">{cfg.emptyText}</span>
-          </div>
-        )}
-      </div>
+          {tasks.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-700 select-none">
+              <span className="opacity-50">
+                <EmptyStateIcon icon={cfg.emptyIcon} />
+              </span>
+              <span className="text-[11px]">{cfg.emptyText}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {collapsed && (
+        <div className="px-4 py-2 text-xs text-zinc-500 border-t border-white/[0.03]">
+          Coluna recolhida. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
+          {tasks.length !== 1 ? "s" : ""}.
+        </div>
+      )}
     </div>
   );
 }
@@ -317,6 +354,9 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.onRetryPR === next.onRetryPR &&
     prev.onArchiveDone === next.onArchiveDone &&
     prev.onClearFailed === next.onClearFailed &&
-    prev.onRetryAllFailed === next.onRetryAllFailed
+    prev.onRetryAllFailed === next.onRetryAllFailed &&
+    prev.collapsible === next.collapsible &&
+    prev.collapsed === next.collapsed &&
+    prev.onToggleCollapse === next.onToggleCollapse
   );
 });

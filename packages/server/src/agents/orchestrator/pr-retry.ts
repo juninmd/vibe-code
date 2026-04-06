@@ -17,6 +17,7 @@ export async function retryPR(
 
   const repo = db.repos.getById(task.repoId);
   if (!repo) throw new Error("Repository not found");
+  const baseBranch = task.baseBranch || repo.defaultBranch;
 
   const barePath = repo.localPath ?? git.getBarePath(repo.name);
   const run = db.runs.getLatestByTask(taskId);
@@ -43,7 +44,7 @@ export async function retryPR(
     task.branchName,
     repo.name,
     wtId,
-    repo.defaultBranch,
+    baseBranch,
     false
   );
 
@@ -53,7 +54,14 @@ export async function retryPR(
 
     // Create PR
     const prBody = `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`;
-    const prUrl = await git.createPR(wtPath, repo.url, task.branchName, task.title, prBody);
+    const prUrl = await git.createPR(
+      wtPath,
+      repo.url,
+      task.branchName,
+      task.title,
+      prBody,
+      baseBranch
+    );
 
     // Update task with PR URL
     db.tasks.updateField(task.id, "pr_url", prUrl);

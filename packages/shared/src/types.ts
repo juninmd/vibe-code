@@ -172,6 +172,7 @@ export interface EngineInfo {
   available: boolean;
   version: string | null;
   activeRuns: number;
+  setupIssue?: string | null;
 }
 
 export type GitProvider = "github" | "gitlab" | "manual";
@@ -251,9 +252,15 @@ export interface ProviderSettings {
   username?: string;
 }
 
+export interface GeminiSettings {
+  apiKey: string;
+  keySet: boolean;
+}
+
 export interface SettingsResponse {
   github: ProviderSettings;
   gitlab: ProviderSettings;
+  gemini: GeminiSettings;
   theme: string;
 }
 
@@ -261,6 +268,7 @@ export interface UpdateSettingsRequest {
   githubToken?: string;
   gitlabToken?: string;
   gitlabBaseUrl?: string;
+  geminiApiKey?: string;
   theme?: string;
 }
 
