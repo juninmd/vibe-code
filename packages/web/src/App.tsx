@@ -140,6 +140,26 @@ export default function App() {
             });
           }
           break;
+        case "agent_logs_batch":
+          // Batched log delivery — single state update for multiple lines.
+          if (selectedTask?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: [
+                  ...(prev[msg.taskId] ?? []),
+                  ...msg.logs.map((l, i) => ({
+                    id: Date.now() + i,
+                    runId: l.runId,
+                    stream: l.stream,
+                    content: l.content,
+                    timestamp: l.timestamp,
+                  })),
+                ],
+              }));
+            });
+          }
+          break;
         case "run_updated":
           startTransition(() => {
             updateRunLocal(msg.run.taskId, msg.run);

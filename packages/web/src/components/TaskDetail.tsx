@@ -844,6 +844,7 @@ export function TaskDetail({
               liveLogs={liveLogs}
               isRunning={isRunning}
               onSendInput={(input) => onSendInput(task.id, input)}
+              currentStatus={task.latestRun?.currentStatus}
             />
           </div>
 
