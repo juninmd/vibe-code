@@ -13,6 +13,26 @@ interface ProjectContext {
   agentInstructions: string | null;
 }
 
+async function detectPreferredPm(workdir: string): Promise<string> {
+  const pmFiles = [
+    ["pnpm-lock.yaml", "pnpm"],
+    ["bun.lock", "bun"],
+    ["bun.lockb", "bun"],
+    ["yarn.lock", "yarn"],
+    ["package-lock.json", "npm"],
+  ] as const;
+
+  for (const [file, pm] of pmFiles) {
+    try {
+      await readFile(join(workdir, file));
+      return pm;
+    } catch {}
+  }
+
+  // Default preference when no lock file is present.
+  return "pnpm";
+}
+
 async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   const ctx: ProjectContext = {
     hasPackageJson: false,
@@ -26,18 +46,17 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   };
 
   try {
+    const pm = await detectPreferredPm(workdir);
     const pkgRaw = await readFile(join(workdir, "package.json"), "utf8");
     const pkg = JSON.parse(pkgRaw);
     ctx.hasPackageJson = true;
+    ctx.packageManager = pm;
 
     const scripts = pkg.scripts ?? {};
-    ctx.testCommand =
-      scripts.test && !scripts.test.includes("no test") ? `${detectPm(workdir)} run test` : null;
-    ctx.buildCommand = scripts.build ? `${detectPm(workdir)} run build` : null;
+    ctx.testCommand = scripts.test && !scripts.test.includes("no test") ? `${pm} run test` : null;
+    ctx.buildCommand = scripts.build ? `${pm} run build` : null;
     ctx.lintCommand =
-      (scripts.lint ?? scripts["lint:fix"] ?? scripts.check)
-        ? `${detectPm(workdir)} run lint`
-        : null;
+      (scripts.lint ?? scripts["lint:fix"] ?? scripts.check) ? `${pm} run lint` : null;
 
     const deps = {
       ...(pkg.dependencies ?? {}),
@@ -53,21 +72,6 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
     else ctx.mainLanguages.push("JavaScript");
     if (deps.tailwindcss) ctx.frameworks.push("TailwindCSS");
     if (deps.prisma) ctx.frameworks.push("Prisma");
-
-    const pmFiles = [
-      ["bun.lock", "bun"],
-      ["bun.lockb", "bun"],
-      ["pnpm-lock.yaml", "pnpm"],
-      ["yarn.lock", "yarn"],
-    ];
-    for (const [file, pm] of pmFiles) {
-      try {
-        await readFile(join(workdir, file));
-        ctx.packageManager = pm;
-        break;
-      } catch {}
-    }
-    if (!ctx.packageManager) ctx.packageManager = "npm";
   } catch {
     // No package.json — could be Python, Go, Rust, etc.
     try {
@@ -101,11 +105,6 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   }
 
   return ctx;
-}
-
-function detectPm(_workdir: string): string {
-  // Quick sync check — we'll refine async above
-  return "bun";
 }
 
 export async function buildPromptAsync(task: Task, workdir: string): Promise<string> {
@@ -189,6 +188,7 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
     "- Never delete remote repositories (GitHub/GitLab).",
     "",
     "**Code quality rules:**",
+    "- Prefer pnpm over npm whenever possible (unless the repository already standardizes on another package manager).",
     "- Add or update automated tests for every changed behavior. If no test setup exists, create minimal runnable tests.",
     "- For net-new frontend projects, use React + Vite (prefer TypeScript) instead of plain HTML/JS.",
     "- No hardcoded secrets, credentials or API keys — use environment variables.",

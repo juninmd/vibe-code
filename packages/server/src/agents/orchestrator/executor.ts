@@ -1,4 +1,4 @@
-import { appendFile, readFile } from "node:fs/promises";
+import { access, appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
@@ -24,7 +24,16 @@ function taskSlug(task: Task): string {
 
 function docsRelativePath(task: Task): string {
   const slug = taskSlug(task);
-  return `docs/tasks/${task.id}-${slug || "task"}.md`;
+  return `docs/tasks/${slug || "task"}.md`;
+}
+
+function normalizeAsciiText(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E\n\r\t]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
 }
 
 function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
@@ -58,6 +67,7 @@ function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
 
 function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
   const docsFile = docsRelativePath(task);
+  const screenshotFile = `docs/assets/${taskSlug(task) || "task"}.png`;
   const formattedFindings = findings
     .slice(0, 30)
     .map((f, i) => `${i + 1}. ${f}`)
@@ -71,9 +81,12 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     "2) Include clear sections: Contexto, Funcionalidades entregues, Decisões de arquitetura, Impactos e riscos, Como validar, Rollback, Próximos passos.",
     "3) If behavior/contracts/workflow changed, update README.md and/or AGENTS.md accordingly.",
     "4) Ensure docs explicitly mention testing strategy and commands used.",
-    "5) If frontend was created from scratch, document why React + Vite was used and project structure.",
-    "4) Keep text factual and based only on current repository changes.",
-    "6) Do not push or open PR; only modify files.",
+    "5) For frontend tasks, try to run the app locally and capture one screenshot of the UI.",
+    `6) Save screenshot (if captured) to ${screenshotFile} and reference it in docs as markdown image.`,
+    "7) Add an 'Evidencias visuais' section in docs (include URL used and screenshot path, or explain why capture was not possible).",
+    "8) If frontend was created from scratch, document why React + Vite was used and project structure.",
+    "9) Keep text factual and based only on current repository changes.",
+    "10) Do not push or open PR; only modify files.",
     "",
     "Task context:",
     `Title: ${task.title}`,
@@ -102,79 +115,25 @@ async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void
   }
 }
 
-/** Builds a rich PR body with changed files summary. */
-async function buildPRBody(
-  task: Task,
-  engineName: string,
-  wtPath: string,
-  baseBranch: string,
-  git: GitService,
-  _barePath: string
-): Promise<string> {
+/** Builds PR body using only the docs generated in the docs step. */
+async function buildPRBody(task: Task, wtPath: string): Promise<string> {
   const docsRel = docsRelativePath(task);
   const docsFile = join(wtPath, docsRel);
-  const lines: string[] = [];
 
-  if (task.description?.trim()) {
-    lines.push(`## Description\n${task.description.trim()}`);
-  }
-
-  // Try to add changed files summary
-  try {
-    const files = await git.diffSummary(baseBranch, "HEAD", { cwd: wtPath });
-    if (files.length > 0) {
-      const added = files.filter((f) => f.status === "added").length;
-      const modified = files.filter((f) => f.status === "modified").length;
-      const deleted = files.filter((f) => f.status === "deleted").length;
-      const totalAdd = files.reduce((s, f) => s + f.additions, 0);
-      const totalDel = files.reduce((s, f) => s + f.deletions, 0);
-
-      lines.push(
-        `## Changes\n` +
-          `**${files.length} file(s)** changed ` +
-          `(+${totalAdd} / -${totalDel} lines)` +
-          (added ? ` · ${added} added` : "") +
-          (modified ? ` · ${modified} modified` : "") +
-          (deleted ? ` · ${deleted} deleted` : "")
-      );
-
-      const fileList = files
-        .slice(0, 20)
-        .map((f) => {
-          const icon =
-            f.status === "added"
-              ? "🆕"
-              : f.status === "deleted"
-                ? "🗑"
-                : f.status === "renamed"
-                  ? "📝"
-                  : "✏️";
-          return `- ${icon} \`${f.path}\` (+${f.additions}/-${f.deletions})`;
-        })
-        .join("\n");
-      lines.push(fileList);
-      if (files.length > 20) {
-        lines.push(`_...and ${files.length - 20} more files_`);
-      }
-    }
-  } catch {
-    // Non-fatal — diff summary is best-effort
-  }
-
-  // If docs file was generated, include it to keep PR description detailed and traceable.
+  // Use only docs-generated content for MR description.
   try {
     const docsText = (await readFile(docsFile, "utf8")).trim();
     if (docsText) {
       const clipped =
-        docsText.length > 8000 ? `${docsText.slice(0, 8000)}\n\n...[truncated]` : docsText;
-      lines.push(`## Detailed Notes (from ${docsRel})\n${clipped}`);
+        docsText.length > 12000 ? `${docsText.slice(0, 12000)}\n\n...[truncated]` : docsText;
+      return normalizeAsciiText(clipped);
     }
   } catch {
     // Optional docs file
   }
 
-  lines.push(`---\n_Created by vibe-code agent using **${engineName}**_ 🤖`);
-  return lines.join("\n\n");
+  // Fallback when docs file is missing or empty.
+  return normalizeAsciiText(task.description?.trim() || `Task: ${task.title}`);
 }
 
 export async function executeAgent(
@@ -195,7 +154,8 @@ export async function executeAgent(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 40);
-  const branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
+  let branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
+  let resumeExistingBranch = false;
 
   const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 2 * 60 * 60 * 1000;
   const INACTIVITY_MS = Number(process.env.VIBE_CODE_INACTIVITY_MS) || 10 * 60 * 1000;
@@ -227,23 +187,65 @@ export async function executeAgent(
   }, 30_000);
 
   let wtPath: string | undefined;
+  let keepWorkspaceForRetry = false;
   try {
+    let reusableWorkspacePath: string | null = null;
+
+    if (task.status === "failed" && task.branchName) {
+      const exists = await git.branchExists(barePath, task.branchName);
+      if (exists) {
+        branch = task.branchName;
+        resumeExistingBranch = true;
+
+        const previousRun = db.runs
+          .listByTask(task.id)
+          .find((r) => r.id !== run.id && r.status === "failed" && !!r.worktreePath);
+
+        if (previousRun?.worktreePath) {
+          try {
+            await access(previousRun.worktreePath);
+            reusableWorkspacePath = previousRun.worktreePath;
+          } catch {
+            reusableWorkspacePath = null;
+          }
+        }
+      }
+    }
+
     db.runs.updateStatus(run.id, "running", { started_at: new Date().toISOString() });
     sysLog("Setting up workspace...");
-    wtPath = await git.createWorktree(
-      barePath,
-      branch,
-      repo.name,
-      run.id,
-      task.baseBranch || repo.defaultBranch
-    );
+
+    if (reusableWorkspacePath) {
+      wtPath = reusableWorkspacePath;
+      await git.fetchRepo(barePath);
+      sysLog(`Workspace reused at ${wtPath}`);
+    } else {
+      wtPath = await git.createWorktree(
+        barePath,
+        branch,
+        repo.name,
+        run.id,
+        task.baseBranch || repo.defaultBranch,
+        !resumeExistingBranch
+      );
+      sysLog(`Workspace ready at ${wtPath}`);
+    }
+
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
 
     // Ensure opencode.json won't pollute git history
     await ensureGitignoreEntry(wtPath, "opencode.json");
 
-    sysLog(`Workspace ready at ${wtPath}`);
-    sysLog(`Branch: ${branch}`);
+    if (resumeExistingBranch) {
+      sysLog(`Branch: ${branch} (resuming from previous failed run)`);
+      sysLog(
+        reusableWorkspacePath
+          ? "Resume mode: continuing from preserved workspace + branch state."
+          : "Resume mode: continuing from latest committed state on the same branch."
+      );
+    } else {
+      sysLog(`Branch: ${branch}`);
+    }
 
     let agentExitCode: number | null = null;
     const prompt = await buildPromptAsync(task, wtPath);
@@ -376,7 +378,7 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = await buildPRBody(task, engine.name, wtPath, baseBranch, git, barePath);
+      const prBody = await buildPRBody(task, wtPath);
       prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
       sysLog(`PR created: ${prUrl}`);
@@ -394,7 +396,16 @@ export async function executeAgent(
   } catch (err: any) {
     const errMsg = err.message || String(err);
     const isCancelled = !timedOut && abort.signal.aborted;
-    if (!isCancelled) sysLog(`Failed: ${errMsg}`);
+    if (!isCancelled) {
+      keepWorkspaceForRetry = true;
+      if (wtPath) {
+        sysLog(`Workspace preserved for retry at ${wtPath}`);
+      }
+      if (errMsg.includes("Verification failed")) {
+        sysLog("Verification failed. MR creation blocked for this run.");
+      }
+      sysLog(`Failed: ${errMsg}`);
+    }
     db.runs.updateStatus(run.id, "failed", {
       finished_at: new Date().toISOString(),
       error_message: errMsg,
@@ -406,7 +417,7 @@ export async function executeAgent(
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);
-    if (wtPath) {
+    if (wtPath && !keepWorkspaceForRetry) {
       try {
         await git.removeWorktree(barePath, wtPath);
       } catch {}

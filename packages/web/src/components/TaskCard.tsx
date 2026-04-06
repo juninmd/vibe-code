@@ -79,26 +79,29 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       {...attributes}
       {...listeners}
       onClick={() => onClick(task)}
-      className={`glass-card border rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-sm shadow-black/20 ${
+      className={`glass-card border rounded-2xl p-3 cursor-grab active:cursor-grabbing transition-all duration-250 group relative shadow-lg shadow-black/35 overflow-hidden ${
         isRunning
-          ? "border-blue-500/30 shadow-blue-500/10 shadow-md running-glow"
+          ? "border-cyan-400/45 shadow-cyan-500/20 running-glow"
           : task.status === "failed"
-            ? "border-red-500/20 hover:border-red-500/30"
-            : "hover:border-white/10 hover:brightness-110"
+            ? "border-red-500/25 hover:border-red-400/45 hover:shadow-red-900/30"
+            : "hover:border-sky-300/25 hover:shadow-blue-900/30 hover:translate-y-[-1px]"
       }`}
     >
+      {/* Ambient gradient layer */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.04] via-transparent to-cyan-400/[0.05] opacity-80" />
+
       {/* Running accent bar */}
       {isRunning && (
         <>
-          <div className="absolute inset-x-3 top-0 h-px overflow-hidden rounded-full bg-blue-500/20">
-            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-[pulse_1.4s_ease-in-out_infinite]" />
+          <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-cyan-500/25">
+            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-cyan-300 to-transparent animate-[pulse_1.1s_ease-in-out_infinite]" />
           </div>
-          <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-blue-400 animate-pulse" />
+          <div className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-gradient-to-b from-cyan-300 via-blue-400 to-indigo-400 animate-pulse" />
         </>
       )}
 
       {/* Title row */}
-      <div className="flex items-start gap-2 mb-1.5">
+      <div className="relative z-10 flex items-start gap-2 mb-1.5">
         {ProviderIcon && (
           <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
             <ProviderIcon size={13} />
@@ -120,7 +123,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
 
       {/* Description */}
       {task.description && (
-        <p className="text-xs text-zinc-500 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
+        <p className="text-xs text-zinc-400/95 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
           {task.description}
         </p>
       )}
@@ -133,7 +136,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       )}
 
       {/* Footer */}
-      <div className="flex items-center gap-1.5 flex-wrap ml-[21px]">
+      <div className="relative z-10 flex items-center gap-1.5 flex-wrap ml-[21px]">
         {task.repo &&
           (task.repo.url ? (
             <a
@@ -258,10 +261,10 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
 
         {isRunning && (
-          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[160px]">
-            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-cyan-300 ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-cyan-950/30 border border-cyan-800/35 px-2 py-[2px] rounded-md">
+            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
             <span className="truncate">{task.latestRun?.currentStatus || "Executando..."}</span>
-            {elapsed && <span className="shrink-0 text-blue-500/80 tabular-nums">{elapsed}</span>}
+            {elapsed && <span className="shrink-0 text-cyan-200/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
         {!isRunning &&
