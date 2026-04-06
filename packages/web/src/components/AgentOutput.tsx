@@ -1,4 +1,4 @@
-import type { AgentLog } from "@vibe-code/shared";
+import type { AgentLog, LogStream } from "@vibe-code/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { formatTime } from "../utils/date";
@@ -10,6 +10,8 @@ interface AgentOutputProps {
   onSendInput?: (input: string) => void;
   /** If true, renders in full-height mode (for dedicated terminal view) */
   fullHeight?: boolean;
+  /** Latest status from the agent (from run.currentStatus) */
+  currentStatus?: string | null;
 }
 
 const streamColor = (stream: string, content: string) => {
@@ -69,12 +71,64 @@ function detectAwaitingInput(logs: AgentLog[]): string | null {
   return null;
 }
 
+/** Derive token usage and step count from system logs */
+function deriveTokenStats(logs: AgentLog[]): { totalTokens: number; steps: number } {
+  let totalTokens = 0;
+  let steps = 0;
+  for (const log of logs) {
+    if (log.stream === "system") {
+      const m = log.content.match(/tokens used:\s*([\d,]+)/);
+      if (m) {
+        totalTokens += parseInt(m[1].replace(/,/g, ""), 10);
+        steps++;
+      }
+    }
+  }
+  return { totalTokens, steps };
+}
+
+/** Count tool invocations by type from stdout logs */
+function deriveToolStats(logs: AgentLog[]) {
+  let reads = 0;
+  let writes = 0;
+  let searches = 0;
+  let commands = 0;
+  for (const log of logs) {
+    if (log.stream !== "stdout") continue;
+    const c = log.content.trim();
+    if (c.startsWith("Reading")) reads++;
+    else if (c.startsWith("Writing") || c.startsWith("Editing") || c.startsWith("Deleting"))
+      writes++;
+    else if (c.startsWith("Searching")) searches++;
+    else if (c.startsWith("Running:") || c.startsWith("Git:")) commands++;
+  }
+  return { reads, writes, searches, commands };
+}
+
+/** Format token count as human-readable string */
+function fmtTokens(n: number): string {
+  if (n === 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+type StreamFilter = LogStream | "all";
+
+const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
+  { id: "all", label: "Todos" },
+  { id: "stdout", label: "Saída" },
+  { id: "stderr", label: "Erros" },
+  { id: "system", label: "Sistema" },
+];
+
 export function AgentOutput({
   runId,
   liveLogs,
   isRunning,
   onSendInput,
   fullHeight = false,
+  currentStatus,
 }: AgentOutputProps) {
   const [historicLogs, setHistoricLogs] = useState<AgentLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -84,6 +138,7 @@ export function AgentOutput({
   const [matchIdx, setMatchIdx] = useState(0);
   const [pinnedBottom, setPinnedBottom] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -107,6 +162,10 @@ export function AgentOutput({
     const last = historicLogs[historicLogs.length - 1];
     return [...historicLogs, ...liveLogs.filter((l) => l.timestamp > last.timestamp)];
   }, [historicLogs, liveLogs]);
+
+  // Derived stats (only recomputed when allLogs changes)
+  const tokenStats = useMemo(() => deriveTokenStats(allLogs), [allLogs]);
+  const toolStats = useMemo(() => deriveToolStats(allLogs), [allLogs]);
 
   // Detect if agent is waiting for input
   const awaitingQuestion = useMemo(() => {
@@ -135,6 +194,23 @@ export function AgentOutput({
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-match="${matchIdx}"]`);
     el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [matchIdx, showSearch, searchQuery]);
+
+  // Global Ctrl+F to open search within this component
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setShowSearch(true);
+        setTimeout(() => searchRef.current?.focus(), 0);
+      }
+      if (e.key === "Escape" && showSearch) {
+        setShowSearch(false);
+        setSearchQuery("");
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [showSearch]);
 
   // Detect manual scroll
   const handleScroll = () => {
@@ -165,12 +241,14 @@ export function AgentOutput({
     inputRef.current?.focus();
   };
 
-  // Build filtered/highlighted log lines
+  // Apply stream filter then search highlight
   const { renderedLogs, totalMatches } = useMemo(() => {
+    const filtered =
+      streamFilter === "all" ? allLogs : allLogs.filter((l) => l.stream === streamFilter);
+
     if (!showSearch || !searchQuery.trim()) {
-      // Limit visible logs to last 500 + buffer for scroll performance
       const maxVisible = 500;
-      const logsToShow = allLogs.length > maxVisible ? allLogs.slice(-maxVisible) : allLogs;
+      const logsToShow = filtered.length > maxVisible ? filtered.slice(-maxVisible) : filtered;
       return {
         renderedLogs: logsToShow.map((l) => ({ log: l, matchNumber: -1 })),
         totalMatches: 0,
@@ -178,12 +256,12 @@ export function AgentOutput({
     }
     const q = searchQuery.toLowerCase();
     let counter = 0;
-    const renderedLogs = allLogs.map((l) => {
+    const renderedLogs = filtered.map((l) => {
       const hit = l.content.toLowerCase().includes(q);
       return { log: l, matchNumber: hit ? counter++ : -1 };
     });
     return { renderedLogs, totalMatches: counter };
-  }, [allLogs, showSearch, searchQuery]);
+  }, [allLogs, showSearch, searchQuery, streamFilter]);
 
   const containerClass = isFullscreen
     ? "fixed inset-4 z-[60] flex flex-col rounded-xl border border-zinc-700 shadow-2xl overflow-hidden bg-zinc-950"
@@ -195,20 +273,46 @@ export function AgentOutput({
     );
   }
 
+  const hasToolActivity =
+    toolStats.reads + toolStats.writes + toolStats.searches + toolStats.commands > 0;
+
   return (
     <div className={containerClass}>
       {isFullscreen && <div className="absolute inset-0 bg-zinc-950/95 -z-10 rounded-xl" />}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800">
-        <span className="text-[10px] text-zinc-600 flex-1 font-mono">
+      <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 flex-wrap">
+        <span className="text-[10px] text-zinc-600 font-mono shrink-0">
           {allLogs.length} linhas{isRunning ? " · rodando" : ""}
-          {awaitingQuestion && (
-            <span className="ml-2 text-amber-400 animate-pulse font-sans not-italic">
-              ⚡ aguardando input
-            </span>
-          )}
         </span>
+
+        {/* Token counter */}
+        {tokenStats.totalTokens > 0 && (
+          <span
+            className="text-[10px] text-violet-400/70 font-mono shrink-0"
+            title={`${tokenStats.totalTokens.toLocaleString()} tokens em ${tokenStats.steps} step${tokenStats.steps !== 1 ? "s" : ""}`}
+          >
+            · {fmtTokens(tokenStats.totalTokens)} tokens
+          </span>
+        )}
+
+        {/* Tool stats mini-bar */}
+        {hasToolActivity && (
+          <span className="text-[10px] text-zinc-600 font-mono shrink-0 hidden sm:inline">
+            ·{toolStats.reads > 0 && <span title="Leituras"> 📖{toolStats.reads}</span>}
+            {toolStats.writes > 0 && <span title="Escritas"> ✏️{toolStats.writes}</span>}
+            {toolStats.searches > 0 && <span title="Buscas"> 🔍{toolStats.searches}</span>}
+            {toolStats.commands > 0 && <span title="Comandos"> 💻{toolStats.commands}</span>}
+          </span>
+        )}
+
+        {awaitingQuestion && (
+          <span className="text-[10px] text-amber-400 animate-pulse font-sans not-italic shrink-0">
+            ⚡ aguardando input
+          </span>
+        )}
+
+        <div className="flex-1" />
 
         {/* Search toggle */}
         <button
@@ -258,51 +362,102 @@ export function AgentOutput({
         )}
       </div>
 
-      {/* Search bar */}
-      {showSearch && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 border-b border-zinc-800">
-          <input
-            ref={searchRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setMatchIdx(0);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1));
-              if (e.key === "Escape") {
-                setShowSearch(false);
-                setSearchQuery("");
-              }
-            }}
-            placeholder="Buscar nos logs..."
-            className="flex-1 bg-transparent text-xs font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none"
-          />
-          {totalMatches > 0 && (
-            <span className="text-[10px] text-zinc-500 shrink-0">
-              {matchIdx + 1}/{totalMatches}
-            </span>
+      {/* Current activity bar — shows last status message when running */}
+      {isRunning && currentStatus && (
+        <div className="flex items-center gap-2 px-3 py-1 bg-blue-950/30 border-b border-blue-900/40">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+          <span className="text-[11px] text-blue-300 font-mono truncate">{currentStatus}</span>
+        </div>
+      )}
+
+      {/* Stream filter + search bar */}
+      {(showSearch || streamFilter !== "all") && (
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-900/80 border-b border-zinc-800 flex-wrap">
+          {/* Stream filter pills */}
+          <div className="flex gap-1 shrink-0">
+            {STREAM_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setStreamFilter(f.id)}
+                className={`px-2 py-0.5 text-[10px] rounded-full cursor-pointer transition-colors ${
+                  streamFilter === f.id
+                    ? "bg-zinc-700 text-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-400"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {showSearch && (
+            <>
+              <div className="w-px h-4 bg-zinc-700 shrink-0" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setMatchIdx(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1));
+                  if (e.key === "Escape") {
+                    setShowSearch(false);
+                    setSearchQuery("");
+                  }
+                }}
+                placeholder="Buscar nos logs..."
+                className="flex-1 bg-transparent text-xs font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none min-w-0"
+              />
+              {totalMatches > 0 && (
+                <span className="text-[10px] text-zinc-500 shrink-0">
+                  {matchIdx + 1}/{totalMatches}
+                </span>
+              )}
+              {searchQuery && totalMatches === 0 && (
+                <span className="text-[10px] text-red-500 shrink-0">nenhum resultado</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
+                disabled={totalMatches === 0}
+                className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
+                disabled={totalMatches === 0}
+                className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              >
+                ↓
+              </button>
+            </>
           )}
-          {searchQuery && totalMatches === 0 && (
-            <span className="text-[10px] text-red-500 shrink-0">nenhum resultado</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
-            disabled={totalMatches === 0}
-            className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs"
-          >
-            ↑
-          </button>
-          <button
-            type="button"
-            onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
-            disabled={totalMatches === 0}
-            className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs"
-          >
-            ↓
-          </button>
+        </div>
+      )}
+
+      {/* Stream filter shortcut bar (when not searching) — show only when collapsed */}
+      {!showSearch && streamFilter === "all" && (
+        <div className="flex items-center gap-1 px-2 py-1 bg-zinc-900/40 border-b border-zinc-800/50">
+          {STREAM_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setStreamFilter(f.id)}
+              className={`px-2 py-0.5 text-[9px] rounded-full cursor-pointer transition-colors ${
+                streamFilter === f.id
+                  ? "bg-zinc-700 text-zinc-200"
+                  : "text-zinc-700 hover:text-zinc-400"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       )}
 
@@ -317,7 +472,7 @@ export function AgentOutput({
       >
         {allLogs.length > 500 && !showSearch && (
           <div className="text-zinc-600 text-[9px] mb-2 p-1 bg-zinc-900/50 rounded">
-            📋 Mostrando últimos 500 logs de {allLogs.length} total (
+            📋 Mostrando últimos 500 de {allLogs.length} logs (
             {((500 / allLogs.length) * 100).toFixed(0)}%)
           </div>
         )}

@@ -234,6 +234,11 @@ export type WsServerMessage =
       content: string;
       timestamp: string;
     }
+  | {
+      type: "agent_logs_batch";
+      taskId: string;
+      logs: Array<{ runId: string; stream: LogStream; content: string; timestamp: string }>;
+    }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };
 
