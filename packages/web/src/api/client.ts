@@ -6,14 +6,16 @@ import type {
   CreateTaskRequest,
   DiffSummary,
   EngineInfo,
-  GitHubRepo,
   LaunchTaskRequest,
   PromptTemplate,
+  RemoteRepo,
   Repository,
+  StatsResponse,
   Task,
   TaskPollResponse,
   TaskSchedule,
   TaskWithRun,
+  TestConnectionResult,
   UpdateTaskRequest,
   UpsertScheduleRequest,
 } from "@vibe-code/shared";
@@ -50,9 +52,12 @@ export const api = {
         body: JSON.stringify({ confirm: true }),
       }),
     refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
-    listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
+    listGitHub: () => request<RemoteRepo[]>("/repos/github/list"),
     createGitHub: (data: { name: string; description: string; isPrivate: boolean }) =>
-      request<GitHubRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
+      request<RemoteRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
+    listGitLab: () => request<RemoteRepo[]>("/repos/gitlab/list"),
+    createGitLab: (data: { name: string; description: string; isPrivate: boolean }) =>
+      request<RemoteRepo>("/repos/gitlab/create", { method: "POST", body: JSON.stringify(data) }),
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
   },
 
@@ -118,9 +123,15 @@ export const api = {
   },
 
   settings: {
-    get: () => request<{ githubToken: string; githubTokenSet: boolean }>("/settings"),
-    update: (data: { githubToken?: string }) =>
-      request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+    get: () => request<any>("/settings"),
+    update: (data: {
+      githubToken?: string;
+      gitlabToken?: string;
+      gitlabBaseUrl?: string;
+      theme?: string;
+    }) => request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+    testConnection: (provider: "github" | "gitlab") =>
+      request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
   },
 
   prompts: {
@@ -148,5 +159,9 @@ export const api = {
       }),
     runNow: (taskId: string) =>
       request<AgentRun>(`/tasks/${taskId}/schedule/run-now`, { method: "POST" }),
+  },
+
+  stats: {
+    get: () => request<StatsResponse>("/stats"),
   },
 };

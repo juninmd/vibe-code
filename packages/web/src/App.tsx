@@ -18,6 +18,7 @@ import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
+import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
@@ -42,6 +43,7 @@ export default function App() {
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFilterBar, setShowFilterBar] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [filters, setFilters] = useState<Filters>({
     engine: null,
     priority: null,
@@ -540,6 +542,7 @@ export default function App() {
             }
           }}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenStats={() => setShowStats(true)}
           connected={connected}
         />
 
@@ -845,6 +848,8 @@ export default function App() {
         />
 
         <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+
+        <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
 
         <Toaster />
       </div>

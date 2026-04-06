@@ -183,6 +183,11 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
 
   execLines.push(
     "",
+    "**Repository safety boundaries (mandatory):**",
+    "- You may modify files only inside the current task worktree/repository.",
+    "- Do NOT read, edit, or run commands against any other local repository or parent/sibling directories.",
+    "- Never delete remote repositories (GitHub/GitLab).",
+    "",
     "**Code quality rules:**",
     "- No hardcoded secrets, credentials or API keys — use environment variables.",
     "- **CRITICAL: Respect `.gitignore`. Do NOT create, modify, or read files that are ignored by git.**",

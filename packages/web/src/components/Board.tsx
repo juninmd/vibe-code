@@ -84,6 +84,8 @@ export function Board({
       if (task.status === targetStatus) return;
       // Scheduled template tasks cannot be dragged to other columns
       if (task.status === "scheduled") return;
+      // Tasks cannot be manually moved to scheduled templates
+      if (targetStatus === "scheduled") return;
 
       // Calculate new order
       const targetTasks = tasksByColumn[targetStatus];
@@ -102,21 +104,32 @@ export function Board({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {BOARD_COLUMNS.filter(
-          (status) => status !== "failed" || tasksByColumn[status].length > 0
-        ).map((status) => (
-          <Column
-            key={status}
-            status={status}
-            tasks={tasksByColumn[status]}
-            onTaskClick={onTaskClick}
-            onRetryPR={onRetryPR}
-            onArchiveDone={onArchiveDone}
-            onClearFailed={onClearFailed}
-            onRetryAllFailed={onRetryAllFailed}
-          />
-        ))}
+      <div className="flex flex-col gap-4 pb-4 h-full">
+        <Column
+          status="scheduled"
+          tasks={tasksByColumn.scheduled}
+          onTaskClick={onTaskClick}
+          onRetryPR={onRetryPR}
+          horizontal
+        />
+
+        <div className="flex gap-4 overflow-x-auto min-h-0">
+          {BOARD_COLUMNS.filter(
+            (status) =>
+              status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
+          ).map((status) => (
+            <Column
+              key={status}
+              status={status}
+              tasks={tasksByColumn[status]}
+              onTaskClick={onTaskClick}
+              onRetryPR={onRetryPR}
+              onArchiveDone={onArchiveDone}
+              onClearFailed={onClearFailed}
+              onRetryAllFailed={onRetryAllFailed}
+            />
+          ))}
+        </div>
       </div>
 
       <DragOverlay>

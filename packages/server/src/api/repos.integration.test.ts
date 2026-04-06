@@ -135,8 +135,22 @@ describe("DELETE /api/repos/:id", () => {
 
     const res = await buildApp(db).request(`/api/repos/${repo.id}`, { method: "DELETE" });
     expect(res.status).toBe(200);
-    expect((await res.json()).data.ok).toBe(true);
+    const body = await res.json();
+    expect(body.data.ok).toBe(true);
+    expect(body.data.scope).toBe("local_catalog_only");
+    expect(body.data.remoteDeleted).toBe(false);
     expect(db.repos.getById(repo.id)).toBeNull();
+  });
+
+  it("returns 409 when a task is in progress for the repo", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/busy-delete.git" });
+    db.tasks.create({ title: "Busy delete", repoId: repo.id, status: "in_progress" });
+
+    const res = await buildApp(db).request(`/api/repos/${repo.id}`, { method: "DELETE" });
+
+    expect(res.status).toBe(409);
+    expect(db.repos.getById(repo.id)).not.toBeNull();
   });
 
   it("returns 404 for unknown repo", async () => {

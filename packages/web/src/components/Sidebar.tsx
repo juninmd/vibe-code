@@ -23,6 +23,7 @@ interface SidebarProps {
   onDeleteLocalClone: (id: string) => void;
   onDeleteAllLocalClones: () => void;
   onOpenSettings: () => void;
+  onOpenStats?: () => void;
   connected: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
@@ -36,6 +37,7 @@ export function Sidebar({
   onDeleteLocalClone,
   onDeleteAllLocalClones,
   onOpenSettings,
+  onOpenStats,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -69,6 +71,29 @@ export function Sidebar({
             className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-zinc-600"}`}
             title={connected ? "Conectado" : "Desconectado"}
           />
+          {onOpenStats && (
+            <button
+              type="button"
+              onClick={onOpenStats}
+              title="Estatísticas"
+              className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="8" width="3" height="6" rx="0.5" />
+                <rect x="6.5" y="4" width="3" height="10" rx="0.5" />
+                <rect x="11" y="2" width="3" height="12" rx="0.5" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenSettings}

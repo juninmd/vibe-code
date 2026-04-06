@@ -1,0 +1,124 @@
+import type { RemoteRepo } from "@vibe-code/shared";
+import type { CreatePRParams, CreateRepoParams, GitProviderAdapter } from "./types";
+
+const GH_API = "https://api.github.com";
+
+function headers(token: string): Record<string, string> {
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "vibe-code",
+  };
+}
+
+function getRepoOwnerAndName(url: string): string {
+  const match = url.match(/[:/]([^/:]+\/[^/.]+)(?:\.git)?$/);
+  return match ? match[1] : url;
+}
+
+export class GitHubProvider implements GitProviderAdapter {
+  readonly name = "github" as const;
+
+  async getUser(token: string): Promise<{ username: string; displayName?: string }> {
+    const res = await fetch(`${GH_API}/user`, { headers: headers(token) });
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as { login: string; name?: string };
+    return { username: data.login, displayName: data.name ?? undefined };
+  }
+
+  async listRepos(token: string, limit = 200): Promise<RemoteRepo[]> {
+    const repos: RemoteRepo[] = [];
+    let page = 1;
+    const perPage = Math.min(limit, 100);
+
+    while (repos.length < limit) {
+      const res = await fetch(
+        `${GH_API}/user/repos?per_page=${perPage}&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
+        { headers: headers(token) }
+      );
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      const data = (await res.json()) as {
+        full_name: string;
+        html_url: string;
+        description: string | null;
+        private: boolean;
+      }[];
+      if (data.length === 0) break;
+      for (const r of data) {
+        repos.push({
+          name: r.full_name,
+          url: r.html_url,
+          description: r.description ?? "",
+          isPrivate: r.private,
+          provider: "github",
+        });
+      }
+      if (data.length < perPage) break;
+      page++;
+    }
+    return repos.slice(0, limit);
+  }
+
+  async createRepo(token: string, params: CreateRepoParams): Promise<RemoteRepo> {
+    const res = await fetch(`${GH_API}/user/repos`, {
+      method: "POST",
+      headers: { ...headers(token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: params.name,
+        description: params.description,
+        private: params.isPrivate,
+        auto_init: true,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`GitHub create repo failed: ${res.status} ${err}`);
+    }
+    const data = (await res.json()) as {
+      full_name: string;
+      html_url: string;
+      description: string | null;
+      private: boolean;
+    };
+    return {
+      name: data.full_name,
+      url: data.html_url,
+      description: data.description ?? "",
+      isPrivate: data.private,
+      provider: "github",
+    };
+  }
+
+  async createPR(token: string, params: CreatePRParams): Promise<string> {
+    const repoPath = getRepoOwnerAndName(params.repoUrl);
+    const res = await fetch(`${GH_API}/repos/${repoPath}/pulls`, {
+      method: "POST",
+      headers: { ...headers(token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: params.title,
+        body: params.body,
+        head: params.head,
+        base: params.base,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`GitHub create PR failed: ${res.status} ${err}`);
+    }
+    const data = (await res.json()) as { html_url: string };
+    return data.html_url;
+  }
+
+  async isPrMerged(token: string, prUrl: string): Promise<boolean> {
+    const match = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+    if (!match) return false;
+    const [, repoPath, prNumber] = match;
+    const apiUrl = `${GH_API}/repos/${repoPath}/pulls/${prNumber}`;
+
+    const res = await fetch(apiUrl, { headers: headers(token) });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { merged: boolean };
+    return data.merged === true;
+  }
+}
