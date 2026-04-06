@@ -5,6 +5,59 @@ import { promisify } from "node:util";
 
 const execAsync = promisify(exec);
 
+function tail(text: string, lines = 40): string {
+  const parts = text.split("\n").filter(Boolean);
+  return parts.slice(-lines).join("\n");
+}
+
+function formatVerifyError(step: string, cmd: string, err: unknown): string {
+  const e = err as NodeJS.ErrnoException & {
+    code?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+
+  const stderrTail = tail(e.stderr ?? "");
+  const stdoutTail = tail(e.stdout ?? "");
+  const details = stderrTail || stdoutTail || e.message || String(err);
+  const exit = typeof e.code === "number" ? `exit ${e.code}` : "exit unknown";
+
+  return [
+    `Verification failed (${step}) — ${exit}. MR creation blocked.`,
+    `Command: ${cmd}`,
+    details,
+  ].join("\n");
+}
+
+async function runVerifyCommand(
+  wtPath: string,
+  cmd: string,
+  timeout: number,
+  step: "install" | "typecheck" | "test" | "build",
+  sysLog: (content: string) => void
+): Promise<void> {
+  try {
+    sysLog(`Running: ${cmd}...`);
+    const { stdout, stderr } = await execAsync(cmd, { cwd: wtPath, timeout });
+    const stderrTail = tail(stderr ?? "", 8);
+    if (stderrTail) {
+      sysLog(`[verify:${step}] stderr (tail):`);
+      for (const line of stderrTail.split("\n")) {
+        if (line.trim()) sysLog(`[verify:${step}] ${line}`);
+      }
+    }
+    const stdoutTail = tail(stdout ?? "", 5);
+    if (stdoutTail) {
+      sysLog(`[verify:${step}] output (tail):`);
+      for (const line of stdoutTail.split("\n")) {
+        if (line.trim()) sysLog(`[verify:${step}] ${line}`);
+      }
+    }
+  } catch (err: unknown) {
+    throw new Error(formatVerifyError(step, cmd, err));
+  }
+}
+
 async function detectPackageManager(wtPath: string): Promise<string> {
   const checks = [
     ["bun.lock", "bun"],
@@ -46,23 +99,11 @@ export async function verifyWorktree(
   const pm = await detectPackageManager(wtPath);
   const scripts = await readPackageScripts(wtPath);
 
-  try {
-    sysLog(`Running: ${pm} install...`);
-    await execAsync(`${pm} install`, { cwd: wtPath, timeout: 120_000 });
-  } catch (err: unknown) {
-    const errorMsg = (err as NodeJS.ErrnoException).message ?? String(err);
-    throw new Error(`Verification failed (install):\n${errorMsg}`);
-  }
+  await runVerifyCommand(wtPath, `${pm} install`, 120_000, "install", sysLog);
 
   // Only run typecheck if the script exists
   if (scripts.typecheck || scripts["type-check"] || scripts["tsc"]) {
-    try {
-      sysLog(`Running: ${pm} run typecheck...`);
-      await execAsync(`${pm} run typecheck`, { cwd: wtPath, timeout: 60_000 });
-    } catch (err: unknown) {
-      const errorMsg = (err as NodeJS.ErrnoException).message ?? String(err);
-      throw new Error(`Verification failed (typecheck):\n${errorMsg}`);
-    }
+    await runVerifyCommand(wtPath, `${pm} run typecheck`, 60_000, "typecheck", sysLog);
   }
 
   // Only run tests if there's a meaningful test script (not the "no test" placeholder)
@@ -74,26 +115,14 @@ export async function verifyWorktree(
     !testScript.includes("echo");
 
   if (hasRealTests) {
-    try {
-      sysLog(`Running: ${pm} test...`);
-      await execAsync(`${pm} test`, { cwd: wtPath, timeout: 120_000 });
-    } catch (err: unknown) {
-      const errorMsg = (err as NodeJS.ErrnoException).message ?? String(err);
-      throw new Error(`Verification failed (test):\n${errorMsg}`);
-    }
+    await runVerifyCommand(wtPath, `${pm} test`, 120_000, "test", sysLog);
   } else {
     sysLog("Skipping tests: no test script found (or placeholder only).");
   }
 
   // Run build as final smoke test if script exists
   if (scripts.build) {
-    try {
-      sysLog(`Running: ${pm} run build...`);
-      await execAsync(`${pm} run build`, { cwd: wtPath, timeout: 180_000 });
-    } catch (err: unknown) {
-      const errorMsg = (err as NodeJS.ErrnoException).message ?? String(err);
-      throw new Error(`Verification failed (build):\n${errorMsg}`);
-    }
+    await runVerifyCommand(wtPath, `${pm} run build`, 180_000, "build", sysLog);
   }
 
   sysLog("Verification passed successfully!");

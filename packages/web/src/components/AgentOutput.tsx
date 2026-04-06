@@ -181,11 +181,27 @@ export function AgentOutput({
     }
   }, [historicLogs, liveLogs, pinnedBottom]);
 
-  // Auto-focus input when agent asks a question
+  // Auto-focus input only when a new question appears and user is not selecting/copying logs.
+  const lastQuestionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (awaitingQuestion && isRunning) {
-      setTimeout(() => inputRef.current?.focus(), 100);
+    if (!awaitingQuestion || !isRunning) {
+      lastQuestionRef.current = awaitingQuestion;
+      return;
     }
+
+    const isNewQuestion = awaitingQuestion !== lastQuestionRef.current;
+    lastQuestionRef.current = awaitingQuestion;
+    if (!isNewQuestion) return;
+
+    const selection = window.getSelection?.()?.toString() ?? "";
+    const active = document.activeElement;
+    const editingElsewhere =
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active as HTMLElement | null)?.isContentEditable === true;
+    if (selection.trim() || editingElsewhere) return;
+
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, [awaitingQuestion, isRunning]);
 
   // Scroll to highlighted match
@@ -465,7 +481,6 @@ export function AgentOutput({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        onClick={() => inputRef.current?.focus()}
         className={`bg-zinc-950 p-3 font-mono text-xs overflow-y-auto cursor-text ${
           isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
         } space-y-0.5`}
