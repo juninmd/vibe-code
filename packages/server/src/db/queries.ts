@@ -5,6 +5,7 @@ import type {
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
+  GitProvider,
   PromptTemplate,
   Repository,
   Task,
@@ -22,6 +23,7 @@ interface RepoRow {
   default_branch: string;
   local_path: string | null;
   status: string;
+  provider: string;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -79,6 +81,7 @@ function mapRepo(row: RepoRow): Repository {
     defaultBranch: row.default_branch,
     localPath: row.local_path,
     status: row.status as Repository["status"],
+    provider: (row.provider || "github") as GitProvider,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -140,8 +143,8 @@ export function createRepoQueries(db: Database) {
     list: db.prepare<RepoRow, []>("SELECT * FROM repositories ORDER BY created_at DESC"),
     getById: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE id = ?"),
     getByUrl: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE url = ?"),
-    insert: db.prepare<RepoRow, [string, string, string]>(
-      "INSERT INTO repositories (name, url, default_branch) VALUES (?, ?, ?) RETURNING *"
+    insert: db.prepare<RepoRow, [string, string, string, string]>(
+      "INSERT INTO repositories (name, url, default_branch, provider) VALUES (?, ?, ?, ?) RETURNING *"
     ),
     updateStatus: db.prepare<RepoRow, [string, string | null, string | null, string]>(
       "UPDATE repositories SET status = ?, local_path = ?, error_message = ?, updated_at = datetime('now') WHERE id = ? RETURNING *"
@@ -163,9 +166,10 @@ export function createRepoQueries(db: Database) {
         .all(...ids) as RepoRow[];
       return rows.map(mapRepo);
     },
-    create: (req: CreateRepoRequest): Repository => {
+    create: (req: CreateRepoRequest & { provider?: GitProvider }): Repository => {
       const name = extractRepoName(req.url);
-      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main")!;
+      const provider = req.provider ?? detectProviderFromUrl(req.url);
+      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main", provider)!;
       return mapRepo(row);
     },
     updateStatus: (
@@ -663,4 +667,10 @@ function extractRepoName(url: string): string {
   // Handle GitHub URLs like https://github.com/user/repo or git@github.com:user/repo.git
   const match = url.match(/([^/\\:]+?)(?:\.git)?$/);
   return match?.[1] ?? url;
+}
+
+function detectProviderFromUrl(url: string): GitProvider {
+  if (url.includes("github.com")) return "github";
+  if (url.includes("gitlab")) return "gitlab";
+  return "manual";
 }

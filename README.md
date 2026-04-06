@@ -600,6 +600,30 @@ VIBE_CODE_AGENT_TIMEOUT_MS=10800000  # 3 horas
 
 ## 🔐 Segurança
 
+### GitHub/GitLab: rotas acessadas
+
+As integrações com providers são somente para listar/criar repositórios e abrir/consultar PR/MR.
+Não existe endpoint de deleção remota no Vibe-Code.
+
+| Escopo | Provedor | Método | Rota/Endpoint | Finalidade |
+|---|---|---|---|---|
+| API interna | GitHub | GET | `/api/repos/github/list` | Listar repositórios remotos acessíveis |
+| API interna | GitHub | POST | `/api/repos/github/create` | Criar repositório remoto |
+| API interna | GitLab | GET | `/api/repos/gitlab/list` | Listar projetos remotos acessíveis |
+| API interna | GitLab | POST | `/api/repos/gitlab/create` | Criar projeto remoto |
+| API interna | GitHub | POST | `/api/settings/test/github` | Testar conexão/token do GitHub |
+| API interna | GitLab | POST | `/api/settings/test/gitlab` | Testar conexão/token do GitLab |
+| API externa | GitHub | GET | `https://api.github.com/user` | Obter usuário autenticado |
+| API externa | GitHub | GET | `https://api.github.com/user/repos` | Listar repositórios do usuário |
+| API externa | GitHub | POST | `https://api.github.com/user/repos` | Criar repositório |
+| API externa | GitHub | POST | `https://api.github.com/repos/{owner}/{repo}/pulls` | Criar pull request |
+| API externa | GitHub | GET | `https://api.github.com/repos/{owner}/{repo}/pulls/{number}` | Verificar status de merge do PR |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/user` | Obter usuário autenticado |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/projects` | Listar projetos acessíveis |
+| API externa | GitLab | POST | `{gitlab_base_url}/api/v4/projects` | Criar projeto |
+| API externa | GitLab | POST | `{gitlab_base_url}/api/v4/projects/{project}/merge_requests` | Criar merge request |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/projects/{project}/merge_requests/{iid}` | Verificar status de merge do MR |
+
 ### Isolamento de Tarefas
 
 Cada tarefa:

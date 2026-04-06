@@ -117,6 +117,13 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE tasks ADD COLUMN notes TEXT DEFAULT ''");
   }
 
+  // Migration: add provider column to repositories
+  const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];
+  const repoColNames = repoCols.map((c) => c.name);
+  if (!repoColNames.includes("provider")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN provider TEXT NOT NULL DEFAULT 'github'");
+  }
+
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
   db.exec(`
     INSERT OR IGNORE INTO prompt_templates (id, title, description, content, category, is_builtin) VALUES

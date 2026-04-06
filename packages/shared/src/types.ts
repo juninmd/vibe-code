@@ -33,6 +33,7 @@ export interface Repository {
   defaultBranch: string;
   localPath: string | null;
   status: RepoStatus;
+  provider: GitProvider;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
@@ -173,12 +174,18 @@ export interface EngineInfo {
   activeRuns: number;
 }
 
-export interface GitHubRepo {
+export type GitProvider = "github" | "gitlab" | "manual";
+
+export interface RemoteRepo {
   name: string;
   url: string;
   description: string;
   isPrivate: boolean;
+  provider: GitProvider;
 }
+
+/** @deprecated Use RemoteRepo instead */
+export type GitHubRepo = RemoteRepo;
 
 export interface TaskWithRun extends Task {
   latestRun?: AgentRun;
@@ -229,3 +236,87 @@ export type WsServerMessage =
     }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };
+
+// ─── Settings Types ──────────────────────────────────────────────────────────
+
+export interface ProviderSettings {
+  token: string;
+  tokenSet: boolean;
+  baseUrl?: string;
+  username?: string;
+}
+
+export interface SettingsResponse {
+  github: ProviderSettings;
+  gitlab: ProviderSettings;
+  theme: string;
+}
+
+export interface UpdateSettingsRequest {
+  githubToken?: string;
+  gitlabToken?: string;
+  gitlabBaseUrl?: string;
+  theme?: string;
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  username?: string;
+  error?: string;
+}
+
+// ─── Statistics Types ────────────────────────────────────────────────────────
+
+export interface StatsOverview {
+  totalRepos: number;
+  totalTasks: number;
+  totalRuns: number;
+  successRate: number;
+  avgRunDurationSecs: number;
+  totalPRsCreated: number;
+  totalPRsMerged: number;
+}
+
+export interface StatusBreakdown {
+  status: string;
+  count: number;
+}
+
+export interface RepoStats {
+  repoId: string;
+  repoName: string;
+  total: number;
+  done: number;
+  failed: number;
+}
+
+export interface EngineStats {
+  engine: string;
+  runs: number;
+  completed: number;
+  failed: number;
+  avgDurationSecs: number;
+}
+
+export interface ModelStats {
+  model: string;
+  runs: number;
+}
+
+export interface DailyActivity {
+  date: string;
+  runs: number;
+  completed: number;
+  failed: number;
+}
+
+export interface StatsResponse {
+  overview: StatsOverview;
+  tasksByStatus: StatusBreakdown[];
+  tasksByRepo: RepoStats[];
+  runsByEngine: EngineStats[];
+  runsByModel: ModelStats[];
+  dailyActivity: DailyActivity[];
+  favoriteEngine: string | null;
+  favoriteModel: string | null;
+}

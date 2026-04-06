@@ -28,7 +28,7 @@ function PriorityDot({ priority }: { priority: number }) {
   if (priority === 0) return null;
   return (
     <span
-      title={`Priority ${priority}`}
+      title={`Prioridade ${priority}`}
       className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -186,8 +186,24 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
           })()}
 
         {task.status === "scheduled" && (
-          <Badge variant="warning" className="text-[10px] py-0 px-1.5">
-            ⏰ agendada
+          <Badge
+            variant="warning"
+            className="text-[10px] py-0 px-1.5 inline-flex items-center gap-1"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5.5v3l2 1.3" />
+            </svg>
+            agendada
           </Badge>
         )}
         {task.parentTaskId && (
@@ -197,7 +213,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
         {task.status === "failed" && (
           <Badge variant="danger" className="text-[10px] py-0 px-1.5">
-            Failed
+            Falhou
           </Badge>
         )}
 
@@ -214,7 +230,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               onClick={handleRetryPR}
               disabled={retrying}
             >
-              {retrying ? "…" : "Retry PR"}
+              {retrying ? "…" : "Tentar PR"}
             </Button>
             {retryError && (
               <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-red-400 bg-zinc-900 border border-red-900/50 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
@@ -244,7 +260,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         {isRunning && (
           <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[160px]">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="truncate">{task.latestRun?.currentStatus || "Running…"}</span>
+            <span className="truncate">{task.latestRun?.currentStatus || "Executando..."}</span>
             {elapsed && <span className="shrink-0 text-blue-500/80 tabular-nums">{elapsed}</span>}
           </span>
         )}

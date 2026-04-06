@@ -12,10 +12,12 @@ import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createRunsRouter } from "./api/runs";
 import { createSettingsRouter } from "./api/settings";
+import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
+import { ProviderRegistry } from "./git/providers/registry";
 import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -35,6 +37,8 @@ const db = createDb(DB_PATH);
 const git = new GitService(DATA_DIR);
 const registry = new EngineRegistry();
 const hub = new BroadcastHub();
+const providerRegistry = new ProviderRegistry(db);
+git.providers = providerRegistry;
 const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
 
 await git.init();
@@ -74,6 +78,7 @@ await git.init();
 }
 
 const prPoller = new PrPoller(db, hub);
+prPoller.setProviderRegistry(providerRegistry);
 prPoller.start();
 
 const scheduleRunner = new ScheduleRunner(db, orchestrator);
@@ -93,8 +98,9 @@ app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry, orchestrator));
-app.route("/api/settings", createSettingsRouter(db));
+app.route("/api/settings", createSettingsRouter(db, providerRegistry));
 app.route("/api/prompts", createPromptsRouter(db));
+app.route("/api/stats", createStatsRouter(db));
 
 // Health check
 app.get("/api/health", (c) => {

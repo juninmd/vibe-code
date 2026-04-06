@@ -47,6 +47,7 @@ const baseTask: TaskWithRun = {
     localPath: "/tmp",
     status: "ready",
     errorMessage: null,
+    provider: "github",
     createdAt: "",
     updatedAt: "",
   },
