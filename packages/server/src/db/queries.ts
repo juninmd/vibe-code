@@ -169,7 +169,8 @@ export function createRepoQueries(db: Database) {
     create: (req: CreateRepoRequest & { provider?: GitProvider }): Repository => {
       const name = extractRepoName(req.url);
       const provider = req.provider ?? detectProviderFromUrl(req.url);
-      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main", provider)!;
+      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main", provider);
+      if (!row) throw new Error("Failed to create repository");
       return mapRepo(row);
     },
     updateStatus: (
@@ -255,7 +256,8 @@ export function createTaskQueries(db: Database) {
           status,
           req.parentTaskId ?? null,
           tagsJson
-        )!;
+        );
+      if (!row) throw new Error("Failed to create task");
       return mapTask(row);
     },
     update: (id: string, req: UpdateTaskRequest): Task | null => {
@@ -293,7 +295,10 @@ export function createTaskQueries(db: Database) {
         sets.push("notes = ?");
         values.push(req.notes);
       }
-      if (sets.length === 0) return stmts.getById.get(id) ? mapTask(stmts.getById.get(id)!) : null;
+      if (sets.length === 0) {
+        const currentRow = stmts.getById.get(id);
+        return currentRow ? mapTask(currentRow) : null;
+      }
       sets.push("updated_at = datetime('now')");
       values.push(id);
       const sql = `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? RETURNING *`;
@@ -390,7 +395,8 @@ export function createRunQueries(db: Database) {
       return row ? mapRun(row) : null;
     },
     create: (taskId: string, engine: string): AgentRun => {
-      const row = stmts.insert.get(taskId, engine)!;
+      const row = stmts.insert.get(taskId, engine);
+      if (!row) throw new Error("Failed to create run");
       return mapRun(row);
     },
     updateStatus: (
@@ -454,7 +460,8 @@ export function createLogQueries(db: Database) {
     listByRunAfter: (runId: string, afterId: number, limit = 300): AgentLog[] =>
       stmts.listByRunAfter.all(runId, afterId, limit).map(mapLog),
     create: (runId: string, stream: string, content: string): AgentLog => {
-      const row = stmts.insert.get(runId, stream, content)!;
+      const row = stmts.insert.get(runId, stream, content);
+      if (!row) throw new Error("Failed to create log");
       return mapLog(row);
     },
   };
@@ -535,7 +542,8 @@ export function createPromptTemplateQueries(db: Database) {
         req.description ?? null,
         req.content,
         req.category ?? null
-      )!;
+      );
+      if (!row) throw new Error("Failed to create prompt template");
       return mapTemplate(row);
     },
     update: (id: string, req: Partial<CreatePromptTemplateRequest>): PromptTemplate | null => {
@@ -557,8 +565,10 @@ export function createPromptTemplateQueries(db: Database) {
         sets.push("category = ?");
         values.push(req.category ?? null);
       }
-      if (sets.length === 0)
-        return stmts.getById.get(id) ? mapTemplate(stmts.getById.get(id)!) : null;
+      if (sets.length === 0) {
+        const currentRow = stmts.getById.get(id);
+        return currentRow ? mapTemplate(currentRow) : null;
+      }
       sets.push("updated_at = datetime('now')");
       values.push(id);
       const sql = `UPDATE prompt_templates SET ${sets.join(", ")} WHERE id = ? AND is_builtin = 0 RETURNING *`;
@@ -626,7 +636,8 @@ export function createScheduleQueries(db: Database) {
              updated_at = datetime('now')
            RETURNING *`
         )
-        .get(taskId, cronExpression, deadlineAt, nextRunAt)!;
+        .get(taskId, cronExpression, deadlineAt, nextRunAt);
+      if (!row) throw new Error("Failed to upsert schedule");
       return mapSchedule(row);
     },
     setEnabled: (taskId: string, enabled: boolean): TaskSchedule | null => {
