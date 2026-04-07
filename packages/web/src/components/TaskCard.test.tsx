@@ -86,12 +86,12 @@ describe("TaskCard", () => {
   it("shows Retry PR button when status is review and no prUrl", () => {
     const task = { ...baseTask, status: "review" as const };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /retry pr/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /tentar pr/i })).toBeInTheDocument();
   });
 
   it("shows Failed badge when status is failed", () => {
     const task = { ...baseTask, status: "failed" as const };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Falhou")).toBeInTheDocument();
   });
 });
