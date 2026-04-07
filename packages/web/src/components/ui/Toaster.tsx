@@ -26,6 +26,18 @@ export function Toaster() {
             {t.type === "error" ? "✕" : t.type === "success" ? "✓" : "ℹ"}
           </span>
           <span className="flex-1 leading-snug">{t.message}</span>
+          {t.action && (
+            <button
+              type="button"
+              onClick={() => {
+                t.action?.onClick();
+                dismiss(t.id);
+              }}
+              className="shrink-0 text-xs font-semibold underline cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              {t.action.label}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => dismiss(t.id)}

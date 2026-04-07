@@ -18,6 +18,7 @@ function makeHub(): BroadcastHub {
   return {
     broadcastAll: () => {},
     broadcastToTask: () => {},
+    batchLog: () => {},
     addClient: () => ({ ws: {} as unknown, subscribedTasks: new Set() }),
     removeClient: () => {},
     subscribe: () => {},
@@ -160,7 +161,7 @@ describe("Orchestrator — task flow", () => {
     expect(final?.branchName).toMatch(/^vibe-code\//);
   });
 
-  it("moves task to 'review' even when agent exits with code 1 but made commits (critical fix)", async () => {
+  it("moves task to 'failed' when agent exits with non-zero code", async () => {
     const repo = seedRepo(db);
     const task = db.tasks.create({ title: "Fix", repoId: repo.id });
     // Simulate an agent that exits with code 1 but DID commit work (common with Claude Code)
@@ -177,10 +178,10 @@ describe("Orchestrator — task flow", () => {
     );
 
     await orch.launch(task);
-    const final = await waitForStatus(db, task.id, "review");
+    const final = await waitForStatus(db, task.id, "failed");
 
-    expect(final?.status).toBe("review");
-    expect(final?.prUrl).not.toBeNull();
+    expect(final?.status).toBe("failed");
+    expect(final?.prUrl).toBeNull();
   });
 
   it("moves task to 'failed' when agent makes no commits", async () => {

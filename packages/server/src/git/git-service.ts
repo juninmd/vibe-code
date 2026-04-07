@@ -1,9 +1,19 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ProviderRegistry } from "./providers/registry";
 
 export class GitService {
   private basePath: string;
+  private _providers: ProviderRegistry | null = null;
+
+  set providers(registry: ProviderRegistry) {
+    this._providers = registry;
+  }
+
+  get providerRegistry(): ProviderRegistry | null {
+    return this._providers;
+  }
 
   constructor(basePath?: string) {
     this.basePath = basePath ?? join(homedir(), ".vibe-code");
@@ -97,6 +107,11 @@ export class GitService {
     }
   }
 
+  async deleteLocalRepo(barePath: string, repoName: string): Promise<void> {
+    await rm(join(this.workspacesDir, repoName), { recursive: true, force: true });
+    await rm(barePath, { recursive: true, force: true });
+  }
+
   async hasChanges(wtPath: string): Promise<boolean> {
     const result = await this.exec(["git", "status", "--porcelain"], { cwd: wtPath });
     return result.stdout.trim().length > 0;
@@ -138,30 +153,23 @@ export class GitService {
   }
 
   async createPR(
-    wtPath: string,
+    _wtPath: string,
     repoUrl: string,
     branch: string,
     title: string,
-    body: string
+    body: string,
+    base?: string
   ): Promise<string> {
-    const repoInfo = this.getRepoOwnerAndName(repoUrl);
-    const result = await this.exec(
-      [
-        "gh",
-        "pr",
-        "create",
-        "--repo",
-        repoInfo,
-        "--title",
-        title,
-        "--body",
-        body,
-        "--head",
-        branch,
-      ],
-      { cwd: wtPath }
-    );
-    return result.stdout.trim();
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) throw new Error(`No git provider configured for ${repoUrl}`);
+    return resolved.adapter.createPR(resolved.token, {
+      repoUrl,
+      head: branch,
+      base: base || "main",
+      title,
+      body,
+    });
   }
 
   getRepoOwnerAndName(url: string): string {
@@ -190,67 +198,51 @@ export class GitService {
     }
   }
 
-  async createGitHubRepo(
+  async createRemoteRepo(
+    provider: "github" | "gitlab",
     name: string,
     description: string,
     isPrivate: boolean
   ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }> {
-    const args = [
-      "gh",
-      "repo",
-      "create",
-      name,
-      "--json",
-      "name,url,description,isPrivate",
-      isPrivate ? "--private" : "--public",
-    ];
-    if (description) {
-      args.push("--description", description);
-    }
-    const result = await this.exec(args);
-    const repo = JSON.parse(result.stdout) as {
-      name: string;
-      url: string;
-      description: string | null;
-      isPrivate: boolean;
-    };
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) throw new Error(`Provider ${provider} not configured or missing token`);
+    const repo = await adapter.createRepo(token, { name, description, isPrivate });
     return {
       name: repo.name,
       url: repo.url,
-      description: repo.description ?? "",
+      description: repo.description,
       isPrivate: repo.isPrivate,
     };
   }
 
-  async listGitHubRepos(
+  async listRemoteRepos(
+    provider: "github" | "gitlab",
     limit = 200
-  ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }[]> {
+  ): Promise<
+    { name: string; url: string; description: string; isPrivate: boolean; provider: string }[]
+  > {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) return [];
     try {
-      const result = await this.exec([
-        "gh",
-        "repo",
-        "list",
-        "--limit",
-        String(limit),
-        "--json",
-        "nameWithOwner,url,description,isPrivate",
-      ]);
-      const repos = JSON.parse(result.stdout) as {
-        nameWithOwner: string;
-        url: string;
-        description: string | null;
-        isPrivate: boolean;
-      }[];
-      return repos.map((r) => ({
-        name: r.nameWithOwner,
-        url: r.url,
-        description: r.description ?? "",
-        isPrivate: r.isPrivate,
-      }));
+      return await adapter.listRepos(token, limit);
     } catch (err: any) {
-      console.error("[git] Failed to list GitHub repos:", err.message);
+      console.error(`[git] Failed to list ${provider} repos:`, err.message);
       return [];
     }
+  }
+
+  /** @deprecated Use listRemoteRepos('github') instead */
+  async listGitHubRepos(limit = 200) {
+    return this.listRemoteRepos("github", limit);
+  }
+
+  /** @deprecated Use createRemoteRepo('github', ...) instead */
+  async createGitHubRepo(name: string, description: string, isPrivate: boolean) {
+    return this.createRemoteRepo("github", name, description, isPrivate);
   }
 
   async diffSummary(

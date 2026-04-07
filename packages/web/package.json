@@ -12,12 +12,12 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@vibe-code/shared": "workspace:*",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2"
+    "@dnd-kit/utilities": "^3.2.2",
+    "@vibe-code/shared": "workspace:*",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
@@ -25,14 +25,14 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react-swc": "^4.3.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.1",
     "@vitest/coverage-v8": "^4.1.2",
     "jsdom": "^29.0.1",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.0",
-    "vite": "^6.0.0",
+    "typescript": "6.0.2",
+    "vite": "8.0.3",
     "vitest": "^4.1.2"
   }
 }

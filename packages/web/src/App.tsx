@@ -1,13 +1,24 @@
 import type { AgentLog, TaskStatus, TaskWithRun, WsServerMessage } from "@vibe-code/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api } from "./api/client";
 import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
+import { FilterBar, type Filters } from "./components/FilterBar";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
+import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
@@ -17,6 +28,14 @@ import { useRepos } from "./hooks/useRepos";
 import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
+
+const MAX_LIVE_LOGS_PER_TASK = 1500;
+
+function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog[] {
+  const merged = [...existing, ...incoming];
+  if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
+  return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
+}
 
 export default function App() {
   const toastCtx = useToastState();
@@ -30,14 +49,27 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showFilterBar, setShowFilterBar] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    engine: null,
+    priority: null,
+    hasPR: false,
+    tags: [],
+  });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  const focusedLogCursorRef = useRef(0);
+  const refreshEnginesThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { repos, addRepo, removeRepo, addOrUpdateRepo } = useRepos();
+  const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
+    useRepos();
   const {
     tasks,
     createTask,
+    cloneTask,
     updateTask,
     removeTask,
     archiveDone,
@@ -48,8 +80,13 @@ export default function App() {
     retryTask,
     retryPR,
     updateTaskLocal,
+    updateRunLocal,
+    setTasksSnapshot,
     refresh,
   } = useTasks(selectedRepoId ?? undefined);
+  const deferredTasks = useDeferredValue(tasks);
+  const deferredSearch = useDeferredValue(search);
+
   const {
     engines,
     loading: enginesLoading,
@@ -66,7 +103,22 @@ export default function App() {
   // ─── WebSocket ──────────────────────────────────────────────────────────────
   const wasConnected = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: notify and prevStatusRef are stable refs
+  const refreshEnginesThrottled = useCallback(() => {
+    if (refreshEnginesThrottleRef.current) return;
+    refreshEnginesThrottleRef.current = setTimeout(() => {
+      refreshEnginesThrottleRef.current = null;
+      refreshEngines();
+    }, 1500);
+  }, [refreshEngines]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshEnginesThrottleRef.current) {
+        clearTimeout(refreshEnginesThrottleRef.current);
+      }
+    };
+  }, []);
+
   const handleWsMessage = useCallback(
     (msg: WsServerMessage) => {
       switch (msg.type) {
@@ -83,55 +135,215 @@ export default function App() {
               notify(`◎ PR pronto: ${updated.title}`, "Agente abriu um pull request");
           }
           prevStatusRef.current[updated.id] = updated.status;
-          updateTaskLocal(updated);
-          setSelectedTask((sel) =>
-            sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
-          );
-          refresh();
-          // Refresh engine active runs when task changes
-          refreshEngines();
+          startTransition(() => {
+            updateTaskLocal(updated);
+            setSelectedTask((sel) =>
+              sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
+            );
+          });
           break;
         }
         case "repo_updated":
           addOrUpdateRepo(msg.repo);
           break;
         case "agent_log":
-          setLiveLogs((prev) => ({
-            ...prev,
-            [msg.taskId]: [
-              ...(prev[msg.taskId] ?? []),
-              {
-                id: Date.now(),
-                runId: msg.runId,
-                stream: msg.stream,
-                content: msg.content,
-                timestamp: msg.timestamp,
-              },
-            ],
-          }));
+          // Only update state if this is the task the user is currently looking at.
+          // This avoids re-rendering the whole App for every background task log.
+          if (selectedTask?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: appendLogsLimited(prev[msg.taskId] ?? [], [
+                  {
+                    id: Date.now(),
+                    runId: msg.runId,
+                    stream: msg.stream,
+                    content: msg.content,
+                    timestamp: msg.timestamp,
+                  },
+                ]),
+              }));
+            });
+          }
+          break;
+        case "agent_logs_batch":
+          // Batched log delivery — single state update for multiple lines.
+          if (selectedTask?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: appendLogsLimited(
+                  prev[msg.taskId] ?? [],
+                  msg.logs.map((l, i) => ({
+                    id: Date.now() + i,
+                    runId: l.runId,
+                    stream: l.stream,
+                    content: l.content,
+                    timestamp: l.timestamp,
+                  }))
+                ),
+              }));
+            });
+          }
+          break;
+        case "run_updated":
+          startTransition(() => {
+            updateRunLocal(msg.run.taskId, msg.run);
+            setSelectedTask((sel) =>
+              sel?.id === msg.run.taskId ? ({ ...sel, latestRun: msg.run } as TaskWithRun) : sel
+            );
+          });
+          refreshEnginesThrottled();
           break;
         case "run_status":
-        case "run_updated":
-          refresh();
-          refreshEngines();
+          startTransition(() => {
+            updateRunLocal(msg.taskId, {
+              id: msg.runId,
+              taskId: msg.taskId,
+              engine: selectedTask?.latestRun?.engine ?? "unknown",
+              status: msg.status,
+              currentStatus: selectedTask?.latestRun?.currentStatus ?? null,
+              worktreePath: selectedTask?.latestRun?.worktreePath ?? null,
+              startedAt: selectedTask?.latestRun?.startedAt ?? null,
+              finishedAt: selectedTask?.latestRun?.finishedAt ?? null,
+              exitCode: selectedTask?.latestRun?.exitCode ?? null,
+              errorMessage: selectedTask?.latestRun?.errorMessage ?? null,
+              createdAt: selectedTask?.latestRun?.createdAt ?? new Date().toISOString(),
+            });
+          });
+          refreshEnginesThrottled();
           break;
       }
     },
-    [updateTaskLocal, refresh, addOrUpdateRepo, refreshEngines]
+    [
+      addOrUpdateRepo,
+      notify,
+      refreshEnginesThrottled,
+      selectedTask?.id,
+      selectedTask?.latestRun,
+      updateRunLocal,
+      updateTaskLocal,
+    ]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
 
+  const selectedRepo = useMemo(
+    () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
+    [repos, selectedRepoId]
+  );
+
+  // Backend-driven polling: refresh all statuses every minute.
+  useEffect(() => {
+    if (connected) return; // when WS is available rely on push
+
+    const pollBackground = async () => {
+      try {
+        const data = await api.tasks.poll(selectedRepoId ?? undefined);
+        startTransition(() => {
+          setTasksSnapshot(data.tasks);
+          if (selectedTask?.id) {
+            const refreshedSelected = data.tasks.find((task) => task.id === selectedTask.id);
+            if (refreshedSelected) setSelectedTask(refreshedSelected);
+          }
+        });
+      } catch {
+        // best effort: websocket/local state still updates the UI
+      }
+    };
+
+    pollBackground();
+    const id = setInterval(pollBackground, 60_000);
+    return () => clearInterval(id);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot, connected]);
+
+  // Focused task polling: fast updates for run status + incremental logs.
+  useEffect(() => {
+    if (!selectedTask?.id) {
+      focusedLogCursorRef.current = 0;
+      return;
+    }
+    if (connected) {
+      // WS will push focused logs when subscribed
+      focusedLogCursorRef.current = 0;
+      return;
+    }
+
+    const pollFocused = async () => {
+      try {
+        const data = await api.tasks.poll(
+          selectedRepoId ?? undefined,
+          selectedTask.id,
+          focusedLogCursorRef.current
+        );
+
+        startTransition(() => {
+          setTasksSnapshot(data.tasks);
+          if (data.focusedTask) {
+            setSelectedTask(data.focusedTask);
+          }
+          if (data.focusedLogs.length > 0) {
+            const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
+            focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
+            setLiveLogs((prev) => ({
+              ...prev,
+              [selectedTask.id]: appendLogsLimited(prev[selectedTask.id] ?? [], data.focusedLogs),
+            }));
+          }
+        });
+      } catch {
+        // best effort: websocket/local state still updates the UI
+      }
+    };
+
+    focusedLogCursorRef.current = 0;
+    pollFocused();
+    const id = setInterval(pollFocused, 3_000);
+    return () => clearInterval(id);
+  }, [selectedRepoId, selectedTask?.id, setTasksSnapshot, connected]);
+
   // Show toast on disconnect / reconnect
   useEffect(() => {
+    let canceled = false;
+
     if (!connected && wasConnected.current) {
       toast("Conexão perdida. Reconectando...", "error");
     }
     if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
       toast("Reconectado!", "success");
+      // Resync state after reconnect: refresh tasks and focused logs once
+      (async () => {
+        try {
+          await refresh();
+          if (selectedTask?.id) {
+            const data = await api.tasks.poll(selectedRepoId ?? undefined, selectedTask.id, 0);
+            if (canceled) return;
+            startTransition(() => {
+              setTasksSnapshot(data.tasks);
+              if (data.focusedTask) setSelectedTask(data.focusedTask);
+              if (data.focusedLogs.length > 0) {
+                const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
+                focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
+                setLiveLogs((prev) => ({
+                  ...prev,
+                  [selectedTask.id]: appendLogsLimited(
+                    prev[selectedTask.id] ?? [],
+                    data.focusedLogs
+                  ),
+                }));
+              }
+            });
+          }
+        } catch {
+          // ignore
+        }
+      })();
     }
     wasConnected.current = connected;
-  }, [connected, toast]);
+    return () => {
+      canceled = true;
+    };
+  }, [connected, toast, refresh, selectedRepoId, selectedTask, setTasksSnapshot]);
 
   // ─── Task interactions ───────────────────────────────────────────────────────
   const handleTaskClick = useCallback(
@@ -161,15 +373,28 @@ export default function App() {
 
   // ─── Filtered tasks ──────────────────────────────────────────────────────────
   const filteredTasks = useMemo(() => {
-    let result = tasks.filter((t) => t.status !== "archived");
+    let result = deferredTasks.filter((t) => t.status !== "archived");
 
     if (selectedAgent) {
       result = result.filter((t) => t.engine === selectedAgent);
     }
 
-    if (!search.trim()) return result;
+    if (filters.engine) {
+      result = result.filter((t) => t.engine === filters.engine);
+    }
+    if (filters.priority !== null) {
+      result = result.filter((t) => t.priority === filters.priority);
+    }
+    if (filters.hasPR) {
+      result = result.filter((t) => !!t.prUrl);
+    }
+    if (filters.tags.length > 0) {
+      result = result.filter((t) => filters.tags.every((tag) => t.tags?.includes(tag)));
+    }
 
-    const q = search.toLowerCase();
+    if (!deferredSearch.trim()) return result;
+
+    const q = deferredSearch.toLowerCase();
     return result.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
@@ -177,7 +402,59 @@ export default function App() {
         t.repo?.name.toLowerCase().includes(q) ||
         t.branchName?.toLowerCase().includes(q)
     );
-  }, [tasks, search, selectedAgent]);
+  }, [deferredTasks, deferredSearch, selectedAgent, filters]);
+
+  // ─── Repo stats ──────────────────────────────────────────────────────────────
+  const repoStats = useMemo(() => {
+    const stats: Record<string, { total: number; done: number; failed: number; running: number }> =
+      {};
+    for (const task of tasks) {
+      if (!stats[task.repoId]) stats[task.repoId] = { total: 0, done: 0, failed: 0, running: 0 };
+      stats[task.repoId].total++;
+      if (task.status === "done") stats[task.repoId].done++;
+      if (task.status === "failed") stats[task.repoId].failed++;
+      if (task.status === "in_progress") stats[task.repoId].running++;
+    }
+    return stats;
+  }, [tasks]);
+
+  // ─── Available tags from tasks ───────────────────────────────────────────────
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const task of tasks) {
+      for (const tag of task.tags ?? []) tagSet.add(tag);
+    }
+    return Array.from(tagSet).sort();
+  }, [tasks]);
+
+  // ─── Export board ────────────────────────────────────────────────────────────
+  const exportBoard = useCallback(() => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      repo: repos.find((r) => r.id === selectedRepoId) ?? null,
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        engine: t.engine,
+        model: t.model,
+        tags: t.tags,
+        branchName: t.branchName,
+        prUrl: t.prUrl,
+        priority: t.priority,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibe-code-board-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [tasks, repos, selectedRepoId]);
 
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -199,6 +476,10 @@ export default function App() {
       if (e.key === "Escape") {
         if (showCommandPalette) {
           setShowCommandPalette(false);
+          return;
+        }
+        if (showShortcuts) {
+          setShowShortcuts(false);
           return;
         }
         if (showEnginesPanel) {
@@ -239,8 +520,8 @@ export default function App() {
         e.preventDefault();
         searchRef.current?.focus();
       }
-      // R — add repo
-      if (e.key === "r" || e.key === "R") {
+      // O — add repo
+      if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
         e.preventDefault();
         setShowAddRepo(true);
       }
@@ -248,6 +529,16 @@ export default function App() {
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
         setShowEnginesPanel(true);
+      }
+      // ? — shortcuts modal
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowShortcuts((v) => !v);
+      }
+      // F — toggle filter bar
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setShowFilterBar((v) => !v);
       }
     };
 
@@ -259,6 +550,7 @@ export default function App() {
     showNewTask,
     showAddRepo,
     showSettings,
+    showShortcuts,
     selectedTask,
     search,
     handleCloseDetail,
@@ -273,7 +565,29 @@ export default function App() {
           onSelectRepo={setSelectedRepoId}
           onAddRepo={() => setShowAddRepo(true)}
           onRemoveRepo={removeRepo}
+          repoStats={repoStats}
+          onDeleteLocalClone={async (repoId) => {
+            const repo = repos.find((item) => item.id === repoId);
+            if (!repo) return;
+            if (!window.confirm(`Apagar o clone local de ${repo.name}?`)) return;
+            try {
+              await deleteLocalClone(repoId);
+              toast(`Clone local de ${repo.name} apagado.`, "success");
+            } catch (err) {
+              toast(err instanceof Error ? err.message : String(err), "error");
+            }
+          }}
+          onDeleteAllLocalClones={async () => {
+            if (!window.confirm("Apagar todos os clones locais ociosos?")) return;
+            try {
+              const result = await purgeLocalClones();
+              toast(`Clones limpos: ${result.deleted}. Pulados: ${result.skipped}.`, "success");
+            } catch (err) {
+              toast(err instanceof Error ? err.message : String(err), "error");
+            }
+          }}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenStats={() => setShowStats(true)}
           connected={connected}
         />
 
@@ -290,14 +604,23 @@ export default function App() {
           <header className="glass-panel border-b px-4 py-3 flex items-center gap-3 shrink-0">
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-zinc-300 truncate">
-                {selectedRepoId
-                  ? (repos.find((r) => r.id === selectedRepoId)?.name ?? "Repositório")
-                  : "Todos os Repositórios"}
+                {selectedRepoId ? (selectedRepo?.name ?? "Repositório") : "Todos os Repositórios"}
               </h2>
-              <p className="text-xs text-zinc-600">
+              <p className="text-xs text-zinc-600 flex items-center gap-2">
                 {filteredTasks.length !== tasks.length
                   ? `${filteredTasks.length} de ${tasks.length} tarefas`
                   : `${tasks.length} tarefa${tasks.length !== 1 ? "s" : ""}`}
+                {selectedRepo?.url && (
+                  <a
+                    href={selectedRepo.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title={selectedRepo.url}
+                  >
+                    abrir repo
+                  </a>
+                )}
               </p>
             </div>
 
@@ -380,6 +703,24 @@ export default function App() {
               <span>⌘K</span>
             </button>
 
+            <button
+              type="button"
+              onClick={exportBoard}
+              title="Exportar board como JSON"
+              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+            >
+              ↓ Export
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowShortcuts(true)}
+              title="Atalhos (?) "
+              className="hidden sm:flex items-center px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+            >
+              ?
+            </button>
+
             <Button
               variant="primary"
               size="sm"
@@ -389,6 +730,16 @@ export default function App() {
               + Tarefa
             </Button>
           </header>
+
+          {/* Filter Bar */}
+          {showFilterBar && (
+            <FilterBar
+              filters={filters}
+              onFilterChange={setFilters}
+              availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
+              availableTags={availableTags}
+            />
+          )}
 
           {/* Board */}
           <main className="flex-1 overflow-hidden p-4">
@@ -438,19 +789,47 @@ export default function App() {
               toast("Criando PR...", "info");
             }}
             onDelete={async (id) => {
+              const taskToDelete = tasks.find((t) => t.id === id);
               await removeTask(id);
               handleCloseDetail();
-              toast("Tarefa deletada", "info");
+              toast(
+                "Tarefa deletada",
+                "info",
+                taskToDelete
+                  ? {
+                      label: "Desfazer",
+                      onClick: async () => {
+                        await createTask({
+                          title: taskToDelete.title,
+                          description: taskToDelete.description,
+                          repoId: taskToDelete.repoId,
+                          engine: taskToDelete.engine ?? undefined,
+                          tags: taskToDelete.tags,
+                        });
+                        toast("Tarefa restaurada", "success");
+                      },
+                    }
+                  : undefined
+              );
             }}
             onSendInput={(taskId, input) => {
               send({ type: "agent_input", taskId, input });
+            }}
+            onClone={async (id) => {
+              const cloned = await cloneTask(id);
+              toast(`"${cloned.title}" clonada`, "success");
+            }}
+            onUpdateTask={async (id, data) => {
+              await updateTask(id, data);
             }}
             onTaskRefresh={refresh}
           />
         )}
 
-        {/* Engines Panel */}
         {showEnginesPanel && <EnginesPanel onClose={() => setShowEnginesPanel(false)} />}
+
+        {/* Shortcuts Modal */}
+        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
         {/* Command Palette */}
         {showCommandPalette && (
@@ -485,8 +864,8 @@ export default function App() {
           engines={engines}
           enginesLoading={enginesLoading}
           enginesError={enginesError}
-          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, ...data }) => {
-            const task = await createTask({ ...data, baseBranch });
+          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, tags, ...data }) => {
+            const task = await createTask({ ...data, baseBranch, tags });
             if (!task) return;
 
             if (schedule) {
@@ -514,6 +893,8 @@ export default function App() {
         />
 
         <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+
+        <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
 
         <Toaster />
       </div>

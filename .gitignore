@@ -6,3 +6,4 @@ dist/
 .vite/
 .env
 .env.local
+coverage/

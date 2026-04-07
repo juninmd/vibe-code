@@ -1,17 +1,25 @@
 /**
- * Reviewer engine — runs `claude --print` with a specialized persona prompt
- * and the git diff to review code changes before PR creation.
+ * Reviewer engine — runs a specialized persona prompt (Claude/Gemini)
+ * against the current git diff before PR creation.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export type ReviewPersona = "frontend" | "backend" | "security" | "quality";
+export type ReviewPersona = "frontend" | "backend" | "security" | "quality" | "docs";
 
 interface ReviewEvent {
   persona: ReviewPersona;
   content: string;
   hasBlocker: boolean;
+}
+
+type ReviewRuntime = "claude" | "gemini";
+
+function pickReviewRuntime(engineName?: string): ReviewRuntime {
+  if (!engineName) return "claude";
+  if (engineName.toLowerCase().includes("gemini")) return "gemini";
+  return "claude";
 }
 
 const PERSONA_PROMPTS: Record<ReviewPersona, string> = {
@@ -54,6 +62,20 @@ Format each issue as one of:
   INFO: <description>
 If there are no issues, write: LGTM
 Be concise, specific, and actionable. Reference file names when relevant.`,
+
+  docs: `You are a technical documentation reviewer for a pull request diff.
+Review ONLY the code changes shown in the diff below.
+Focus on: missing developer documentation, unclear architecture decisions, behavior changes not captured in docs, migration notes, and operational impacts.
+Format each issue as one of:
+  BLOCKER: <description>  (documentation gaps that can break rollout/operation)
+  WARNING: <description>
+  INFO: <description>
+When useful, include specific suggestions for:
+- merge request description sections
+- docs file structure under docs/
+- README.md and AGENTS.md updates
+If there are no issues, write: LGTM
+Be concise, specific, and actionable. Reference file names when relevant.`,
 };
 
 const PERSONA_LABELS: Record<ReviewPersona, string> = {
@@ -61,6 +83,7 @@ const PERSONA_LABELS: Record<ReviewPersona, string> = {
   backend: "Backend",
   security: "Security",
   quality: "Quality",
+  docs: "Docs",
 };
 
 /** Get the git diff for all changes on the current branch vs the base branch. */
@@ -83,7 +106,7 @@ async function getWorktreeDiff(worktreePath: string, defaultBranch: string): Pro
 }
 
 /**
- * Run a single persona review using `claude --print`.
+ * Run a single persona review using the selected review runtime.
  * Returns a stream of text lines and whether any BLOCKER was found.
  */
 export async function runPersonaReview(opts: {
@@ -92,14 +115,30 @@ export async function runPersonaReview(opts: {
   taskTitle: string;
   taskDescription: string;
   defaultBranch: string;
+  reviewEngine?: string;
+  reviewModel?: string;
 }): Promise<ReviewEvent> {
-  const { persona, worktreePath, taskTitle, taskDescription, defaultBranch } = opts;
+  const {
+    persona,
+    worktreePath,
+    taskTitle,
+    taskDescription,
+    defaultBranch,
+    reviewEngine,
+    reviewModel,
+  } = opts;
 
   const diff = await getWorktreeDiff(worktreePath, defaultBranch);
   const label = PERSONA_LABELS[persona];
+  const runtime = pickReviewRuntime(reviewEngine);
 
   const prompt = [
     PERSONA_PROMPTS[persona],
+    "",
+    "Execution mode: read-only review only.",
+    "Do not use any tools, do not execute commands, and do not attempt to edit files.",
+    "Do not call list/read/write/edit tools. Analyze only the provided task context and diff text.",
+    "Multiple reviewer personas are already executed in parallel by the orchestrator; just return this persona's findings.",
     "",
     `## Task Context`,
     `Title: ${taskTitle}`,
@@ -124,10 +163,40 @@ export async function runPersonaReview(opts: {
   try {
     await writeFile(promptFile, prompt, "utf8");
 
-    const proc = Bun.spawn(["claude", "--print", "-p", `@${promptFile}`], {
+    if (runtime === "gemini") {
+      lines.push(
+        "INFO: [reviewer:gemini] Running with IDE-related env removed from child process (prevents workspace mismatch and IDE companion warnings in detached worktrees)"
+      );
+    }
+
+    const args =
+      runtime === "gemini"
+        ? ["gemini", ...(reviewModel ? ["-m", reviewModel] : []), "-p", prompt]
+        : ["claude", "--print", "-p", `@${promptFile}`];
+
+    const childEnv =
+      runtime === "gemini"
+        ? (() => {
+            const env = { ...process.env };
+            // Detached review worktrees should not attach to VS Code Gemini IDE client.
+            delete env.GEMINI_CLI_IDE_SERVER_PORT;
+            delete env.GEMINI_CLI_IDE_WORKSPACE_PATH;
+            delete env.GEMINI_CLI_IDE_AUTH_TOKEN;
+            delete env.TERM_PROGRAM;
+            delete env.VSCODE_INJECTION;
+            delete env.VSCODE_GIT_ASKPASS_NODE;
+            delete env.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
+            delete env.VSCODE_GIT_ASKPASS_MAIN;
+            delete env.VSCODE_GIT_IPC_HANDLE;
+            return env;
+          })()
+        : process.env;
+
+    const proc = Bun.spawn(args, {
       cwd: worktreePath,
       stdout: "pipe",
       stderr: "pipe",
+      env: childEnv,
     });
 
     const reader = proc.stdout.getReader();
@@ -152,10 +221,29 @@ export async function runPersonaReview(opts: {
       if (buffer.startsWith("BLOCKER:")) hasBlocker = true;
     }
 
-    await proc.exited;
+    const [exitCode, stderrText] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text().catch(() => ""),
+    ]);
+
+    if (stderrText.trim()) {
+      for (const line of stderrText.split("\n")) {
+        if (!line.trim()) continue;
+        lines.push(`INFO: [reviewer:${runtime}:stderr] ${line}`);
+      }
+    }
+
+    if ((exitCode ?? 0) !== 0) {
+      const stderrSummary = stderrText.trim().split("\n").slice(-2).join(" | ");
+      lines.push(
+        `BLOCKER: [reviewer] ${label} review failed (${runtime}) with exit code ${exitCode}${stderrSummary ? `: ${stderrSummary}` : ""}`
+      );
+      hasBlocker = true;
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    lines.push(`[reviewer] ${label} review failed: ${msg}`);
+    lines.push(`BLOCKER: [reviewer] ${label} review failed (${runtime}): ${msg}`);
+    hasBlocker = true;
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
   }

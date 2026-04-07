@@ -34,7 +34,7 @@
 | **Bug Fixes** | Resolver issues usando agentes de IA |
 | **Documentação** | Gerar ou atualizar docs, READMEs automaticamente |
 | **CI/CD Customizado** | Orquestrar workflows complexos com controle fino |
-| **Code Review Automático** | Pipeline de review com múltiplas personas (frontend, backend, security, quality) |
+| **Code Review Automático** | Pipeline de review com múltiplas personas (frontend, backend, security, quality, docs) |
 
 ---
 
@@ -161,6 +161,29 @@ User clicks "Launch Task"
                 (for stall detection)
 ```
 
+### Fluxo de Orquestração (Mermaid)
+
+```mermaid
+flowchart TD
+  A[POST /api/tasks/:id/launch] --> B[Orchestrator setup<br/>worktree + run status]
+  B --> C[Agent pass 1<br/>implementa requisitos]
+  C --> D{Agent exit code == 0?}
+  D -- nao --> Z[Run failed]
+  D -- sim --> E[Final Validator pass<br/>descobre CLI nativo do repo]
+  E --> F[Executa lint + test + build]
+  F --> G{Passou?}
+  G -- nao --> H{Tentativas restantes?}
+  H -- sim --> E
+  H -- nao --> Z
+  G -- sim --> I[Commit changes]
+  I --> J{Review pipeline habilitado?}
+  J -- sim --> K[Review + autofix + docs step]
+  J -- nao --> L[Push branch]
+  K --> L
+  L --> M[Create PR/MR]
+  M --> N[Task status: review/completed]
+```
+
 ---
 
 ## 🚀 Quick Start
@@ -252,10 +275,12 @@ O repositório será clonado como **bare clone** em `~/.vibe-code/repos/`
 2. No painel de detalhes, clique **"Launch"** (ou arraste para "In Progress")
 3. Acompanhe os **logs em tempo real** na aba "Output"
 4. Agent vai:
-   - ✅ Criar uma branch `vibe-code/{id}/{title}`
-   - 🔧 Fazer commits com suas mudanças
-   - 📊 Passar pelo pipeline de review (se habilitado)
-   - 📤 Push para origin e criar PR
+  - ✅ Criar uma branch `vibe-code/{id}/{title}`
+  - 🧪 Rodar validador final no CLI do agente (lint, test, build), com retentativas automáticas
+  - 🔧 Fazer commits com suas mudanças
+  - 📊 Passar pelo pipeline de review (se habilitado)
+  - 📝 Executar etapa final de docs (gera `docs/tasks/<task-id>.md` e atualiza README/AGENTS quando necessário)
+  - 📤 Push para origin e criar PR
 5. Task mostra status: **In Progress** → **Review** → **Done**
 
 ---
@@ -272,8 +297,11 @@ PORT=3000                                      # (default: 3000)
 VIBE_CODE_DATA_DIR=~/.vibe-code              # (default: ~/.vibe-code)
 VIBE_CODE_MAX_AGENTS=4                        # Max concurrent runs
 VIBE_CODE_AGENT_TIMEOUT_MS=7200000            # 2h timeout (default: 2h)
+VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS=3      # Tentativas do validador final (lint/test/build)
 VIBE_CODE_REVIEW_ENABLED=true                 # Enable review pipeline
 VIBE_CODE_REVIEW_STRICT=false                 # Block PR on review failures
+VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/quality suggestions
+VIBE_CODE_DOCS_AUTO_APPLY=true                # Run docs finisher step before PR creation
 
 # GitHub (Para criar PRs automaticamente)
 GITHUB_TOKEN=ghp_xxxxx...                     # (required para PRs)
@@ -599,6 +627,30 @@ VIBE_CODE_AGENT_TIMEOUT_MS=10800000  # 3 horas
 ---
 
 ## 🔐 Segurança
+
+### GitHub/GitLab: rotas acessadas
+
+As integrações com providers são somente para listar/criar repositórios e abrir/consultar PR/MR.
+Não existe endpoint de deleção remota no Vibe-Code.
+
+| Escopo | Provedor | Método | Rota/Endpoint | Finalidade |
+|---|---|---|---|---|
+| API interna | GitHub | GET | `/api/repos/github/list` | Listar repositórios remotos acessíveis |
+| API interna | GitHub | POST | `/api/repos/github/create` | Criar repositório remoto |
+| API interna | GitLab | GET | `/api/repos/gitlab/list` | Listar projetos remotos acessíveis |
+| API interna | GitLab | POST | `/api/repos/gitlab/create` | Criar projeto remoto |
+| API interna | GitHub | POST | `/api/settings/test/github` | Testar conexão/token do GitHub |
+| API interna | GitLab | POST | `/api/settings/test/gitlab` | Testar conexão/token do GitLab |
+| API externa | GitHub | GET | `https://api.github.com/user` | Obter usuário autenticado |
+| API externa | GitHub | GET | `https://api.github.com/user/repos` | Listar repositórios do usuário |
+| API externa | GitHub | POST | `https://api.github.com/user/repos` | Criar repositório |
+| API externa | GitHub | POST | `https://api.github.com/repos/{owner}/{repo}/pulls` | Criar pull request |
+| API externa | GitHub | GET | `https://api.github.com/repos/{owner}/{repo}/pulls/{number}` | Verificar status de merge do PR |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/user` | Obter usuário autenticado |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/projects` | Listar projetos acessíveis |
+| API externa | GitLab | POST | `{gitlab_base_url}/api/v4/projects` | Criar projeto |
+| API externa | GitLab | POST | `{gitlab_base_url}/api/v4/projects/{project}/merge_requests` | Criar merge request |
+| API externa | GitLab | GET | `{gitlab_base_url}/api/v4/projects/{project}/merge_requests/{iid}` | Verificar status de merge do MR |
 
 ### Isolamento de Tarefas
 

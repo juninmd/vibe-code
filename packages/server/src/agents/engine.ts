@@ -24,6 +24,9 @@ export interface AgentEngine {
   /** Get CLI version string, e.g. "1.2.3". Returns null if not available. */
   getVersion?(): Promise<string | null>;
 
+  /** Optional readiness issue when the engine is installed but not fully configured. */
+  getSetupIssue?(): Promise<string | null>;
+
   /** List available models by querying the CLI. Returns [] if not supported. */
   listModels(): Promise<string[]>;
 

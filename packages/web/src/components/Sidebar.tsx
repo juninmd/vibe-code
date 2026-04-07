@@ -20,8 +20,12 @@ interface SidebarProps {
   onSelectRepo: (id: string | null) => void;
   onAddRepo: () => void;
   onRemoveRepo: (id: string) => void;
+  onDeleteLocalClone: (id: string) => void;
+  onDeleteAllLocalClones: () => void;
   onOpenSettings: () => void;
+  onOpenStats?: () => void;
   connected: boolean;
+  repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
 
 export function Sidebar({
@@ -30,10 +34,15 @@ export function Sidebar({
   onSelectRepo,
   onAddRepo,
   onRemoveRepo,
+  onDeleteLocalClone,
+  onDeleteAllLocalClones,
   onOpenSettings,
+  onOpenStats,
   connected,
+  repoStats,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
+  const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
 
   const filtered = search
     ? repos.filter(
@@ -62,6 +71,29 @@ export function Sidebar({
             className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-zinc-600"}`}
             title={connected ? "Conectado" : "Desconectado"}
           />
+          {onOpenStats && (
+            <button
+              type="button"
+              onClick={onOpenStats}
+              title="Estatísticas"
+              className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="8" width="3" height="6" rx="0.5" />
+                <rect x="6.5" y="4" width="3" height="10" rx="0.5" />
+                <rect x="11" y="2" width="3" height="12" rx="0.5" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenSettings}
@@ -92,10 +124,42 @@ export function Sidebar({
           <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-0.5">
             Repositórios
           </h2>
-          <Button size="sm" variant="ghost" onClick={onAddRepo} title="Adicionar repositório">
-            +
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDeleteAllLocalClones}
+              title="Apagar todos os clones locais"
+            >
+              ⌫
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onAddRepo}
+              title="Adicionar repositório (Ctrl+O)"
+            >
+              +
+            </Button>
+          </div>
         </div>
+
+        {selectedRepo && (
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2 py-1.5">
+            <span className="truncate flex-1 text-[11px] text-zinc-500">
+              Clone local: {selectedRepo.localPath ? "pronto" : "ausente"}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDeleteLocalClone(selectedRepo.id)}
+              title="Apagar clone local do repositório selecionado"
+              disabled={!selectedRepo.localPath}
+            >
+              Apagar clone
+            </Button>
+          </div>
+        )}
 
         {/* Filter input */}
         {repos.length > 1 && (
@@ -172,6 +236,13 @@ export function Sidebar({
                   <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
                     {meta.label}
                   </Badge>
+                )}
+                {repoStats?.[repo.id] && repo.status === "ready" && (
+                  <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums">
+                    {repoStats[repo.id].total > 0 &&
+                      `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
+                    {repoStats[repo.id].running > 0 && ` ⚡`}
+                  </span>
                 )}
                 <button
                   type="button"

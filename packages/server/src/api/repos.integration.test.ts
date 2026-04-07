@@ -20,6 +20,7 @@ function makeGit(overrides: Partial<GitService> = {}): GitService {
     detectDefaultBranch: async () => "main",
     cloneRepo: async (_url: string, name: string) => `/tmp/${name}.git`,
     listGitHubRepos: async () => [],
+    deleteLocalRepo: async () => {},
     ...overrides,
   } as unknown as GitService;
 }
@@ -134,13 +135,118 @@ describe("DELETE /api/repos/:id", () => {
 
     const res = await buildApp(db).request(`/api/repos/${repo.id}`, { method: "DELETE" });
     expect(res.status).toBe(200);
-    expect((await res.json()).data.ok).toBe(true);
+    const body = await res.json();
+    expect(body.data.ok).toBe(true);
+    expect(body.data.scope).toBe("local_catalog_only");
+    expect(body.data.remoteDeleted).toBe(false);
     expect(db.repos.getById(repo.id)).toBeNull();
+  });
+
+  it("returns 409 when a task is in progress for the repo", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/busy-delete.git" });
+    db.tasks.create({ title: "Busy delete", repoId: repo.id, status: "in_progress" });
+
+    const res = await buildApp(db).request(`/api/repos/${repo.id}`, { method: "DELETE" });
+
+    expect(res.status).toBe(409);
+    expect(db.repos.getById(repo.id)).not.toBeNull();
   });
 
   it("returns 404 for unknown repo", async () => {
     const res = await buildApp(makeDb()).request("/api/repos/ghost", { method: "DELETE" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("DELETE /api/repos/:id/local-clone", () => {
+  it("removes the local clone and resets the repo to pending", async () => {
+    const db = makeDb();
+    const deleted: Array<{ barePath: string; repoName: string }> = [];
+    const repo = db.repos.create({ url: "https://github.com/org/clone.git" });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/clone.git");
+
+    const res = await buildApp(
+      db,
+      makeGit({
+        deleteLocalRepo: async (barePath: string, repoName: string) => {
+          deleted.push({ barePath, repoName });
+        },
+      })
+    ).request(`/api/repos/${repo.id}/local-clone`, { method: "DELETE" });
+
+    expect(res.status).toBe(200);
+    expect(deleted).toEqual([{ barePath: "/tmp/clone.git", repoName: "clone" }]);
+    expect(db.repos.getById(repo.id)?.status).toBe("pending");
+    expect(db.repos.getById(repo.id)?.localPath).toBeNull();
+  });
+
+  it("returns 400 when the repo has no local clone", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/clone.git" });
+
+    const res = await buildApp(db).request(`/api/repos/${repo.id}/local-clone`, {
+      method: "DELETE",
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 409 when a task is in progress for the repo", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/busy.git" });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/busy.git");
+    db.tasks.create({ title: "Busy", repoId: repo.id, status: "in_progress" });
+
+    const res = await buildApp(db).request(`/api/repos/${repo.id}/local-clone`, {
+      method: "DELETE",
+    });
+
+    expect(res.status).toBe(409);
+  });
+});
+
+describe("POST /api/repos/local-clones/purge", () => {
+  it("purges local clones for idle repos and skips busy or missing ones", async () => {
+    const db = makeDb();
+    const deleted: Array<{ barePath: string; repoName: string }> = [];
+
+    const idle = db.repos.create({ url: "https://github.com/org/idle.git" });
+    const busy = db.repos.create({ url: "https://github.com/org/busy.git" });
+    const missing = db.repos.create({ url: "https://github.com/org/missing.git" });
+    db.repos.updateStatus(idle.id, "ready", "/tmp/idle.git");
+    db.repos.updateStatus(busy.id, "ready", "/tmp/busy.git");
+    db.tasks.create({ title: "Busy", repoId: busy.id, status: "in_progress" });
+
+    const res = await buildApp(
+      db,
+      makeGit({
+        deleteLocalRepo: async (barePath: string, repoName: string) => {
+          deleted.push({ barePath, repoName });
+        },
+      })
+    ).request("/api/repos/local-clones/purge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { deleted: 1, skipped: 2 } });
+    expect(deleted).toEqual([{ barePath: "/tmp/idle.git", repoName: "idle" }]);
+    expect(db.repos.getById(idle.id)?.status).toBe("pending");
+    expect(db.repos.getById(busy.id)?.status).toBe("ready");
+    expect(db.repos.getById(missing.id)?.status).toBe("pending");
+  });
+
+  it("returns 400 without explicit confirmation", async () => {
+    const res = await buildApp(makeDb()).request("/api/repos/local-clones/purge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: false }),
+    });
+
+    expect(res.status).toBe(400);
   });
 });
 

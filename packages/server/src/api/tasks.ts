@@ -1,4 +1,4 @@
-import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
+import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -22,6 +22,7 @@ const createTaskSchema = z.object({
   model: z.string().optional(),
   baseBranch: z.string().optional(),
   priority: z.number().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -33,6 +34,8 @@ const updateTaskSchema = z.object({
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().optional(),
 });
 
 const launchTaskSchema = z.object({
@@ -43,19 +46,58 @@ const launchTaskSchema = z.object({
 export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
   const router = new Hono();
 
+  function mapTasksWithRuns(repoId?: string, status?: string): TaskWithRun[] {
+    const tasks = db.tasks.list(repoId, status);
+    const latestRunsByTaskId = new Map(
+      db.runs.listLatestByTaskIds(tasks.map((task) => task.id)).map((run) => [run.taskId, run])
+    );
+    const reposById = new Map(
+      db.repos
+        .listByIds(Array.from(new Set(tasks.map((task) => task.repoId))))
+        .map((repo) => [repo.id, repo])
+    );
+    return tasks.map((task) => ({
+      ...task,
+      latestRun: latestRunsByTaskId.get(task.id) ?? undefined,
+      repo: reposById.get(task.repoId) ?? undefined,
+    }));
+  }
+
   router.get("/", (c) => {
     const repoId = c.req.query("repo_id");
     const status = c.req.query("status");
-    const tasks = db.tasks.list(repoId, status);
+    return c.json({ data: mapTasksWithRuns(repoId, status) });
+  });
 
-    // Attach latest run info
-    const tasksWithRuns = tasks.map((task) => {
-      const latestRun = db.runs.getLatestByTask(task.id);
-      const repo = db.repos.getById(task.repoId);
-      return { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined };
+  router.get("/poll", (c) => {
+    const repoId = c.req.query("repo_id");
+    const focusedTaskId = c.req.query("focused_task_id") ?? undefined;
+    const focusedLogsAfterIdRaw = c.req.query("focused_logs_after_id") ?? "0";
+    const focusedLogsAfterId = Number.parseInt(focusedLogsAfterIdRaw, 10);
+
+    const tasks = mapTasksWithRuns(repoId);
+    let focusedTask: TaskWithRun | null = null;
+    let focusedLogs: ReturnType<typeof db.logs.listByRun> = [];
+
+    if (focusedTaskId) {
+      focusedTask = tasks.find((task) => task.id === focusedTaskId) ?? null;
+      if (focusedTask?.latestRun?.id) {
+        focusedLogs = db.logs.listByRunAfter(
+          focusedTask.latestRun.id,
+          Number.isNaN(focusedLogsAfterId) ? 0 : focusedLogsAfterId,
+          400
+        );
+      }
+    }
+
+    return c.json({
+      data: {
+        tasks,
+        focusedTask,
+        focusedLogs,
+        serverTime: new Date().toISOString(),
+      },
     });
-
-    return c.json({ data: tasksWithRuns });
   });
 
   router.post("/archive-done", (c) => {
@@ -78,7 +120,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       try {
         await orchestrator.launch(task);
         count++;
-      } catch (err) {
+      } catch (_err) {
         /* ignore individual failures */
       }
     }
@@ -128,6 +170,22 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     db.tasks.remove(c.req.param("id"));
     return c.json({ data: { ok: true } });
+  });
+
+  router.post("/:id/clone", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    const cloned = db.tasks.create({
+      title: `${task.title} (copy)`,
+      description: task.description,
+      repoId: task.repoId,
+      engine: task.engine ?? undefined,
+      model: task.model ?? undefined,
+      baseBranch: task.baseBranch ?? undefined,
+      priority: task.priority,
+      tags: task.tags,
+    });
+    return c.json({ data: cloned }, 201);
   });
 
   router.post("/:id/launch", async (c) => {

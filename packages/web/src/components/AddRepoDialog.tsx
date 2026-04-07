@@ -1,4 +1,4 @@
-import type { GitHubRepo } from "@vibe-code/shared";
+import type { RemoteRepo } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Badge } from "./ui/badge";
@@ -13,38 +13,56 @@ interface AddRepoDialogProps {
 }
 
 export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
-  const [ghRepos, setGhRepos] = useState<GitHubRepo[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [ghRepos, setGhRepos] = useState<RemoteRepo[]>([]);
+  const [glRepos, setGlRepos] = useState<RemoteRepo[]>([]);
+  const [ghLoading, setGhLoading] = useState(false);
+  const [glLoading, setGlLoading] = useState(false);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const [glError, setGlError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [manualUrl, setManualUrl] = useState("");
-  const [mode, setMode] = useState<"github" | "manual" | "create">("github");
+  const [mode, setMode] = useState<"github" | "gitlab" | "manual" | "create">("github");
+  const [createProvider, setCreateProvider] = useState<"github" | "gitlab">("github");
 
   // Create new repo state
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newIsPrivate, setNewIsPrivate] = useState(false);
+  const [newIsPrivate, setNewIsPrivate] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
+    setGhLoading(true);
+    setGhError(null);
     api.repos
       .listGitHub()
       .then(setGhRepos)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch((err) => setGhError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setGhLoading(false));
+
+    setGlLoading(true);
+    setGlError(null);
+    api.repos
+      .listGitLab()
+      .then(setGlRepos)
+      .catch((err) => setGlError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setGlLoading(false));
   }, [open]);
 
+  const activeRepos = mode === "gitlab" ? glRepos : ghRepos;
+  const activeLoading = mode === "gitlab" ? glLoading : ghLoading;
+  const activeError = mode === "gitlab" ? glError : ghError;
+  const activeProviderLabel = mode === "gitlab" ? "GitLab" : "GitHub";
   const filtered = search
-    ? ghRepos.filter(
+    ? activeRepos.filter(
         (r) =>
           r.name.toLowerCase().includes(search.toLowerCase()) ||
           r.description.toLowerCase().includes(search.toLowerCase())
       )
-    : ghRepos;
+    : activeRepos;
 
-  const handleSelect = (repo: GitHubRepo) => {
+  const handleSelect = (repo: RemoteRepo) => {
     onSubmit({ url: repo.url });
     handleClose();
   };
@@ -62,7 +80,9 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     setCreating(true);
     setCreateError(null);
     try {
-      const repo = await api.repos.createGitHub({
+      const createFn =
+        createProvider === "gitlab" ? api.repos.createGitLab : api.repos.createGitHub;
+      const repo = await createFn({
         name: newName.trim(),
         description: newDescription.trim(),
         isPrivate: newIsPrivate,
@@ -82,63 +102,66 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     setMode("github");
     setNewName("");
     setNewDescription("");
-    setNewIsPrivate(false);
+    setNewIsPrivate(true);
     setCreateError(null);
+    setGhError(null);
+    setGlError(null);
     onClose();
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Add Repository">
+    <Dialog open={open} onClose={handleClose} title="Adicionar repositório">
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 bg-zinc-800 rounded-lg p-1">
-        <button
-          type="button"
-          onClick={() => setMode("github")}
-          className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer ${
-            mode === "github" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          GitHub
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("create")}
-          className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer ${
-            mode === "create" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          + New Repo
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("manual")}
-          className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer ${
-            mode === "manual" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
-          }`}
-        >
-          Manual URL
-        </button>
+      <div className="flex gap-1 mb-4 rounded-lg p-1" style={{ background: "var(--bg-input)" }}>
+        {(["github", "gitlab", "create", "manual"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setMode(t)}
+            className="flex-1 text-xs font-medium py-1.5 rounded-md transition-colors cursor-pointer"
+            style={{
+              background: mode === t ? "var(--bg-surface)" : "transparent",
+              color: mode === t ? "var(--text-primary)" : "var(--text-muted)",
+            }}
+          >
+            {t === "github"
+              ? "GitHub"
+              : t === "gitlab"
+                ? "GitLab"
+                : t === "create"
+                  ? "Novo"
+                  : "URL"}
+          </button>
+        ))}
       </div>
 
-      {mode === "github" ? (
+      {mode === "github" || mode === "gitlab" ? (
         <div className="space-y-3">
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search your repositories..."
+            placeholder={`Buscar repositórios no ${mode === "gitlab" ? "GitLab" : "GitHub"}...`}
             autoFocus
           />
 
           <div className="max-h-72 overflow-y-auto rounded-md border border-zinc-800">
-            {loading ? (
+            {activeLoading ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
-                Loading repositories...
+                Carregando repositórios do {activeProviderLabel}...
+              </div>
+            ) : activeError ? (
+              <div className="px-3 py-8 text-center text-xs text-red-400 space-y-2">
+                <p>Não foi possível carregar os repositórios do {activeProviderLabel}.</p>
+                <p className="text-zinc-500">{activeError}</p>
+                <p className="text-zinc-500">
+                  Verifique a configuração do provider em Configurações.
+                </p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
                 {search
-                  ? "No repositories match your search"
-                  : "No repositories found. Is `gh` authenticated?"}
+                  ? "Nenhum repositório corresponde à busca"
+                  : `Nenhum repositório encontrado no ${activeProviderLabel}.`}
               </div>
             ) : (
               filtered.map((repo) => (
@@ -154,7 +177,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                     </span>
                     {repo.isPrivate && (
                       <Badge variant="warning" className="text-[10px]">
-                        private
+                        privado
                       </Badge>
                     )}
                   </div>
@@ -169,38 +192,111 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
       ) : mode === "create" ? (
         <form onSubmit={handleCreateSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
-              Repository Name *
+            <label
+              htmlFor="provider-github"
+              className="block text-xs font-medium mb-1"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Provedor
+            </label>
+            <div className="flex gap-2">
+              {(["github", "gitlab"] as const).map((p) => (
+                <button
+                  key={p}
+                  id={p === "github" ? "provider-github" : undefined}
+                  type="button"
+                  onClick={() => setCreateProvider(p)}
+                  className="flex-1 text-xs font-medium py-2 rounded-md border cursor-pointer transition-colors"
+                  style={{
+                    background: createProvider === p ? "var(--accent-muted)" : "transparent",
+                    borderColor: createProvider === p ? "var(--accent)" : "var(--border-default)",
+                    color: createProvider === p ? "var(--accent-text)" : "var(--text-muted)",
+                  }}
+                >
+                  {p === "github" ? "GitHub" : "GitLab"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label
+              htmlFor="repo-name"
+              className="block text-xs font-medium mb-1"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Nome do repositório *
             </label>
             <Input
+              id="repo-name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="my-new-project"
               required
               autoFocus
             />
-            <p className="text-xs text-zinc-600 mt-1">
-              Will be created on your GitHub account via <code className="text-zinc-500">gh</code>
+            <p className="text-xs mt-1" style={{ color: "var(--text-dimmed)" }}>
+              Será criado na sua conta {createProvider === "gitlab" ? "GitLab" : "GitHub"} via API
             </p>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Description</label>
+            <label
+              htmlFor="repo-description"
+              className="block text-xs font-medium mb-1"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Descrição
+            </label>
             <Input
+              id="repo-description"
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Optional description..."
+              placeholder="Descrição opcional..."
             />
           </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex items-center gap-2 cursor-pointer group">
             <input
               type="checkbox"
               checked={newIsPrivate}
               onChange={(e) => setNewIsPrivate(e.target.checked)}
               className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
             />
-            <span className="text-sm text-zinc-400">Private repository</span>
+            <span className="text-sm text-zinc-400 flex items-center gap-1.5">
+              {newIsPrivate ? (
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <title>Private repository</title>
+                  <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+                  <path d="M5.5 7V5.5a2.5 2.5 0 1 1 5 0V7" />
+                </svg>
+              ) : (
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <title>Public repository</title>
+                  <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+                  <path d="M10.5 7V5.5a2.5 2.5 0 1 0-5 0" />
+                </svg>
+              )}
+              {newIsPrivate ? "Privado (recomendado)" : "Público"}
+            </span>
           </label>
 
           {createError && (
@@ -211,17 +307,19 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
 
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="ghost" onClick={handleClose}>
-              Cancel
+              Cancelar
             </Button>
             <Button type="submit" variant="primary" disabled={!newName.trim() || creating}>
-              {creating ? "Creating..." : "Create & Add"}
+              {creating ? "Criando..." : "Criar e adicionar"}
             </Button>
           </div>
         </form>
       ) : (
         <form onSubmit={handleManualSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">Repository URL *</label>
+            <label className="block text-xs font-medium text-zinc-400 mb-1">
+              URL do repositório *
+            </label>
             <Input
               value={manualUrl}
               onChange={(e) => setManualUrl(e.target.value)}
@@ -230,15 +328,15 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               autoFocus
             />
             <p className="text-xs text-zinc-600 mt-1">
-              GitHub URL or local path. Branch is auto-detected.
+              URL GitHub/GitLab ou caminho local. A branch é detectada automaticamente.
             </p>
           </div>
           <div className="flex gap-2 justify-end">
             <Button type="button" variant="ghost" onClick={handleClose}>
-              Cancel
+              Cancelar
             </Button>
             <Button type="submit" variant="primary" disabled={!manualUrl.trim()}>
-              Add
+              Adicionar
             </Button>
           </div>
         </form>

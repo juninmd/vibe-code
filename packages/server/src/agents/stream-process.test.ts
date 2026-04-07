@@ -38,6 +38,22 @@ describe("streamProcess", () => {
       expect(logs.map((e) => e.content)).toContain("world");
     });
 
+    it("streams carriage-return progress lines in real time", async () => {
+      const proc = spawn(`
+        process.stdout.write("Progress 10%\\r");
+        process.stdout.write("Progress 50%\\r");
+        process.stdout.write("Progress 100%\\n");
+      `);
+      const events = await collect(proc, passthrough);
+      const logs = events
+        .filter((e) => e.type === "log" && e.stream === "stdout")
+        .map((e) => e.content);
+
+      expect(logs).toContain("Progress 10%");
+      expect(logs).toContain("Progress 50%");
+      expect(logs).toContain("Progress 100%");
+    });
+
     it("does not emit empty lines", async () => {
       const proc = spawn(`console.log("a"); console.log(""); console.log("b")`);
       const events = await collect(proc, passthrough);

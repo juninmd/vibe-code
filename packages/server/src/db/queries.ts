@@ -5,6 +5,7 @@ import type {
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
+  GitProvider,
   PromptTemplate,
   Repository,
   Task,
@@ -22,6 +23,7 @@ interface RepoRow {
   default_branch: string;
   local_path: string | null;
   status: string;
+  provider: string;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -41,6 +43,8 @@ interface TaskRow {
   branch_name: string | null;
   pr_url: string | null;
   parent_task_id: string | null;
+  tags: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +81,7 @@ function mapRepo(row: RepoRow): Repository {
     defaultBranch: row.default_branch,
     localPath: row.local_path,
     status: row.status as Repository["status"],
+    provider: (row.provider || "github") as GitProvider,
     errorMessage: row.error_message,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -98,6 +103,8 @@ function mapTask(row: TaskRow): Task {
     branchName: row.branch_name,
     prUrl: row.pr_url,
     parentTaskId: row.parent_task_id,
+    tags: JSON.parse(row.tags || "[]") as string[],
+    notes: row.notes ?? "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -136,8 +143,8 @@ export function createRepoQueries(db: Database) {
     list: db.prepare<RepoRow, []>("SELECT * FROM repositories ORDER BY created_at DESC"),
     getById: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE id = ?"),
     getByUrl: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE url = ?"),
-    insert: db.prepare<RepoRow, [string, string, string]>(
-      "INSERT INTO repositories (name, url, default_branch) VALUES (?, ?, ?) RETURNING *"
+    insert: db.prepare<RepoRow, [string, string, string, string]>(
+      "INSERT INTO repositories (name, url, default_branch, provider) VALUES (?, ?, ?, ?) RETURNING *"
     ),
     updateStatus: db.prepare<RepoRow, [string, string | null, string | null, string]>(
       "UPDATE repositories SET status = ?, local_path = ?, error_message = ?, updated_at = datetime('now') WHERE id = ? RETURNING *"
@@ -151,9 +158,19 @@ export function createRepoQueries(db: Database) {
       const row = stmts.getById.get(id);
       return row ? mapRepo(row) : null;
     },
-    create: (req: CreateRepoRequest): Repository => {
+    listByIds: (ids: string[]): Repository[] => {
+      if (ids.length === 0) return [];
+      const placeholders = ids.map(() => "?").join(", ");
+      const rows = db
+        .prepare(`SELECT * FROM repositories WHERE id IN (${placeholders})`)
+        .all(...ids) as RepoRow[];
+      return rows.map(mapRepo);
+    },
+    create: (req: CreateRepoRequest & { provider?: GitProvider }): Repository => {
       const name = extractRepoName(req.url);
-      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main")!;
+      const provider = req.provider ?? detectProviderFromUrl(req.url);
+      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main", provider);
+      if (!row) throw new Error("Failed to create repository");
       return mapRepo(row);
     },
     updateStatus: (
@@ -207,6 +224,7 @@ export function createTaskQueries(db: Database) {
       const status = req.status ?? "backlog";
       const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
+      const tagsJson = JSON.stringify(req.tags ?? []);
       const row = db
         .prepare<
           TaskRow,
@@ -221,9 +239,10 @@ export function createTaskQueries(db: Database) {
             number,
             string,
             string | null,
+            string,
           ]
         >(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -235,8 +254,10 @@ export function createTaskQueries(db: Database) {
           req.priority ?? 0,
           order,
           status,
-          req.parentTaskId ?? null
-        )!;
+          req.parentTaskId ?? null,
+          tagsJson
+        );
+      if (!row) throw new Error("Failed to create task");
       return mapTask(row);
     },
     update: (id: string, req: UpdateTaskRequest): Task | null => {
@@ -266,7 +287,18 @@ export function createTaskQueries(db: Database) {
         sets.push("model = ?");
         values.push(req.model ?? null);
       }
-      if (sets.length === 0) return stmts.getById.get(id) ? mapTask(stmts.getById.get(id)!) : null;
+      if (req.tags !== undefined) {
+        sets.push("tags = ?");
+        values.push(JSON.stringify(req.tags));
+      }
+      if (req.notes !== undefined) {
+        sets.push("notes = ?");
+        values.push(req.notes);
+      }
+      if (sets.length === 0) {
+        const currentRow = stmts.getById.get(id);
+        return currentRow ? mapTask(currentRow) : null;
+      }
       sets.push("updated_at = datetime('now')");
       values.push(id);
       const sql = `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? RETURNING *`;
@@ -340,12 +372,31 @@ export function createRunQueries(db: Database) {
       const row = stmts.getById.get(id);
       return row ? mapRun(row) : null;
     },
+    listLatestByTaskIds: (taskIds: string[]): AgentRun[] => {
+      if (taskIds.length === 0) return [];
+      const placeholders = taskIds.map(() => "?").join(", ");
+      const rows = db
+        .prepare(
+          `SELECT * FROM agent_runs WHERE id IN (
+            SELECT id FROM (
+              SELECT id, task_id, row_number() OVER (
+                PARTITION BY task_id ORDER BY created_at DESC, rowid DESC
+              ) AS rank
+              FROM agent_runs
+              WHERE task_id IN (${placeholders})
+            ) ranked WHERE rank = 1
+          )`
+        )
+        .all(...taskIds) as RunRow[];
+      return rows.map(mapRun);
+    },
     getLatestByTask: (taskId: string): AgentRun | null => {
       const row = stmts.getLatestByTask.get(taskId);
       return row ? mapRun(row) : null;
     },
     create: (taskId: string, engine: string): AgentRun => {
-      const row = stmts.insert.get(taskId, engine)!;
+      const row = stmts.insert.get(taskId, engine);
+      if (!row) throw new Error("Failed to create run");
       return mapRun(row);
     },
     updateStatus: (
@@ -396,6 +447,9 @@ export function createLogQueries(db: Database) {
     listByRun: db.prepare<LogRow, [string]>(
       "SELECT * FROM agent_logs WHERE run_id = ? ORDER BY id ASC"
     ),
+    listByRunAfter: db.prepare<LogRow, [string, number, number]>(
+      "SELECT * FROM agent_logs WHERE run_id = ? AND id > ? ORDER BY id ASC LIMIT ?"
+    ),
     insert: db.prepare<LogRow, [string, string, string]>(
       "INSERT INTO agent_logs (run_id, stream, content) VALUES (?, ?, ?) RETURNING *"
     ),
@@ -403,8 +457,11 @@ export function createLogQueries(db: Database) {
 
   return {
     listByRun: (runId: string): AgentLog[] => stmts.listByRun.all(runId).map(mapLog),
+    listByRunAfter: (runId: string, afterId: number, limit = 300): AgentLog[] =>
+      stmts.listByRunAfter.all(runId, afterId, limit).map(mapLog),
     create: (runId: string, stream: string, content: string): AgentLog => {
-      const row = stmts.insert.get(runId, stream, content)!;
+      const row = stmts.insert.get(runId, stream, content);
+      if (!row) throw new Error("Failed to create log");
       return mapLog(row);
     },
   };
@@ -485,7 +542,8 @@ export function createPromptTemplateQueries(db: Database) {
         req.description ?? null,
         req.content,
         req.category ?? null
-      )!;
+      );
+      if (!row) throw new Error("Failed to create prompt template");
       return mapTemplate(row);
     },
     update: (id: string, req: Partial<CreatePromptTemplateRequest>): PromptTemplate | null => {
@@ -507,8 +565,10 @@ export function createPromptTemplateQueries(db: Database) {
         sets.push("category = ?");
         values.push(req.category ?? null);
       }
-      if (sets.length === 0)
-        return stmts.getById.get(id) ? mapTemplate(stmts.getById.get(id)!) : null;
+      if (sets.length === 0) {
+        const currentRow = stmts.getById.get(id);
+        return currentRow ? mapTemplate(currentRow) : null;
+      }
       sets.push("updated_at = datetime('now')");
       values.push(id);
       const sql = `UPDATE prompt_templates SET ${sets.join(", ")} WHERE id = ? AND is_builtin = 0 RETURNING *`;
@@ -576,7 +636,8 @@ export function createScheduleQueries(db: Database) {
              updated_at = datetime('now')
            RETURNING *`
         )
-        .get(taskId, cronExpression, deadlineAt, nextRunAt)!;
+        .get(taskId, cronExpression, deadlineAt, nextRunAt);
+      if (!row) throw new Error("Failed to upsert schedule");
       return mapSchedule(row);
     },
     setEnabled: (taskId: string, enabled: boolean): TaskSchedule | null => {
@@ -617,4 +678,10 @@ function extractRepoName(url: string): string {
   // Handle GitHub URLs like https://github.com/user/repo or git@github.com:user/repo.git
   const match = url.match(/([^/\\:]+?)(?:\.git)?$/);
   return match?.[1] ?? url;
+}
+
+function detectProviderFromUrl(url: string): GitProvider {
+  if (url.includes("github.com")) return "github";
+  if (url.includes("gitlab")) return "gitlab";
+  return "manual";
 }
