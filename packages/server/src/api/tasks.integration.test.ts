@@ -56,7 +56,9 @@ function makeGit(): GitService {
 function seedRepo(db: Db) {
   const repo = db.repos.create({ url: "https://github.com/test/repo.git" });
   db.repos.updateStatus(repo.id, "ready", "/tmp/repo.git");
-  return db.repos.getById(repo.id)!;
+  const result = db.repos.getById(repo.id);
+  if (!result) throw new Error("Repo not found");
+  return result;
 }
 
 function buildApp(db: Db) {

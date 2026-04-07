@@ -144,6 +144,7 @@ export function createStatsRouter(db: Db) {
           totalRepos,
           totalTasks,
           totalRuns,
+          failedRuns,
           successRate,
           avgRunDurationSecs: Math.round(avgDuration),
           totalPRsCreated,

@@ -193,6 +193,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
         <form onSubmit={handleCreateSubmit} className="space-y-4">
           <div>
             <label
+              htmlFor="provider-github"
               className="block text-xs font-medium mb-1"
               style={{ color: "var(--text-muted)" }}
             >
@@ -202,6 +203,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               {(["github", "gitlab"] as const).map((p) => (
                 <button
                   key={p}
+                  id={p === "github" ? "provider-github" : undefined}
                   type="button"
                   onClick={() => setCreateProvider(p)}
                   className="flex-1 text-xs font-medium py-2 rounded-md border cursor-pointer transition-colors"
@@ -219,12 +221,14 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
 
           <div>
             <label
+              htmlFor="repo-name"
               className="block text-xs font-medium mb-1"
               style={{ color: "var(--text-muted)" }}
             >
               Nome do repositório *
             </label>
             <Input
+              id="repo-name"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="my-new-project"
@@ -238,12 +242,14 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
 
           <div>
             <label
+              htmlFor="repo-description"
               className="block text-xs font-medium mb-1"
               style={{ color: "var(--text-muted)" }}
             >
               Descrição
             </label>
             <Input
+              id="repo-description"
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
               placeholder="Descrição opcional..."
@@ -269,6 +275,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Private repository</title>
                   <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
                   <path d="M5.5 7V5.5a2.5 2.5 0 1 1 5 0V7" />
                 </svg>
@@ -283,6 +290,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
+                  <title>Public repository</title>
                   <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
                   <path d="M10.5 7V5.5a2.5 2.5 0 1 0-5 0" />
                 </svg>
