@@ -5,7 +5,8 @@ import { api } from "../api/client";
 export function useRepos() {
   const [repos, setRepos] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollDelayRef = useRef(2_000);
 
   const refresh = useCallback(async () => {
     try {
@@ -26,14 +27,24 @@ export function useRepos() {
   useEffect(() => {
     const hasCloning = repos.some((r) => r.status === "cloning" || r.status === "pending");
     if (hasCloning && !pollRef.current) {
-      pollRef.current = setInterval(refresh, 2000);
+      const scheduleNext = () => {
+        pollRef.current = setTimeout(async () => {
+          await refresh();
+          pollRef.current = null;
+          pollDelayRef.current = Math.min(pollDelayRef.current * 2, 8_000);
+          scheduleNext();
+        }, pollDelayRef.current);
+      };
+      pollDelayRef.current = 2_000;
+      scheduleNext();
     } else if (!hasCloning && pollRef.current) {
-      clearInterval(pollRef.current);
+      clearTimeout(pollRef.current);
       pollRef.current = null;
+      pollDelayRef.current = 2_000;
     }
     return () => {
       if (pollRef.current) {
-        clearInterval(pollRef.current);
+        clearTimeout(pollRef.current);
         pollRef.current = null;
       }
     };
@@ -56,6 +67,18 @@ export function useRepos() {
     [refresh]
   );
 
+  const deleteLocalClone = useCallback(async (id: string) => {
+    const repo = await api.repos.deleteLocalClone(id);
+    setRepos((prev) => prev.map((item) => (item.id === repo.id ? repo : item)));
+    return repo;
+  }, []);
+
+  const purgeLocalClones = useCallback(async () => {
+    const result = await api.repos.purgeLocalClones();
+    await refresh();
+    return result;
+  }, [refresh]);
+
   const addOrUpdateRepo = useCallback((repo: Repository) => {
     setRepos((prev) => {
       const idx = prev.findIndex((r) => r.id === repo.id);
@@ -68,5 +91,14 @@ export function useRepos() {
     });
   }, []);
 
-  return { repos, loading, refresh, addRepo, removeRepo, addOrUpdateRepo };
+  return {
+    repos,
+    loading,
+    refresh,
+    addRepo,
+    removeRepo,
+    deleteLocalClone,
+    purgeLocalClones,
+    addOrUpdateRepo,
+  };
 }

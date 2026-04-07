@@ -1,21 +1,20 @@
 import type { Db } from "../db";
 import type { BroadcastHub } from "../ws/broadcast";
+import type { ProviderRegistry } from "./providers/registry";
 
 const POLL_INTERVAL_MS = 60_000; // 1 minute
-const GH_API = "https://api.github.com";
 
 export class PrPoller {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private providerRegistry: ProviderRegistry | null = null;
 
   constructor(
     private db: Db,
     private hub: BroadcastHub
   ) {}
 
-  private getToken(): string | undefined {
-    const dbToken = this.db.settings.get("github_token");
-    if (dbToken) return dbToken;
-    return process.env.GITHUB_TOKEN || undefined;
+  setProviderRegistry(registry: ProviderRegistry): void {
+    this.providerRegistry = registry;
   }
 
   start(): void {
@@ -34,7 +33,7 @@ export class PrPoller {
     for (const task of tasks) {
       try {
         if (!task.prUrl) continue;
-        const merged = await this.isPrMerged(task.prUrl);
+        const merged = await this.checkMerged(task.prUrl);
         if (merged) {
           const updated = this.db.tasks.update(task.id, { status: "done" });
           if (updated) {
@@ -48,27 +47,14 @@ export class PrPoller {
     }
   }
 
-  private async isPrMerged(prUrl: string): Promise<boolean> {
-    // Convert https://github.com/owner/repo/pull/123 → /repos/owner/repo/pulls/123
-    const match = prUrl.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
-    if (!match) return false;
-
-    const [, repoPath, prNumber] = match;
-    const apiUrl = `${GH_API}/repos/${repoPath}/pulls/${prNumber}`;
-
-    const headers: Record<string, string> = {
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "vibe-code",
-    };
-    const token = this.getToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
+  private async checkMerged(prUrl: string): Promise<boolean> {
+    if (!this.providerRegistry) return false;
+    const resolved = this.providerRegistry.resolve(prUrl);
+    if (!resolved) return false;
+    try {
+      return await resolved.adapter.isPrMerged(resolved.token, prUrl);
+    } catch {
+      return false;
     }
-
-    const res = await fetch(apiUrl, { headers });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { merged: boolean; state: string };
-    return data.merged === true;
   }
 }

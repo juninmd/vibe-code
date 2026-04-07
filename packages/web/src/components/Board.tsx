@@ -13,9 +13,11 @@ import { TASK_COLUMNS } from "@vibe-code/shared";
 
 const BOARD_COLUMNS: TaskStatus[] = [...TASK_COLUMNS, "failed"];
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
+
+const SCHEDULED_COLLAPSED_KEY = "vibe-code-scheduled-collapsed";
 
 interface BoardProps {
   tasks: TaskWithRun[];
@@ -37,17 +39,26 @@ export function Board({
   onRetryAllFailed,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
+  const [scheduledCollapsed, setScheduledCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SCHEDULED_COLLAPSED_KEY) === "1";
+  });
+  const noopTaskClick = useCallback(() => {}, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const tasksByColumn = BOARD_COLUMNS.reduce(
-    (acc, status) => {
-      acc[status] = tasks
-        .filter((t) => t.status === status)
-        .sort((a, b) => a.columnOrder - b.columnOrder);
-      return acc;
-    },
-    {} as Record<TaskStatus, TaskWithRun[]>
+  const tasksByColumn = useMemo(
+    () =>
+      BOARD_COLUMNS.reduce(
+        (acc, status) => {
+          acc[status] = tasks
+            .filter((t) => t.status === status)
+            .sort((a, b) => a.columnOrder - b.columnOrder);
+          return acc;
+        },
+        {} as Record<TaskStatus, TaskWithRun[]>
+      ),
+    [tasks]
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -79,6 +90,8 @@ export function Board({
       if (task.status === targetStatus) return;
       // Scheduled template tasks cannot be dragged to other columns
       if (task.status === "scheduled") return;
+      // Tasks cannot be manually moved to scheduled templates
+      if (targetStatus === "scheduled") return;
 
       // Calculate new order
       const targetTasks = tasksByColumn[targetStatus];
@@ -97,27 +110,49 @@ export function Board({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {BOARD_COLUMNS.filter(
-          (status) => status !== "failed" || tasksByColumn[status].length > 0
-        ).map((status) => (
-          <Column
-            key={status}
-            status={status}
-            tasks={tasksByColumn[status]}
-            onTaskClick={onTaskClick}
-            onRetryPR={onRetryPR}
-            onArchiveDone={onArchiveDone}
-            onClearFailed={onClearFailed}
-            onRetryAllFailed={onRetryAllFailed}
-          />
-        ))}
+      <div className="flex flex-col gap-4 pb-4 h-full">
+        <Column
+          status="scheduled"
+          tasks={tasksByColumn.scheduled}
+          onTaskClick={onTaskClick}
+          onRetryPR={onRetryPR}
+          horizontal
+          collapsible
+          collapsed={scheduledCollapsed}
+          onToggleCollapse={() => {
+            setScheduledCollapsed((prev) => {
+              const next = !prev;
+              if (typeof window !== "undefined") {
+                window.localStorage.setItem(SCHEDULED_COLLAPSED_KEY, next ? "1" : "0");
+              }
+              return next;
+            });
+          }}
+        />
+
+        <div className="flex gap-4 overflow-x-auto min-h-0">
+          {BOARD_COLUMNS.filter(
+            (status) =>
+              status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
+          ).map((status) => (
+            <Column
+              key={status}
+              status={status}
+              tasks={tasksByColumn[status]}
+              onTaskClick={onTaskClick}
+              onRetryPR={onRetryPR}
+              onArchiveDone={onArchiveDone}
+              onClearFailed={onClearFailed}
+              onRetryAllFailed={onRetryAllFailed}
+            />
+          ))}
+        </div>
       </div>
 
       <DragOverlay>
         {activeTask ? (
           <div className="rotate-2 opacity-90">
-            <TaskCard task={activeTask} onClick={() => {}} onRetryPR={onRetryPR} />
+            <TaskCard task={activeTask} onClick={noopTaskClick} onRetryPR={onRetryPR} />
           </div>
         ) : null}
       </DragOverlay>

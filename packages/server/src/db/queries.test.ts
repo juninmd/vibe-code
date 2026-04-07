@@ -10,7 +10,9 @@ function makeDb(): Db {
 function seedRepo(db: Db, url = "https://github.com/test/repo.git") {
   const repo = db.repos.create({ url });
   db.repos.updateStatus(repo.id, "ready", "/path/repo.git");
-  return db.repos.getById(repo.id)!;
+  const result = db.repos.getById(repo.id);
+  if (!result) throw new Error("Repo not found");
+  return result;
 }
 
 describe("Repository queries", () => {
@@ -25,7 +27,8 @@ describe("Repository queries", () => {
     const db = makeDb();
     const repo = db.repos.create({ url: "https://github.com/owner/repo.git" });
     db.repos.updateStatus(repo.id, "ready", "/some/path.git");
-    const updated = db.repos.getById(repo.id)!;
+    const updated = db.repos.getById(repo.id);
+    if (!updated) throw new Error("Repo not found");
     expect(updated.status).toBe("ready");
     expect(updated.localPath).toBe("/some/path.git");
   });
@@ -101,7 +104,8 @@ describe("Task queries", () => {
   it("updates specific fields via updateField", () => {
     const task = db.tasks.create({ title: "T", repoId });
     db.tasks.updateField(task.id, "pr_url", "https://github.com/owner/repo/pull/1");
-    const updated = db.tasks.getById(task.id)!;
+    const updated = db.tasks.getById(task.id);
+    if (!updated) throw new Error("Task not found");
     expect(updated.prUrl).toBe("https://github.com/owner/repo/pull/1");
   });
 
@@ -144,7 +148,8 @@ describe("AgentRun queries", () => {
     const run = db.runs.create(taskId, "claude-code");
     const now = new Date().toISOString();
     db.runs.updateStatus(run.id, "running", { started_at: now });
-    const updated = db.runs.getById(run.id)!;
+    const updated = db.runs.getById(run.id);
+    if (!updated) throw new Error("Run not found");
     expect(updated.status).toBe("running");
     expect(updated.startedAt).toBe(now);
   });
@@ -155,7 +160,8 @@ describe("AgentRun queries", () => {
       finished_at: new Date().toISOString(),
       exit_code: 0,
     });
-    const updated = db.runs.getById(run.id)!;
+    const updated = db.runs.getById(run.id);
+    if (!updated) throw new Error("Run not found");
     expect(updated.status).toBe("completed");
     expect(updated.exitCode).toBe(0);
   });
@@ -163,7 +169,8 @@ describe("AgentRun queries", () => {
   it("updates run status to failed with error_message", () => {
     const run = db.runs.create(taskId, "claude-code");
     db.runs.updateStatus(run.id, "failed", { error_message: "Something went wrong" });
-    const updated = db.runs.getById(run.id)!;
+    const updated = db.runs.getById(run.id);
+    if (!updated) throw new Error("Run not found");
     expect(updated.status).toBe("failed");
     expect(updated.errorMessage).toBe("Something went wrong");
   });

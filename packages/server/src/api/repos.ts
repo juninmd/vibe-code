@@ -8,10 +8,14 @@ const createRepoSchema = z.object({
   url: z.string().url("Must be a valid URL").min(1),
 });
 
-const createGitHubRepoSchema = z.object({
+const createRemoteRepoSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().default(""),
   isPrivate: z.boolean().default(false),
+});
+
+const purgeLocalClonesSchema = z.object({
+  confirm: z.literal(true),
 });
 
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
@@ -59,18 +63,19 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   });
 
   router.get("/github/list", async (c) => {
-    const repos = await git.listGitHubRepos();
+    const repos = await git.listRemoteRepos("github");
     return c.json({ data: repos });
   });
 
   router.post("/github/create", async (c) => {
     const body = await c.req.json();
-    const parsed = createGitHubRepoSchema.safeParse(body);
+    const parsed = createRemoteRepoSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: "validation", message: parsed.error.message }, 400);
     }
     try {
-      const ghRepo = await git.createGitHubRepo(
+      const ghRepo = await git.createRemoteRepo(
+        "github",
         parsed.data.name,
         parsed.data.description,
         parsed.data.isPrivate
@@ -79,6 +84,32 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "github_error", message: msg }, 500);
+    }
+  });
+
+  // GitLab provider routes
+  router.get("/gitlab/list", async (c) => {
+    const repos = await git.listRemoteRepos("gitlab");
+    return c.json({ data: repos });
+  });
+
+  router.post("/gitlab/create", async (c) => {
+    const body = await c.req.json();
+    const parsed = createRemoteRepoSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+    try {
+      const glRepo = await git.createRemoteRepo(
+        "gitlab",
+        parsed.data.name,
+        parsed.data.description,
+        parsed.data.isPrivate
+      );
+      return c.json({ data: glRepo });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "gitlab_error", message: msg }, 500);
     }
   });
 
@@ -98,11 +129,79 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     return c.json({ data: sorted });
   });
 
+  router.delete("/:id/local-clone", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath) {
+      return c.json({ error: "invalid_state", message: "Repository has no local clone" }, 400);
+    }
+
+    const runningTask = db.tasks.list(repo.id).find((task) => task.status === "in_progress");
+    if (runningTask) {
+      return c.json(
+        { error: "conflict", message: "Cannot delete local clone while tasks are running" },
+        409
+      );
+    }
+
+    await git.deleteLocalRepo(repo.localPath, repo.name);
+    const updated = db.repos.updateStatus(repo.id, "pending", null, null);
+    if (updated) hub.broadcastAll({ type: "repo_updated", repo: updated });
+    return c.json({ data: updated });
+  });
+
+  router.post("/local-clones/purge", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = purgeLocalClonesSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+
+    const repos = db.repos.list();
+    let deleted = 0;
+    let skipped = 0;
+
+    for (const repo of repos) {
+      if (!repo.localPath) {
+        skipped++;
+        continue;
+      }
+
+      const hasRunningTask = db.tasks.list(repo.id).some((task) => task.status === "in_progress");
+      if (hasRunningTask) {
+        skipped++;
+        continue;
+      }
+
+      await git.deleteLocalRepo(repo.localPath, repo.name);
+      const updated = db.repos.updateStatus(repo.id, "pending", null, null);
+      if (updated) hub.broadcastAll({ type: "repo_updated", repo: updated });
+      deleted++;
+    }
+
+    return c.json({ data: { deleted, skipped } });
+  });
+
   router.delete("/:id", (c) => {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const runningTask = db.tasks.list(repo.id).find((task) => task.status === "in_progress");
+    if (runningTask) {
+      return c.json(
+        { error: "conflict", message: "Cannot remove repository while tasks are running" },
+        409
+      );
+    }
+
     db.repos.remove(c.req.param("id"));
-    return c.json({ data: { ok: true } });
+    return c.json({
+      data: {
+        ok: true,
+        scope: "local_catalog_only",
+        remoteDeleted: false,
+      },
+    });
   });
 
   router.post("/:id/refresh", (c) => {

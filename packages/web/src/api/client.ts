@@ -6,30 +6,94 @@ import type {
   CreateTaskRequest,
   DiffSummary,
   EngineInfo,
-  GitHubRepo,
   LaunchTaskRequest,
   PromptTemplate,
+  RemoteRepo,
   Repository,
+  SettingsResponse,
+  StatsResponse,
   Task,
+  TaskPollResponse,
   TaskSchedule,
   TaskWithRun,
+  TestConnectionResult,
+  UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export class ApiError extends Error {
+  status: number;
+  path: string;
+  method: string;
+
+  constructor(message: string, status: number, path: string, method: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.method = method;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message ?? json.error ?? "Request failed");
-  return json.data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const method = options?.method ?? "GET";
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...options,
+      signal: options?.signal ?? controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    const text = await res.text();
+    let json: any = null;
+
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        if (!res.ok) {
+          throw new ApiError(`Erro ${res.status} em ${method} ${path}`, res.status, path, method);
+        }
+        throw new ApiError(`Resposta inválida em ${method} ${path}`, res.status, path, method);
+      }
+    }
+
+    if (!res.ok) {
+      const message = json?.message ?? json?.error ?? `Erro ${res.status} em ${method} ${path}`;
+      throw new ApiError(message, res.status, path, method);
+    }
+
+    return (json?.data ?? null) as T;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new ApiError(
+        `Timeout de ${REQUEST_TIMEOUT_MS / 1000}s em ${method} ${path}`,
+        408,
+        path,
+        method
+      );
+    }
+    if (err instanceof ApiError) throw err;
+    throw new ApiError(
+      (err as Error)?.message || `Falha de rede em ${method} ${path}`,
+      0,
+      path,
+      method
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ─── Repositories ────────────────────────────────────────────────────────────
@@ -41,10 +105,20 @@ export const api = {
     create: (data: CreateRepoRequest) =>
       request<Repository>("/repos", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
+    deleteLocalClone: (id: string) =>
+      request<Repository>(`/repos/${id}/local-clone`, { method: "DELETE" }),
+    purgeLocalClones: () =>
+      request<{ deleted: number; skipped: number }>(`/repos/local-clones/purge`, {
+        method: "POST",
+        body: JSON.stringify({ confirm: true }),
+      }),
     refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
-    listGitHub: () => request<GitHubRepo[]>("/repos/github/list"),
+    listGitHub: () => request<RemoteRepo[]>("/repos/github/list"),
     createGitHub: (data: { name: string; description: string; isPrivate: boolean }) =>
-      request<GitHubRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
+      request<RemoteRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
+    listGitLab: () => request<RemoteRepo[]>("/repos/gitlab/list"),
+    createGitLab: (data: { name: string; description: string; isPrivate: boolean }) =>
+      request<RemoteRepo>("/repos/gitlab/create", { method: "POST", body: JSON.stringify(data) }),
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
   },
 
@@ -55,6 +129,16 @@ export const api = {
       if (status) params.set("status", status);
       const qs = params.toString();
       return request<TaskWithRun[]>(`/tasks${qs ? `?${qs}` : ""}`);
+    },
+    poll: (repoId?: string, focusedTaskId?: string, focusedLogsAfterId?: number) => {
+      const params = new URLSearchParams();
+      if (repoId) params.set("repo_id", repoId);
+      if (focusedTaskId) params.set("focused_task_id", focusedTaskId);
+      if (focusedLogsAfterId && focusedLogsAfterId > 0) {
+        params.set("focused_logs_after_id", String(focusedLogsAfterId));
+      }
+      const qs = params.toString();
+      return request<TaskPollResponse>(`/tasks/poll${qs ? `?${qs}` : ""}`);
     },
     archiveDone: (repoId?: string) => {
       const qs = repoId ? `?repo_id=${repoId}` : "";
@@ -83,6 +167,7 @@ export const api = {
     retry: (id: string) => request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
     retryPR: (id: string) =>
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
+    clone: (id: string) => request<Task>(`/tasks/${id}/clone`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
     diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
     diffFile: (id: string, path: string) =>
@@ -99,9 +184,11 @@ export const api = {
   },
 
   settings: {
-    get: () => request<{ githubToken: string; githubTokenSet: boolean }>("/settings"),
-    update: (data: { githubToken?: string }) =>
+    get: () => request<SettingsResponse>("/settings"),
+    update: (data: UpdateSettingsRequest) =>
       request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
+    testConnection: (provider: "github" | "gitlab") =>
+      request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
   },
 
   prompts: {
@@ -129,5 +216,9 @@ export const api = {
       }),
     runNow: (taskId: string) =>
       request<AgentRun>(`/tasks/${taskId}/schedule/run-now`, { method: "POST" }),
+  },
+
+  stats: {
+    get: () => request<StatsResponse>("/stats"),
   },
 };

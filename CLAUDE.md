@@ -53,7 +53,7 @@ bun run typecheck
 
 ### Data flow
 
-```
+```text
 POST /api/tasks/{id}/launch
   → Orchestrator: create worktree → spawn engine CLI
   → AsyncGenerator yields AgentEvents
@@ -64,7 +64,7 @@ POST /api/tasks/{id}/launch
 ### Runtime configuration (env vars)
 
 | Variable | Default |
-|---|---|
+| --- | --- |
 | `PORT` | `3000` |
 | `VIBE_CODE_DATA_DIR` | `~/.vibe-code` |
 | `VIBE_CODE_MAX_AGENTS` | `4` |
@@ -74,20 +74,22 @@ Data is stored at `~/.vibe-code/`: SQLite DB, bare repos (`repos/`), and task wo
 ## Custom Commands (`.claude/commands/`)
 
 | Comando | Descrição |
-|---|---|
+| --- | --- |
 | `/health` | Roda lint + typecheck + testes + build e reporta resultados |
 | `/fix` | Encontra e corrige todos os erros de TypeScript e lint |
 | `/pr` | Valida qualidade e gera título + body do PR |
 | `/new-engine <nome>` | Scaffolda novo adaptador de engine seguindo o padrão do projeto |
 | `/add-migration <desc>` | Adiciona migração SQLite segura com rollback documentado |
+| `/create-skill` | Captura comportamento real do OpenCode e transforma em fixture, replay test e skill interna |
 
 ## Sub-Agents (`.claude/agents/`)
 
 | Agente | Persona |
-|---|---|
+| --- | --- |
 | `code-reviewer` | Revisa código buscando bugs, segurança e padrões do projeto |
 | `test-writer` | Escreve testes de integração (server) e componentes/hooks (web) |
 | `db-admin` | Projeta schemas, otimiza queries SQLite e gerencia migrações |
+| `opencode-testing` | Aprende contratos reais do OpenCode via execução manual e os converte em fixtures e testes de replay |
 
 ## Convenções de código
 

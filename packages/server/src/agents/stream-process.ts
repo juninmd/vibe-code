@@ -3,6 +3,17 @@ import type { AgentEvent } from "./engine";
 
 type SpawnedProc = Subprocess<"pipe", "pipe", "pipe">;
 
+function splitBufferedLines(buffer: string): { lines: string[]; rest: string } {
+  // Progress renderers (npm/pnpm) often update the same line using \r.
+  // Treat both \n and \r as line breaks so UI receives live progress events.
+  const normalized = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const parts = normalized.split("\n");
+  return {
+    lines: parts.slice(0, -1),
+    rest: parts[parts.length - 1] ?? "",
+  };
+}
+
 /**
  * Streams stdout and stderr from a subprocess in parallel,
  * yielding AgentEvents as they arrive. Handles abort signals properly.
@@ -48,8 +59,8 @@ export async function* streamProcess(
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+        const { lines, rest } = splitBufferedLines(buffer);
+        buffer = rest;
         for (const line of lines) {
           if (line.trim()) {
             push({ type: "log", stream: "stderr", content: line });
@@ -76,8 +87,8 @@ export async function* streamProcess(
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+        const { lines, rest } = splitBufferedLines(buffer);
+        buffer = rest;
         for (const line of lines) {
           if (!line.trim()) continue;
           for (const event of parseLine(line)) {

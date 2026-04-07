@@ -2,12 +2,41 @@ import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";
 
+const NO_PLAN_MODE_GUARD = [
+  "SYSTEM: You are in implementation mode.",
+  "Do NOT enter Plan Mode.",
+  "Do NOT call the enter_plan_mode tool.",
+  "Execute the task directly by editing project files in the current workspace.",
+].join("\n");
+
 export class GeminiEngine implements AgentEngine {
   name = "gemini";
   displayName = "Gemini CLI";
   private processes = new Map<string, Subprocess>();
 
-  async isAvailable(): Promise<boolean> {
+  private getApiKey(): string | null {
+    const raw = process.env.GEMINI_API_KEY;
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    // Accept values pasted as "GEMINI_API_KEY=..." in settings.
+    if (trimmed.startsWith("GEMINI_API_KEY=")) {
+      const fromEnvLike = trimmed.slice("GEMINI_API_KEY=".length).trim();
+      return fromEnvLike || null;
+    }
+    return trimmed;
+  }
+
+  private buildGeminiChildEnv(apiKey: string): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    // Avoid Gemini IDE client binding when running in detached task worktrees.
+const keysToDelete = ['GEMINI_CLI_IDE_SERVER_PORT', 'GEMINI_CLI_IDE_WORKSPACE_PATH', 'GEMINI_CLI_IDE_AUTH_TOKEN', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'VSCODE_GIT_ASKPASS_NODE', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS', 'VSCODE_GIT_ASKPASS_MAIN', 'VSCODE_GIT_IPC_HANDLE'];
+keysToDelete.forEach(key => delete env[key]);
+    env.GEMINI_API_KEY = apiKey;
+    return env;
+  }
+
+  private async hasCli(): Promise<boolean> {
     try {
       const proc = Bun.spawn(["gemini", "--version"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
@@ -15,6 +44,52 @@ export class GeminiEngine implements AgentEngine {
     } catch {
       return false;
     }
+  }
+
+  private parseProviderLoadSignals(line: string): {
+    skills?: number;
+    agents?: number;
+    tools?: number;
+  } {
+    const out: { skills?: number; agents?: number; tools?: number } = {};
+    const skillMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+skills?/i);
+    const agentMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+agents?/i);
+    const toolMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+tools?/i);
+    if (skillMatch?.[1]) out.skills = Number(skillMatch[1]);
+    if (agentMatch?.[1]) out.agents = Number(agentMatch[1]);
+    if (toolMatch?.[1]) out.tools = Number(toolMatch[1]);
+    return out;
+  }
+
+  private deriveStatusFromLine(line: string): string | null {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+
+    const installProgressMatch = trimmed.match(
+      /(progress|resolved|reused|downloaded|added\s+\d+\s+packages?|packages:\s*[+-]\d+)/i
+    );
+    if (installProgressMatch) {
+      const compact = trimmed.replace(/\s+/g, " ");
+      return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
+    }
+
+    if (/tool execution denied by policy/i.test(trimmed)) {
+      return "Tool bloqueada por policy; trocando estrategia...";
+    }
+
+    if (/missing pgrep output/i.test(trimmed)) {
+      return "Ferramenta tentou pgrep; usando alternativa permitida...";
+    }
+
+    if (/switching to plan mode|enter_plan_mode/i.test(trimmed)) {
+      return "Plan Mode detectado: continuar em implementation mode (sem enter_plan_mode).";
+    }
+
+    return null;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return this.hasCli();
   }
 
   async getVersion(): Promise<string | null> {
@@ -34,28 +109,108 @@ export class GeminiEngine implements AgentEngine {
     return [];
   }
 
+  async getSetupIssue(): Promise<string | null> {
+    if (!(await this.hasCli())) return "Gemini CLI não instalado";
+    if (!this.getApiKey()) return "GEMINI_API_KEY não configurada";
+    return null;
+  }
+
   async *execute(
     prompt: string,
     workdir: string,
     options?: EngineOptions
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[gemini] Starting in ${workdir}` };
+    yield {
+      type: "log",
+      stream: "system",
+      content: `[gemini] Run context: model=${options?.model ?? "default"}, runId=${options?.runId ?? "n/a"}`,
+    };
+
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      yield {
+        type: "log",
+        stream: "system",
+        content: "[gemini] Debug: GEMINI_API_KEY ausente no processo do servidor",
+      };
+      throw new Error("GEMINI_API_KEY não configurada no servidor");
+    }
+
+    yield {
+      type: "log",
+      stream: "system",
+      content: `[gemini] Debug: GEMINI_API_KEY detectada (len=${apiKey.length}, prefix=${apiKey.slice(0, 3)}...)`,
+    };
 
     const args = ["gemini", "--yolo"];
     if (options?.model) args.push("-m", options.model);
-    args.push("-p", prompt);
+    const guardedPrompt = `${NO_PLAN_MODE_GUARD}\n\n${prompt}`;
+    args.push("-p", guardedPrompt);
 
-    const proc = Bun.spawn(args, { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+    const proc = Bun.spawn(args, {
+      cwd: workdir,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "pipe",
+      env: this.buildGeminiChildEnv(apiKey),
+    });
+
+    yield {
+      type: "log",
+      stream: "system",
+      content:
+        "[gemini] Process started with GEMINI_API_KEY injected and IDE-related env removed from child env",
+    };
 
     if (options?.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(
+    const providerLoad = {
+      skills: null as number | null,
+      agents: null as number | null,
+      tools: null as number | null,
+    };
+
+    for await (const event of streamProcess(
       proc,
       (line) => {
-        return [{ type: "log", stream: "stdout", content: line }];
+        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
+
+        const status = this.deriveStatusFromLine(line);
+        if (status) {
+          events.unshift({ type: "status", content: status });
+        }
+
+        if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
+          events.push({
+            type: "log",
+            stream: "system",
+            content:
+              "[gemini] Debug: Gemini CLI reportou chave ausente no child process mesmo após injeção. Verifique se a chave salva é válida e sem espaços/quebras extras.",
+          });
+        }
+        return events;
       },
       options?.signal
-    );
+    )) {
+      if (event.type === "log" && event.content) {
+        const parsed = this.parseProviderLoadSignals(event.content);
+        if (parsed.skills !== undefined) providerLoad.skills = parsed.skills;
+        if (parsed.agents !== undefined) providerLoad.agents = parsed.agents;
+        if (parsed.tools !== undefined) providerLoad.tools = parsed.tools;
+      }
+      yield event;
+    }
+
+    yield {
+      type: "log",
+      stream: "system",
+      content:
+        `[gemini] Provider load summary: ` +
+        `skills=${providerLoad.skills ?? "n/a"}, ` +
+        `agents=${providerLoad.agents ?? "n/a"}, ` +
+        `tools=${providerLoad.tools ?? "n/a"}`,
+    };
 
     if (options?.runId) this.processes.delete(options.runId);
   }

@@ -2,55 +2,92 @@
 
 /* ── App background ─────────────────────────────────── */
 body {
-  background-color: #09090b;
+  background-color: var(--bg-app, #09090b);
   background-image:
-    radial-gradient(ellipse 70% 40% at 15% 0%,   rgba(124, 58, 237, 0.09) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 35% at 85% 100%, rgba(16, 185, 129, 0.06) 0%, transparent 65%),
-    radial-gradient(ellipse 50% 30% at 50% 50%,  rgba(59, 130, 246, 0.03) 0%, transparent 70%);
+    var(--bg-gradient-1, radial-gradient(ellipse 70% 40% at 15% 0%, rgba(124, 58, 237, 0.09) 0%, transparent 65%)),
+    var(--bg-gradient-2, radial-gradient(ellipse 60% 35% at 85% 100%, rgba(16, 185, 129, 0.06) 0%, transparent 65%)),
+    var(--bg-gradient-3, radial-gradient(ellipse 50% 30% at 50% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 70%));
+  color: var(--text-primary, #e4e4e7);
 }
 
 /* ── Glass surface tokens ───────────────────────────── */
 .glass-panel {
-  background: rgba(24, 24, 27, 0.85);
+  background: var(--glass-surface, rgba(24, 24, 27, 0.85));
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
-  border-color: rgba(255, 255, 255, 0.055);
+  border-color: var(--glass-border, rgba(255, 255, 255, 0.055));
 }
 
 .glass-card {
-  background: rgba(39, 39, 42, 0.52);
+  background: var(--glass-card, rgba(39, 39, 42, 0.52));
   backdrop-filter: blur(10px) saturate(130%);
   -webkit-backdrop-filter: blur(10px) saturate(130%);
-  border-color: rgba(255, 255, 255, 0.07);
+  border-color: var(--glass-border, rgba(255, 255, 255, 0.07));
 }
 
 .glass-dialog {
-  background: rgba(24, 24, 27, 0.92);
+  background: var(--glass-dialog, rgba(24, 24, 27, 0.92));
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border-color: rgba(255, 255, 255, 0.09);
+  border-color: var(--glass-border, rgba(255, 255, 255, 0.09));
 }
 
 /* ── Running task glow ──────────────────────────────── */
 @keyframes running-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.10), 0 1px 3px rgba(0,0,0,0.3); }
-  50%       { box-shadow: 0 0 12px 2px rgba(59, 130, 246, 0.18), 0 1px 3px rgba(0,0,0,0.3); }
+
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 var(--glow-color, rgba(34, 211, 238, 0.16)),
+      0 0 18px 2px rgba(59, 130, 246, 0.12),
+      0 8px 24px rgba(2, 6, 23, 0.45);
+  }
+
+  50% {
+    box-shadow:
+      0 0 18px 3px var(--glow-color, rgba(34, 211, 238, 0.38)),
+      0 0 42px 6px rgba(59, 130, 246, 0.28),
+      0 14px 30px rgba(2, 6, 23, 0.55);
+  }
 }
 
 .running-glow {
-  animation: running-glow-pulse 2.5s ease-in-out infinite;
+  animation: running-glow-pulse 1.9s ease-in-out infinite;
 }
 
 /* ── Smooth scrollbar ───────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(63, 63, 70, 0.5) transparent;
+  scrollbar-color: var(--scroll-thumb, rgba(63, 63, 70, 0.5)) transparent;
 }
 
-::-webkit-scrollbar        { width: 4px; height: 4px; }
-::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: rgba(63, 63, 70, 0.6); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(82, 82, 91, 0.8); }
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb, rgba(63, 63, 70, 0.6));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover, rgba(82, 82, 91, 0.8));
+}
 
 /* ── Selection ──────────────────────────────────────── */
-::selection { background: rgba(124, 58, 237, 0.3); }
+::selection {
+  background: var(--selection, rgba(124, 58, 237, 0.3));
+}
+
+/* ── Theme transition ───────────────────────────────── */
+body,
+.glass-panel,
+.glass-card,
+.glass-dialog {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}

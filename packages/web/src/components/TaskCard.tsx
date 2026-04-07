@@ -1,8 +1,10 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
+import { formatDuration } from "../utils/date";
+import { TaskTagsDisplay } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getEngineMeta } from "./ui/engine-icons";
@@ -10,11 +12,32 @@ import { getProviderFromUrl } from "./ui/git-icons";
 
 interface TaskCardProps {
   task: TaskWithRun;
-  onClick: () => void;
+  onClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
 }
 
-export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
+const PRIORITY_CONFIG = [
+  { label: "P3", color: "text-zinc-600", bg: "bg-zinc-700/60", dot: "bg-zinc-600" },
+  { label: "P2", color: "text-sky-500", bg: "bg-sky-900/40", dot: "bg-sky-500" },
+  { label: "P1", color: "text-amber-400", bg: "bg-amber-900/40", dot: "bg-amber-400" },
+  { label: "P0", color: "text-red-400", bg: "bg-red-900/40", dot: "bg-red-400" },
+];
+
+function PriorityDot({ priority }: { priority: number }) {
+  const cfg = PRIORITY_CONFIG[Math.min(priority, 3)] ?? PRIORITY_CONFIG[0];
+  if (priority === 0) return null;
+  return (
+    <span
+      title={`Prioridade ${priority}`}
+      className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -55,20 +78,30 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
       style={style}
       {...attributes}
       {...listeners}
-      onClick={onClick}
-      className={`glass-card border rounded-xl p-3 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-sm shadow-black/20 ${
+      onClick={() => onClick(task)}
+      className={`glass-card border rounded-2xl p-3 cursor-grab active:cursor-grabbing transition-all duration-250 group relative shadow-lg shadow-black/35 overflow-hidden ${
         isRunning
-          ? "border-blue-500/30 shadow-blue-500/10 shadow-md running-glow"
-          : "hover:border-white/10 hover:brightness-110"
-      } ${task.status === "failed" ? "border-red-500/20" : ""}`}
+          ? "border-cyan-400/45 shadow-cyan-500/20 running-glow"
+          : task.status === "failed"
+            ? "border-red-500/25 hover:border-red-400/45 hover:shadow-red-900/30"
+            : "hover:border-sky-300/25 hover:shadow-blue-900/30 hover:translate-y-[-1px]"
+      }`}
     >
+      {/* Ambient gradient layer */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.04] via-transparent to-cyan-400/[0.05] opacity-80" />
+
       {/* Running accent bar */}
       {isRunning && (
-        <div className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-blue-400 animate-pulse" />
+        <>
+          <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-cyan-500/25">
+            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-cyan-300 to-transparent animate-[pulse_1.1s_ease-in-out_infinite]" />
+          </div>
+          <div className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-gradient-to-b from-cyan-300 via-blue-400 to-indigo-400 animate-pulse" />
+        </>
       )}
 
       {/* Title row */}
-      <div className="flex items-start gap-2 mb-2">
+      <div className="relative z-10 flex items-start gap-2 mb-1.5">
         {ProviderIcon && (
           <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
             <ProviderIcon size={13} />
@@ -77,23 +110,33 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
         <h3 className="text-[13px] font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
           {task.title}
         </h3>
-        <span
-          title={task.id}
-          className="shrink-0 text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
-        >
-          {task.id.slice(0, 8)}
-        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <PriorityDot priority={task.priority} />
+          <span
+            title={task.id}
+            className="text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
+          >
+            {task.id.slice(0, 8)}
+          </span>
+        </div>
       </div>
 
       {/* Description */}
       {task.description && (
-        <p className="text-xs text-zinc-500 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
+        <p className="text-xs text-zinc-400/95 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
           {task.description}
         </p>
       )}
 
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="mb-2 ml-[21px]">
+          <TaskTagsDisplay tags={task.tags} small />
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="flex items-center gap-1.5 flex-wrap ml-[21px]">
+      <div className="relative z-10 flex items-center gap-1.5 flex-wrap ml-[21px]">
         {task.repo &&
           (task.repo.url ? (
             <a
@@ -121,7 +164,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
             >
               <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 3.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 12.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 13.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM5 6.25V7.5A2.5 2.5 0 0 0 7.5 10H9v1.75A2.25 2.25 0 1 0 3 11.75V6.25A2.25 2.25 0 1 0 5 6.25z" />
             </svg>
-            {task.branchName}
+            {task.branchName.replace("vibe-code/", "vc/")}
           </span>
         )}
 
@@ -133,13 +176,37 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
               <Badge variant="purple" className="text-[10px] py-0 px-1.5 flex items-center gap-1">
                 <EngIcon size={9} className={eng.color} />
                 {task.engine}
+                {task.model && (
+                  <span
+                    className="text-[9px] opacity-60 font-mono ml-0.5 max-w-[80px] truncate"
+                    title={task.model}
+                  >
+                    /{task.model.split("/").pop()?.replace(":free", "")}
+                  </span>
+                )}
               </Badge>
             );
           })()}
 
         {task.status === "scheduled" && (
-          <Badge variant="warning" className="text-[10px] py-0 px-1.5">
-            ⏰ agendada
+          <Badge
+            variant="warning"
+            className="text-[10px] py-0 px-1.5 inline-flex items-center gap-1"
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5.5v3l2 1.3" />
+            </svg>
+            agendada
           </Badge>
         )}
         {task.parentTaskId && (
@@ -149,7 +216,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
         {task.status === "failed" && (
           <Badge variant="danger" className="text-[10px] py-0 px-1.5">
-            Failed
+            Falhou
           </Badge>
         )}
 
@@ -166,7 +233,7 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
               onClick={handleRetryPR}
               disabled={retrying}
             >
-              {retrying ? "…" : "Retry PR"}
+              {retrying ? "…" : "Tentar PR"}
             </Button>
             {retryError && (
               <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-red-400 bg-zinc-900 border border-red-900/50 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
@@ -194,13 +261,28 @@ export function TaskCard({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
 
         {isRunning && (
-          <span className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400 ml-auto whitespace-nowrap overflow-hidden max-w-[140px]">
-            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="truncate">{task.latestRun?.currentStatus || "Running…"}</span>
-            {elapsed && <span className="shrink-0 text-blue-500/80 tabular-nums">{elapsed}</span>}
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-cyan-300 ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-cyan-950/30 border border-cyan-800/35 px-2 py-[2px] rounded-md">
+            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
+            <span className="truncate">{task.latestRun?.currentStatus || "Executando..."}</span>
+            {elapsed && <span className="shrink-0 text-cyan-200/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
+        {!isRunning &&
+          task.latestRun?.startedAt &&
+          task.latestRun?.finishedAt &&
+          (() => {
+            const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
+            return dur ? (
+              <span className="text-[10px] text-zinc-600 ml-auto tabular-nums">⏱ {dur}</span>
+            ) : null;
+          })()}
       </div>
     </div>
   );
 }
+
+export const TaskCard = memo(TaskCardComponent, (prev, next) => {
+  return (
+    prev.task === next.task && prev.onClick === next.onClick && prev.onRetryPR === next.onRetryPR
+  );
+});

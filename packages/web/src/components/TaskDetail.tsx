@@ -1,9 +1,10 @@
 import type { AgentLog, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { formatDateTime } from "../utils/date";
+import { formatDateTime, formatDuration } from "../utils/date";
 import { AgentOutput } from "./AgentOutput";
 import { DiffViewer } from "./DiffViewer";
+import { TaskTagsEditor } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -18,6 +19,8 @@ interface TaskDetailProps {
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
+  onClone?: (taskId: string) => Promise<void>;
+  onUpdateTask?: (taskId: string, data: { tags?: string[]; notes?: string }) => Promise<void>;
   onTaskRefresh?: () => void;
 }
 
@@ -106,45 +109,71 @@ function PipelineSteps({
     return null;
   }
 
+  const progressValue = activeStep
+    ? Math.max(12, (steps.findIndex((step) => step.id === activeStep) / (steps.length - 1)) * 100)
+    : completedSteps.length > 0
+      ? (completedSteps.length / steps.length) * 100
+      : 0;
+
   return (
-    <div className="flex items-center gap-0 bg-zinc-800/30 rounded-lg p-3">
-      {steps.map((step, i) => {
-        const isCompleted = completedSteps.includes(step.id);
-        const isActive = activeStep === step.id;
-        return (
-          <div key={step.id} className="flex items-center flex-1 min-w-0">
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                  isCompleted
-                    ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
-                    : isActive
-                      ? "bg-blue-900/60 border-blue-500 text-blue-300 animate-pulse"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-600"
-                }`}
-              >
-                {isCompleted ? "✓" : isActive ? <span className="animate-spin">⟳</span> : step.icon}
+    <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+      <div>
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+          <span>Execução</span>
+          <span>{Math.round(progressValue)}%</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-[width] duration-500"
+            style={{ width: `${progressValue}%` }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-0">
+        {steps.map((step, i) => {
+          const isCompleted = completedSteps.includes(step.id);
+          const isActive = activeStep === step.id;
+          return (
+            <div key={step.id} className="flex items-center flex-1 min-w-0">
+              <div className="flex flex-col items-center gap-1">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                    isCompleted
+                      ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                      : isActive
+                        ? "bg-blue-900/60 border-blue-500 text-blue-300 animate-pulse"
+                        : "bg-zinc-800 border-zinc-700 text-zinc-600"
+                  }`}
+                >
+                  {isCompleted ? (
+                    "✓"
+                  ) : isActive ? (
+                    <span className="animate-spin">⟳</span>
+                  ) : (
+                    step.icon
+                  )}
+                </div>
+                <span
+                  className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
+                    isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
+                  }`}
+                >
+                  {step.label}
+                </span>
               </div>
-              <span
-                className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
-                  isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
-                }`}
-              >
-                {step.label}
-              </span>
+              {i < steps.length - 1 && (
+                <div
+                  className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded ${
+                    completedSteps.includes(steps[i + 1].id) || isCompleted
+                      ? "bg-emerald-700"
+                      : "bg-zinc-700"
+                  }`}
+                />
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <div
-                className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded ${
-                  completedSteps.includes(steps[i + 1].id) || isCompleted
-                    ? "bg-emerald-700"
-                    : "bg-zinc-700"
-                }`}
-              />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -405,16 +434,6 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
   );
 }
 
-function formatDuration(start: string | null, end: string | null): string | null {
-  if (!start) return null;
-  const ms = new Date(end ?? Date.now()).getTime() - new Date(start).getTime();
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
 export function TaskDetail({
   task,
   liveLogs,
@@ -425,11 +444,15 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
+  onClone,
+  onUpdateTask,
   onTaskRefresh,
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
+  const [notesValue, setNotesValue] = useState(task.notes ?? "");
+  const [notesSaved, setNotesSaved] = useState(false);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -438,6 +461,25 @@ export function TaskDetail({
     task.latestRun?.startedAt ?? null,
     task.latestRun?.finishedAt ?? null
   );
+
+  // Sync notes when task changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional sync when task.id changes
+  useEffect(() => {
+    setNotesValue(task.notes ?? "");
+  }, [task.id]);
+
+  const handleNotesBlur = () => {
+    if (!onUpdateTask) return;
+    if (notesValue === (task.notes ?? "")) return;
+    onUpdateTask(task.id, { notes: notesValue }).then(() => {
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    });
+  };
+
+  const handleTagsChange = (tags: string[]) => {
+    onUpdateTask?.(task.id, { tags });
+  };
 
   const handleCopyPR = () => {
     if (task.prUrl) {
@@ -477,13 +519,34 @@ export function TaskDetail({
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {onClone && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLoadingAction("clone");
+                    try {
+                      await onClone(task.id);
+                      onClose();
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                  disabled={!!loadingAction}
+                  title="Clonar tarefa"
+                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+                >
+                  ⎘
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Status row */}
@@ -627,6 +690,28 @@ export function TaskDetail({
             </div>
           )}
 
+          {/* Tags */}
+          <div>
+            <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Tags</h3>
+            <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className="text-xs font-medium text-zinc-500">Notas internas</h3>
+              {notesSaved && <span className="text-[10px] text-emerald-400">✓ salvo</span>}
+            </div>
+            <textarea
+              value={notesValue}
+              onChange={(e) => setNotesValue(e.target.value)}
+              onBlur={handleNotesBlur}
+              placeholder="Anotações pessoais (não enviadas ao agente)…"
+              rows={3}
+              className="w-full bg-zinc-800/60 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+            />
+          </div>
+
           {/* Error message */}
           {task.latestRun?.errorMessage && (
             <div className="bg-red-950/30 border border-red-800/40 rounded-lg p-3">
@@ -759,6 +844,7 @@ export function TaskDetail({
               liveLogs={liveLogs}
               isRunning={isRunning}
               onSendInput={(input) => onSendInput(task.id, input)}
+              currentStatus={task.latestRun?.currentStatus}
             />
           </div>
 

@@ -56,7 +56,9 @@ function makeGit(): GitService {
 function seedRepo(db: Db) {
   const repo = db.repos.create({ url: "https://github.com/test/repo.git" });
   db.repos.updateStatus(repo.id, "ready", "/tmp/repo.git");
-  return db.repos.getById(repo.id)!;
+  const result = db.repos.getById(repo.id);
+  if (!result) throw new Error("Repo not found");
+  return result;
 }
 
 function buildApp(db: Db) {
@@ -98,6 +100,44 @@ describe("GET /api/tasks", () => {
     const body = await res.json();
     expect(body.data).toHaveLength(1);
     expect(body.data[0].title).toBe("Mine");
+  });
+
+  it("returns aggregated polling payload with tasks and focused task/log deltas", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Polling task", repoId: repo.id });
+    const run = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(run.id, "running", { current_status: "Working..." });
+    db.logs.create(run.id, "stdout", "first line");
+    const second = db.logs.create(run.id, "stdout", "second line");
+
+    const res = await buildApp(db).request(
+      `/api/tasks/poll?repo_id=${repo.id}&focused_task_id=${task.id}&focused_logs_after_id=${second.id - 1}`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(Array.isArray(body.data.tasks)).toBe(true);
+    expect(body.data.tasks).toHaveLength(1);
+    expect(body.data.focusedTask?.id).toBe(task.id);
+    expect(body.data.focusedTask?.latestRun?.status).toBe("running");
+    expect(body.data.focusedLogs).toHaveLength(1);
+    expect(body.data.focusedLogs[0].content).toBe("second line");
+    expect(typeof body.data.serverTime).toBe("string");
+  });
+
+  it("returns empty focused details when focused task is not found", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.tasks.create({ title: "Any", repoId: repo.id });
+
+    const res = await buildApp(db).request(
+      `/api/tasks/poll?repo_id=${repo.id}&focused_task_id=missing-task-id&focused_logs_after_id=0`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.focusedTask).toBeNull();
+    expect(body.data.focusedLogs).toEqual([]);
   });
 });
 

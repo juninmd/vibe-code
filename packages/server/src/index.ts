@@ -12,10 +12,12 @@ import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createRunsRouter } from "./api/runs";
 import { createSettingsRouter } from "./api/settings";
+import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
+import { ProviderRegistry } from "./git/providers/registry";
 import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -32,9 +34,21 @@ import { mkdir } from "node:fs/promises";
 await mkdir(DATA_DIR, { recursive: true });
 
 const db = createDb(DB_PATH);
+const persistedGeminiApiKey = db.settings.get("gemini_api_key");
+if (!process.env.GEMINI_API_KEY && persistedGeminiApiKey) {
+  const normalized = persistedGeminiApiKey.trim().startsWith("GEMINI_API_KEY=")
+    ? persistedGeminiApiKey.trim().slice("GEMINI_API_KEY=".length).trim()
+    : persistedGeminiApiKey.trim();
+  if (normalized) {
+    process.env.GEMINI_API_KEY = normalized;
+    console.info(`[startup] Loaded persisted GEMINI_API_KEY (len=${normalized.length})`);
+  }
+}
 const git = new GitService(DATA_DIR);
 const registry = new EngineRegistry();
 const hub = new BroadcastHub();
+const providerRegistry = new ProviderRegistry(db);
+git.providers = providerRegistry;
 const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
 
 await git.init();
@@ -74,6 +88,7 @@ await git.init();
 }
 
 const prPoller = new PrPoller(db, hub);
+prPoller.setProviderRegistry(providerRegistry);
 prPoller.start();
 
 const scheduleRunner = new ScheduleRunner(db, orchestrator);
@@ -93,12 +108,9 @@ app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry, orchestrator));
-app.route("/api/settings", createSettingsRouter(db));
+app.route("/api/settings", createSettingsRouter(db, providerRegistry));
 app.route("/api/prompts", createPromptsRouter(db));
-
-// Serve static frontend files
-app.get("/*", serveStatic({ root: "../web/dist" }));
-app.get("*", serveStatic({ path: "../web/dist/index.html" }));
+app.route("/api/stats", createStatsRouter(db));
 
 // Health check
 app.get("/api/health", (c) => {
@@ -108,6 +120,10 @@ app.get("/api/health", (c) => {
     maxAgents: MAX_AGENTS,
   });
 });
+
+// Serve static frontend files
+app.get("/*", serveStatic({ root: "../web/dist" }));
+app.get("*", serveStatic({ path: "../web/dist/index.html" }));
 
 // WebSocket
 const wsClients = new Map<unknown, ReturnType<BroadcastHub["addClient"]>>();
