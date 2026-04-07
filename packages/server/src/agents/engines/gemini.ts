@@ -30,15 +30,8 @@ export class GeminiEngine implements AgentEngine {
   private buildGeminiChildEnv(apiKey: string): NodeJS.ProcessEnv {
     const env = { ...process.env };
     // Avoid Gemini IDE client binding when running in detached task worktrees.
-    delete env.GEMINI_CLI_IDE_SERVER_PORT;
-    delete env.GEMINI_CLI_IDE_WORKSPACE_PATH;
-    delete env.GEMINI_CLI_IDE_AUTH_TOKEN;
-    delete env.TERM_PROGRAM;
-    delete env.VSCODE_INJECTION;
-    delete env.VSCODE_GIT_ASKPASS_NODE;
-    delete env.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
-    delete env.VSCODE_GIT_ASKPASS_MAIN;
-    delete env.VSCODE_GIT_IPC_HANDLE;
+const keysToDelete = ['GEMINI_CLI_IDE_SERVER_PORT', 'GEMINI_CLI_IDE_WORKSPACE_PATH', 'GEMINI_CLI_IDE_AUTH_TOKEN', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'VSCODE_GIT_ASKPASS_NODE', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS', 'VSCODE_GIT_ASKPASS_MAIN', 'VSCODE_GIT_IPC_HANDLE'];
+keysToDelete.forEach(key => delete env[key]);
     env.GEMINI_API_KEY = apiKey;
     return env;
   }
