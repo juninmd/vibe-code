@@ -2,6 +2,13 @@ import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";
 
+const NO_PLAN_MODE_GUARD = [
+  "SYSTEM: You are in implementation mode.",
+  "Do NOT enter Plan Mode.",
+  "Do NOT call the enter_plan_mode tool.",
+  "Execute the task directly by editing project files in the current workspace.",
+].join("\n");
+
 export class GeminiEngine implements AgentEngine {
   name = "gemini";
   displayName = "Gemini CLI";
@@ -61,6 +68,33 @@ export class GeminiEngine implements AgentEngine {
     return out;
   }
 
+  private deriveStatusFromLine(line: string): string | null {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+
+    const installProgressMatch = trimmed.match(
+      /(progress|resolved|reused|downloaded|added\s+\d+\s+packages?|packages:\s*[+-]\d+)/i
+    );
+    if (installProgressMatch) {
+      const compact = trimmed.replace(/\s+/g, " ");
+      return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
+    }
+
+    if (/tool execution denied by policy/i.test(trimmed)) {
+      return "Tool bloqueada por policy; trocando estrategia...";
+    }
+
+    if (/missing pgrep output/i.test(trimmed)) {
+      return "Ferramenta tentou pgrep; usando alternativa permitida...";
+    }
+
+    if (/switching to plan mode|enter_plan_mode/i.test(trimmed)) {
+      return "Plan Mode detectado: continuar em implementation mode (sem enter_plan_mode).";
+    }
+
+    return null;
+  }
+
   async isAvailable(): Promise<boolean> {
     return this.hasCli();
   }
@@ -118,7 +152,8 @@ export class GeminiEngine implements AgentEngine {
 
     const args = ["gemini", "--yolo"];
     if (options?.model) args.push("-m", options.model);
-    args.push("-p", prompt);
+    const guardedPrompt = `${NO_PLAN_MODE_GUARD}\n\n${prompt}`;
+    args.push("-p", guardedPrompt);
 
     const proc = Bun.spawn(args, {
       cwd: workdir,
@@ -147,6 +182,12 @@ export class GeminiEngine implements AgentEngine {
       proc,
       (line) => {
         const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
+
+        const status = this.deriveStatusFromLine(line);
+        if (status) {
+          events.unshift({ type: "status", content: status });
+        }
+
         if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
           events.push({
             type: "log",

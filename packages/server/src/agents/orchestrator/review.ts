@@ -25,12 +25,10 @@ export async function runReviewPipeline(
   reviewEngine?: string,
   reviewModel?: string
 ): Promise<ReviewPipelineResult> {
-  sysLog(run.id, task.id, `Starting review pipeline (${ALL_PERSONAS.length} agents)...`);
+  sysLog(run.id, task.id, `Starting review pipeline (${ALL_PERSONAS.length} parallel agents)...`);
 
-  const results = [];
-  for (const persona of ALL_PERSONAS) {
-    // Keep deterministic order and ensure docs always runs last.
-    const result = await runPersonaReview({
+  const reviewPromises = ALL_PERSONAS.map((persona) =>
+    runPersonaReview({
       persona,
       worktreePath: wtPath,
       taskTitle: task.title,
@@ -38,9 +36,17 @@ export async function runReviewPipeline(
       defaultBranch,
       reviewEngine,
       reviewModel,
-    });
-    results.push(result);
-  }
+    })
+  );
+  const results = await Promise.all(reviewPromises);
+
+  // Keep deterministic reporting order regardless of completion order.
+  const personaOrder = new Map(ALL_PERSONAS.map((persona, idx) => [persona, idx]));
+  results.sort((a, b) => {
+    const left = personaOrder.get(a.persona) ?? Number.MAX_SAFE_INTEGER;
+    const right = personaOrder.get(b.persona) ?? Number.MAX_SAFE_INTEGER;
+    return left - right;
+  });
 
   const blockers: string[] = [];
   const actionableFindings: string[] = [];
