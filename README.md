@@ -161,6 +161,29 @@ User clicks "Launch Task"
                 (for stall detection)
 ```
 
+### Fluxo de Orquestração (Mermaid)
+
+```mermaid
+flowchart TD
+  A[POST /api/tasks/:id/launch] --> B[Orchestrator setup<br/>worktree + run status]
+  B --> C[Agent pass 1<br/>implementa requisitos]
+  C --> D{Agent exit code == 0?}
+  D -- nao --> Z[Run failed]
+  D -- sim --> E[Final Validator pass<br/>descobre CLI nativo do repo]
+  E --> F[Executa lint + test + build]
+  F --> G{Passou?}
+  G -- nao --> H{Tentativas restantes?}
+  H -- sim --> E
+  H -- nao --> Z
+  G -- sim --> I[Commit changes]
+  I --> J{Review pipeline habilitado?}
+  J -- sim --> K[Review + autofix + docs step]
+  J -- nao --> L[Push branch]
+  K --> L
+  L --> M[Create PR/MR]
+  M --> N[Task status: review/completed]
+```
+
 ---
 
 ## 🚀 Quick Start
@@ -252,11 +275,12 @@ O repositório será clonado como **bare clone** em `~/.vibe-code/repos/`
 2. No painel de detalhes, clique **"Launch"** (ou arraste para "In Progress")
 3. Acompanhe os **logs em tempo real** na aba "Output"
 4. Agent vai:
-   - ✅ Criar uma branch `vibe-code/{id}/{title}`
-   - 🔧 Fazer commits com suas mudanças
+  - ✅ Criar uma branch `vibe-code/{id}/{title}`
+  - 🧪 Rodar validador final no CLI do agente (lint, test, build), com retentativas automáticas
+  - 🔧 Fazer commits com suas mudanças
   - 📊 Passar pelo pipeline de review (se habilitado)
   - 📝 Executar etapa final de docs (gera `docs/tasks/<task-id>.md` e atualiza README/AGENTS quando necessário)
-   - 📤 Push para origin e criar PR
+  - 📤 Push para origin e criar PR
 5. Task mostra status: **In Progress** → **Review** → **Done**
 
 ---
@@ -273,6 +297,7 @@ PORT=3000                                      # (default: 3000)
 VIBE_CODE_DATA_DIR=~/.vibe-code              # (default: ~/.vibe-code)
 VIBE_CODE_MAX_AGENTS=4                        # Max concurrent runs
 VIBE_CODE_AGENT_TIMEOUT_MS=7200000            # 2h timeout (default: 2h)
+VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS=3      # Tentativas do validador final (lint/test/build)
 VIBE_CODE_REVIEW_ENABLED=true                 # Enable review pipeline
 VIBE_CODE_REVIEW_STRICT=false                 # Block PR on review failures
 VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/quality suggestions

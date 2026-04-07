@@ -3,60 +3,21 @@ import { join } from "node:path";
 import type { Task } from "@vibe-code/shared";
 
 interface ProjectContext {
-  hasPackageJson: boolean;
-  packageManager: string | null;
   mainLanguages: string[];
-  testCommand: string | null;
-  buildCommand: string | null;
-  lintCommand: string | null;
   frameworks: string[];
   agentInstructions: string | null;
 }
 
-async function detectPreferredPm(workdir: string): Promise<string> {
-  const pmFiles = [
-    ["pnpm-lock.yaml", "pnpm"],
-    ["bun.lock", "bun"],
-    ["bun.lockb", "bun"],
-    ["yarn.lock", "yarn"],
-    ["package-lock.json", "npm"],
-  ] as const;
-
-  for (const [file, pm] of pmFiles) {
-    try {
-      await readFile(join(workdir, file));
-      return pm;
-    } catch {}
-  }
-
-  // Default preference when no lock file is present.
-  return "pnpm";
-}
-
 async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   const ctx: ProjectContext = {
-    hasPackageJson: false,
-    packageManager: null,
     mainLanguages: [],
-    testCommand: null,
-    buildCommand: null,
-    lintCommand: null,
     frameworks: [],
     agentInstructions: null,
   };
 
   try {
-    const pm = await detectPreferredPm(workdir);
     const pkgRaw = await readFile(join(workdir, "package.json"), "utf8");
     const pkg = JSON.parse(pkgRaw);
-    ctx.hasPackageJson = true;
-    ctx.packageManager = pm;
-
-    const scripts = pkg.scripts ?? {};
-    ctx.testCommand = scripts.test && !scripts.test.includes("no test") ? `${pm} run test` : null;
-    ctx.buildCommand = scripts.build ? `${pm} run build` : null;
-    ctx.lintCommand =
-      (scripts.lint ?? scripts["lint:fix"] ?? scripts.check) ? `${pm} run lint` : null;
 
     const deps = {
       ...(pkg.dependencies ?? {}),
@@ -73,24 +34,7 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
     if (deps.tailwindcss) ctx.frameworks.push("TailwindCSS");
     if (deps.prisma) ctx.frameworks.push("Prisma");
   } catch {
-    // No package.json — could be Python, Go, Rust, etc.
-    try {
-      await readFile(join(workdir, "requirements.txt"));
-      ctx.mainLanguages.push("Python");
-      ctx.testCommand = "pytest";
-    } catch {}
-    try {
-      await readFile(join(workdir, "go.mod"));
-      ctx.mainLanguages.push("Go");
-      ctx.testCommand = "go test ./...";
-      ctx.buildCommand = "go build ./...";
-    } catch {}
-    try {
-      await readFile(join(workdir, "Cargo.toml"));
-      ctx.mainLanguages.push("Rust");
-      ctx.testCommand = "cargo test";
-      ctx.buildCommand = "cargo build";
-    } catch {}
+    // Package metadata is optional. Prompt remains generic when unavailable.
   }
 
   // Read AGENTS.md or CLAUDE.md for project-specific instructions
@@ -115,12 +59,7 @@ export async function buildPromptAsync(task: Task, workdir: string): Promise<str
 export function buildPrompt(task: Task): string {
   // Sync fallback — used when workdir is not available
   return assemblePrompt(task, {
-    hasPackageJson: false,
-    packageManager: null,
     mainLanguages: [],
-    testCommand: null,
-    buildCommand: null,
-    lintCommand: null,
     frameworks: [],
     agentInstructions: null,
   });
@@ -166,19 +105,14 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
     "Create, edit, or delete files as needed — including full file content when creating new files.",
     "Do NOT ask clarifying questions — make reasonable decisions and proceed immediately.",
     "There is no user available to answer questions. You must complete the task autonomously.",
+    "Do NOT enter Plan Mode and do NOT call `enter_plan_mode`.",
     "",
     "**Before finishing:**",
+    "- Discover and use the repository's own CLI/workflow for validation (read scripts, Makefile/Taskfile/justfile, README, and project docs).",
+    "- Always run lint, test, and build via the project's native commands.",
+    "- If any validation fails, fix the issues and re-run validation until lint, test, and build all pass.",
+    "- Include in your final summary the exact commands you executed for lint/test/build.",
   ];
-
-  if (ctx.buildCommand) {
-    execLines.push(`- Run \`${ctx.buildCommand}\` and fix any build errors before finishing.`);
-  }
-  if (ctx.lintCommand) {
-    execLines.push(`- Run \`${ctx.lintCommand}\` and fix lint errors (not warnings).`);
-  }
-  if (ctx.testCommand) {
-    execLines.push(`- Run \`${ctx.testCommand}\` and ensure existing tests still pass.`);
-  }
 
   execLines.push(
     "",
@@ -188,7 +122,10 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
     "- Never delete remote repositories (GitHub/GitLab).",
     "",
     "**Code quality rules:**",
-    "- Prefer pnpm over npm whenever possible (unless the repository already standardizes on another package manager).",
+    "- Do NOT rely on `pgrep`. Prefer `ps`, `grep`, `lsof`, or `/proc`-based checks when process inspection is needed.",
+    "- Avoid tool name `run_shell_command` in this environment (it may be policy-blocked); use allowed terminal/command tools instead.",
+    "- If a tool is denied by policy, do not loop on the same tool call; switch to an allowed alternative and continue.",
+    "- Use non-interactive commands only (pass `--yes`, `--force`, `--template`, or equivalent flags when scaffolding projects).",
     "- Add or update automated tests for every changed behavior. If no test setup exists, create minimal runnable tests.",
     "- For net-new frontend projects, use React + Vite (prefer TypeScript) instead of plain HTML/JS.",
     "- No hardcoded secrets, credentials or API keys — use environment variables.",

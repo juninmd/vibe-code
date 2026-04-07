@@ -13,6 +13,10 @@ import { verifyWorktree } from "./verify";
 
 const REVIEW_AUTO_APPLY = process.env.VIBE_CODE_REVIEW_AUTO_APPLY !== "false";
 const DOCS_AUTO_APPLY = process.env.VIBE_CODE_DOCS_AUTO_APPLY !== "false";
+const FINAL_VALIDATOR_MAX_ATTEMPTS =
+  Number(process.env.VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS) > 0
+    ? Number(process.env.VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS)
+    : 3;
 
 function taskSlug(task: Task): string {
   return task.title
@@ -46,6 +50,8 @@ function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
     "Apply the actionable review suggestions below directly in the repository.",
     "",
     "Rules:",
+    "- Do NOT use `pgrep`; use `ps|grep` alternatives when needed.",
+    "- If a tool call is denied by policy, switch approach and continue (do not retry the same denied tool).",
     "- Implement concrete fixes in code and tests when relevant.",
     "- If changed logic has no tests, add automated tests.",
     "- If the task creates a new frontend project, use React + Vite (prefer TypeScript) instead of plain HTML/JS.",
@@ -81,12 +87,14 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     "2) Include clear sections: Contexto, Funcionalidades entregues, Decisões de arquitetura, Impactos e riscos, Como validar, Rollback, Próximos passos.",
     "3) If behavior/contracts/workflow changed, update README.md and/or AGENTS.md accordingly.",
     "4) Ensure docs explicitly mention testing strategy and commands used.",
-    "5) For frontend tasks, try to run the app locally and capture one screenshot of the UI.",
-    `6) Save screenshot (if captured) to ${screenshotFile} and reference it in docs as markdown image.`,
-    "7) Add an 'Evidencias visuais' section in docs (include URL used and screenshot path, or explain why capture was not possible).",
-    "8) If frontend was created from scratch, document why React + Vite was used and project structure.",
-    "9) Keep text factual and based only on current repository changes.",
-    "10) Do not push or open PR; only modify files.",
+    "5) For frontend tasks ONLY: if the app is already running and you can discover its URL, try to capture the UI. This is OPTIONAL — skip silently if the app is not running or the tool is unavailable.",
+    "6) Do NOT start or build the app just to take a screenshot. Do NOT capture the Vibe-Code dashboard unless the task explicitly modifies the Vibe-Code UI itself.",
+    `7) If a screenshot was taken, save it to ${screenshotFile} and reference it in docs with a relative markdown image link. Otherwise omit any image reference.`,
+    "8) Add an 'Evidencias visuais' section in docs: include the target app URL if found, and either the screenshot path or a one-line note explaining why capture was skipped.",
+    "9) If frontend was created from scratch, document why React + Vite was used and project structure.",
+    "10) Keep text factual and based only on current repository changes.",
+    "11) Do not push or open PR; only modify files.",
+    "12) Environment policy: avoid `run_shell_command` and `pgrep`; if denied by policy, use allowed alternatives and proceed.",
     "",
     "Task context:",
     `Title: ${task.title}`,
@@ -95,6 +103,35 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     "Documentation review findings:",
     formattedFindings ||
       "(no explicit findings; still create detailed docs file based on current diff)",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildFinalValidatorPrompt(task: Task): string {
+  return [
+    "You are the final validation agent for this task.",
+    "Run a full quality gate using this repository's own CLI and conventions.",
+    "",
+    "Mandatory flow:",
+    "1) Discover the project-native commands from scripts/Makefile/Taskfile/justfile/README and other local docs.",
+    "2) Run lint, test, and build (all three are required).",
+    "3) If any command fails, fix the code and tests, then re-run lint/test/build.",
+    "4) Repeat until lint, test, and build all pass in this worktree.",
+    "5) Do not push and do not open PR/MR; only modify repository files.",
+    "",
+    "Output requirements:",
+    "- Log the exact lint/test/build commands you executed.",
+    "- If a required command does not exist, add a minimal project-native command and use it.",
+    "- Keep changes scoped to this task only.",
+    "",
+    "Environment policy:",
+    "- Do NOT use `pgrep`; use alternatives (`ps`, `grep`, `lsof`, `/proc`).",
+    "- If a tool call is denied by policy, switch strategy and continue.",
+    "",
+    "Task context:",
+    `Title: ${task.title}`,
+    task.description ? `Description: ${task.description}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -115,8 +152,67 @@ async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void
   }
 }
 
+function normalizeRepoWebUrl(repoUrl: string): string {
+  const sshMatch = repoUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return `https://${sshMatch[1]}/${sshMatch[2].replace(/\.git$/, "")}`;
+  }
+
+  try {
+    const u = new URL(repoUrl);
+    u.pathname = u.pathname.replace(/\.git$/, "").replace(/\/$/, "");
+    return `${u.origin}${u.pathname}`;
+  } catch {
+    return repoUrl.replace(/\.git$/, "").replace(/\/$/, "");
+  }
+}
+
+function extractDocsAssetPath(rawPath: string): string | null {
+  const withoutQuery = rawPath.split(/[?#]/)[0].trim();
+  const normalized = withoutQuery.replace(/^\.?\//, "");
+  if (normalized.startsWith("docs/assets/")) return normalized;
+
+  const idx = normalized.indexOf("docs/assets/");
+  if (idx >= 0) return normalized.slice(idx);
+
+  return null;
+}
+
+function buildAssetBlobUrl(repoUrl: string, branch: string, assetPath: string): string {
+  const base = normalizeRepoWebUrl(repoUrl);
+  const encodedBranch = encodeURIComponent(branch).replace(/%2F/g, "/");
+  const encodedAssetPath = assetPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  if (base.includes("github.com")) {
+    return `${base}/blob/${encodedBranch}/${encodedAssetPath}`;
+  }
+
+  if (base.includes("gitlab")) {
+    return `${base}/-/blob/${encodedBranch}/${encodedAssetPath}?ref_type=heads`;
+  }
+
+  return `${base}/-/blob/${encodedBranch}/${encodedAssetPath}`;
+}
+
+function rewriteDocsAssetLinks(body: string, repoUrl: string, branch: string): string {
+  return body.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (full, alt, target) => {
+    const assetPath = extractDocsAssetPath(target);
+    if (!assetPath) return full;
+    const blobUrl = buildAssetBlobUrl(repoUrl, branch, assetPath);
+    return `![${alt}](${blobUrl})`;
+  });
+}
+
 /** Builds PR body using only the docs generated in the docs step. */
-async function buildPRBody(task: Task, wtPath: string): Promise<string> {
+async function buildPRBody(
+  task: Task,
+  wtPath: string,
+  repoUrl: string,
+  branch: string
+): Promise<string> {
   const docsRel = docsRelativePath(task);
   const docsFile = join(wtPath, docsRel);
 
@@ -126,7 +222,7 @@ async function buildPRBody(task: Task, wtPath: string): Promise<string> {
     if (docsText) {
       const clipped =
         docsText.length > 12000 ? `${docsText.slice(0, 12000)}\n\n...[truncated]` : docsText;
-      return normalizeAsciiText(clipped);
+      return normalizeAsciiText(rewriteDocsAssetLinks(clipped, repoUrl, branch));
     }
   } catch {
     // Optional docs file
@@ -270,6 +366,52 @@ export async function executeAgent(
       throw new Error(`Agent exited with code ${agentExitCode}`);
     }
 
+    sysLog(
+      `Running final validator agent (lint/test/build), max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`
+    );
+    let validatorPassed = false;
+    let validatorExitCode: number | null = null;
+    for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
+      validatorExitCode = null;
+      const validatorPrompt = buildFinalValidatorPrompt(task);
+      sysLog(`Final validator attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
+
+      for await (const event of engine.execute(validatorPrompt, wtPath, {
+        runId: run.id,
+        signal: abort.signal,
+        model,
+      })) {
+        if (abort.signal.aborted) break;
+        if (event.type === "complete") {
+          validatorExitCode = event.exitCode ?? 0;
+          continue;
+        }
+        await handleAgentEvent(event, run.id, task.id, db, hub, () => {
+          lastActivity = Date.now();
+        });
+      }
+
+      if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+
+      if (validatorExitCode === null || validatorExitCode === 0) {
+        validatorPassed = true;
+        sysLog(`Final validator passed on attempt ${attempt} ✓`);
+        break;
+      }
+
+      if (attempt < FINAL_VALIDATOR_MAX_ATTEMPTS) {
+        sysLog(
+          `Final validator failed (exit ${validatorExitCode}). Retrying with updated context...`
+        );
+      }
+    }
+
+    if (!validatorPassed) {
+      throw new Error(
+        `Final validator failed after ${FINAL_VALIDATOR_MAX_ATTEMPTS} attempts (last exit ${validatorExitCode ?? "unknown"})`
+      );
+    }
+
     const baseBranch = task.baseBranch || repo.defaultBranch;
 
     if (await git.hasChanges(wtPath)) {
@@ -353,7 +495,9 @@ export async function executeAgent(
 
         if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
         if (docsExitCode !== null && docsExitCode !== 0) {
-          throw new Error(`Docs step exited with code ${docsExitCode}`);
+          sysLog(
+            `Docs step exited with code ${docsExitCode} — screenshot may be unavailable; continuing with available docs.`
+          );
         }
 
         if (await git.hasChanges(wtPath)) {
@@ -378,7 +522,7 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = await buildPRBody(task, wtPath);
+      const prBody = await buildPRBody(task, wtPath, repo.url, branch);
       prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
       sysLog(`PR created: ${prUrl}`);

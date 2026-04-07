@@ -135,6 +135,11 @@ export async function runPersonaReview(opts: {
   const prompt = [
     PERSONA_PROMPTS[persona],
     "",
+    "Execution mode: read-only review only.",
+    "Do not use any tools, do not execute commands, and do not attempt to edit files.",
+    "Do not call list/read/write/edit tools. Analyze only the provided task context and diff text.",
+    "Multiple reviewer personas are already executed in parallel by the orchestrator; just return this persona's findings.",
+    "",
     `## Task Context`,
     `Title: ${taskTitle}`,
     taskDescription ? `Description: ${taskDescription}` : "",
@@ -166,7 +171,7 @@ export async function runPersonaReview(opts: {
 
     const args =
       runtime === "gemini"
-        ? ["gemini", "--yolo", ...(reviewModel ? ["-m", reviewModel] : []), "-p", prompt]
+        ? ["gemini", ...(reviewModel ? ["-m", reviewModel] : []), "-p", prompt]
         : ["claude", "--print", "-p", `@${promptFile}`];
 
     const childEnv =
