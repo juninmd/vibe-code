@@ -24,6 +24,7 @@ interface SidebarProps {
   onDeleteAllLocalClones: () => void;
   onOpenSettings: () => void;
   onOpenStats?: () => void;
+  onOpenSkills?: () => void;
   connected: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
@@ -38,6 +39,7 @@ export function Sidebar({
   onDeleteAllLocalClones,
   onOpenSettings,
   onOpenStats,
+  onOpenSkills,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -75,10 +77,12 @@ export function Sidebar({
             <button
               type="button"
               onClick={onOpenStats}
+              aria-label="Abrir estatísticas"
               title="Estatísticas"
               className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
             >
               <svg
+                aria-hidden="true"
                 width="14"
                 height="14"
                 viewBox="0 0 16 16"
@@ -94,13 +98,38 @@ export function Sidebar({
               </svg>
             </button>
           )}
+          {onOpenSkills && (
+            <button
+              type="button"
+              onClick={onOpenSkills}
+              aria-label="Abrir skills e regras"
+              title="Skills & Regras"
+              className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenSettings}
+            aria-label="Abrir configurações"
             title="Configurações"
             className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
           >
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 16 16"
@@ -165,6 +194,7 @@ export function Sidebar({
         {repos.length > 1 && (
           <div className="relative">
             <svg
+              aria-hidden="true"
               width="12"
               height="12"
               viewBox="0 0 16 16"
@@ -219,37 +249,37 @@ export function Sidebar({
             const isSelected = selectedRepoId === repo.id;
 
             return (
-              <div
-                key={repo.id}
-                className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
-                }`}
-                onClick={() => onSelectRepo(repo.id)}
-              >
-                <span className={`shrink-0 ${isSelected ? prov.color : "text-zinc-600"}`}>
-                  <ProvIcon size={13} />
-                </span>
-                <span className="truncate flex-1 font-medium">{repo.name}</span>
-                {repo.status !== "ready" && (
-                  <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
-                    {meta.label}
-                  </Badge>
-                )}
-                {repoStats?.[repo.id] && repo.status === "ready" && (
-                  <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums">
-                    {repoStats[repo.id].total > 0 &&
-                      `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
-                    {repoStats[repo.id].running > 0 && ` ⚡`}
-                  </span>
-                )}
+              <div key={repo.id} className="group flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveRepo(repo.id);
-                  }}
+                  className={`flex flex-1 items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
+                    isSelected
+                      ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
+                  }`}
+                  onClick={() => onSelectRepo(repo.id)}
+                >
+                  <span className={`shrink-0 ${isSelected ? prov.color : "text-zinc-600"}`}>
+                    <ProvIcon size={13} />
+                  </span>
+                  <span className="truncate flex-1 font-medium">{repo.name}</span>
+                  {repo.status !== "ready" && (
+                    <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
+                      {meta.label}
+                    </Badge>
+                  )}
+                  {repoStats?.[repo.id] && repo.status === "ready" && (
+                    <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums">
+                      {repoStats[repo.id].total > 0 &&
+                        `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
+                      {repoStats[repo.id].running > 0 && ` ⚡`}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remover repositório ${repo.name}`}
+                  onClick={() => onRemoveRepo(repo.id)}
                   className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-700 hover:text-red-400 transition-all cursor-pointer ml-0.5"
                 >
                   ✕

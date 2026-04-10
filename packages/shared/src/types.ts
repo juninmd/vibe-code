@@ -70,6 +70,7 @@ export interface AgentRun {
   finishedAt: string | null;
   exitCode: number | null;
   errorMessage: string | null;
+  litellmTokenId?: string | null;
   createdAt: string;
 }
 
@@ -243,6 +244,16 @@ export type WsServerMessage =
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };
 
+// ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
+
+export interface TaskSpec {
+  objective: string;
+  acceptance: string[];
+  constraints: string[];
+  context: string;
+  outOfScope: string[];
+}
+
 // ─── Settings Types ──────────────────────────────────────────────────────────
 
 export interface ProviderSettings {
@@ -252,15 +263,26 @@ export interface ProviderSettings {
   username?: string;
 }
 
-export interface GeminiSettings {
-  apiKey: string;
-  keySet: boolean;
+export interface LiteLLMSettings {
+  baseUrl: string;
+  enabled: boolean;
+}
+
+export interface ApiKeyEntry {
+  tokenSet: boolean;
+  token: string;
 }
 
 export interface SettingsResponse {
   github: ProviderSettings;
   gitlab: ProviderSettings;
-  gemini: GeminiSettings;
+  litellm: LiteLLMSettings;
+  apiKeys: {
+    gemini: ApiKeyEntry;
+    anthropic: ApiKeyEntry;
+    openai: ApiKeyEntry;
+  };
+  skillsPath: string;
   theme: string;
 }
 
@@ -268,7 +290,11 @@ export interface UpdateSettingsRequest {
   githubToken?: string;
   gitlabToken?: string;
   gitlabBaseUrl?: string;
+  litellmBaseUrl?: string;
+  litellmEnabled?: boolean;
   geminiApiKey?: string;
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
   theme?: string;
 }
 
@@ -332,4 +358,46 @@ export interface StatsResponse {
   dailyActivity: DailyActivity[];
   favoriteEngine: string | null;
   favoriteModel: string | null;
+}
+
+// ─── Skills / Rules / Agents / Workflows Types ──────────────────────────────
+
+export type SkillCategory = "skill" | "rule" | "agent" | "workflow";
+
+export interface SkillEntry {
+  name: string;
+  description: string;
+  category: "skill";
+  filePath: string;
+}
+
+export interface RuleEntry {
+  name: string;
+  description: string;
+  applyTo: string;
+  category: "rule";
+  filePath: string;
+}
+
+export interface AgentEntry {
+  name: string;
+  description: string;
+  category: "agent";
+  filePath: string;
+}
+
+export interface WorkflowEntry {
+  name: string;
+  description: string;
+  category: "workflow";
+  filePath: string;
+}
+
+export type SkillsEntry = SkillEntry | RuleEntry | AgentEntry | WorkflowEntry;
+
+export interface SkillsIndex {
+  skills: SkillEntry[];
+  rules: RuleEntry[];
+  agents: AgentEntry[];
+  workflows: WorkflowEntry[];
 }

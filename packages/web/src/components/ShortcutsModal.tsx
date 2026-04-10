@@ -16,7 +16,12 @@ const SHORTCUTS = [
 export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Fechar modal de atalhos"
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
       <div className="relative glass-panel border rounded-xl shadow-2xl shadow-black/40 w-full max-w-sm mx-4 p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-zinc-200">Atalhos de teclado</h2>

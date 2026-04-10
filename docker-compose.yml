@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-litellmpassword}
+      POSTGRES_DB: litellm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./litellm.config.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      DATABASE_URL: postgresql://litellm:${POSTGRES_PASSWORD:-litellmpassword}@postgres:5432/litellm
+      UI_USERNAME: ${UI_USERNAME:-admin}
+      UI_PASSWORD: ${UI_PASSWORD:-changeme}
+      # Provider API keys — stored only here, never in vibe-code server
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      STORE_MODEL_IN_DB: "true"
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "4"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health/liveliness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres_data:

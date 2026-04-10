@@ -88,6 +88,7 @@ interface ColumnProps {
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
   const shared = {
+    "aria-hidden": true,
     width: 20,
     height: 20,
     viewBox: "0 0 24 24",
@@ -101,14 +102,14 @@ function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emp
   switch (icon) {
     case "clock":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7v5l3 2" />
         </svg>
       );
     case "list":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <path d="M9 6h11" />
           <path d="M9 12h11" />
           <path d="M9 18h11" />
@@ -119,28 +120,28 @@ function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emp
       );
     case "play":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="m10 8 6 4-6 4z" />
         </svg>
       );
     case "eye":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
           <circle cx="12" cy="12" r="2.5" />
         </svg>
       );
     case "check":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="m8 12 2.5 2.5L16 9" />
         </svg>
       );
     case "x":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="m9 9 6 6" />
           <path d="m15 9-6 6" />
@@ -148,7 +149,7 @@ function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emp
       );
     case "archive":
       return (
-        <svg {...shared}>
+        <svg {...shared} aria-hidden="true">
           <rect x="3" y="4" width="18" height="4" rx="1" />
           <path d="M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
           <path d="M10 13h4" />
@@ -202,10 +203,12 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onToggleCollapse}
+                aria-label={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
                 title={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
                 className="p-1.5 rounded-lg text-zinc-600 hover:text-amber-300 hover:bg-amber-950/30 transition-all cursor-pointer"
               >
                 <svg
+                  aria-hidden="true"
                   width="13"
                   height="13"
                   viewBox="0 0 16 16"
@@ -224,10 +227,12 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onArchiveDone}
+                aria-label="Arquivar concluídas"
                 title="Arquivar concluídas"
                 className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-950/30 transition-all cursor-pointer"
               >
                 <svg
+                  aria-hidden="true"
                   xmlns="http://www.w3.org/2000/svg"
                   width="13"
                   height="13"
@@ -250,10 +255,12 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onRetryAllFailed}
+                    aria-label="Retry todas as falhas"
                     title="Retry todas as falhas"
                     className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-950/30 transition-all cursor-pointer"
                   >
                     <svg
+                      aria-hidden="true"
                       xmlns="http://www.w3.org/2000/svg"
                       width="13"
                       height="13"
@@ -275,10 +282,12 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onClearFailed}
+                    aria-label="Limpar falhas"
                     title="Limpar falhas"
                     className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
                   >
                     <svg
+                      aria-hidden="true"
                       xmlns="http://www.w3.org/2000/svg"
                       width="13"
                       height="13"

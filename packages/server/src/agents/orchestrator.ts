@@ -1,6 +1,7 @@
 import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
 import { executeAgent } from "./orchestrator/executor";
 import { retryPR } from "./orchestrator/pr-retry";
@@ -17,6 +18,7 @@ interface ActiveRun {
 export class Orchestrator {
   private activeRuns = new Map<string, ActiveRun>();
   private maxConcurrent: number;
+  skillsLoader?: SkillsLoader;
 
   constructor(
     private db: Db,
@@ -92,7 +94,8 @@ export class Orchestrator {
       this.hub,
       (c) => this.sysLog(run.id, task.id, c),
       () => this.activeRuns.delete(task.id),
-      model
+      model,
+      this.skillsLoader
     ).catch((err) => {
       this.activeRuns.delete(task.id);
       console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);

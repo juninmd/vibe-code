@@ -219,7 +219,7 @@ export class GitService {
 
   async listRemoteRepos(
     provider: "github" | "gitlab",
-    limit = 200
+    limit = 20
   ): Promise<
     { name: string; url: string; description: string; isPrivate: boolean; provider: string }[]
   > {
@@ -227,12 +227,21 @@ export class GitService {
     const adapter = this._providers.get(provider);
     const token = this._providers.getToken(provider);
     if (!adapter || !token) return [];
-    try {
-      return await adapter.listRepos(token, limit);
-    } catch (err: any) {
-      console.error(`[git] Failed to list ${provider} repos:`, err.message);
-      return [];
-    }
+    return adapter.listRepos(token, limit);
+  }
+
+  async searchRemoteRepos(
+    provider: "github" | "gitlab",
+    query: string,
+    limit = 20
+  ): Promise<
+    { name: string; url: string; description: string; isPrivate: boolean; provider: string }[]
+  > {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) throw new Error(`No ${provider} token configured`);
+    return adapter.searchRepos(token, query, limit);
   }
 
   /** @deprecated Use listRemoteRepos('github') instead */

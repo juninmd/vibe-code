@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 
 export class ClaudeCodeEngine implements AgentEngine {
@@ -30,24 +31,42 @@ export class ClaudeCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Claude CLI does not provide a model listing command
-    return [];
+    // Return Anthropic models available in LiteLLM (auto-routed via ANTHROPIC_API_KEY).
+    const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+    // Filter to models that go to Anthropic: prefixed with anthropic/ or named claude-*
+    return all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
   }
 
   async *execute(
     prompt: string,
     workdir: string,
-    options?: EngineOptions
+    options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[claude-code] Starting in ${workdir}` };
 
     const args = ["claude", "--print", "--verbose", "--output-format", "stream-json"];
-    if (options?.model) args.push("--model", options.model);
+    if (options.model) args.push("--model", options.model);
     args.push("-p", prompt);
 
-    const proc = Bun.spawn(args, { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+    // When LiteLLM is enabled, route through the proxy using a virtual key.
+    // Otherwise, prefer the DB-stored native key, then fall back to process.env.
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (options.litellmKey) {
+      env.ANTHROPIC_BASE_URL = options.litellmBaseUrl;
+      env.ANTHROPIC_API_KEY = options.litellmKey;
+    } else if (options.nativeApiKeys?.anthropic) {
+      env.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
+    }
 
-    if (options?.runId) this.processes.set(options.runId, proc);
+    const proc = Bun.spawn(args, {
+      cwd: workdir,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "pipe",
+      env,
+    });
+
+    if (options.runId) this.processes.set(options.runId, proc);
 
     yield* streamProcess(
       proc,
@@ -74,10 +93,10 @@ export class ClaudeCodeEngine implements AgentEngine {
           return [{ type: "log", stream: "stdout", content: line }];
         }
       },
-      options?.signal
+      options.signal
     );
 
-    if (options?.runId) this.processes.delete(options.runId);
+    if (options.runId) this.processes.delete(options.runId);
   }
 
   abort(runId: string): void {

@@ -96,6 +96,9 @@ export function initDatabase(dbPath: string): Database {
   if (!runColNames.includes("current_status")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN current_status TEXT");
   }
+  if (!runColNames.includes("litellm_token_id")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN litellm_token_id TEXT");
+  }
 
   const taskCols = db.query("PRAGMA table_info(tasks)").all() as { name: string }[];
   const taskColNames = taskCols.map((c) => c.name);

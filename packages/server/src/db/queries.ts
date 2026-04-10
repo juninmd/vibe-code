@@ -60,6 +60,7 @@ interface RunRow {
   finished_at: string | null;
   exit_code: number | null;
   error_message: string | null;
+  litellm_token_id: string | null;
   created_at: string;
 }
 
@@ -122,6 +123,7 @@ function mapRun(row: RunRow): AgentRun {
     finishedAt: row.finished_at,
     exitCode: row.exit_code,
     errorMessage: row.error_message,
+    litellmTokenId: row.litellm_token_id,
     createdAt: row.created_at,
   };
 }
@@ -436,6 +438,9 @@ export function createRunQueries(db: Database) {
       const sql = `UPDATE agent_runs SET ${sets.join(", ")} WHERE id = ? RETURNING *`;
       const row = db.prepare(sql).get(...values) as RunRow | null;
       return row ? mapRun(row) : null;
+    },
+    updateLitellmTokenId: (id: string, tokenId: string | null): void => {
+      db.prepare("UPDATE agent_runs SET litellm_token_id = ? WHERE id = ?").run(tokenId, id);
     },
   };
 }

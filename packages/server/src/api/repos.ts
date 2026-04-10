@@ -63,8 +63,25 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   });
 
   router.get("/github/list", async (c) => {
-    const repos = await git.listRemoteRepos("github");
-    return c.json({ data: repos });
+    try {
+      const repos = await git.listRemoteRepos("github", 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "github_error", message: msg }, 500);
+    }
+  });
+
+  router.get("/github/search", async (c) => {
+    const q = c.req.query("q")?.trim();
+    if (!q) return c.json({ data: [] });
+    try {
+      const repos = await git.searchRemoteRepos("github", q, 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "github_error", message: msg }, 500);
+    }
   });
 
   router.post("/github/create", async (c) => {
@@ -89,8 +106,25 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
 
   // GitLab provider routes
   router.get("/gitlab/list", async (c) => {
-    const repos = await git.listRemoteRepos("gitlab");
-    return c.json({ data: repos });
+    try {
+      const repos = await git.listRemoteRepos("gitlab", 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "gitlab_error", message: msg }, 500);
+    }
+  });
+
+  router.get("/gitlab/search", async (c) => {
+    const q = c.req.query("q")?.trim();
+    if (!q) return c.json({ data: [] });
+    try {
+      const repos = await git.searchRemoteRepos("gitlab", q, 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "gitlab_error", message: msg }, 500);
+    }
   });
 
   router.post("/gitlab/create", async (c) => {

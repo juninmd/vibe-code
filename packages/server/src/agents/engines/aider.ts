@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 
 export class AiderEngine implements AgentEngine {
@@ -30,43 +31,54 @@ export class AiderEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    try {
-      const proc = Bun.spawn(["aider", "--list-models", ""], { stdout: "pipe", stderr: "pipe" });
-      await proc.exited;
-      const text = await new Response(proc.stdout).text();
-      return text
-        .split("\n")
-        .map((l) => l.replace(/^-\s*/, "").trim())
-        .filter((l) => l && !l.startsWith("Aider") && !l.startsWith("Model"));
-    } catch {
-      return [];
-    }
+    // Aider supports any OpenAI-compatible model. Return everything LiteLLM knows.
+    return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
   async *execute(
     prompt: string,
     workdir: string,
-    options?: EngineOptions
+    options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[aider] Starting in ${workdir}` };
 
     const args = ["aider", "--yes-always", "--no-auto-commits"];
-    if (options?.model) args.push("--model", options.model);
+    if (options.model) args.push("--model", options.model);
     args.push("--message", prompt);
 
-    const proc = Bun.spawn(args, { cwd: workdir, stdout: "pipe", stderr: "pipe", stdin: "pipe" });
+    // When LiteLLM is enabled, route through the proxy and strip native keys.
+    // Otherwise, prefer DB-stored native keys; fall back to host env vars.
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (options.litellmKey) {
+      delete env.ANTHROPIC_API_KEY;
+      delete env.GEMINI_API_KEY;
+      env.OPENAI_API_KEY = options.litellmKey;
+      env.OPENAI_API_BASE = `${options.litellmBaseUrl}/v1`;
+    } else {
+      if (options.nativeApiKeys?.openai) env.OPENAI_API_KEY = options.nativeApiKeys.openai;
+      if (options.nativeApiKeys?.anthropic) env.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
+      if (options.nativeApiKeys?.gemini) env.GEMINI_API_KEY = options.nativeApiKeys.gemini;
+    }
 
-    if (options?.runId) this.processes.set(options.runId, proc);
+    const proc = Bun.spawn(args, {
+      cwd: workdir,
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "pipe",
+      env,
+    });
+
+    if (options.runId) this.processes.set(options.runId, proc);
 
     yield* streamProcess(
       proc,
       (line) => {
         return [{ type: "log", stream: "stdout", content: line }];
       },
-      options?.signal
+      options.signal
     );
 
-    if (options?.runId) this.processes.delete(options.runId);
+    if (options.runId) this.processes.delete(options.runId);
   }
 
   abort(runId: string): void {

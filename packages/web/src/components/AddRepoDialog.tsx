@@ -1,5 +1,5 @@
 import type { RemoteRepo } from "@vibe-code/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -13,16 +13,16 @@ interface AddRepoDialogProps {
 }
 
 export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
-  const [ghRepos, setGhRepos] = useState<RemoteRepo[]>([]);
-  const [glRepos, setGlRepos] = useState<RemoteRepo[]>([]);
-  const [ghLoading, setGhLoading] = useState(false);
-  const [glLoading, setGlLoading] = useState(false);
-  const [ghError, setGhError] = useState<string | null>(null);
-  const [glError, setGlError] = useState<string | null>(null);
+  const manualUrlInputId = useId();
+  const [repos, setRepos] = useState<RemoteRepo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [mode, setMode] = useState<"github" | "gitlab" | "manual" | "create">("github");
   const [createProvider, setCreateProvider] = useState<"github" | "gitlab">("github");
+  const [isSearchResult, setIsSearchResult] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Create new repo state
   const [newName, setNewName] = useState("");
@@ -31,36 +31,65 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const providerLabel = mode === "gitlab" ? "GitLab" : "GitHub";
+
+  const fetchRecent = useCallback(async (provider: "github" | "gitlab") => {
+    setLoading(true);
+    setError(null);
+    setIsSearchResult(false);
+    try {
+      const list =
+        provider === "gitlab" ? await api.repos.listGitLab() : await api.repos.listGitHub();
+      setRepos(list);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setRepos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch recent repos when dialog opens or tab changes
   useEffect(() => {
     if (!open) return;
-    setGhLoading(true);
-    setGhError(null);
-    api.repos
-      .listGitHub()
-      .then(setGhRepos)
-      .catch((err) => setGhError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setGhLoading(false));
+    if (mode === "github" || mode === "gitlab") {
+      setSearch("");
+      fetchRecent(mode);
+    }
+  }, [open, mode, fetchRecent]);
 
-    setGlLoading(true);
-    setGlError(null);
-    api.repos
-      .listGitLab()
-      .then(setGlRepos)
-      .catch((err) => setGlError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setGlLoading(false));
-  }, [open]);
+  // Debounced server-side search
+  useEffect(() => {
+    if (mode !== "github" && mode !== "gitlab") return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
 
-  const activeRepos = mode === "gitlab" ? glRepos : ghRepos;
-  const activeLoading = mode === "gitlab" ? glLoading : ghLoading;
-  const activeError = mode === "gitlab" ? glError : ghError;
-  const activeProviderLabel = mode === "gitlab" ? "GitLab" : "GitHub";
-  const filtered = search
-    ? activeRepos.filter(
-        (r) =>
-          r.name.toLowerCase().includes(search.toLowerCase()) ||
-          r.description.toLowerCase().includes(search.toLowerCase())
-      )
-    : activeRepos;
+    const q = search.trim();
+    if (!q) {
+      // Restore recent list when search is cleared
+      fetchRecent(mode);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      setIsSearchResult(true);
+      try {
+        const searchFn = mode === "gitlab" ? api.repos.searchGitLab : api.repos.searchGitHub;
+        const results = await searchFn(q);
+        setRepos(results);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setRepos([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search, mode, fetchRecent]);
 
   const handleSelect = (repo: RemoteRepo) => {
     onSubmit({ url: repo.url });
@@ -100,12 +129,12 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     setSearch("");
     setManualUrl("");
     setMode("github");
+    setRepos([]);
+    setError(null);
     setNewName("");
     setNewDescription("");
     setNewIsPrivate(true);
     setCreateError(null);
-    setGhError(null);
-    setGlError(null);
     onClose();
   };
 
@@ -140,31 +169,36 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Buscar repositórios no ${mode === "gitlab" ? "GitLab" : "GitHub"}...`}
+            placeholder={`Buscar repositórios no ${providerLabel}...`}
             autoFocus
           />
+          {!search.trim() && !loading && repos.length > 0 && (
+            <p className="text-[10px] px-1" style={{ color: "var(--text-dimmed)" }}>
+              Mostrando recentes. Digite para buscar entre todos os repositórios.
+            </p>
+          )}
 
           <div className="max-h-72 overflow-y-auto rounded-md border border-zinc-800">
-            {activeLoading ? (
+            {loading ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
-                Carregando repositórios do {activeProviderLabel}...
+                {isSearchResult ? "Buscando" : "Carregando"} repositórios do {providerLabel}...
               </div>
-            ) : activeError ? (
+            ) : error ? (
               <div className="px-3 py-8 text-center text-xs text-red-400 space-y-2">
-                <p>Não foi possível carregar os repositórios do {activeProviderLabel}.</p>
-                <p className="text-zinc-500">{activeError}</p>
+                <p>Não foi possível carregar os repositórios do {providerLabel}.</p>
+                <p className="text-zinc-500">{error}</p>
                 <p className="text-zinc-500">
                   Verifique a configuração do provider em Configurações.
                 </p>
               </div>
-            ) : filtered.length === 0 ? (
+            ) : repos.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-zinc-500">
-                {search
+                {search.trim()
                   ? "Nenhum repositório corresponde à busca"
-                  : `Nenhum repositório encontrado no ${activeProviderLabel}.`}
+                  : `Nenhum repositório encontrado no ${providerLabel}.`}
               </div>
             ) : (
-              filtered.map((repo) => (
+              repos.map((repo) => (
                 <button
                   key={repo.url}
                   type="button"
@@ -317,10 +351,14 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
       ) : (
         <form onSubmit={handleManualSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-1">
+            <label
+              htmlFor={manualUrlInputId}
+              className="block text-xs font-medium text-zinc-400 mb-1"
+            >
               URL do repositório *
             </label>
             <Input
+              id={manualUrlInputId}
               value={manualUrl}
               onChange={(e) => setManualUrl(e.target.value)}
               placeholder="https://github.com/user/repo"
