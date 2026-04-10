@@ -6,7 +6,14 @@ interface IconProps {
 // Claude / Anthropic — stylized diamond
 export function ClaudeIcon({ className = "", size = 16 }: IconProps) {
   return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} fill="currentColor">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
       <path d="M8 1L14 8L8 15L2 8Z" />
     </svg>
   );
@@ -15,7 +22,14 @@ export function ClaudeIcon({ className = "", size = 16 }: IconProps) {
 // OpenCode — hexagon
 export function OpenCodeIcon({ className = "", size = 16 }: IconProps) {
   return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} fill="currentColor">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
       <path d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5Z" />
     </svg>
   );
@@ -24,7 +38,14 @@ export function OpenCodeIcon({ className = "", size = 16 }: IconProps) {
 // Aider — 4-pointed star
 export function AiderIcon({ className = "", size = 16 }: IconProps) {
   return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} fill="currentColor">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
       <path d="M8 1L9.5 6.5L15 8L9.5 9.5L8 15L6.5 9.5L1 8L6.5 6.5Z" />
     </svg>
   );
@@ -33,7 +54,14 @@ export function AiderIcon({ className = "", size = 16 }: IconProps) {
 // Gemini — Google's two triangles motif
 export function GeminiIcon({ className = "", size = 16 }: IconProps) {
   return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={className} fill="currentColor">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
       <path d="M8 2C5.5 5 4 6.5 4 8C4 9.5 5.5 11 8 14C10.5 11 12 9.5 12 8C12 6.5 10.5 5 8 2Z" />
     </svg>
   );

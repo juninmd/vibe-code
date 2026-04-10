@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Task } from "@vibe-code/shared";
+import type { SkillsLoader } from "../../skills/loader";
+import { matchSkillsForTask } from "../../skills/matcher";
 
 interface ProjectContext {
   mainLanguages: string[];
@@ -51,9 +53,49 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   return ctx;
 }
 
-export async function buildPromptAsync(task: Task, workdir: string): Promise<string> {
+export async function buildPromptAsync(
+  task: Task,
+  workdir: string,
+  skillsLoader?: SkillsLoader
+): Promise<string> {
   const ctx = await detectProjectContext(workdir);
-  return assemblePrompt(task, ctx);
+
+  // Inject matched skills/rules if loader is available
+  let skillsSection = "";
+  if (skillsLoader) {
+    try {
+      const index = await skillsLoader.load();
+      const matched = await matchSkillsForTask(index, task.title, task.description ?? "", workdir);
+
+      const parts: string[] = [];
+
+      if (matched.rules.length > 0) {
+        parts.push("### Coding Standards (auto-matched from ~/.agents/rules)\n");
+        for (const rule of matched.rules) {
+          parts.push(`- **${rule.name}**: ${rule.description}`);
+        }
+      }
+
+      if (matched.skills.length > 0) {
+        parts.push("\n### Applicable Skills (auto-matched from ~/.agents/skills)\n");
+        for (const skill of matched.skills) {
+          parts.push(`- **${skill.name}**: ${skill.description}`);
+        }
+      }
+
+      if (matched.workflow) {
+        parts.push(`\n### Workflow: ${matched.workflow.name}\n${matched.workflow.description}`);
+      }
+
+      if (parts.length > 0) {
+        skillsSection = `## Organizational Standards\n${parts.join("\n")}`;
+      }
+    } catch {
+      // Skills loading failure is non-fatal — proceed without injection
+    }
+  }
+
+  return assemblePrompt(task, ctx, skillsSection);
 }
 
 export function buildPrompt(task: Task): string {
@@ -65,7 +107,7 @@ export function buildPrompt(task: Task): string {
   });
 }
 
-function assemblePrompt(task: Task, ctx: ProjectContext): string {
+function assemblePrompt(task: Task, ctx: ProjectContext, skillsSection = ""): string {
   const sections: string[] = [];
 
   // ── CRITICAL directive — must appear first to prevent interactive mode ──────
@@ -97,6 +139,11 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
       `## Project Stack\n${stackLine}\n\nFollow the conventions already in place. ` +
         "Inspect existing files before creating new ones. Match the style of nearby code."
     );
+  }
+
+  // ── Organizational standards (skills/rules from ~/.agents) ─────────────────
+  if (skillsSection) {
+    sections.push(skillsSection);
   }
 
   // ── Execution instructions ─────────────────────────────────────────────────

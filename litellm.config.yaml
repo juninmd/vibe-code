@@ -1,0 +1,14 @@
+# LiteLLM Proxy — no model_list.
+# Without model_list, LiteLLM auto-routes requests to the right provider based
+# on the model name prefix (claude-* → Anthropic, gpt-* → OpenAI, gemini-* → Google).
+# Provider API keys come exclusively from environment variables (see docker-compose.yml).
+# When a new model is released, just use it — no config changes needed.
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 600

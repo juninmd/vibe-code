@@ -181,7 +181,12 @@ export function CommandPalette({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Fechar command palette"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div className="relative w-full max-w-xl glass-dialog border rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">

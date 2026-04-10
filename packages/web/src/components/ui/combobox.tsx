@@ -111,6 +111,7 @@ export function Combobox({
           className="px-2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
         >
           <svg
+            aria-hidden="true"
             width="12"
             height="12"
             viewBox="0 0 12 12"

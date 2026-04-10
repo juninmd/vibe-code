@@ -3,8 +3,10 @@ import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
+import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
 import { handleAgentEvent } from "./event-handler";
 import { buildPromptAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
@@ -243,7 +245,8 @@ export async function executeAgent(
   hub: BroadcastHub,
   sysLog: (content: string) => void,
   onFinish: () => void,
-  model?: string
+  model?: string,
+  skillsLoader?: SkillsLoader
 ): Promise<void> {
   const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
   const slugTitle = task.title
@@ -284,6 +287,7 @@ export async function executeAgent(
 
   let wtPath: string | undefined;
   let keepWorkspaceForRetry = false;
+  let litellmTokenId: string | undefined;
   try {
     let reusableWorkspacePath: string | null = null;
 
@@ -332,6 +336,35 @@ export async function executeAgent(
     // Ensure opencode.json won't pollute git history
     await ensureGitignoreEntry(wtPath, "opencode.json");
 
+    // Generate a per-run virtual key in LiteLLM when enabled.
+    // When disabled, engines use native API keys from the environment.
+    const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
+    let litellmKey: string | undefined;
+    let litellmBaseUrl: string | undefined;
+
+    if (litellmEnabled) {
+      try {
+        const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+        const vk = await generateVirtualKey(task.id, engine.name, baseUrl);
+        litellmKey = vk.key;
+        litellmBaseUrl = baseUrl;
+        litellmTokenId = vk.tokenId;
+        db.runs.updateLitellmTokenId(run.id, vk.tokenId);
+        sysLog("LiteLLM proxy: enabled (virtual key generated)");
+      } catch (err: any) {
+        sysLog(`LiteLLM proxy: unavailable (${err.message}). Using native API keys.`);
+      }
+    } else {
+      sysLog("LiteLLM proxy: disabled by setting. Using native API keys.");
+    }
+
+    // Native API keys stored via settings UI (used when LiteLLM is disabled).
+    const nativeApiKeys = {
+      gemini: db.settings.get("gemini_api_key") || undefined,
+      anthropic: db.settings.get("anthropic_api_key") || undefined,
+      openai: db.settings.get("openai_api_key") || undefined,
+    };
+
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
       sysLog(
@@ -344,11 +377,14 @@ export async function executeAgent(
     }
 
     let agentExitCode: number | null = null;
-    const prompt = await buildPromptAsync(task, wtPath);
+    const prompt = await buildPromptAsync(task, wtPath, skillsLoader);
     for await (const event of engine.execute(prompt, wtPath, {
       runId: run.id,
       signal: abort.signal,
       model,
+      litellmKey,
+      litellmBaseUrl,
+      nativeApiKeys,
     })) {
       if (abort.signal.aborted) break;
       if (event.type === "complete") {
@@ -380,6 +416,9 @@ export async function executeAgent(
         runId: run.id,
         signal: abort.signal,
         model,
+        litellmKey,
+        litellmBaseUrl,
+        nativeApiKeys,
       })) {
         if (abort.signal.aborted) break;
         if (event.type === "complete") {
@@ -435,7 +474,10 @@ export async function executeAgent(
         hub,
         (_rid, _tid, content) => sysLog(content),
         engine.name,
-        model
+        model,
+        litellmKey,
+        litellmBaseUrl,
+        nativeApiKeys
       );
 
       if (REVIEW_AUTO_APPLY && reviewResult.actionableFindings.length > 0) {
@@ -448,6 +490,9 @@ export async function executeAgent(
           runId: run.id,
           signal: abort.signal,
           model,
+          litellmKey,
+          litellmBaseUrl,
+          nativeApiKeys,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "complete") {
@@ -482,6 +527,9 @@ export async function executeAgent(
           runId: run.id,
           signal: abort.signal,
           model,
+          litellmKey,
+          litellmBaseUrl,
+          nativeApiKeys,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "complete") {
@@ -561,6 +609,11 @@ export async function executeAgent(
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);
+    // Best-effort cleanup of the per-task LiteLLM virtual key.
+    if (litellmTokenId) {
+      const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+      await deleteVirtualKey(litellmTokenId, baseUrl).catch(() => {});
+    }
     if (wtPath && !keepWorkspaceForRetry) {
       try {
         await git.removeWorktree(barePath, wtPath);

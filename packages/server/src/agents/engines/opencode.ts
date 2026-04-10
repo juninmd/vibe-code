@@ -2,6 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 
 // Maps raw tool names to readable labels and extracts the most useful arg
 function humanizeToolCall(tool: string, input: Record<string, unknown>): string {
@@ -133,42 +134,10 @@ export function humanizeStderr(line: string): string | null {
 }
 
 /**
- * Best free models ranked by coding capability.
- * These work without paid API keys when configured in OpenCode.
+ * Default model for OpenCode when no model is specified.
+ * Uses the LiteLLM auto-routing format: provider/model-name.
  */
-/**
- * Free models available via OpenCode's built-in platform or GitHub Copilot.
- * Verified by running `opencode models` — these IDs must match exactly.
- */
-export const FREE_MODELS = [
-  {
-    id: "github-copilot/claude-sonnet-4.6",
-    label: "Claude Sonnet 4.6 (Copilot · Best quality)",
-    quality: "excellent",
-  },
-  {
-    id: "github-copilot/gpt-4.1",
-    label: "GPT-4.1 (Copilot · Fast)",
-    quality: "excellent",
-  },
-  {
-    id: "opencode/qwen3.6-plus-free",
-    label: "Qwen 3.6 Plus (Free · Great coding)",
-    quality: "good",
-  },
-  {
-    id: "opencode/nemotron-3-super-free",
-    label: "Nemotron 3 Super (Free · NVIDIA)",
-    quality: "good",
-  },
-  {
-    id: "opencode/minimax-m2.5-free",
-    label: "MiniMax M2.5 (Free · via OpenCode)",
-    quality: "good",
-  },
-] as const;
-
-export const DEFAULT_FREE_MODEL = "github-copilot/claude-sonnet-4.6";
+export const DEFAULT_OPENCODE_MODEL = "anthropic/claude-sonnet-4-5";
 
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
@@ -219,34 +188,17 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Always include free models first so they appear at top of dropdown
-    const freePrefixed: string[] = FREE_MODELS.map((m) => m.id);
-
-    try {
-      const proc = Bun.spawn(["opencode", "models"], { stdout: "pipe", stderr: "pipe" });
-      await proc.exited;
-      if (proc.exitCode !== 0) return freePrefixed;
-      const text = await new Response(proc.stdout).text();
-      const cliModels = text
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      // Deduplicate: free models first, then CLI models not already listed
-      const seen = new Set(freePrefixed);
-      const extra = cliModels.filter((m) => !seen.has(m));
-      return [...freePrefixed, ...extra];
-    } catch {
-      return freePrefixed;
-    }
+    // Fetch models from LiteLLM — populated as they are used (store_model_in_db: true).
+    // OpenCode can route to any provider (anthropic, openai, google), so return all LiteLLM models.
+    return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
   async *execute(
     prompt: string,
     workdir: string,
-    options?: EngineOptions
+    options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
-    const model = options?.model ?? DEFAULT_FREE_MODEL;
+    const model = options.model ?? DEFAULT_OPENCODE_MODEL;
     yield {
       type: "log",
       stream: "system",
@@ -256,22 +208,69 @@ export class OpenCodeEngine implements AgentEngine {
     // Write opencode.json with permissions pre-configured for non-interactive mode.
     // Allow all tool use and planning phases to prevent hanging.
     const configPath = join(workdir, "opencode.json");
-    await writeFile(
-      configPath,
-      JSON.stringify(
+    const config: Record<string, any> = {
+      permission: {
+        "*": "allow",
+        question: "allow",
+        plan_enter: "allow",
+        plan_exit: "allow",
+      },
+    };
+
+    // When LiteLLM is enabled, configure providers routing through the proxy.
+    // When disabled, use native API keys from DB settings if available (explicit providers).
+    // Otherwise omit providers so opencode uses its own env-var-based auth.
+    if (options.litellmKey) {
+      config.providers = [
         {
-          permission: {
-            "*": "allow",
-            question: "allow",
-            plan_enter: "allow",
-            plan_exit: "allow",
-          },
+          id: "anthropic",
+          name: "Anthropic (via LiteLLM)",
+          apiUrl: options.litellmBaseUrl,
+          apiKey: options.litellmKey,
         },
-        null,
-        2
-      ),
-      "utf8"
-    );
+        {
+          id: "openai",
+          name: "OpenAI (via LiteLLM)",
+          apiUrl: `${options.litellmBaseUrl}/v1`,
+          apiKey: options.litellmKey,
+        },
+        {
+          id: "google",
+          name: "Google (via LiteLLM)",
+          apiUrl: options.litellmBaseUrl,
+          apiKey: options.litellmKey,
+        },
+      ];
+    } else if (
+      options.nativeApiKeys?.anthropic ||
+      options.nativeApiKeys?.openai ||
+      options.nativeApiKeys?.gemini
+    ) {
+      config.providers = [];
+      if (options.nativeApiKeys.anthropic) {
+        config.providers.push({
+          id: "anthropic",
+          name: "Anthropic",
+          apiKey: options.nativeApiKeys.anthropic,
+        });
+      }
+      if (options.nativeApiKeys.openai) {
+        config.providers.push({
+          id: "openai",
+          name: "OpenAI",
+          apiKey: options.nativeApiKeys.openai,
+        });
+      }
+      if (options.nativeApiKeys.gemini) {
+        config.providers.push({
+          id: "google",
+          name: "Google",
+          apiKey: options.nativeApiKeys.gemini,
+        });
+      }
+    }
+
+    await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
 
     // Use stdout: "pipe" so proc.exited resolves correctly and events stream in
     // real-time. (Using Bun.file() as stdout breaks proc.exited on Windows.)
@@ -297,8 +296,8 @@ export class OpenCodeEngine implements AgentEngine {
       };
     }
 
-    if (options?.runId) this.processes.set(options.runId, proc);
-    if (options?.signal) {
+    if (options.runId) this.processes.set(options.runId, proc);
+    if (options.signal) {
       options.signal.addEventListener("abort", () => proc.kill());
     }
 
@@ -454,7 +453,7 @@ export class OpenCodeEngine implements AgentEngine {
     await Promise.all([stdoutTask, stderrTask]);
     const exitCode = await proc.exited;
 
-    if (options?.runId) this.processes.delete(options.runId);
+    if (options.runId) this.processes.delete(options.runId);
 
     // Cleanup config file — don't include it in git commits
     try {

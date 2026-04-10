@@ -23,6 +23,9 @@ export interface GitProviderAdapter {
   /** List repositories accessible to the authenticated user */
   listRepos(token: string, limit?: number): Promise<RemoteRepo[]>;
 
+  /** Search repositories by query (server-side) */
+  searchRepos(token: string, query: string, limit?: number): Promise<RemoteRepo[]>;
+
   /** Create a new remote repository */
   createRepo(token: string, params: CreateRepoParams): Promise<RemoteRepo>;
 

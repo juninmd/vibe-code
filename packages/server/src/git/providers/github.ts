@@ -27,7 +27,7 @@ export class GitHubProvider implements GitProviderAdapter {
     return { username: data.login, displayName: data.name ?? undefined };
   }
 
-  async listRepos(token: string, limit = 200): Promise<RemoteRepo[]> {
+  async listRepos(token: string, limit = 20): Promise<RemoteRepo[]> {
     const repos: RemoteRepo[] = [];
     let page = 1;
     const perPage = Math.min(limit, 100);
@@ -58,6 +58,31 @@ export class GitHubProvider implements GitProviderAdapter {
       page++;
     }
     return repos.slice(0, limit);
+  }
+
+  async searchRepos(token: string, query: string, limit = 20): Promise<RemoteRepo[]> {
+    const perPage = Math.min(limit, 100);
+    const q = encodeURIComponent(`${query} in:name,description`);
+    const res = await fetch(
+      `${GH_API}/search/repositories?q=${q}&per_page=${perPage}&sort=best-match`,
+      { headers: headers(token) }
+    );
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    const json = (await res.json()) as {
+      items: {
+        full_name: string;
+        html_url: string;
+        description: string | null;
+        private: boolean;
+      }[];
+    };
+    return (json.items ?? []).map((r) => ({
+      name: r.full_name,
+      url: r.html_url,
+      description: r.description ?? "",
+      isPrivate: r.private,
+      provider: "github",
+    }));
   }
 
   async createRepo(token: string, params: CreateRepoParams): Promise<RemoteRepo> {

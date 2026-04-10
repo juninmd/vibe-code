@@ -11,6 +11,7 @@ import type {
   RemoteRepo,
   Repository,
   SettingsResponse,
+  SkillsIndex,
   StatsResponse,
   Task,
   TaskPollResponse,
@@ -114,9 +115,13 @@ export const api = {
       }),
     refresh: (id: string) => request<{ ok: boolean }>(`/repos/${id}/refresh`, { method: "POST" }),
     listGitHub: () => request<RemoteRepo[]>("/repos/github/list"),
+    searchGitHub: (q: string) =>
+      request<RemoteRepo[]>(`/repos/github/search?q=${encodeURIComponent(q)}`),
     createGitHub: (data: { name: string; description: string; isPrivate: boolean }) =>
       request<RemoteRepo>("/repos/github/create", { method: "POST", body: JSON.stringify(data) }),
     listGitLab: () => request<RemoteRepo[]>("/repos/gitlab/list"),
+    searchGitLab: (q: string) =>
+      request<RemoteRepo[]>(`/repos/gitlab/search?q=${encodeURIComponent(q)}`),
     createGitLab: (data: { name: string; description: string; isPrivate: boolean }) =>
       request<RemoteRepo>("/repos/gitlab/create", { method: "POST", body: JSON.stringify(data) }),
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
@@ -189,6 +194,7 @@ export const api = {
       request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
     testConnection: (provider: "github" | "gitlab") =>
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
+    litellmHealth: () => request<{ ok: boolean; baseUrl: string }>("/settings/litellm/health"),
   },
 
   prompts: {
@@ -220,5 +226,16 @@ export const api = {
 
   stats: {
     get: () => request<StatsResponse>("/stats"),
+  },
+
+  skills: {
+    index: () => request<SkillsIndex>("/skills"),
+    content: (filePath: string) =>
+      request<{ content: string }>(`/skills/content?path=${encodeURIComponent(filePath)}`),
+    refresh: () =>
+      request<{ skills: number; rules: number; agents: number; workflows: number }>(
+        "/skills/refresh",
+        { method: "POST" }
+      ),
   },
 };
