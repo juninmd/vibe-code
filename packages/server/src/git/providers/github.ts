@@ -128,11 +128,31 @@ export class GitHubProvider implements GitProviderAdapter {
       }),
     });
     if (!res.ok) {
+      if (res.status === 422) {
+        // A PR for this branch may already exist — return it instead of failing
+        const existing = await this.findOpenPR(token, repoPath, params.head, params.base);
+        if (existing) return existing;
+      }
       const err = await res.text();
       throw new Error(`GitHub create PR failed: ${res.status} ${err}`);
     }
     const data = (await res.json()) as { html_url: string };
     return data.html_url;
+  }
+
+  private async findOpenPR(
+    token: string,
+    repoPath: string,
+    head: string,
+    base: string
+  ): Promise<string | null> {
+    const owner = repoPath.split("/")[0];
+    const headQuery = `${owner}:${head}`;
+    const url = `${GH_API}/repos/${repoPath}/pulls?state=open&head=${encodeURIComponent(headQuery)}&base=${encodeURIComponent(base)}&per_page=1`;
+    const res = await fetch(url, { headers: headers(token) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { html_url: string }[];
+    return data[0]?.html_url ?? null;
   }
 
   async isPrMerged(token: string, prUrl: string): Promise<boolean> {
