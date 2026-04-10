@@ -142,11 +142,30 @@ export class GitLabProvider implements GitProviderAdapter {
       }),
     });
     if (!res.ok) {
+      if (res.status === 409 || res.status === 422) {
+        // An open MR for this source branch may already exist — return it instead of failing
+        const existing = await this.findOpenMR(token, encodedPath, params.head);
+        if (existing) return existing;
+      }
       const err = await res.text();
       throw new Error(`GitLab create MR failed: ${res.status} ${err}`);
     }
     const data = (await res.json()) as { web_url: string };
     return data.web_url;
+  }
+
+  private async findOpenMR(
+    token: string,
+    encodedProjectPath: string,
+    sourceBranch: string
+  ): Promise<string | null> {
+    const url = this.api(
+      `/projects/${encodedProjectPath}/merge_requests?state=opened&source_branch=${encodeURIComponent(sourceBranch)}&per_page=1`
+    );
+    const res = await fetch(url, { headers: headers(token) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { web_url: string }[];
+    return data[0]?.web_url ?? null;
   }
 
   async isPrMerged(token: string, prUrl: string): Promise<boolean> {

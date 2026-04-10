@@ -26,16 +26,19 @@ export async function retryPR(
   const engine = registry.get(run.engine);
   if (!engine) throw new Error(`Engine ${run.engine} not found`);
 
-  // Log the attempt
-  db.logs.create(run.id, "system", "Retrying Pull Request creation...");
-  hub.broadcastToTask(taskId, {
-    type: "agent_log",
-    runId: run.id,
-    taskId,
-    stream: "system",
-    content: "Retrying Pull Request creation...",
-    timestamp: new Date().toISOString(),
-  });
+  const logToRun = (content: string) => {
+    db.logs.create(run.id, "system", content);
+    hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId: run.id,
+      taskId,
+      stream: "system",
+      content,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  logToRun("Retrying Pull Request creation...");
 
   // Create a temporary worktree using the task branch
   const wtId = `retry-pr-${Date.now()}`;
@@ -50,9 +53,12 @@ export async function retryPR(
 
   try {
     // Push with -u to ensure it's tracked
+    logToRun(`Pushing branch "${task.branchName}" to origin...`);
     await git.push(wtPath, task.branchName);
+    logToRun("Branch pushed ✓");
 
     // Create PR
+    logToRun("Creating Pull Request...");
     const prBody = `${task.description}\n\n---\n_Created by vibe-code agent using ${engine.name}_`;
     const prUrl = await git.createPR(
       wtPath,
@@ -70,19 +76,18 @@ export async function retryPR(
       hub.broadcastAll({ type: "task_updated", task: updatedTask });
     }
 
-    db.logs.create(run.id, "system", `Pull Request created manually: ${prUrl}`);
-    hub.broadcastToTask(taskId, {
-      type: "agent_log",
-      runId: run.id,
-      taskId,
-      stream: "system",
-      content: `Pull Request created manually: ${prUrl}`,
-      timestamp: new Date().toISOString(),
-    });
-
+    logToRun(`Pull Request created: ${prUrl}`);
     return prUrl;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logToRun(`PR retry failed: ${errMsg}`);
+    throw err;
   } finally {
-    // Cleanup worktree
-    await git.removeWorktree(barePath, wtPath);
+    // Cleanup worktree — don't let cleanup errors mask the original error
+    try {
+      await git.removeWorktree(barePath, wtPath);
+    } catch {
+      // Non-fatal: workspace may need manual cleanup
+    }
   }
 }
