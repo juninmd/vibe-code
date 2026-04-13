@@ -1,3 +1,6 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -124,6 +127,53 @@ export class GeminiEngine implements AgentEngine {
   async getSetupIssue(): Promise<string | null> {
     if (!(await this.hasCli())) return "Gemini CLI não instalado";
     return null;
+  }
+
+  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
+    const sections: string[] = [];
+
+    if (skills.projectInstructions) {
+      sections.push(`## Project Instructions\n\n${skills.projectInstructions}`);
+    }
+
+    if (skills.rules.length > 0) {
+      sections.push("## Coding Standards\n");
+      for (const rule of skills.rules) {
+        const body = rule.content
+          ? `\n<details><summary>${rule.description}</summary>\n\n${rule.content}\n</details>`
+          : rule.description;
+        sections.push(`### ${rule.name}\n${body}`);
+      }
+    }
+
+    if (skills.skills.length > 0) {
+      sections.push("## Skills\n");
+      for (const skill of skills.skills) {
+        const body = skill.content
+          ? `\n<details><summary>${skill.description}</summary>\n\n${skill.content}\n</details>`
+          : skill.description;
+        sections.push(`### ${skill.name}\n${body}`);
+      }
+    }
+
+    if (skills.agents.length > 0) {
+      sections.push("## Agent Personas\n");
+      for (const agent of skills.agents) {
+        sections.push(`### ${agent.name}\n${agent.content || agent.description}`);
+      }
+    }
+
+    if (skills.workflow) {
+      sections.push(
+        `## Workflow: ${skills.workflow.name}\n${skills.workflow.content || skills.workflow.description}`
+      );
+    }
+
+    if (sections.length === 0) return [];
+
+    const geminiMd = join(workdir, "GEMINI.md");
+    await writeFile(geminiMd, sections.join("\n\n"), "utf8");
+    return [geminiMd];
   }
 
   async *execute(

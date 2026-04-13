@@ -1,5 +1,7 @@
 import {
+  createFindingsQueries,
   createLogQueries,
+  createMetricsQueries,
   createPromptTemplateQueries,
   createRepoQueries,
   createRunQueries,
@@ -21,6 +23,8 @@ export function createDb(dbPath: string) {
     settings: createSettingsQueries(db),
     prompts: createPromptTemplateQueries(db),
     schedules: createScheduleQueries(db),
+    findings: createFindingsQueries(db),
+    metrics: createMetricsQueries(db),
   };
 }
 

@@ -53,6 +53,8 @@ export interface Task {
   branchName: string | null;
   prUrl: string | null;
   parentTaskId: string | null;
+  agentId: string | null;
+  matchedSkills: string[];
   tags: string[];
   notes: string;
   createdAt: string;
@@ -71,6 +73,7 @@ export interface AgentRun {
   exitCode: number | null;
   errorMessage: string | null;
   litellmTokenId?: string | null;
+  matchedSkills?: string | null;
   createdAt: string;
 }
 
@@ -400,4 +403,74 @@ export interface SkillsIndex {
   rules: RuleEntry[];
   agents: AgentEntry[];
   workflows: WorkflowEntry[];
+}
+
+// ─── Skill Payload (structured context for engines) ─────────────────────────
+
+export interface SkillPayloadItem {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export interface SkillPayload {
+  rules: SkillPayloadItem[];
+  skills: SkillPayloadItem[];
+  workflow: SkillPayloadItem | null;
+  agents: SkillPayloadItem[];
+  projectInstructions: string | null;
+}
+
+// ─── Review Finding (persisted feedback) ────────────────────────────────────
+
+export interface ReviewFinding {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  persona: string;
+  severity: "blocker" | "warning" | "info";
+  content: string;
+  filePath: string | null;
+  resolved: boolean;
+  createdAt: string;
+}
+
+// ─── Run Metrics (evaluation harness) ───────────────────────────────────────
+
+export interface RunMetrics {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  engine: string;
+  model: string | null;
+  matchedSkills: string[];
+  matchedRules: string[];
+  durationMs: number | null;
+  validatorAttempts: number;
+  reviewBlockers: number;
+  reviewWarnings: number;
+  finalStatus: string;
+  prCreated: boolean;
+  createdAt: string;
+}
+
+// ─── Skill Stats (evaluation responses) ─────────────────────────────────────
+
+export interface SkillEffectiveness {
+  name: string;
+  totalRuns: number;
+  successRate: number;
+  avgBlockers: number;
+  avgWarnings: number;
+}
+
+export interface EngineEffectiveness {
+  engine: string;
+  totalRuns: number;
+  successRate: number;
+  avgDurationSecs: number;
+  avgBlockers: number;
+  prRate: number;
 }

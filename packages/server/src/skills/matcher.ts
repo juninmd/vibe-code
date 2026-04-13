@@ -1,10 +1,17 @@
 import { readdir } from "node:fs/promises";
-import type { RuleEntry, SkillEntry, SkillsIndex, WorkflowEntry } from "@vibe-code/shared";
+import type {
+  AgentEntry,
+  RuleEntry,
+  SkillEntry,
+  SkillsIndex,
+  WorkflowEntry,
+} from "@vibe-code/shared";
 
 export interface MatchedSkills {
   rules: RuleEntry[];
   skills: SkillEntry[];
   workflow: WorkflowEntry | null;
+  agents: AgentEntry[];
 }
 
 const MAX_INJECTION_CHARS = 8000;
@@ -59,6 +66,23 @@ function matchWorkflow(workflows: WorkflowEntry[], taskText: string): WorkflowEn
 }
 
 /**
+ * Match agents by keyword overlap (same approach as skills).
+ */
+function matchAgents(agents: AgentEntry[], taskText: string): AgentEntry[] {
+  const lowerText = taskText.toLowerCase();
+  const scored = agents
+    .map((agent) => {
+      const words = agent.description.toLowerCase().split(/\s+/);
+      const hits = words.filter((w) => w.length > 3 && lowerText.includes(w)).length;
+      return { agent, score: hits };
+    })
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, 3).map((s) => s.agent);
+}
+
+/**
  * Detect file extensions in the workdir (top-level only for speed).
  */
 async function detectExtensions(workdir: string): Promise<Set<string>> {
@@ -103,6 +127,7 @@ export async function matchSkillsForTask(
   const rules = matchRules(index.rules, fileExts);
   const skills = matchSkills(index.skills, taskText);
   const workflow = matchWorkflow(index.workflows, taskText);
+  const agents = matchAgents(index.agents, taskText);
 
   // Trim to budget
   let totalChars = 0;
@@ -122,5 +147,5 @@ export async function matchSkillsForTask(
     trimmedSkills.push(skill);
   }
 
-  return { rules: trimmedRules, skills: trimmedSkills, workflow };
+  return { rules: trimmedRules, skills: trimmedSkills, workflow, agents };
 }

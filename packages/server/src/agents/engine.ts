@@ -1,3 +1,5 @@
+import type { SkillPayload } from "@vibe-code/shared";
+
 export interface AgentEvent {
   type: "log" | "status" | "error" | "complete";
   stream?: "stdout" | "stderr" | "system";
@@ -19,6 +21,8 @@ export interface EngineOptions {
     anthropic?: string;
     openai?: string;
   };
+  /** Structured skill/rule/agent context matched for this task run. */
+  skills?: SkillPayload;
 }
 
 export interface AgentEngine {
@@ -39,6 +43,13 @@ export interface AgentEngine {
 
   /** List available models by querying the CLI. Returns [] if not supported. */
   listModels(): Promise<string[]>;
+
+  /**
+   * Prepare the workdir with engine-native context files (e.g. GEMINI.md, .claude/instructions.md).
+   * Returns list of file paths created (for cleanup after execution).
+   * Optional — engines that don't need native files can skip implementing this.
+   */
+  prepareWorkdir?(workdir: string, skills: SkillPayload): Promise<string[]>;
 
   /**
    * Execute a task in the given directory.
