@@ -127,6 +127,52 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE repositories ADD COLUMN provider TEXT NOT NULL DEFAULT 'github'");
   }
 
+  // Migration: matched_skills column on agent_runs (M7.2)
+  if (!runColNames.includes("matched_skills")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN matched_skills TEXT DEFAULT '[]'");
+  }
+
+  // M4.1: review_findings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_findings (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      persona     TEXT NOT NULL,
+      severity    TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      file_path   TEXT,
+      resolved    INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_findings_repo ON review_findings(repo_id, resolved, created_at);
+    CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
+  `);
+
+  // M5.1: run_metrics table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS run_metrics (
+      id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      run_id              TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      task_id             TEXT NOT NULL,
+      repo_id             TEXT NOT NULL,
+      engine              TEXT NOT NULL,
+      model               TEXT,
+      matched_skills      TEXT DEFAULT '[]',
+      matched_rules       TEXT DEFAULT '[]',
+      duration_ms         INTEGER,
+      validator_attempts  INTEGER NOT NULL DEFAULT 0,
+      review_blockers     INTEGER NOT NULL DEFAULT 0,
+      review_warnings     INTEGER NOT NULL DEFAULT 0,
+      final_status        TEXT NOT NULL,
+      pr_created          INTEGER NOT NULL DEFAULT 0,
+      created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_metrics_engine ON run_metrics(engine);
+    CREATE INDEX IF NOT EXISTS idx_run_metrics_repo ON run_metrics(repo_id);
+  `);
+
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
   db.exec(`
     INSERT OR IGNORE INTO prompt_templates (id, title, description, content, category, is_builtin) VALUES

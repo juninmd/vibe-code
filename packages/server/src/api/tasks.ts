@@ -431,5 +431,20 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }
   });
 
+  // M7.1: Matched skills for the latest run of a task
+  router.get("/:id/matched-skills", (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    const runs = db.runs.listByTask(task.id);
+    const latest = runs[0];
+    if (!latest) return c.json({ data: [] });
+    try {
+      const matched = JSON.parse(latest.matchedSkills ?? "[]");
+      return c.json({ data: matched });
+    } catch {
+      return c.json({ data: [] });
+    }
+  });
+
   return router;
 }

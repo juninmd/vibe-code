@@ -5,9 +5,13 @@ import type {
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
+  EngineEffectiveness,
   GitProvider,
   PromptTemplate,
   Repository,
+  ReviewFinding,
+  RunMetrics,
+  SkillEffectiveness,
   Task,
   TaskSchedule,
   TaskStatus,
@@ -61,6 +65,7 @@ interface RunRow {
   exit_code: number | null;
   error_message: string | null;
   litellm_token_id: string | null;
+  matched_skills: string | null;
   created_at: string;
 }
 
@@ -124,6 +129,7 @@ function mapRun(row: RunRow): AgentRun {
     exitCode: row.exit_code,
     errorMessage: row.error_message,
     litellmTokenId: row.litellm_token_id,
+    matchedSkills: row.matched_skills,
     createdAt: row.created_at,
   };
 }
@@ -442,6 +448,12 @@ export function createRunQueries(db: Database) {
     updateLitellmTokenId: (id: string, tokenId: string | null): void => {
       db.prepare("UPDATE agent_runs SET litellm_token_id = ? WHERE id = ?").run(tokenId, id);
     },
+    updateMatchedSkills: (id: string, skills: string[]): void => {
+      db.prepare("UPDATE agent_runs SET matched_skills = ? WHERE id = ?").run(
+        JSON.stringify(skills),
+        id
+      );
+    },
   };
 }
 
@@ -689,4 +701,255 @@ function detectProviderFromUrl(url: string): GitProvider {
   if (url.includes("github.com")) return "github";
   if (url.includes("gitlab")) return "gitlab";
   return "manual";
+}
+
+// ─── Review Findings Queries (M4) ───────────────────────────────────────────
+
+interface FindingRow {
+  id: string;
+  run_id: string;
+  task_id: string;
+  repo_id: string;
+  persona: string;
+  severity: string;
+  content: string;
+  file_path: string | null;
+  resolved: number;
+  created_at: string;
+}
+
+function mapFinding(row: FindingRow): ReviewFinding {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    taskId: row.task_id,
+    repoId: row.repo_id,
+    persona: row.persona,
+    severity: row.severity as ReviewFinding["severity"],
+    content: row.content,
+    filePath: row.file_path,
+    resolved: row.resolved === 1,
+    createdAt: row.created_at,
+  };
+}
+
+export function createFindingsQueries(db: Database) {
+  return {
+    create: (params: {
+      runId: string;
+      taskId: string;
+      repoId: string;
+      persona: string;
+      severity: string;
+      content: string;
+      filePath?: string;
+    }): ReviewFinding => {
+      const row = db
+        .prepare<FindingRow, [string, string, string, string, string, string, string | null]>(
+          "INSERT INTO review_findings (run_id, task_id, repo_id, persona, severity, content, file_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
+        )
+        .get(
+          params.runId,
+          params.taskId,
+          params.repoId,
+          params.persona,
+          params.severity,
+          params.content,
+          params.filePath ?? null
+        );
+      if (!row) throw new Error("Failed to create finding");
+      return mapFinding(row);
+    },
+    getRecentByRepo: (repoId: string, limit = 20): ReviewFinding[] => {
+      const rows = db
+        .prepare<FindingRow, [string, number]>(
+          `SELECT * FROM review_findings
+           WHERE repo_id = ? AND resolved = 0
+             AND created_at >= datetime('now', '-30 days')
+           ORDER BY created_at DESC LIMIT ?`
+        )
+        .all(repoId, limit);
+      return rows.map(mapFinding);
+    },
+    listByRepo: (repoId: string, limit = 50): ReviewFinding[] => {
+      const rows = db
+        .prepare<FindingRow, [string, number]>(
+          "SELECT * FROM review_findings WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?"
+        )
+        .all(repoId, limit);
+      return rows.map(mapFinding);
+    },
+    resolve: (id: string): void => {
+      db.prepare("UPDATE review_findings SET resolved = 1 WHERE id = ?").run(id);
+    },
+  };
+}
+
+// ─── Run Metrics Queries (M5) ───────────────────────────────────────────────
+
+interface MetricsRow {
+  id: string;
+  run_id: string;
+  task_id: string;
+  repo_id: string;
+  engine: string;
+  model: string | null;
+  matched_skills: string | null;
+  matched_rules: string | null;
+  duration_ms: number | null;
+  validator_attempts: number;
+  review_blockers: number;
+  review_warnings: number;
+  final_status: string;
+  pr_created: number;
+  created_at: string;
+}
+
+function mapMetrics(row: MetricsRow): RunMetrics {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    taskId: row.task_id,
+    repoId: row.repo_id,
+    engine: row.engine,
+    model: row.model,
+    matchedSkills: JSON.parse(row.matched_skills || "[]"),
+    matchedRules: JSON.parse(row.matched_rules || "[]"),
+    durationMs: row.duration_ms,
+    validatorAttempts: row.validator_attempts,
+    reviewBlockers: row.review_blockers,
+    reviewWarnings: row.review_warnings,
+    finalStatus: row.final_status,
+    prCreated: row.pr_created === 1,
+    createdAt: row.created_at,
+  };
+}
+
+export function createMetricsQueries(db: Database) {
+  return {
+    create: (params: {
+      runId: string;
+      taskId: string;
+      repoId: string;
+      engine: string;
+      model?: string;
+      matchedSkills: string[];
+      matchedRules: string[];
+      durationMs?: number;
+      validatorAttempts: number;
+      reviewBlockers: number;
+      reviewWarnings: number;
+      finalStatus: string;
+      prCreated: boolean;
+    }): RunMetrics => {
+      const row = db
+        .prepare<
+          MetricsRow,
+          [
+            string,
+            string,
+            string,
+            string,
+            string | null,
+            string,
+            string,
+            number | null,
+            number,
+            number,
+            number,
+            string,
+            number,
+          ]
+        >(
+          `INSERT INTO run_metrics (run_id, task_id, repo_id, engine, model, matched_skills, matched_rules, duration_ms, validator_attempts, review_blockers, review_warnings, final_status, pr_created)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+        )
+        .get(
+          params.runId,
+          params.taskId,
+          params.repoId,
+          params.engine,
+          params.model ?? null,
+          JSON.stringify(params.matchedSkills),
+          JSON.stringify(params.matchedRules),
+          params.durationMs ?? null,
+          params.validatorAttempts,
+          params.reviewBlockers,
+          params.reviewWarnings,
+          params.finalStatus,
+          params.prCreated ? 1 : 0
+        );
+      if (!row) throw new Error("Failed to create metrics");
+      return mapMetrics(row);
+    },
+    skillEffectiveness: (): SkillEffectiveness[] => {
+      // Unnest matched_skills JSON arrays and aggregate per skill
+      const rows = db
+        .query(
+          `WITH skill_runs AS (
+            SELECT
+              je.value AS skill_name,
+              m.final_status,
+              m.review_blockers,
+              m.review_warnings
+            FROM run_metrics m, json_each(m.matched_skills) je
+          )
+          SELECT
+            skill_name AS name,
+            COUNT(*) AS total_runs,
+            ROUND(100.0 * SUM(CASE WHEN final_status = 'completed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS success_rate,
+            ROUND(AVG(review_blockers), 2) AS avg_blockers,
+            ROUND(AVG(review_warnings), 2) AS avg_warnings
+          FROM skill_runs
+          GROUP BY skill_name
+          ORDER BY total_runs DESC
+          LIMIT 50`
+        )
+        .all() as {
+        name: string;
+        total_runs: number;
+        success_rate: number;
+        avg_blockers: number;
+        avg_warnings: number;
+      }[];
+      return rows.map((r) => ({
+        name: r.name,
+        totalRuns: r.total_runs,
+        successRate: r.success_rate,
+        avgBlockers: r.avg_blockers,
+        avgWarnings: r.avg_warnings,
+      }));
+    },
+    engineEffectiveness: (): EngineEffectiveness[] => {
+      const rows = db
+        .query(
+          `SELECT
+            engine,
+            COUNT(*) AS total_runs,
+            ROUND(100.0 * SUM(CASE WHEN final_status = 'completed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS success_rate,
+            ROUND(AVG(COALESCE(duration_ms, 0)) / 1000.0, 1) AS avg_duration_secs,
+            ROUND(AVG(review_blockers), 2) AS avg_blockers,
+            ROUND(100.0 * SUM(CASE WHEN pr_created = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS pr_rate
+          FROM run_metrics
+          GROUP BY engine
+          ORDER BY total_runs DESC`
+        )
+        .all() as {
+        engine: string;
+        total_runs: number;
+        success_rate: number;
+        avg_duration_secs: number;
+        avg_blockers: number;
+        pr_rate: number;
+      }[];
+      return rows.map((r) => ({
+        engine: r.engine,
+        totalRuns: r.total_runs,
+        successRate: r.success_rate,
+        avgDurationSecs: r.avg_duration_secs,
+        avgBlockers: r.avg_blockers,
+        prRate: r.pr_rate,
+      }));
+    },
+  };
 }

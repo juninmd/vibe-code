@@ -245,5 +245,14 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     return c.json({ data: { ok: true } });
   });
 
+  // M4.5: Review findings for a repository
+  router.get("/:id/findings", (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    const limit = Number(c.req.query("limit")) || 50;
+    const findings = db.findings.listByRepo(repo.id, limit);
+    return c.json({ data: findings });
+  });
+
   return router;
 }
