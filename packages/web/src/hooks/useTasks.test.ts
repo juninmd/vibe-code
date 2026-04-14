@@ -17,6 +17,8 @@ const mockTask: TaskWithRun = {
   branchName: null,
   prUrl: null,
   parentTaskId: null,
+  agentId: null,
+  matchedSkills: [],
   tags: [],
   notes: "",
   createdAt: new Date().toISOString(),
