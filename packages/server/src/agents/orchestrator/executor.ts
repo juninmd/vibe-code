@@ -683,10 +683,13 @@ export async function executeAgent(
     }
 
     const updatedTask = db.tasks.update(task.id, { status: "review" });
-    db.runs.updateStatus(run.id, "completed", {
+    const completedRun = db.runs.updateStatus(run.id, "completed", {
       finished_at: new Date().toISOString(),
       exit_code: 0,
     });
+    // Flush any pending log batches before broadcasting terminal state
+    hub.flushLogs(task.id);
+    if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
   } catch (err: any) {
@@ -702,11 +705,14 @@ export async function executeAgent(
       }
       sysLog(`Failed: ${errMsg}`);
     }
-    db.runs.updateStatus(run.id, "failed", {
+    const failedRun = db.runs.updateStatus(run.id, isCancelled ? "cancelled" : "failed", {
       finished_at: new Date().toISOString(),
-      error_message: errMsg,
+      error_message: isCancelled ? null : errMsg,
     });
     db.tasks.update(task.id, { status: isCancelled ? "backlog" : "failed" });
+    // Flush pending logs before broadcasting terminal state
+    hub.flushLogs(task.id);
+    if (failedRun) hub.broadcastAll({ type: "run_updated", run: failedRun });
     const finalTask = db.tasks.getById(task.id);
     if (finalTask) hub.broadcastAll({ type: "task_updated", task: finalTask });
     logAgentFinish(task.id, isCancelled ? "cancelled" : "failed", errMsg);

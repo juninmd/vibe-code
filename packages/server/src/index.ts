@@ -129,7 +129,7 @@ app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry, orchestrator));
-app.route("/api/settings", createSettingsRouter(db, providerRegistry));
+app.route("/api/settings", createSettingsRouter(db, providerRegistry, skillsLoader));
 app.route("/api/prompts", createPromptsRouter(db));
 app.route("/api/stats", createStatsRouter(db));
 app.route("/api/skills", createSkillsRouter(skillsLoader));
@@ -174,6 +174,8 @@ app.get(
           hub.unsubscribe(client, msg.taskId);
         } else if (msg.type === "agent_input") {
           orchestrator.sendInput(msg.taskId, msg.input);
+        } else if (msg.type === "ping") {
+          // Liveness reply — no-op; any incoming frame resets client pong counter
         }
       } catch {
         // Invalid message, ignore

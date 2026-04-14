@@ -1,7 +1,25 @@
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { AgentLog, LogStream } from "@vibe-code/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import AnsiToHtml from "ansi-to-html";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { formatTime } from "../utils/date";
+
+const ansiConverter = new AnsiToHtml({
+  fg: "#e4e4e7",
+  bg: "#09090b",
+  newline: false,
+  escapeXML: true,
+  stream: false,
+});
+function convertAnsi(text: string): string {
+  try {
+    return ansiConverter.toHtml(text);
+  } catch {
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape strip
+    return text.replace(/\u001b\[[0-9;]*m/g, "");
+  }
+}
 
 interface AgentOutputProps {
   runId: string | null;
@@ -14,26 +32,26 @@ interface AgentOutputProps {
   currentStatus?: string | null;
 }
 
-const streamColor = (stream: string, content: string) => {
+function getStreamColor(stream: string, content: string): string {
   if (stream === "review") {
-    if (content.startsWith("BLOCKER:")) return "text-red-400 font-semibold";
-    if (content.startsWith("WARNING:")) return "text-yellow-400";
-    if (content.startsWith("INFO:")) return "text-blue-400";
-    if (content.startsWith("LGTM")) return "text-emerald-400";
-    if (content.startsWith("[REVIEW:")) return "text-violet-300 font-mono text-[10px]";
-    return "text-zinc-400";
+    if (content.startsWith("BLOCKER:")) return "#f87171";
+    if (content.startsWith("WARNING:")) return "#facc15";
+    if (content.startsWith("INFO:")) return "#60a5fa";
+    if (content.startsWith("LGTM")) return "#34d399";
+    if (content.startsWith("[REVIEW:")) return "#c4b5fd";
+    return "#a1a1aa";
   }
   switch (stream) {
     case "stderr":
-      return "text-red-400";
+      return "#f87171";
     case "system":
-      return "text-zinc-500 italic";
+      return "#71717a";
     case "stdin":
-      return "text-emerald-400";
+      return "#34d399";
     default:
-      return "text-zinc-200";
+      return "";
   }
-};
+}
 
 const PERSONA_BADGE: Record<string, string> = {
   frontend: "bg-blue-900/50 text-blue-300 border border-blue-700/50",
@@ -114,13 +132,15 @@ function fmtTokens(n: number): string {
 }
 
 type StreamFilter = LogStream | "all";
-
-const STREAM_FILTERS: { id: StreamFilter; label: string }[] = [
-  { id: "all", label: "Todos" },
-  { id: "stdout", label: "Saída" },
-  { id: "stderr", label: "Erros" },
-  { id: "system", label: "Sistema" },
-];
+const STREAM_LABEL: Record<string, string> = {
+  all: "Todos",
+  stdout: "Saída",
+  stderr: "Erros",
+  system: "Sistema",
+  review: "Review",
+  stdin: "Stdin",
+};
+const STREAM_TABS: StreamFilter[] = ["all", "stdout", "stderr", "system", "review"];
 
 export function AgentOutput({
   runId,
@@ -134,12 +154,15 @@ export function AgentOutput({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [input, setInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [useRegex, setUseRegex] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [matchIdx, setMatchIdx] = useState(0);
   const [pinnedBottom, setPinnedBottom] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
+  const [showTimestamps, setShowTimestamps] = useState(false);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -168,18 +191,24 @@ export function AgentOutput({
   const toolStats = useMemo(() => deriveToolStats(allLogs), [allLogs]);
 
   // Detect if agent is waiting for input
-  const awaitingQuestion = useMemo(() => {
-    if (!isRunning) return null;
-    return detectAwaitingInput(allLogs);
-  }, [allLogs, isRunning]);
+  const awaitingQuestion = useMemo(
+    () => (isRunning ? detectAwaitingInput(allLogs) : null),
+    [allLogs, isRunning]
+  );
 
-  // Auto-scroll when pinned
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally triggers on log append
-  useEffect(() => {
-    if (pinnedBottom && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  // Stream counts for tab badges
+  const streamCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allLogs.length };
+    for (const log of allLogs) {
+      counts[log.stream] = (counts[log.stream] ?? 0) + 1;
     }
-  }, [historicLogs, liveLogs, pinnedBottom]);
+    return counts;
+  }, [allLogs]);
+
+  // Auto-scroll when pinned — rowVirtualizer declared below, after renderedLogs
+  // (effects run after render so forward reference is safe at runtime, but TS
+  //  needs the virtualizer declared before the useMemo it depends on)
+  // See declaration right after renderedLogs useMemo.
 
   // Auto-focus input only when a new question appears and user is not selecting/copying logs.
   const lastQuestionRef = useRef<string | null>(null);
@@ -204,12 +233,8 @@ export function AgentOutput({
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [awaitingQuestion, isRunning]);
 
-  // Scroll to highlighted match
-  useEffect(() => {
-    if (!showSearch || !searchQuery) return;
-    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-match="${matchIdx}"]`);
-    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [matchIdx, showSearch, searchQuery]);
+  // Scroll to highlighted match — moved below rowVirtualizer declaration
+  // (see effect after renderedLogs + rowVirtualizer)
 
   // Global Ctrl+F to open search within this component
   useEffect(() => {
@@ -249,6 +274,35 @@ export function AgentOutput({
     navigator.clipboard.writeText(text).catch(console.error);
   };
 
+  const downloadLogs = useCallback(() => {
+    const text = allLogs
+      .map((l) => `[${formatTime(l.timestamp)}][${l.stream}] ${l.content}`)
+      .join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `logs-${runId ?? "task"}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [allLogs, runId]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!containerRef.current) return;
+    if (!document.fullscreenElement) {
+      containerRef.current.requestFullscreen().catch(console.error);
+    } else {
+      document.exitFullscreen().catch(console.error);
+    }
+  }, []);
+
+  // Sync isFullscreen state with native fullscreen changes
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !onSendInput) return;
@@ -263,24 +317,49 @@ export function AgentOutput({
       streamFilter === "all" ? allLogs : allLogs.filter((l) => l.stream === streamFilter);
 
     if (!showSearch || !searchQuery.trim()) {
-      const maxVisible = 500;
-      const logsToShow = filtered.length > maxVisible ? filtered.slice(-maxVisible) : filtered;
-      return {
-        renderedLogs: logsToShow.map((l) => ({ log: l, matchNumber: -1 })),
-        totalMatches: 0,
-      };
+      return { renderedLogs: filtered.map((l) => ({ log: l, matchNumber: -1 })), totalMatches: 0 };
+    }
+    let re: RegExp | null = null;
+    if (useRegex) {
+      try {
+        re = new RegExp(searchQuery, "i");
+      } catch {
+        /* invalid regex */
+      }
     }
     const q = searchQuery.toLowerCase();
     let counter = 0;
     const renderedLogs = filtered.map((l) => {
-      const hit = l.content.toLowerCase().includes(q);
+      const hit = re ? re.test(l.content) : l.content.toLowerCase().includes(q);
       return { log: l, matchNumber: hit ? counter++ : -1 };
     });
     return { renderedLogs, totalMatches: counter };
-  }, [allLogs, showSearch, searchQuery, streamFilter]);
+  }, [allLogs, showSearch, searchQuery, streamFilter, useRegex]);
+
+  // Virtual list — declared after renderedLogs to avoid forward-reference TS errors
+  const rowVirtualizer = useVirtualizer({
+    count: renderedLogs.length + (loadingLogs ? 1 : 0),
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 22,
+    overscan: 30,
+  });
+
+  // Auto-scroll when pinned
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally triggers on log append
+  useEffect(() => {
+    if (!pinnedBottom || renderedLogs.length === 0) return;
+    rowVirtualizer.scrollToIndex(renderedLogs.length - 1, { align: "end" });
+  }, [renderedLogs.length, pinnedBottom]);
+
+  // Scroll to highlighted match
+  useEffect(() => {
+    if (!showSearch || !searchQuery || totalMatches === 0) return;
+    const idx = renderedLogs.findIndex((r) => r.matchNumber === matchIdx);
+    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: "auto" });
+  }, [matchIdx, showSearch, searchQuery, totalMatches, renderedLogs, rowVirtualizer]);
 
   const containerClass = isFullscreen
-    ? "fixed inset-4 z-[60] flex flex-col rounded-xl border border-zinc-700 shadow-2xl overflow-hidden bg-zinc-950"
+    ? "flex flex-col rounded-xl border border-zinc-700 shadow-2xl overflow-hidden bg-zinc-950 h-full"
     : "flex flex-col rounded-lg border border-zinc-800 overflow-hidden";
 
   if (!runId && liveLogs.length === 0) {
@@ -293,9 +372,7 @@ export function AgentOutput({
     toolStats.reads + toolStats.writes + toolStats.searches + toolStats.commands > 0;
 
   return (
-    <div className={containerClass}>
-      {isFullscreen && <div className="absolute inset-0 bg-zinc-950/95 -z-10 rounded-xl" />}
-
+    <div ref={containerRef} className={containerClass}>
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 flex-wrap">
         <span className="text-[10px] text-zinc-600 font-mono shrink-0">
@@ -342,6 +419,20 @@ export function AgentOutput({
           🔍
         </button>
 
+        {/* Timestamp toggle */}
+        <button
+          type="button"
+          onClick={() => setShowTimestamps((v) => !v)}
+          title={showTimestamps ? "Ocultar timestamps" : "Mostrar timestamps"}
+          className={`p-1 rounded text-xs cursor-pointer transition-colors ${
+            showTimestamps
+              ? "text-violet-400 bg-violet-900/30"
+              : "text-zinc-600 hover:text-zinc-300"
+          }`}
+        >
+          ⏱
+        </button>
+
         {/* Copy */}
         <button
           type="button"
@@ -352,11 +443,21 @@ export function AgentOutput({
           ⎘
         </button>
 
+        {/* Download */}
+        <button
+          type="button"
+          onClick={downloadLogs}
+          title="Download logs (.txt)"
+          className="p-1 rounded text-xs text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors"
+        >
+          ⬇
+        </button>
+
         {/* Fullscreen toggle */}
         <button
           type="button"
-          onClick={() => setIsFullscreen((v) => !v)}
-          title={isFullscreen ? "Sair do modo tela cheia" : "Modo tela cheia"}
+          onClick={toggleFullscreen}
+          title={isFullscreen ? "Sair do modo tela cheia" : "Modo tela cheia (F11)"}
           className="p-1 rounded text-xs text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors"
         >
           {isFullscreen ? "⊡" : "⊞"}
@@ -368,7 +469,7 @@ export function AgentOutput({
             type="button"
             onClick={() => {
               setPinnedBottom(true);
-              if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+              rowVirtualizer.scrollToIndex(renderedLogs.length - 1, { align: "end" });
             }}
             className="p-1 rounded text-xs text-blue-400 hover:text-blue-300 cursor-pointer animate-pulse"
             title="Rolar para o fim"
@@ -387,164 +488,176 @@ export function AgentOutput({
       )}
 
       {/* Stream filter + search bar */}
-      {(showSearch || streamFilter !== "all") && (
-        <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-900/80 border-b border-zinc-800 flex-wrap">
-          {/* Stream filter pills */}
-          <div className="flex gap-1 shrink-0">
-            {STREAM_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setStreamFilter(f.id)}
-                className={`px-2 py-0.5 text-[10px] rounded-full cursor-pointer transition-colors ${
-                  streamFilter === f.id
-                    ? "bg-zinc-700 text-zinc-200"
-                    : "text-zinc-600 hover:text-zinc-400"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {showSearch && (
-            <>
-              <div className="w-px h-4 bg-zinc-700 shrink-0" />
-              <input
-                ref={searchRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setMatchIdx(0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1));
-                  if (e.key === "Escape") {
-                    setShowSearch(false);
-                    setSearchQuery("");
-                  }
-                }}
-                placeholder="Buscar nos logs..."
-                className="flex-1 bg-transparent text-xs font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none min-w-0"
-              />
-              {totalMatches > 0 && (
-                <span className="text-[10px] text-zinc-500 shrink-0">
-                  {matchIdx + 1}/{totalMatches}
-                </span>
-              )}
-              {searchQuery && totalMatches === 0 && (
-                <span className="text-[10px] text-red-500 shrink-0">nenhum resultado</span>
-              )}
-              <button
-                type="button"
-                onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
-                disabled={totalMatches === 0}
-                className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
-                disabled={totalMatches === 0}
-                className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
-              >
-                ↓
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Stream filter shortcut bar (when not searching) — show only when collapsed */}
-      {!showSearch && streamFilter === "all" && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-zinc-900/40 border-b border-zinc-800/50">
-          {STREAM_FILTERS.map((f) => (
+      <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/80 border-b border-zinc-800 flex-wrap">
+        {/* Stream filter tabs */}
+        <div className="flex gap-1 shrink-0">
+          {STREAM_TABS.map((f) => (
             <button
-              key={f.id}
+              key={f}
               type="button"
-              onClick={() => setStreamFilter(f.id)}
-              className={`px-2 py-0.5 text-[9px] rounded-full cursor-pointer transition-colors ${
-                streamFilter === f.id
+              onClick={() => setStreamFilter(f)}
+              className={`px-2 py-0.5 text-[10px] rounded-full cursor-pointer transition-colors ${
+                streamFilter === f
                   ? "bg-zinc-700 text-zinc-200"
-                  : "text-zinc-700 hover:text-zinc-400"
+                  : "text-zinc-600 hover:text-zinc-400"
               }`}
             >
-              {f.label}
+              {STREAM_LABEL[f]}
+              {streamCounts[f] ? ` (${streamCounts[f]})` : ""}
             </button>
           ))}
         </div>
-      )}
+
+        {showSearch && (
+          <>
+            <div className="w-px h-4 bg-zinc-700 shrink-0" />
+            <button
+              type="button"
+              onClick={() => setUseRegex((v) => !v)}
+              title="Alternar regex"
+              className={`px-1.5 py-0.5 text-[9px] rounded border cursor-pointer font-mono shrink-0 ${
+                useRegex
+                  ? "border-violet-600 text-violet-300 bg-violet-900/30"
+                  : "border-zinc-700 text-zinc-500"
+              }`}
+            >
+              .*
+            </button>
+            <input
+              ref={searchRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setMatchIdx(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1));
+                if (e.key === "Escape") {
+                  setShowSearch(false);
+                  setSearchQuery("");
+                }
+              }}
+              placeholder={useRegex ? "Regex..." : "Buscar nos logs..."}
+              className="flex-1 bg-transparent text-xs font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none min-w-0"
+            />
+            {totalMatches > 0 && (
+              <span className="text-[10px] text-zinc-500 shrink-0">
+                {matchIdx + 1}/{totalMatches}
+              </span>
+            )}
+            {searchQuery && totalMatches === 0 && (
+              <span className="text-[10px] text-red-500 shrink-0">nenhum resultado</span>
+            )}
+            <button
+              type="button"
+              onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
+              disabled={totalMatches === 0}
+              className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
+              disabled={totalMatches === 0}
+              className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+            >
+              ↓
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Log output */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`bg-zinc-950 p-3 font-mono text-xs overflow-y-auto cursor-text ${
+        className={`bg-zinc-950 font-mono text-xs overflow-y-auto cursor-text ${
           isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
-        } space-y-0.5`}
+        }`}
       >
-        {allLogs.length > 500 && !showSearch && (
-          <div className="text-zinc-600 text-[9px] mb-2 p-1 bg-zinc-900/50 rounded">
-            📋 Mostrando últimos 500 de {allLogs.length} logs (
-            {((500 / allLogs.length) * 100).toFixed(0)}%)
-          </div>
-        )}
-        {renderedLogs.map(({ log, matchNumber }, i) => {
-          const isActive = matchNumber === matchIdx && showSearch && searchQuery;
-          const q = searchQuery.toLowerCase();
-
-          let content: React.ReactNode = log.content;
-          if (showSearch && searchQuery && matchNumber >= 0) {
-            const idx = log.content.toLowerCase().indexOf(q);
-            if (idx >= 0) {
-              content = (
-                <>
-                  {log.content.slice(0, idx)}
-                  <mark
-                    className={`rounded px-0.5 ${
-                      isActive ? "bg-yellow-400 text-black" : "bg-yellow-900 text-yellow-200"
-                    }`}
-                  >
-                    {log.content.slice(idx, idx + q.length)}
-                  </mark>
-                  {log.content.slice(idx + q.length)}
-                </>
+        <div style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            if (virtualRow.index >= renderedLogs.length) {
+              // Loading row
+              return (
+                <div
+                  key="loading"
+                  style={{ position: "absolute", top: virtualRow.start, width: "100%" }}
+                  className="px-3 py-0.5 text-zinc-600 animate-pulse text-[11px]"
+                >
+                  Carregando logs...
+                </div>
               );
             }
-          }
+            const { log, matchNumber } = renderedLogs[virtualRow.index];
+            const isActive = matchNumber === matchIdx && showSearch && !!searchQuery;
+            const isReviewHeader = log.stream === "review" && log.content.startsWith("[REVIEW:");
+            const isQuestion = log.stream === "stdout" && log.content.includes("[Question]");
+            const color = getStreamColor(log.stream, log.content);
 
-          const isReviewHeader = log.stream === "review" && log.content.startsWith("[REVIEW:");
-          const isQuestion = log.stream === "stdout" && log.content.includes("[Question]");
+            // Highlight search matches in text, or render ANSI
+            let inner: React.ReactNode;
+            if (showSearch && searchQuery && matchNumber >= 0) {
+              const q = searchQuery.toLowerCase();
+              const idx = log.content.toLowerCase().indexOf(q);
+              if (idx >= 0) {
+                inner = (
+                  <>
+                    {log.content.slice(0, idx)}
+                    <mark
+                      className={`rounded px-0.5 ${
+                        isActive ? "bg-yellow-400 text-black" : "bg-yellow-900 text-yellow-200"
+                      }`}
+                    >
+                      {log.content.slice(idx, idx + q.length)}
+                    </mark>
+                    {log.content.slice(idx + q.length)}
+                  </>
+                );
+              } else {
+                inner = log.content;
+              }
+            } else {
+              // ANSI rendering — content is XML-escaped by ansi-to-html (escapeXML: true)
+              const html = convertAnsi(log.content);
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via ansi-to-html with escapeXML:true
+              inner = <span dangerouslySetInnerHTML={{ __html: html }} />;
+            }
 
-          return (
-            <div
-              key={log.id ?? `live-${i}`}
-              data-match={matchNumber >= 0 ? matchNumber : undefined}
-              className={`${streamColor(log.stream, log.content)} ${
-                isActive ? "bg-yellow-900/20 rounded" : ""
-              } ${isReviewHeader ? "mt-2" : ""} ${
-                isQuestion
-                  ? "bg-amber-950/30 border-l-2 border-amber-600 pl-2 py-0.5 rounded-r"
-                  : ""
-              } leading-relaxed`}
-            >
-              <span className="text-zinc-700 select-none">{formatTime(log.timestamp)} </span>
-              {log.stream === "stdin" && <span className="text-emerald-500">$ </span>}
-              {isReviewHeader && <ReviewBadge content={log.content} />}
-              {isQuestion && <span className="text-amber-400 mr-1">?</span>}
-              {content}
-            </div>
-          );
-        })}
+            return (
+              <div
+                key={log.id ?? `live-${virtualRow.index}`}
+                style={{
+                  position: "absolute",
+                  top: virtualRow.start,
+                  width: "100%",
+                  color: color || undefined,
+                }}
+                className={`px-3 py-px leading-relaxed ${
+                  isActive ? "bg-yellow-900/20" : ""
+                } ${isQuestion ? "bg-amber-950/30 border-l-2 border-amber-600 pl-2" : ""}`}
+              >
+                {showTimestamps && (
+                  <span className="text-zinc-700 select-none mr-1">
+                    {formatTime(log.timestamp)}
+                  </span>
+                )}
+                {log.stream === "stdin" && <span className="text-emerald-500">$ </span>}
+                {isReviewHeader && <ReviewBadge content={log.content} />}
+                {isQuestion && <span className="text-amber-400 mr-1">?</span>}
+                {inner}
+              </div>
+            );
+          })}
+        </div>
 
-        {loadingLogs && <div className="text-zinc-600 animate-pulse">Carregando logs...</div>}
         {!loadingLogs && allLogs.length === 0 && (
-          <div className="text-zinc-700">Aguardando saída...</div>
+          <div className="text-zinc-700 p-3">Aguardando saída...</div>
         )}
-        {isRunning && !awaitingQuestion && (
-          <div className="flex items-center gap-1.5 text-blue-400 mt-1">
+        {isRunning && !awaitingQuestion && renderedLogs.length > 0 && (
+          <div className="flex items-center gap-1.5 text-blue-400 px-3 py-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
             <span className="text-[11px]">Agente rodando...</span>
           </div>

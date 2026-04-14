@@ -3,6 +3,7 @@ import { z } from "zod";
 import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "../agents/litellm-client";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
+import type { SkillsLoader } from "../skills/loader";
 
 function maskToken(token: string | null | undefined): string {
   if (!token || token.length < 5) return "";
@@ -22,7 +23,11 @@ const updateSettingsSchema = z.object({
   theme: z.string().optional(),
 });
 
-export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry) {
+export function createSettingsRouter(
+  db: Db,
+  providerRegistry?: ProviderRegistry,
+  skillsLoader?: SkillsLoader
+) {
   const app = new Hono();
 
   // GET /api/settings — return current settings (tokens masked)
@@ -130,7 +135,9 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
       db.settings.set("openai_api_key", parsed.data.openaiApiKey.trim());
     }
     if (parsed.data.skillsPath !== undefined) {
-      db.settings.set("skills_path", parsed.data.skillsPath.trim());
+      const trimmed = parsed.data.skillsPath.trim();
+      db.settings.set("skills_path", trimmed);
+      skillsLoader?.updatePath(trimmed);
     }
     if (parsed.data.theme !== undefined) {
       db.settings.set("theme", parsed.data.theme);

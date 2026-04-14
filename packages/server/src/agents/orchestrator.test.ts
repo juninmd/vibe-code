@@ -19,6 +19,7 @@ function makeHub(): BroadcastHub {
     broadcastAll: () => {},
     broadcastToTask: () => {},
     batchLog: () => {},
+    flushLogs: () => {},
     addClient: () => ({ ws: {} as unknown, subscribedTasks: new Set() }),
     removeClient: () => {},
     subscribe: () => {},

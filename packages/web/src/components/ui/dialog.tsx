@@ -5,9 +5,10 @@ interface DialogProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  size?: "sm" | "md" | "lg" | "xl" | "2xl" | "5xl";
 }
 
-export function Dialog({ open, onClose, title, children }: DialogProps) {
+export function Dialog({ open, onClose, title, children, size = "md" }: DialogProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -84,7 +85,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative glass-dialog text-zinc-100 rounded-xl border p-6 w-full max-w-md shadow-2xl shadow-black/50 focus:outline-none"
+        className={`relative glass-dialog text-zinc-100 rounded-xl border p-6 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/50 focus:outline-none`}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id={titleId} className="text-lg font-semibold">

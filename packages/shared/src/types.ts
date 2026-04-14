@@ -225,7 +225,8 @@ export interface DiffSummary {
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string }
   | { type: "unsubscribe"; taskId: string }
-  | { type: "agent_input"; taskId: string; input: string };
+  | { type: "agent_input"; taskId: string; input: string }
+  | { type: "ping" };
 
 export type WsServerMessage =
   | { type: "task_updated"; task: Task }
