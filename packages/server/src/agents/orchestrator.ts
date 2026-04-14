@@ -48,60 +48,75 @@ export class Orchestrator {
       throw new Error("Max concurrent agents reached.");
     }
 
-    const engineName = engineOverride ?? task.engine;
-    const engine = engineName
-      ? this.registry.get(engineName)
-      : await this.registry.getFirstAvailable();
-    if (!engine) {
-      if (!engineName) throw new Error("No AI engines available");
-      throw new Error(`Engine "${engineName}" not found or unavailable`);
-    }
-
-    const model = modelOverride ?? task.model ?? undefined;
-    const repo = this.db.repos.getById(task.repoId);
-    if (!repo) throw new Error("Repository not found");
-    if (repo.status === "pending")
-      await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
-    else if (repo.status !== "ready") throw new Error(`Repository is in "${repo.status}" state`);
-
-    const run = this.db.runs.create(task.id, engine.name);
-    logOrchestratorEvent(
-      `Launching task "${task.title.slice(0, 50)}" [${task.id.slice(0, 8)}] ` +
-        `engine=${engine.name} model=${model ?? "default"} repo=${repo.name}`
-    );
-    this.db.tasks.update(task.id, {
-      status: "in_progress",
-      ...(engineOverride ? { engine: engineOverride } : {}),
-      ...(model && model !== task.model ? { model } : {}),
-    });
-    this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "in_progress" } });
-
-    const abort = new AbortController();
-    this.activeRuns.set(task.id, {
-      runId: run.id,
+    // Reserve a slot immediately to prevent race conditions between concurrent launches
+    const placeholder: ActiveRun = {
+      runId: "__pending__",
       taskId: task.id,
-      engineName: engine.name,
-      abort,
-    });
-    executeAgent(
-      task,
-      run,
-      engine,
-      repo,
-      abort,
-      this.db,
-      this.git,
-      this.hub,
-      (c) => this.sysLog(run.id, task.id, c),
-      () => this.activeRuns.delete(task.id),
-      model,
-      this.skillsLoader
-    ).catch((err) => {
-      this.activeRuns.delete(task.id);
-      console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
-    });
+      engineName: "__pending__",
+      abort: new AbortController(),
+    };
+    this.activeRuns.set(task.id, placeholder);
 
-    return run;
+    try {
+      const engineName = engineOverride ?? task.engine;
+      const engine = engineName
+        ? this.registry.get(engineName)
+        : await this.registry.getFirstAvailable();
+      if (!engine) {
+        if (!engineName) throw new Error("No AI engines available");
+        throw new Error(`Engine "${engineName}" not found or unavailable`);
+      }
+
+      const model = modelOverride ?? task.model ?? undefined;
+      const repo = this.db.repos.getById(task.repoId);
+      if (!repo) throw new Error("Repository not found");
+      if (repo.status === "pending")
+        await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
+      else if (repo.status !== "ready") throw new Error(`Repository is in "${repo.status}" state`);
+
+      const run = this.db.runs.create(task.id, engine.name);
+      logOrchestratorEvent(
+        `Launching task "${task.title.slice(0, 50)}" [${task.id.slice(0, 8)}] ` +
+          `engine=${engine.name} model=${model ?? "default"} repo=${repo.name}`
+      );
+      this.db.tasks.update(task.id, {
+        status: "in_progress",
+        ...(engineOverride ? { engine: engineOverride } : {}),
+        ...(model && model !== task.model ? { model } : {}),
+      });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "in_progress" } });
+
+      const abort = new AbortController();
+      this.activeRuns.set(task.id, {
+        runId: run.id,
+        taskId: task.id,
+        engineName: engine.name,
+        abort,
+      });
+      executeAgent(
+        task,
+        run,
+        engine,
+        repo,
+        abort,
+        this.db,
+        this.git,
+        this.hub,
+        (c) => this.sysLog(run.id, task.id, c),
+        () => this.activeRuns.delete(task.id),
+        model,
+        this.skillsLoader
+      ).catch((err) => {
+        this.activeRuns.delete(task.id);
+        console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
+      });
+
+      return run;
+    } catch (err) {
+      // Release the reserved slot on any setup failure
+      this.activeRuns.delete(task.id);
+      throw err;
+    }
   }
 
   async cancel(taskId: string): Promise<void> {
@@ -133,6 +148,10 @@ export class Orchestrator {
   async triggerScheduled(templateTaskId: string): Promise<AgentRun> {
     const template = this.db.tasks.getById(templateTaskId);
     if (!template || template.status !== "scheduled") throw new Error("Invalid template task");
+
+    if (this.activeRuns.size >= this.maxConcurrent) {
+      throw new Error("Max concurrent agents reached — skipping scheduled trigger");
+    }
 
     const alreadyRunning =
       this.activeRuns.has(templateTaskId) ||

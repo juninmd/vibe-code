@@ -431,7 +431,12 @@ export function Sidebar({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Filtrar..."
-                  className="w-full pl-7 pr-3 py-1.5 rounded-lg border border-zinc-800/80 bg-zinc-900/60 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
+                  className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs focus:outline-none transition-colors"
+                  style={{
+                    background: "var(--bg-input)",
+                    border: "1px solid var(--border-default)",
+                    color: "var(--text-primary)",
+                  }}
                 />
               </div>
             )}
@@ -442,11 +447,11 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={() => onSelectRepo(null)}
-                className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer ${
-                  selectedRepoId === null
-                    ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
-                }`}
+                className="w-full text-left px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer"
+                style={{
+                  background: selectedRepoId === null ? "var(--accent-muted)" : "transparent",
+                  color: selectedRepoId === null ? "var(--text-primary)" : "var(--text-muted)",
+                }}
               >
                 <div className="flex items-center gap-2">
                   <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-600 text-[11px]">
@@ -472,14 +477,17 @@ export function Sidebar({
                   <div key={repo.id} className="group flex items-center gap-1">
                     <button
                       type="button"
-                      className={`flex flex-1 items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer text-left ${
-                        isSelected
-                          ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
-                          : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40"
-                      }`}
+                      className="flex flex-1 items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer text-left"
+                      style={{
+                        background: isSelected ? "var(--accent-muted)" : "transparent",
+                        color: isSelected ? "var(--text-primary)" : "var(--text-muted)",
+                      }}
                       onClick={() => onSelectRepo(repo.id)}
                     >
-                      <span className={`shrink-0 ${isSelected ? prov.color : "text-zinc-600"}`}>
+                      <span
+                        className={`shrink-0 ${isSelected ? prov.color : ""}`}
+                        style={isSelected ? {} : { color: "var(--text-muted)" }}
+                      >
                         <ProvIcon size={13} />
                       </span>
                       <span className="truncate flex-1 font-medium">{repo.name}</span>

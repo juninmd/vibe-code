@@ -410,10 +410,12 @@ export async function executeAgent(
     const prompt = contextResult.prompt;
     skillPayload = contextResult.skills;
 
-    // M7.2: Record matched skills on the run
+    // M7.2: Record matched skills on the run (all 4 categories with prefix)
     const matchedSkillNames = [
-      ...skillPayload.rules.map((r) => r.name),
-      ...skillPayload.skills.map((s) => s.name),
+      ...skillPayload.rules.map((r) => `rule:${r.name}`),
+      ...skillPayload.skills.map((s) => `skill:${s.name}`),
+      ...skillPayload.agents.map((a) => `agent:${a.name}`),
+      ...(skillPayload.workflow ? [`workflow:${skillPayload.workflow.name}`] : []),
     ];
     db.runs.updateMatchedSkills(run.id, matchedSkillNames);
 

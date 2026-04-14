@@ -18,6 +18,7 @@ const mockTask: TaskWithRun = {
   prUrl: null,
   parentTaskId: null,
   agentId: null,
+  workflowId: null,
   matchedSkills: [],
   tags: [],
   notes: "",

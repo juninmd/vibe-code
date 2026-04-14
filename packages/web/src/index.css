@@ -91,3 +91,153 @@ body,
 .glass-dialog {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
+
+/* ── Light theme overrides ──────────────────────────── */
+/* Tailwind utility classes use hardcoded zinc values that look fine in dark
+   but are illegible in light mode. These overrides restore correct contrast. */
+
+/* ── Text colors ── */
+[data-theme="light"] .text-zinc-100,
+[data-theme="light"] .text-zinc-200,
+[data-theme="light"] .text-zinc-300 {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .text-zinc-400,
+[data-theme="light"] .text-zinc-500,
+[data-theme="light"] .text-zinc-600,
+[data-theme="light"] .text-zinc-700 {
+  color: var(--text-muted) !important;
+}
+
+/* Opacity-variant text classes (Tailwind generates these as separate selectors) */
+[data-theme="light"] .text-zinc-400\/95 {
+  color: var(--text-secondary) !important;
+}
+
+/* ── Background — solid and opacity variants ── */
+[data-theme="light"] .bg-zinc-800,
+[data-theme="light"] .bg-zinc-900,
+[data-theme="light"] .bg-zinc-950 {
+  background-color: var(--bg-surface) !important;
+}
+
+[data-theme="light"] .bg-zinc-800\/40,
+[data-theme="light"] .bg-zinc-800\/60,
+[data-theme="light"] .bg-zinc-800\/80 {
+  background-color: var(--bg-surface-hover) !important;
+}
+
+[data-theme="light"] .bg-zinc-900\/60 {
+  background-color: var(--bg-input) !important;
+}
+
+[data-theme="light"] .bg-zinc-700\/60 {
+  background-color: var(--bg-surface-hover) !important;
+}
+
+/* ── Border colors ── */
+[data-theme="light"] .border-zinc-700,
+[data-theme="light"] .border-zinc-800,
+[data-theme="light"] .border-zinc-800\/60,
+[data-theme="light"] .border-zinc-800\/80 {
+  border-color: var(--border-default) !important;
+}
+
+/* ── Hover states ── */
+[data-theme="light"] .hover\:bg-zinc-800\/60:hover,
+[data-theme="light"] .hover\:bg-zinc-800\/40:hover {
+  background-color: var(--bg-surface-hover) !important;
+}
+
+[data-theme="light"] .hover\:text-zinc-200:hover,
+[data-theme="light"] .hover\:text-zinc-300:hover {
+  color: var(--text-primary) !important;
+}
+
+/* ── Violet skill pills ── */
+[data-theme="light"] .bg-violet-950\/40 {
+  background-color: var(--accent-muted) !important;
+}
+
+[data-theme="light"] .text-violet-300,
+[data-theme="light"] .text-violet-400 {
+  color: var(--accent-text) !important;
+}
+
+[data-theme="light"] .border-violet-800\/30,
+[data-theme="light"] .border-violet-700\/40 {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent) !important;
+}
+
+/* ── Amber warning blocks ── */
+[data-theme="light"] .text-amber-300 {
+  color: #b45309 !important;
+}
+
+[data-theme="light"] .bg-amber-950\/20 {
+  background-color: rgba(217, 119, 6, 0.1) !important;
+}
+
+/* Priority badges (dark → light equivalents) */
+[data-theme="light"] .bg-sky-900\/40 {
+  background-color: rgba(56, 189, 248, 0.12) !important;
+}
+
+[data-theme="light"] .bg-amber-900\/40 {
+  background-color: rgba(251, 146, 60, 0.12) !important;
+}
+
+[data-theme="light"] .bg-red-900\/40 {
+  background-color: rgba(248, 113, 113, 0.12) !important;
+}
+
+/* ── Red error blocks ── */
+[data-theme="light"] .text-red-300,
+[data-theme="light"] .text-red-400 {
+  color: #dc2626 !important;
+}
+
+[data-theme="light"] .bg-red-950\/30 {
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+
+/* ── Emerald / blue / green status ── */
+[data-theme="light"] .text-blue-400 {
+  color: #2563eb !important;
+}
+
+[data-theme="light"] .bg-blue-950\/30 {
+  background-color: rgba(37, 99, 235, 0.1) !important;
+}
+
+[data-theme="light"] .text-emerald-400 {
+  color: #059669 !important;
+}
+
+/* Running task status pill in light mode — keep cyan readable */
+[data-theme="light"] .bg-cyan-950\/30 {
+  background-color: rgba(6, 182, 212, 0.1) !important;
+}
+
+[data-theme="light"] .border-cyan-800\/35 {
+  border-color: rgba(6, 182, 212, 0.4) !important;
+}
+
+[data-theme="light"] .text-cyan-300 {
+  color: #0891b2 !important;
+}
+
+/* ── Terminal / mono output — preserve dark bg for legibility ── */
+[data-theme="light"] .font-mono.bg-zinc-950,
+[data-theme="light"] pre.font-mono {
+  background-color: #1e1e2e !important;
+  color: #e4e4e7 !important;
+}
+
+/* Inline code snippets */
+[data-theme="light"] code.text-zinc-300,
+[data-theme="light"] code.text-zinc-400 {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-input) !important;
+}

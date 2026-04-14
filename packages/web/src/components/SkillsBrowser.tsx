@@ -10,7 +10,7 @@ import { api } from "../api/client";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 
-type Tab = "skills" | "rules" | "agents" | "workflows";
+type Tab = "loaded" | "skills" | "rules" | "agents" | "workflows";
 type AnyEntry = RuleEntry | SkillEntry | AgentEntry | WorkflowEntry;
 
 function CountBadge({ count }: { count: number }) {
@@ -39,7 +39,7 @@ function renderInline(text: string): string {
     .replace(/\*([^*]+?)\*/g, "<em>$1</em>")
     .replace(
       /`([^`]+)`/g,
-      '<code style="background:#1a1a2e;padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;color:#c7b8ea">$1</code>'
+      '<code style="background:var(--bg-input);padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;color:var(--accent-text)">$1</code>'
     );
 }
 
@@ -56,15 +56,15 @@ function toHtml(content: string): string {
 
   if (frontmatter) {
     html +=
-      '<div style="background:#0f0f1a;border:1px solid #2a2a40;border-radius:8px;padding:12px;margin-bottom:14px;">';
+      '<div style="background:var(--bg-input);border:1px solid var(--glass-border);border-radius:8px;padding:12px;margin-bottom:14px;">';
     for (const line of frontmatter.split("\n").filter(Boolean)) {
       const ci = line.indexOf(":");
       if (ci > 0) {
         const k = escapeHtml(line.slice(0, ci).trim());
         const v = escapeHtml(line.slice(ci + 1).trim());
-        html += `<div style="display:flex;gap:12px;margin-bottom:5px;font-size:11px"><span style="color:#8b5cf6;font-family:monospace;min-width:90px;flex-shrink:0">${k}</span><span style="color:#d4d4d8">${v}</span></div>`;
+        html += `<div style="display:flex;gap:12px;margin-bottom:5px;font-size:11px"><span style="color:var(--accent-text);font-family:monospace;min-width:90px;flex-shrink:0">${k}</span><span style="color:var(--text-secondary)">${v}</span></div>`;
       } else {
-        html += `<div style="color:#52525b;font-size:11px;font-family:monospace">${escapeHtml(line)}</div>`;
+        html += `<div style="color:var(--text-muted);font-size:11px;font-family:monospace">${escapeHtml(line)}</div>`;
       }
     }
     html += "</div>";
@@ -78,7 +78,7 @@ function toHtml(content: string): string {
   for (const line of lines) {
     if (line.startsWith("```")) {
       if (inCode) {
-        html += `<pre style="background:#0a0a14;border:1px solid #1e1e30;border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:#9ca3af;margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+        html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
         codeLines = [];
         inCode = false;
       } else {
@@ -100,37 +100,37 @@ function toHtml(content: string): string {
         html += "</ul>";
         inList = false;
       }
-      html += `<h1 style="font-size:16px;font-weight:700;color:#f4f4f5;margin:18px 0 8px">${renderInline(line.slice(2))}</h1>`;
+      html += `<h1 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:18px 0 8px">${renderInline(line.slice(2))}</h1>`;
     } else if (line.startsWith("## ")) {
       if (inList) {
         html += "</ul>";
         inList = false;
       }
-      html += `<h2 style="font-size:14px;font-weight:600;color:#e4e4e7;margin:16px 0 6px;border-bottom:1px solid #27272a;padding-bottom:4px">${renderInline(line.slice(3))}</h2>`;
+      html += `<h2 style="font-size:14px;font-weight:600;color:var(--text-primary);margin:16px 0 6px;border-bottom:1px solid var(--border-default);padding-bottom:4px">${renderInline(line.slice(3))}</h2>`;
     } else if (line.startsWith("### ")) {
       if (inList) {
         html += "</ul>";
         inList = false;
       }
-      html += `<h3 style="font-size:13px;font-weight:600;color:#a1a1aa;margin:12px 0 4px">${renderInline(line.slice(4))}</h3>`;
+      html += `<h3 style="font-size:13px;font-weight:600;color:var(--text-secondary);margin:12px 0 4px">${renderInline(line.slice(4))}</h3>`;
     } else if (line.startsWith("#### ")) {
       if (inList) {
         html += "</ul>";
         inList = false;
       }
-      html += `<h4 style="font-size:12px;font-weight:600;color:#71717a;margin:10px 0 3px">${renderInline(line.slice(5))}</h4>`;
+      html += `<h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin:10px 0 3px">${renderInline(line.slice(5))}</h4>`;
     } else if (/^\s*[-*] /.test(line)) {
       if (!inList) {
         html += '<ul style="margin:6px 0 6px 16px;list-style:disc">';
         inList = true;
       }
-      html += `<li style="color:#a1a1aa;font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().slice(2))}</li>`;
+      html += `<li style="color:var(--text-secondary);font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().slice(2))}</li>`;
     } else if (/^\s*\d+\. /.test(line)) {
       if (!inList) {
         html += '<ol style="margin:6px 0 6px 16px;list-style:decimal">';
         inList = true;
       }
-      html += `<li style="color:#a1a1aa;font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().replace(/^\d+\.\s*/, ""))}</li>`;
+      html += `<li style="color:var(--text-secondary);font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().replace(/^\d+\.\s*/, ""))}</li>`;
     } else if (line.trim() === "") {
       if (inList) {
         html += "</ul>";
@@ -142,30 +142,58 @@ function toHtml(content: string): string {
         inList = false;
       }
       if (line.startsWith("> ")) {
-        html += `<blockquote style="border-left:3px solid #3f3f46;padding-left:10px;margin:6px 0;color:#71717a;font-size:11.5px;font-style:italic">${renderInline(line.slice(2))}</blockquote>`;
+        html += `<blockquote style="border-left:3px solid var(--border-default);padding-left:10px;margin:6px 0;color:var(--text-muted);font-size:11.5px;font-style:italic">${renderInline(line.slice(2))}</blockquote>`;
       } else {
-        html += `<p style="color:#a1a1aa;font-size:12px;margin:4px 0;line-height:1.6">${renderInline(line)}</p>`;
+        html += `<p style="color:var(--text-secondary);font-size:12px;margin:4px 0;line-height:1.6">${renderInline(line)}</p>`;
       }
     }
   }
 
   if (inList) html += "</ul>";
   if (inCode && codeLines.length > 0) {
-    html += `<pre style="background:#0a0a14;border:1px solid #1e1e30;border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:#9ca3af;margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+    html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
   }
 
   return html;
 }
 // ─── End renderer ────────────────────────────────────────────────────────────
 
-interface SkillsBrowserProps {
+export interface SkillsBrowserProps {
   open: boolean;
   onClose: () => void;
   initialSkillName?: string;
+  matchedSkills?: string[];
 }
 
-export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowserProps) {
-  const [tab, setTab] = useState<Tab>("rules");
+/** Parse a prefixed matched skill name like "rule:foo" → { category, name } */
+function parseMatchedSkill(s: string): { category: string; name: string } {
+  const idx = s.indexOf(":");
+  if (idx > 0) return { category: s.slice(0, idx), name: s.slice(idx + 1) };
+  return { category: "skill", name: s };
+}
+
+const categoryLabel: Record<string, string> = {
+  rule: "Regra",
+  skill: "Skill",
+  agent: "Agente",
+  workflow: "Workflow",
+};
+
+const categoryColor: Record<string, string> = {
+  rule: "#f59e0b",
+  skill: "#8b5cf6",
+  agent: "#3b82f6",
+  workflow: "#10b981",
+};
+
+export function SkillsBrowser({
+  open,
+  onClose,
+  initialSkillName,
+  matchedSkills,
+}: SkillsBrowserProps) {
+  const hasLoaded = matchedSkills && matchedSkills.length > 0;
+  const [tab, setTab] = useState<Tab>(hasLoaded ? "loaded" : "rules");
   const [index, setIndex] = useState<SkillsIndex | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,13 +243,15 @@ export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowser
     if (autoSelectedRef.current === initialSkillName) return;
     autoSelectedRef.current = initialSkillName;
 
+    // Support prefixed names like "rule:foo" or plain "foo"
+    const parsed = parseMatchedSkill(initialSkillName);
     const allEntries: [Tab, AnyEntry][] = [
       ...index.rules.map((e): [Tab, AnyEntry] => ["rules", e]),
       ...index.skills.map((e): [Tab, AnyEntry] => ["skills", e]),
       ...index.agents.map((e): [Tab, AnyEntry] => ["agents", e]),
       ...index.workflows.map((e): [Tab, AnyEntry] => ["workflows", e]),
     ];
-    const found = allEntries.find(([, e]) => e.name === initialSkillName);
+    const found = allEntries.find(([, e]) => e.name === parsed.name);
     if (!found) return;
     const [foundTab, foundEntry] = found;
     setTab(foundTab);
@@ -243,14 +273,44 @@ export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowser
     }
   };
 
-  const tabItems: Tab[] = ["rules", "skills", "agents", "workflows"];
+  const tabItems: Tab[] = hasLoaded
+    ? ["loaded", "rules", "skills", "agents", "workflows"]
+    : ["rules", "skills", "agents", "workflows"];
   const tabLabels: Record<Tab, string> = {
+    loaded: "Carregadas",
     rules: "Regras",
     skills: "Skills",
     agents: "Agentes",
     workflows: "Workflows",
   };
+
+  // Build loaded entries from matchedSkills + index
+  const loadedEntries: (AnyEntry & { _category: string })[] = [];
+  if (hasLoaded && index) {
+    const allByName = new Map<string, { entry: AnyEntry; category: string }>();
+    for (const e of index.rules) allByName.set(e.name, { entry: e, category: "rule" });
+    for (const e of index.skills) allByName.set(e.name, { entry: e, category: "skill" });
+    for (const e of index.agents) allByName.set(e.name, { entry: e, category: "agent" });
+    for (const e of index.workflows) allByName.set(e.name, { entry: e, category: "workflow" });
+    for (const ms of matchedSkills) {
+      const parsed = parseMatchedSkill(ms);
+      const found = allByName.get(parsed.name);
+      if (found) {
+        loadedEntries.push({ ...found.entry, _category: found.category });
+      } else {
+        // Skill was loaded but not in global index — show a stub
+        loadedEntries.push({
+          name: parsed.name,
+          description: `Carregada pela CLI (${categoryLabel[parsed.category] ?? parsed.category})`,
+          filePath: "",
+          _category: parsed.category,
+        } as AnyEntry & { _category: string });
+      }
+    }
+  }
+
   const tabCounts: Record<Tab, number> = {
+    loaded: loadedEntries.length,
     rules: index?.rules.length ?? 0,
     skills: index?.skills.length ?? 0,
     agents: index?.agents.length ?? 0,
@@ -267,17 +327,26 @@ export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowser
     );
   }
 
-  const currentList: AnyEntry[] = index
-    ? filterBySearch(
-        tab === "rules"
-          ? (index.rules as AnyEntry[])
-          : tab === "skills"
-            ? (index.skills as AnyEntry[])
-            : tab === "agents"
-              ? (index.agents as AnyEntry[])
-              : (index.workflows as AnyEntry[])
-      )
-    : [];
+  const currentList: (AnyEntry & { _category?: string })[] =
+    tab === "loaded"
+      ? lowerSearch
+        ? loadedEntries.filter(
+            (i) =>
+              i.name.toLowerCase().includes(lowerSearch) ||
+              i.description.toLowerCase().includes(lowerSearch)
+          )
+        : loadedEntries
+      : index
+        ? filterBySearch(
+            tab === "rules"
+              ? (index.rules as AnyEntry[])
+              : tab === "skills"
+                ? (index.skills as AnyEntry[])
+                : tab === "agents"
+                  ? (index.agents as AnyEntry[])
+                  : (index.workflows as AnyEntry[])
+          )
+        : [];
 
   return (
     <Dialog open={open} onClose={onClose} title="Skills, Regras & Agentes" size="5xl">
@@ -346,17 +415,20 @@ export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowser
             )}
             {!loading && currentList.length === 0 && index && (
               <p className="text-xs text-center py-6" style={{ color: "var(--text-dimmed)" }}>
-                Nenhum item em ~/.agents/{tab}
+                {tab === "loaded"
+                  ? "Nenhuma skill carregada nesta tarefa"
+                  : `Nenhum item em ~/.agents/${tab}`}
               </p>
             )}
             {currentList.map((entry) => {
               const isSelected = selected?.filePath === entry.filePath;
               const applyTo = (entry as RuleEntry).applyTo;
+              const cat = (entry as AnyEntry & { _category?: string })._category;
               return (
                 <button
-                  key={entry.filePath}
+                  key={entry.filePath || entry.name}
                   type="button"
-                  onClick={() => handleSelect(entry)}
+                  onClick={() => (entry.filePath ? handleSelect(entry) : undefined)}
                   className={`w-full px-2.5 py-2 rounded-lg border cursor-pointer text-left transition-colors`}
                   style={{
                     background: isSelected
@@ -366,6 +438,17 @@ export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowser
                   }}
                 >
                   <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                    {cat && (
+                      <span
+                        className="text-[8px] font-semibold uppercase px-1 py-0.5 rounded"
+                        style={{
+                          background: `${categoryColor[cat] ?? "#666"}22`,
+                          color: categoryColor[cat] ?? "#888",
+                        }}
+                      >
+                        {categoryLabel[cat] ?? cat}
+                      </span>
+                    )}
                     <span
                       className="text-xs font-medium truncate"
                       style={{ color: "var(--text-primary)" }}

@@ -21,6 +21,12 @@ function convertAnsi(text: string): string {
   }
 }
 
+/** Strip all ANSI escape codes, returning plain text for search highlighting */
+function stripAnsi(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape strip
+  return text.replace(/\u001b\[[\d;]*[A-Za-z]/g, "").replace(/\r/g, "");
+}
+
 interface AgentOutputProps {
   runId: string | null;
   liveLogs: AgentLog[];
@@ -167,16 +173,24 @@ export function AgentOutput({
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Load historic logs when run changes
+  // Load historic logs when run changes (with abort to prevent stale responses)
   useEffect(() => {
     setHistoricLogs([]);
     if (!runId) return;
+    const abortCtrl = new AbortController();
     setLoadingLogs(true);
     api.runs
       .logs(runId)
-      .then(setHistoricLogs)
-      .catch(console.error)
-      .finally(() => setLoadingLogs(false));
+      .then((logs) => {
+        if (!abortCtrl.signal.aborted) setHistoricLogs(logs);
+      })
+      .catch((err) => {
+        if (!abortCtrl.signal.aborted) console.error(err);
+      })
+      .finally(() => {
+        if (!abortCtrl.signal.aborted) setLoadingLogs(false);
+      });
+    return () => abortCtrl.abort();
   }, [runId]);
 
   // Deduplicate live vs historic
@@ -236,22 +250,24 @@ export function AgentOutput({
   // Scroll to highlighted match — moved below rowVirtualizer declaration
   // (see effect after renderedLogs + rowVirtualizer)
 
-  // Global Ctrl+F to open search within this component
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+  // Ctrl+F to open search — scoped to the container element so it doesn't
+  // override the browser's global find-in-page when this component is not focused.
+  const handleContainerKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         e.preventDefault();
         setShowSearch(true);
         setTimeout(() => searchRef.current?.focus(), 0);
+        return;
       }
       if (e.key === "Escape" && showSearch) {
+        e.stopPropagation();
         setShowSearch(false);
         setSearchQuery("");
       }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [showSearch]);
+    },
+    [showSearch]
+  );
 
   // Detect manual scroll
   const handleScroll = () => {
@@ -336,12 +352,13 @@ export function AgentOutput({
     return { renderedLogs, totalMatches: counter };
   }, [allLogs, showSearch, searchQuery, streamFilter, useRegex]);
 
-  // Virtual list — declared after renderedLogs to avoid forward-reference TS errors
+  // Virtual list — dynamic measurement for variable-height rows (pre-wrap, badges, etc.)
   const rowVirtualizer = useVirtualizer({
     count: renderedLogs.length + (loadingLogs ? 1 : 0),
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 22,
-    overscan: 30,
+    overscan: 20,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? 22,
   });
 
   // Auto-scroll when pinned
@@ -360,7 +377,7 @@ export function AgentOutput({
 
   const containerClass = isFullscreen
     ? "flex flex-col rounded-xl border border-zinc-700 shadow-2xl overflow-hidden bg-zinc-950 h-full"
-    : "flex flex-col rounded-lg border border-zinc-800 overflow-hidden";
+    : `flex flex-col rounded-lg border border-zinc-800 overflow-hidden${fullHeight ? " flex-1 min-h-0" : ""}`;
 
   if (!runId && liveLogs.length === 0) {
     return (
@@ -372,7 +389,13 @@ export function AgentOutput({
     toolStats.reads + toolStats.writes + toolStats.searches + toolStats.commands > 0;
 
   return (
-    <div ref={containerRef} className={containerClass}>
+    <section
+      ref={containerRef}
+      className={containerClass}
+      onKeyDown={handleContainerKeyDown}
+      tabIndex={-1}
+      aria-label="Saída do Agente"
+    >
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 flex-wrap">
         <span className="text-[10px] text-zinc-600 font-mono shrink-0">
@@ -584,7 +607,15 @@ export function AgentOutput({
               return (
                 <div
                   key="loading"
-                  style={{ position: "absolute", top: virtualRow.start, width: "100%" }}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
                   className="px-3 py-0.5 text-zinc-600 animate-pulse text-[11px]"
                 >
                   Carregando logs...
@@ -597,27 +628,29 @@ export function AgentOutput({
             const isQuestion = log.stream === "stdout" && log.content.includes("[Question]");
             const color = getStreamColor(log.stream, log.content);
 
-            // Highlight search matches in text, or render ANSI
+            // Highlight search matches in plain text (ANSI stripped), or render ANSI
             let inner: React.ReactNode;
             if (showSearch && searchQuery && matchNumber >= 0) {
+              // Strip ANSI codes first so escape sequences don't appear literally in search results
+              const plainText = stripAnsi(log.content);
               const q = searchQuery.toLowerCase();
-              const idx = log.content.toLowerCase().indexOf(q);
+              const idx = plainText.toLowerCase().indexOf(q);
               if (idx >= 0) {
                 inner = (
                   <>
-                    {log.content.slice(0, idx)}
+                    {plainText.slice(0, idx)}
                     <mark
                       className={`rounded px-0.5 ${
                         isActive ? "bg-yellow-400 text-black" : "bg-yellow-900 text-yellow-200"
                       }`}
                     >
-                      {log.content.slice(idx, idx + q.length)}
+                      {plainText.slice(idx, idx + q.length)}
                     </mark>
-                    {log.content.slice(idx + q.length)}
+                    {plainText.slice(idx + q.length)}
                   </>
                 );
               } else {
-                inner = log.content;
+                inner = plainText;
               }
             } else {
               // ANSI rendering — content is XML-escaped by ansi-to-html (escapeXML: true)
@@ -629,11 +662,19 @@ export function AgentOutput({
             return (
               <div
                 key={log.id ?? `live-${virtualRow.index}`}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
                 style={{
                   position: "absolute",
-                  top: virtualRow.start,
+                  top: 0,
+                  left: 0,
                   width: "100%",
+                  transform: `translateY(${virtualRow.start}px)`,
                   color: color || undefined,
+                  // pre-wrap preserves spaces/tabs and original indentation;
+                  // break-all prevents long unbroken lines from causing layout overflow
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
                 }}
                 className={`px-3 py-px leading-relaxed ${
                   isActive ? "bg-yellow-900/20" : ""
@@ -656,13 +697,15 @@ export function AgentOutput({
         {!loadingLogs && allLogs.length === 0 && (
           <div className="text-zinc-700 p-3">Aguardando saída...</div>
         )}
-        {isRunning && !awaitingQuestion && renderedLogs.length > 0 && (
-          <div className="flex items-center gap-1.5 text-blue-400 px-3 py-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-[11px]">Agente rodando...</span>
-          </div>
-        )}
       </div>
+
+      {/* Running status footer — outside scroll container to avoid overlap */}
+      {isRunning && !awaitingQuestion && renderedLogs.length > 0 && (
+        <div className="flex items-center gap-1.5 text-blue-400 px-3 py-1 border-t border-zinc-800 bg-zinc-900/80 shrink-0">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          <span className="text-[11px]">Agente rodando...</span>
+        </div>
+      )}
 
       {/* Stdin input */}
       {isRunning && onSendInput && (
@@ -710,6 +753,6 @@ export function AgentOutput({
           </div>
         </form>
       )}
-    </div>
+    </section>
   );
 }

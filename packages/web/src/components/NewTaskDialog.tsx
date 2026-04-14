@@ -1,4 +1,4 @@
-import type { EngineInfo, Repository, TaskSpec } from "@vibe-code/shared";
+import type { EngineInfo, Repository, SkillsIndex, TaskSpec } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -37,6 +37,8 @@ interface NewTaskDialogProps {
     model?: string;
     baseBranch?: string;
     tags?: string[];
+    agentId?: string;
+    workflowId?: string;
     autoLaunch: boolean;
     schedule?: {
       cronExpression: string;
@@ -74,6 +76,9 @@ export function NewTaskDialog({
   const [branches, setBranches] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [agentId, setAgentId] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+  const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
 
   // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
@@ -88,6 +93,15 @@ export function NewTaskDialog({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
+
+  // Load agents/workflows from skills index
+  useEffect(() => {
+    if (!open) return;
+    api.skills
+      .index()
+      .then(setSkillsIndex)
+      .catch(() => {});
+  }, [open]);
 
   // Set baseBranch and fetch branches when repoId changes
   useEffect(() => {
@@ -137,6 +151,8 @@ export function NewTaskDialog({
         model: model || undefined,
         baseBranch: baseBranch || undefined,
         tags: tags.length > 0 ? tags : undefined,
+        agentId: agentId || undefined,
+        workflowId: workflowId || undefined,
         autoLaunch: isScheduled ? false : autoLaunch,
         schedule: isScheduled ? { cronExpression } : undefined,
       });
@@ -151,6 +167,8 @@ export function NewTaskDialog({
       setBaseBranch("");
       setBranches([]);
       setTags([]);
+      setAgentId("");
+      setWorkflowId("");
       setIsScheduled(false);
       onClose();
     } catch (err) {
@@ -424,6 +442,54 @@ export function NewTaskDialog({
                     </Select>
                   </div>
                 )}
+
+                {/* Agent / Workflow pickers */}
+                {skillsIndex &&
+                  (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) && (
+                    <>
+                      {skillsIndex.agents.length > 0 && (
+                        <div>
+                          <div
+                            className="block text-xs font-medium mb-1.5"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            Agent
+                          </div>
+                          <Select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                            <option value="">None</option>
+                            {skillsIndex.agents.map((a) => (
+                              <option key={a.name} value={a.name}>
+                                {a.name}
+                                {a.description ? ` — ${a.description.slice(0, 60)}` : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                      {skillsIndex.workflows.length > 0 && (
+                        <div>
+                          <div
+                            className="block text-xs font-medium mb-1.5"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            Workflow
+                          </div>
+                          <Select
+                            value={workflowId}
+                            onChange={(e) => setWorkflowId(e.target.value)}
+                          >
+                            <option value="">None</option>
+                            {skillsIndex.workflows.map((w) => (
+                              <option key={w.name} value={w.name}>
+                                {w.name}
+                                {w.description ? ` — ${w.description.slice(0, 60)}` : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                    </>
+                  )}
               </div>
             )}
 

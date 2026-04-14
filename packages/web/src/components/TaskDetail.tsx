@@ -465,25 +465,66 @@ export function TaskDetail({
     task.latestRun?.finishedAt ?? null
   );
 
-  type ActiveTab = "info" | "terminal" | "diff";
+  type ActiveTab = "info" | "terminal" | "diff" | "skills";
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
+
+  function parseMatchedSkill(s: string): { category: string; name: string } {
+    const idx = s.indexOf(":");
+    if (idx > 0) return { category: s.slice(0, idx), name: s.slice(idx + 1) };
+    return { category: "skill", name: s };
+  }
+
+  const skillCategoryLabel: Record<string, string> = {
+    rule: "Regra",
+    skill: "Skill",
+    agent: "Agente",
+    workflow: "Workflow",
+  };
+
+  const skillCategoryColor: Record<string, { bg: string; border: string; text: string }> = {
+    rule: { bg: "rgba(245,158,11,0.15)", border: "rgba(245,158,11,0.35)", text: "#f59e0b" },
+    skill: {
+      bg: "rgba(139,92,246,0.15)",
+      border: "rgba(139,92,246,0.35)",
+      text: "var(--accent-text, #c4b5fd)",
+    },
+    agent: { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.35)", text: "#60a5fa" },
+    workflow: { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.35)", text: "#34d399" },
+  };
+
+  const skillsByCategory = matchedSkills.reduce(
+    (acc, raw) => {
+      const { category, name } = parseMatchedSkill(raw);
+      if (!acc[category]) acc[category] = [];
+      acc[category].push({ raw, name });
+      return acc;
+    },
+    {} as Record<string, { raw: string; name: string }[]>
+  );
+
+  const categoryOrder = ["rule", "skill", "agent", "workflow"];
 
   // Reset tab and notes when task changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when task.id changes
   useEffect(() => {
     setNotesValue(task.notes ?? "");
+    setMatchedSkills([]);
     setActiveTab(
       task.status === "in_progress" || task.latestRun?.status === "running" ? "terminal" : "info"
     );
   }, [task.id]);
 
-  // Fetch matched skills when task/run changes
+  // Fetch matched skills when task/run changes (with abort to prevent stale results)
   useEffect(() => {
     if (!task.latestRun) return;
+    const abortCtrl = new AbortController();
     api.tasks
       .matchedSkills(task.id)
-      .then(setMatchedSkills)
+      .then((skills) => {
+        if (!abortCtrl.signal.aborted) setMatchedSkills(skills);
+      })
       .catch(() => {});
+    return () => abortCtrl.abort();
   }, [task.id, task.latestRun?.id, task.latestRun]);
 
   const handleNotesBlur = () => {
@@ -645,6 +686,29 @@ export function TaskDetail({
                 )}
               </button>
             ))}
+            {matchedSkills.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("skills")}
+                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+                style={{
+                  borderColor: activeTab === "skills" ? "var(--accent, #7c3aed)" : "transparent",
+                  color:
+                    activeTab === "skills" ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
+                }}
+              >
+                Skills
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                  style={{
+                    background: activeTab === "skills" ? "var(--accent-muted)" : "var(--bg-input)",
+                    color: activeTab === "skills" ? "var(--accent-text)" : "var(--text-muted)",
+                  }}
+                >
+                  {matchedSkills.length}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -918,38 +982,6 @@ export function TaskDetail({
                 <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
               )}
 
-              {/* Matched Skills */}
-              {matchedSkills.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-medium text-zinc-500 mb-2">
-                    Skills carregadas pela CLI
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {matchedSkills.map((skill) =>
-                      onSkillClick ? (
-                        <button
-                          key={skill}
-                          type="button"
-                          onClick={() => onSkillClick(skill)}
-                          className="inline-flex items-center gap-1 text-[11px] bg-violet-950/40 border border-violet-800/30 text-violet-300 rounded px-2 py-0.5 cursor-pointer hover:bg-violet-900/50 hover:border-violet-700/50 transition-colors"
-                        >
-                          <span className="opacity-60">⚡</span>
-                          {skill}
-                        </button>
-                      ) : (
-                        <span
-                          key={skill}
-                          className="inline-flex items-center gap-1 text-[11px] bg-violet-950/40 border border-violet-800/30 text-violet-300 rounded px-2 py-0.5"
-                        >
-                          <span className="opacity-60">⚡</span>
-                          {skill}
-                        </span>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
               {/* Timestamps */}
               <div className="text-[11px] text-zinc-600 space-y-0.5 pt-2 border-t border-zinc-800/60">
                 <div>Criado: {formatDateTime(task.createdAt)}</div>
@@ -958,17 +990,92 @@ export function TaskDetail({
             </div>
           )}
 
-          {/* ── Terminal Tab ───────────────────────────────── */}
-          {activeTab === "terminal" && (
-            <div className="flex-1 min-h-0 flex flex-col p-4">
-              <AgentOutput
-                runId={task.latestRun?.id ?? null}
-                liveLogs={liveLogs}
-                isRunning={isRunning}
-                fullHeight
-                onSendInput={(input) => onSendInput(task.id, input)}
-                currentStatus={task.latestRun?.currentStatus}
-              />
+          {/* ── Terminal Tab — kept mounted to avoid refetch on tab switch ── */}
+          <div
+            className="flex-1 min-h-0 flex flex-col p-4"
+            style={{ display: activeTab === "terminal" ? "flex" : "none" }}
+          >
+            <AgentOutput
+              runId={task.latestRun?.id ?? null}
+              liveLogs={liveLogs}
+              isRunning={isRunning}
+              fullHeight
+              onSendInput={(input) => onSendInput(task.id, input)}
+              currentStatus={task.latestRun?.currentStatus}
+            />
+          </div>
+
+          {/* ── Skills Tab ─────────────────────────────────── */}
+          {activeTab === "skills" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Skills carregadas pela CLI
+                </span>
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full"
+                  style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}
+                >
+                  {matchedSkills.length}
+                </span>
+              </div>
+              {categoryOrder
+                .filter((cat) => skillsByCategory[cat]?.length > 0)
+                .map((cat) => {
+                  const colors = skillCategoryColor[cat] ?? {
+                    bg: "rgba(100,100,100,0.15)",
+                    border: "rgba(100,100,100,0.35)",
+                    text: "var(--text-secondary)",
+                  };
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span
+                          className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded"
+                          style={{ background: colors.bg, color: colors.text }}
+                        >
+                          {skillCategoryLabel[cat] ?? cat}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "var(--text-dimmed)" }}>
+                          {skillsByCategory[cat].length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {skillsByCategory[cat].map(({ raw, name }) =>
+                          onSkillClick ? (
+                            <button
+                              key={raw}
+                              type="button"
+                              onClick={() => onSkillClick(raw)}
+                              className="inline-flex items-center gap-1 text-[11px] rounded px-2 py-0.5 cursor-pointer transition-colors"
+                              style={{
+                                background: colors.bg,
+                                border: `1px solid ${colors.border}`,
+                                color: colors.text,
+                              }}
+                            >
+                              <span className="opacity-60">⚡</span>
+                              {name}
+                            </button>
+                          ) : (
+                            <span
+                              key={raw}
+                              className="inline-flex items-center gap-1 text-[11px] rounded px-2 py-0.5"
+                              style={{
+                                background: colors.bg,
+                                border: `1px solid ${colors.border}`,
+                                color: colors.text,
+                              }}
+                            >
+                              <span className="opacity-60">⚡</span>
+                              {name}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
 

@@ -13,6 +13,14 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  // Keep onClose in a ref so the effect never re-runs just because the parent
+  // created a new inline function reference — that was causing the focus to jump
+  // to the close button every time a parent re-render happened while the dialog
+  // was open (e.g. on every incoming WebSocket log message).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -26,13 +34,28 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
 
-      (focusable[0] ?? closeButtonRef.current ?? dialog).focus();
+      // Focus the dialog container itself so the user can start interacting
+      // without accidentally triggering the close button. Individual dialogs
+      // can forward focus wherever they want by autofocusing their own elements.
+      const firstInteractive = Array.from(focusable).find(
+        (el) => !el.closest("[data-dialog-close]") && el !== closeButtonRef.current
+      );
+      (firstInteractive ?? closeButtonRef.current ?? dialog).focus();
     };
 
     queueMicrotask(focusTarget);
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        // Don't close when user is actively typing in an input/textarea
+        const active = document.activeElement;
+        const isTyping =
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active as HTMLElement | null)?.isContentEditable === true;
+        if (!isTyping) onCloseRef.current();
+        return;
+      }
 
       if (e.key !== "Tab") return;
       const dialog = dialogRef.current;
@@ -68,7 +91,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
       document.removeEventListener("keydown", handleKey);
       previousActiveElementRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -76,7 +99,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-        onClick={onClose}
+        onClick={() => onCloseRef.current()}
         aria-hidden="true"
       />
       <div
@@ -94,7 +117,8 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
           <button
             ref={closeButtonRef}
             type="button"
-            onClick={onClose}
+            onClick={() => onCloseRef.current()}
+            data-dialog-close
             className="text-zinc-500 hover:text-zinc-300 cursor-pointer"
             aria-label={`Fechar ${title}`}
           >
