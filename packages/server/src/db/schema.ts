@@ -119,6 +119,12 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("notes")) {
     db.exec("ALTER TABLE tasks ADD COLUMN notes TEXT DEFAULT ''");
   }
+  if (!taskColNames.includes("agent_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN agent_id TEXT");
+  }
+  if (!taskColNames.includes("matched_skills")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN matched_skills TEXT DEFAULT '[]'");
+  }
 
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];

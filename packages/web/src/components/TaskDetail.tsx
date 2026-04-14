@@ -453,6 +453,7 @@ export function TaskDetail({
   const [prCopied, setPrCopied] = useState(false);
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -467,6 +468,15 @@ export function TaskDetail({
   useEffect(() => {
     setNotesValue(task.notes ?? "");
   }, [task.id]);
+
+  // Fetch matched skills when task/run changes
+  useEffect(() => {
+    if (!task.latestRun) return;
+    api.tasks
+      .matchedSkills(task.id)
+      .then(setMatchedSkills)
+      .catch(() => {});
+  }, [task.id, task.latestRun?.id, task.latestRun]);
 
   const handleNotesBlur = () => {
     if (!onUpdateTask) return;
@@ -525,6 +535,16 @@ export function TaskDetail({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              {task.branchName && (
+                <a
+                  href={api.tasks.downloadUrl(task.id)}
+                  download
+                  title="Baixar código (ZIP)"
+                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  ↓
+                </a>
+              )}
               {onClone && (
                 <button
                   type="button"
@@ -845,6 +865,24 @@ export function TaskDetail({
           {/* Schedule section */}
           {(task.status === "scheduled" || task.status === "backlog") && (
             <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
+          )}
+
+          {/* Matched Skills */}
+          {matchedSkills.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-zinc-500 mb-2">Skills carregadas pela CLI</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {matchedSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1 text-[11px] bg-violet-950/40 border border-violet-800/30 text-violet-300 rounded px-2 py-0.5"
+                  >
+                    <span className="opacity-60">⚡</span>
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Agent Output */}

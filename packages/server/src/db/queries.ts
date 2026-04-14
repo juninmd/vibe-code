@@ -47,6 +47,8 @@ interface TaskRow {
   branch_name: string | null;
   pr_url: string | null;
   parent_task_id: string | null;
+  agent_id: string | null;
+  matched_skills: string | null;
   tags: string | null;
   notes: string | null;
   created_at: string;
@@ -109,6 +111,8 @@ function mapTask(row: TaskRow): Task {
     branchName: row.branch_name,
     prUrl: row.pr_url,
     parentTaskId: row.parent_task_id,
+    agentId: row.agent_id,
+    matchedSkills: JSON.parse(row.matched_skills || "[]") as string[],
     tags: JSON.parse(row.tags || "[]") as string[],
     notes: row.notes ?? "",
     createdAt: row.created_at,

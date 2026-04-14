@@ -177,6 +177,8 @@ export const api = {
     diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
     diffFile: (id: string, path: string) =>
       request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),
+    matchedSkills: (id: string) => request<string[]>(`/tasks/${id}/matched-skills`),
+    downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
   },
 
   runs: {
