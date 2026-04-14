@@ -41,7 +41,7 @@ interface NewTaskDialogProps {
     schedule?: {
       cronExpression: string;
     };
-  }) => void;
+  }) => Promise<void> | void;
 }
 
 const CRON_PRESETS = [
@@ -79,6 +79,8 @@ export function NewTaskDialog({
   const [isScheduled, setIsScheduled] = useState(false);
   const [cronExpression, setCronExpression] = useState(CRON_PRESETS[0].value);
   const [isCustomCron, setIsCustomCron] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Guided mode (TaskSpec)
   const [guidedMode, setGuidedMode] = useState(false);
@@ -120,33 +122,42 @@ export function NewTaskDialog({
       .finally(() => setLoadingModels(false));
   }, [engine]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !repoId) return;
+    if (!title.trim() || !repoId || submitting) return;
     const finalDescription = guidedMode ? taskSpecToDescription(taskSpec) : description.trim();
-    onSubmit({
-      title: title.trim(),
-      description: finalDescription,
-      repoId,
-      engine: engine || undefined,
-      model: model || undefined,
-      baseBranch: baseBranch || undefined,
-      tags: tags.length > 0 ? tags : undefined,
-      autoLaunch: isScheduled ? false : autoLaunch,
-      schedule: isScheduled ? { cronExpression } : undefined,
-    });
-    setTitle("");
-    setDescription("");
-    setTaskSpec(EMPTY_TASK_SPEC);
-    setRepoId("");
-    setEngine("");
-    setModel("");
-    setModels([]);
-    setBaseBranch("");
-    setBranches([]);
-    setTags([]);
-    setIsScheduled(false);
-    onClose();
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: finalDescription,
+        repoId,
+        engine: engine || undefined,
+        model: model || undefined,
+        baseBranch: baseBranch || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        autoLaunch: isScheduled ? false : autoLaunch,
+        schedule: isScheduled ? { cronExpression } : undefined,
+      });
+      // Only reset + close on success
+      setTitle("");
+      setDescription("");
+      setTaskSpec(EMPTY_TASK_SPEC);
+      setRepoId("");
+      setEngine("");
+      setModel("");
+      setModels([]);
+      setBaseBranch("");
+      setBranches([]);
+      setTags([]);
+      setIsScheduled(false);
+      onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -276,8 +287,9 @@ export function NewTaskDialog({
                     .filter((r) => r.status === "ready" || r.status === "pending")
                     .map((repo) => ({
                       value: repo.id,
-                      label: repo.name,
+                      label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
                       sublabel: repo.status !== "ready" ? repo.status : undefined,
+                      disabled: repo.status !== "ready",
                     }))}
                 />
               </div>
@@ -512,11 +524,20 @@ export function NewTaskDialog({
               className="flex gap-2 justify-end pt-4 border-t"
               style={{ borderColor: "var(--border-subtle)" }}
             >
-              <Button type="button" variant="ghost" onClick={onClose}>
+              {submitError && (
+                <p className="flex-1 text-xs text-red-400 self-center truncate" title={submitError}>
+                  ⚠ {submitError}
+                </p>
+              )}
+              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={!title.trim() || !repoId}>
-                {isScheduled ? "Create Schedule" : "Create Task"}
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!title.trim() || !repoId || submitting}
+              >
+                {submitting ? "Criando..." : isScheduled ? "Create Schedule" : "Create Task"}
               </Button>
             </div>
           </div>

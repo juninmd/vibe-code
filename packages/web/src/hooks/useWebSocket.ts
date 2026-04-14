@@ -9,10 +9,33 @@ export function useWebSocket(onMessage: MessageHandler) {
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
 
+  /** Active task subscriptions that must be replayed after reconnect */
+  const activeSubsRef = useRef<Set<string>>(new Set());
+  /** Outbound queue for messages sent while disconnected */
+  const queueRef = useRef<WsClientMessage[]>([]);
+
+  /** Drain the outbound queue once the socket is open */
+  function drainQueue(ws: WebSocket) {
+    while (queueRef.current.length > 0) {
+      const msg = queueRef.current.shift();
+      if (msg) ws.send(JSON.stringify(msg));
+    }
+  }
+
+  /** Replay all active subscriptions after reconnect */
+  function replaySubscriptions(ws: WebSocket) {
+    for (const taskId of activeSubsRef.current) {
+      ws.send(JSON.stringify({ type: "subscribe", taskId }));
+    }
+  }
+
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
     let attempts = 0;
     let destroyed = false;
+    // Track whether a heartbeat ack is pending
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let missedPongs = 0;
 
     function connect() {
       if (destroyed) return;
@@ -26,22 +49,48 @@ export function useWebSocket(onMessage: MessageHandler) {
       ws.onopen = () => {
         setConnected(true);
         attempts = 0;
+        missedPongs = 0;
+        // Replay subscriptions so live logs resume transparently
+        replaySubscriptions(ws);
+        // Drain any messages queued while disconnected
+        drainQueue(ws);
+        // Start liveness heartbeat
+        pingTimer = setInterval(() => {
+          if (ws.readyState !== WebSocket.OPEN) return;
+          missedPongs++;
+          if (missedPongs > 2) {
+            // Half-open socket — force reconnect
+            ws.close();
+            return;
+          }
+          try {
+            ws.send(JSON.stringify({ type: "ping" }));
+          } catch {
+            /* ignore */
+          }
+        }, 25000);
       };
 
       ws.onmessage = (evt) => {
         try {
           const msg: WsServerMessage = JSON.parse(evt.data);
+          // Reset pong counter on any server-to-client message
+          missedPongs = 0;
           onMessageRef.current(msg);
         } catch {
-          // Invalid message
+          // Malformed frame — ignore
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (_evt) => {
         setConnected(false);
         wsRef.current = null;
-        if (destroyed) return; // Explicit close — do not reconnect
-        // Exponential backoff reconnect
+        if (pingTimer) {
+          clearInterval(pingTimer);
+          pingTimer = null;
+        }
+        if (destroyed) return;
+        // Exponential back-off: 1s, 2s, 4s … 30s
         const delay = Math.min(1000 * 2 ** attempts, 30000);
         attempts++;
         reconnectTimer = setTimeout(connect, delay);
@@ -57,20 +106,35 @@ export function useWebSocket(onMessage: MessageHandler) {
     return () => {
       destroyed = true;
       clearTimeout(reconnectTimer);
+      if (pingTimer) clearInterval(pingTimer);
       wsRef.current?.close();
     };
-  }, []);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: replaySubscriptions and drainQueue are stable functions defined once
+  }, [replaySubscriptions, drainQueue]);
 
   const send = useCallback((msg: WsClientMessage) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    } else {
+      // Queue until reconnected (cap at 50 to avoid unbounded growth)
+      if (queueRef.current.length < 50) queueRef.current.push(msg);
     }
   }, []);
 
-  const subscribe = useCallback((taskId: string) => send({ type: "subscribe", taskId }), [send]);
+  const subscribe = useCallback(
+    (taskId: string) => {
+      activeSubsRef.current.add(taskId);
+      send({ type: "subscribe", taskId });
+    },
+    [send]
+  );
 
   const unsubscribe = useCallback(
-    (taskId: string) => send({ type: "unsubscribe", taskId }),
+    (taskId: string) => {
+      activeSubsRef.current.delete(taskId);
+      send({ type: "unsubscribe", taskId });
+    },
     [send]
   );
 

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
 const createRepoSchema = z.object({
@@ -252,6 +253,22 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     const limit = Number(c.req.query("limit")) || 50;
     const findings = db.findings.listByRepo(repo.id, limit);
     return c.json({ data: findings });
+  });
+
+  // M6.5: Skills scoped to a repository's .vibe-code directory
+  router.get("/:id/skills", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath)
+      return c.json({ data: { skills: [], rules: [], agents: [], workflows: [] } });
+    try {
+      const loader = new RepoSkillsLoader(repo.localPath);
+      const index = await loader.load();
+      return c.json({ data: index });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "load_error", message: msg }, 500);
+    }
   });
 
   return router;

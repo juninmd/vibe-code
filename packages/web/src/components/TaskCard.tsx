@@ -223,6 +223,14 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             Falhou
           </Badge>
         )}
+        {task.status === "failed" && task.latestRun?.errorMessage && (
+          <span
+            className="text-[9px] text-red-400/70 font-mono truncate max-w-[140px]"
+            title={task.latestRun.errorMessage}
+          >
+            {task.latestRun.errorMessage}
+          </span>
+        )}
 
         {task.status === "review" && !task.prUrl && (
           // biome-ignore lint/a11y/noStaticElementInteractions: this wrapper only prevents drag/click propagation around the nested button

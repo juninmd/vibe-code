@@ -844,6 +844,10 @@ export default function App() {
               setShowCommandPalette(false);
               handleTaskClick(task);
             }}
+            onSelectRepo={(repoId) => {
+              setShowCommandPalette(false);
+              setSelectedRepoId(repoId);
+            }}
             onNewTask={() => {
               setShowCommandPalette(false);
               setShowNewTask(true);
