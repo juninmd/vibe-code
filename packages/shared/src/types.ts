@@ -54,6 +54,7 @@ export interface Task {
   prUrl: string | null;
   parentTaskId: string | null;
   agentId: string | null;
+  workflowId: string | null;
   matchedSkills: string[];
   tags: string[];
   notes: string;
@@ -141,6 +142,8 @@ export interface CreateTaskRequest {
   baseBranch?: string;
   priority?: number;
   tags?: string[];
+  agentId?: string;
+  workflowId?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -314,6 +317,7 @@ export interface StatsOverview {
   totalRepos: number;
   totalTasks: number;
   totalRuns: number;
+  failedRuns: number;
   successRate: number;
   avgRunDurationSecs: number;
   totalPRsCreated: number;

@@ -106,14 +106,18 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             <ProviderIcon size={13} />
           </span>
         )}
-        <h3 className="text-[13px] font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
+        <h3
+          className="text-[13px] font-medium line-clamp-2 flex-1 leading-snug"
+          style={{ color: "var(--text-primary)" }}
+        >
           {task.title}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
           <PriorityDot priority={task.priority} />
           <span
             title={task.id}
-            className="text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
+            className="text-[9px] font-mono select-all leading-snug mt-px"
+            style={{ color: "var(--text-dimmed)" }}
           >
             {task.id.slice(0, 8)}
           </span>
@@ -121,7 +125,10 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       </div>
 
       {task.description && (
-        <p className="text-xs text-zinc-400/95 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
+        <p
+          className="text-xs line-clamp-2 mb-2.5 ml-[21px] leading-relaxed"
+          style={{ color: "var(--text-secondary)" }}
+        >
           {task.description}
         </p>
       )}
@@ -140,17 +147,27 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-[11px] text-zinc-500 font-medium hover:text-zinc-300 transition-colors"
+              className="text-[11px] font-medium transition-colors"
+              style={{ color: "var(--text-muted)" }}
               title={task.repo.url}
             >
               {task.repo.name}
             </a>
           ) : (
-            <span className="text-[11px] text-zinc-500 font-medium">{task.repo.name}</span>
+            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+              {task.repo.name}
+            </span>
           ))}
 
         {task.branchName && (
-          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-900/60 border border-zinc-800/60 px-1.5 py-px rounded-md font-mono">
+          <span
+            className="hidden sm:inline-flex items-center gap-1 text-[11px] px-1.5 py-px rounded-md font-mono"
+            style={{
+              color: "var(--text-muted)",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-default)",
+            }}
+          >
             <svg
               aria-hidden="true"
               width="9"
@@ -286,7 +303,12 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
           (() => {
             const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
             return dur ? (
-              <span className="text-[10px] text-zinc-600 ml-auto tabular-nums">⏱ {dur}</span>
+              <span
+                className="text-[10px] ml-auto tabular-nums"
+                style={{ color: "var(--text-dimmed)" }}
+              >
+                ⏱ {dur}
+              </span>
             ) : null;
           })()}
       </div>

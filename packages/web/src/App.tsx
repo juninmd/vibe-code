@@ -33,7 +33,17 @@ import { useWebSocket } from "./hooks/useWebSocket";
 const MAX_LIVE_LOGS_PER_TASK = 1500;
 
 function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog[] {
-  const merged = [...existing, ...incoming];
+  // Deduplicate by content+timestamp to prevent repeated messages on reconnect or dual-emit
+  const seen = new Set<string>();
+  for (const log of existing) seen.add(`${log.timestamp}|${log.stream}|${log.content}`);
+  const unique = incoming.filter((l) => {
+    const key = `${l.timestamp}|${l.stream}|${l.content}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (unique.length === 0) return existing;
+  const merged = [...existing, ...unique];
   if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
 }
@@ -66,6 +76,8 @@ export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedLogCursorRef = useRef(0);
   const refreshEnginesThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedTaskRef = useRef(selectedTask);
+  selectedTaskRef.current = selectedTask;
 
   const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
     useRepos();
@@ -124,11 +136,12 @@ export default function App() {
 
   const handleWsMessage = useCallback(
     (msg: WsServerMessage) => {
+      // Use ref to avoid re-creating this callback when selectedTask changes
+      const sel = selectedTaskRef.current;
       switch (msg.type) {
         case "task_updated": {
           const updated = msg.task as TaskWithRun;
           const prev = prevStatusRef.current[updated.id];
-          // Browser notification on terminal status change
           if (prev && prev !== updated.status) {
             if (updated.status === "done")
               notify(`✓ Tarefa concluída: ${updated.title}`, "Agente executou com sucesso");
@@ -140,8 +153,8 @@ export default function App() {
           prevStatusRef.current[updated.id] = updated.status;
           startTransition(() => {
             updateTaskLocal(updated);
-            setSelectedTask((sel) =>
-              sel?.id === updated.id ? ({ ...sel, ...updated } as TaskWithRun) : sel
+            setSelectedTask((s) =>
+              s?.id === updated.id ? ({ ...s, ...updated } as TaskWithRun) : s
             );
           });
           break;
@@ -150,9 +163,7 @@ export default function App() {
           addOrUpdateRepo(msg.repo);
           break;
         case "agent_log":
-          // Only update state if this is the task the user is currently looking at.
-          // This avoids re-rendering the whole App for every background task log.
-          if (selectedTask?.id === msg.taskId) {
+          if (sel?.id === msg.taskId) {
             startTransition(() => {
               setLiveLogs((prev) => ({
                 ...prev,
@@ -170,8 +181,7 @@ export default function App() {
           }
           break;
         case "agent_logs_batch":
-          // Batched log delivery — single state update for multiple lines.
-          if (selectedTask?.id === msg.taskId) {
+          if (sel?.id === msg.taskId) {
             startTransition(() => {
               setLiveLogs((prev) => ({
                 ...prev,
@@ -192,41 +202,35 @@ export default function App() {
         case "run_updated":
           startTransition(() => {
             updateRunLocal(msg.run.taskId, msg.run);
-            setSelectedTask((sel) =>
-              sel?.id === msg.run.taskId ? ({ ...sel, latestRun: msg.run } as TaskWithRun) : sel
+            setSelectedTask((s) =>
+              s?.id === msg.run.taskId ? ({ ...s, latestRun: msg.run } as TaskWithRun) : s
             );
           });
           refreshEnginesThrottled();
           break;
-        case "run_status":
+        case "run_status": {
+          const run = sel?.latestRun;
           startTransition(() => {
             updateRunLocal(msg.taskId, {
               id: msg.runId,
               taskId: msg.taskId,
-              engine: selectedTask?.latestRun?.engine ?? "unknown",
+              engine: run?.engine ?? "unknown",
               status: msg.status,
-              currentStatus: selectedTask?.latestRun?.currentStatus ?? null,
-              worktreePath: selectedTask?.latestRun?.worktreePath ?? null,
-              startedAt: selectedTask?.latestRun?.startedAt ?? null,
-              finishedAt: selectedTask?.latestRun?.finishedAt ?? null,
-              exitCode: selectedTask?.latestRun?.exitCode ?? null,
-              errorMessage: selectedTask?.latestRun?.errorMessage ?? null,
-              createdAt: selectedTask?.latestRun?.createdAt ?? new Date().toISOString(),
+              currentStatus: run?.currentStatus ?? null,
+              worktreePath: run?.worktreePath ?? null,
+              startedAt: run?.startedAt ?? null,
+              finishedAt: run?.finishedAt ?? null,
+              exitCode: run?.exitCode ?? null,
+              errorMessage: run?.errorMessage ?? null,
+              createdAt: run?.createdAt ?? new Date().toISOString(),
             });
           });
           refreshEnginesThrottled();
           break;
+        }
       }
     },
-    [
-      addOrUpdateRepo,
-      notify,
-      refreshEnginesThrottled,
-      selectedTask?.id,
-      selectedTask?.latestRun,
-      updateRunLocal,
-      updateTaskLocal,
-    ]
+    [addOrUpdateRepo, notify, refreshEnginesThrottled, updateRunLocal, updateTaskLocal]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
@@ -314,7 +318,7 @@ export default function App() {
     }
     if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
       toast("Reconectado!", "success");
-      // Resync state after reconnect: refresh tasks and focused logs once
+      // Resync state after reconnect: clear live logs then fetch fresh
       (async () => {
         try {
           await refresh();
@@ -324,17 +328,16 @@ export default function App() {
             startTransition(() => {
               setTasksSnapshot(data.tasks);
               if (data.focusedTask) setSelectedTask(data.focusedTask);
-              if (data.focusedLogs.length > 0) {
-                const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
-                focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
-                setLiveLogs((prev) => ({
-                  ...prev,
-                  [selectedTask.id]: appendLogsLimited(
-                    prev[selectedTask.id] ?? [],
-                    data.focusedLogs
-                  ),
-                }));
-              }
+              // Replace (not append) to avoid duplicates after reconnect
+              const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
+              focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
+              setLiveLogs((prev) => ({
+                ...prev,
+                [selectedTask.id]:
+                  data.focusedLogs.length > 0
+                    ? data.focusedLogs.slice(-MAX_LIVE_LOGS_PER_TASK)
+                    : (prev[selectedTask.id] ?? []),
+              }));
             });
           }
         } catch {
@@ -507,6 +510,14 @@ export default function App() {
           return;
         }
         if (selectedTask) {
+          // Don't close TaskDetail while the user is actively typing in an
+          // input or textarea inside the panel (e.g. notes, stdin, cron fields).
+          const active = document.activeElement;
+          const isTypingInDetail =
+            active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement ||
+            (active as HTMLElement | null)?.isContentEditable === true;
+          if (isTypingInDetail) return;
           handleCloseDetail();
           return;
         }
@@ -878,8 +889,24 @@ export default function App() {
           engines={engines}
           enginesLoading={enginesLoading}
           enginesError={enginesError}
-          onSubmit={async ({ autoLaunch, model, schedule, baseBranch, tags, ...data }) => {
-            const task = await createTask({ ...data, baseBranch, tags });
+          onSubmit={async ({
+            autoLaunch,
+            model,
+            schedule,
+            baseBranch,
+            tags,
+            agentId,
+            workflowId,
+            ...data
+          }) => {
+            const task = await createTask({
+              ...data,
+              baseBranch,
+              tags,
+              model,
+              agentId,
+              workflowId,
+            });
             if (!task) return;
 
             if (schedule) {
@@ -917,6 +944,7 @@ export default function App() {
             setInitialSkillName(null);
           }}
           initialSkillName={initialSkillName ?? undefined}
+          matchedSkills={selectedTask?.matchedSkills}
         />
 
         <Toaster />

@@ -226,12 +226,16 @@ export class GeminiEngine implements AgentEngine {
     for await (const event of streamProcess(
       proc,
       (line) => {
-        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
-
         const status = this.deriveStatusFromLine(line);
         if (status) {
-          events.unshift({ type: "status", content: status });
+          // Yield only the status event — the log would be redundant when a status is derived
+          return [
+            { type: "status", content: status },
+            { type: "log", stream: "stdout", content: line },
+          ] satisfies AgentEvent[];
         }
+
+        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
 
         if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
           events.push({

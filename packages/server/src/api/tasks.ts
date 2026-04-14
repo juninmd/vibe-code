@@ -27,6 +27,8 @@ const createTaskSchema = z.object({
   baseBranch: z.string().optional(),
   priority: z.number().optional(),
   tags: z.array(z.string()).optional(),
+  agentId: z.string().optional(),
+  workflowId: z.string().optional(),
 });
 
 const updateTaskSchema = z.object({

@@ -183,11 +183,14 @@ function ColumnComponent({
       } ${isOver ? "ring-2 ring-violet-500/40 brightness-105" : ""}`}
     >
       {/* Column header */}
-      <div className="px-4 pt-3.5 pb-3 border-b border-white/[0.05]">
+      <div className="px-4 pt-3.5 pb-3 border-b" style={{ borderColor: "var(--glass-border)" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-            <h2 className="text-[13px] font-semibold text-zinc-200 tracking-tight">
+            <h2
+              className="text-[13px] font-semibold tracking-tight"
+              style={{ color: "var(--text-primary)" }}
+            >
               {TASK_STATUS_LABELS[status]}
             </h2>
             <span
@@ -335,7 +338,10 @@ function ColumnComponent({
           </SortableContext>
 
           {tasks.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-700 select-none">
+            <div
+              className="flex flex-col items-center justify-center py-8 gap-2 select-none"
+              style={{ color: "var(--text-dimmed)" }}
+            >
               <span className="opacity-50">
                 <EmptyStateIcon icon={cfg.emptyIcon} />
               </span>
@@ -346,7 +352,10 @@ function ColumnComponent({
       )}
 
       {collapsed && (
-        <div className="px-4 py-2 text-xs text-zinc-500 border-t border-white/[0.03]">
+        <div
+          className="px-4 py-2 text-xs border-t"
+          style={{ color: "var(--text-muted)", borderColor: "var(--glass-border)" }}
+        >
           Coluna recolhida. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
           {tasks.length !== 1 ? "s" : ""}.
         </div>

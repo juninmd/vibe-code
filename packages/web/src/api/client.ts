@@ -5,12 +5,14 @@ import type {
   CreateRepoRequest,
   CreateTaskRequest,
   DiffSummary,
+  EngineEffectiveness,
   EngineInfo,
   LaunchTaskRequest,
   PromptTemplate,
   RemoteRepo,
   Repository,
   SettingsResponse,
+  SkillEffectiveness,
   SkillsIndex,
   StatsResponse,
   Task,
@@ -229,6 +231,14 @@ export const api = {
 
   stats: {
     get: () => request<StatsResponse>("/stats"),
+    skills: () =>
+      request<SkillEffectiveness[]>("/stats/skills").then((r) =>
+        Array.isArray(r) ? r : ((r as { data: SkillEffectiveness[] }).data ?? [])
+      ),
+    engines: () =>
+      request<EngineEffectiveness[]>("/stats/engines").then((r) =>
+        Array.isArray(r) ? r : ((r as { data: EngineEffectiveness[] }).data ?? [])
+      ),
   },
 
   skills: {

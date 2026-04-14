@@ -5,6 +5,7 @@ export function initDatabase(dbPath: string): Database {
 
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA busy_timeout = 5000");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS repositories (
@@ -122,6 +123,9 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("agent_id")) {
     db.exec("ALTER TABLE tasks ADD COLUMN agent_id TEXT");
   }
+  if (!taskColNames.includes("workflow_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN workflow_id TEXT");
+  }
   if (!taskColNames.includes("matched_skills")) {
     db.exec("ALTER TABLE tasks ADD COLUMN matched_skills TEXT DEFAULT '[]'");
   }
@@ -177,6 +181,13 @@ export function initDatabase(dbPath: string): Database {
     );
     CREATE INDEX IF NOT EXISTS idx_run_metrics_engine ON run_metrics(engine);
     CREATE INDEX IF NOT EXISTS idx_run_metrics_repo ON run_metrics(repo_id);
+  `);
+
+  // Composite indexes for common query patterns
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_repo_status ON tasks(repo_id, status);
+    CREATE INDEX IF NOT EXISTS idx_agent_logs_run_timestamp ON agent_logs(run_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_task_status ON agent_runs(task_id, status);
   `);
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)

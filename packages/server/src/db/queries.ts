@@ -48,6 +48,7 @@ interface TaskRow {
   pr_url: string | null;
   parent_task_id: string | null;
   agent_id: string | null;
+  workflow_id: string | null;
   matched_skills: string | null;
   tags: string | null;
   notes: string | null;
@@ -112,6 +113,7 @@ function mapTask(row: TaskRow): Task {
     prUrl: row.pr_url,
     parentTaskId: row.parent_task_id,
     agentId: row.agent_id,
+    workflowId: row.workflow_id ?? null,
     matchedSkills: JSON.parse(row.matched_skills || "[]") as string[],
     tags: JSON.parse(row.tags || "[]") as string[],
     notes: row.notes ?? "",
@@ -252,9 +254,11 @@ export function createTaskQueries(db: Database) {
             string,
             string | null,
             string,
+            string | null,
+            string | null,
           ]
         >(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -267,7 +271,9 @@ export function createTaskQueries(db: Database) {
           order,
           status,
           req.parentTaskId ?? null,
-          tagsJson
+          tagsJson,
+          req.agentId ?? null,
+          req.workflowId ?? null
         );
       if (!row) throw new Error("Failed to create task");
       return mapTask(row);
