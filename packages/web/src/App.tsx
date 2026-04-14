@@ -54,6 +54,7 @@ export default function App() {
   const [showFilterBar, setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     engine: null,
     priority: null,
@@ -361,6 +362,11 @@ export default function App() {
     if (selectedTask) unsubscribe(selectedTask.id);
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
+
+  const handleSkillClick = useCallback((skillName: string) => {
+    setInitialSkillName(skillName);
+    setShowSkills(true);
+  }, []);
 
   const handleTaskMove = useCallback(
     async (taskId: string, newStatus: TaskStatus, newOrder: number) => {
@@ -826,6 +832,7 @@ export default function App() {
               await updateTask(id, data);
             }}
             onTaskRefresh={refresh}
+            onSkillClick={handleSkillClick}
           />
         )}
 
@@ -903,7 +910,14 @@ export default function App() {
 
         <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
 
-        <SkillsBrowser open={showSkills} onClose={() => setShowSkills(false)} />
+        <SkillsBrowser
+          open={showSkills}
+          onClose={() => {
+            setShowSkills(false);
+            setInitialSkillName(null);
+          }}
+          initialSkillName={initialSkillName ?? undefined}
+        />
 
         <Toaster />
       </div>

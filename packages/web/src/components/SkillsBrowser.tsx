@@ -5,7 +5,7 @@ import type {
   SkillsIndex,
   WorkflowEntry,
 } from "@vibe-code/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
@@ -24,12 +24,147 @@ function CountBadge({ count }: { count: number }) {
   );
 }
 
+// ─── Inline Markdown / YAML → HTML renderer ─────────────────────────────────
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderInline(text: string): string {
+  return escapeHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+?)\*/g, "<em>$1</em>")
+    .replace(
+      /`([^`]+)`/g,
+      '<code style="background:#1a1a2e;padding:1px 5px;border-radius:3px;font-size:10px;font-family:monospace;color:#c7b8ea">$1</code>'
+    );
+}
+
+function toHtml(content: string): string {
+  let frontmatter = "";
+  let body = content;
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (fmMatch) {
+    frontmatter = fmMatch[1];
+    body = fmMatch[2].trim();
+  }
+
+  let html = "";
+
+  if (frontmatter) {
+    html +=
+      '<div style="background:#0f0f1a;border:1px solid #2a2a40;border-radius:8px;padding:12px;margin-bottom:14px;">';
+    for (const line of frontmatter.split("\n").filter(Boolean)) {
+      const ci = line.indexOf(":");
+      if (ci > 0) {
+        const k = escapeHtml(line.slice(0, ci).trim());
+        const v = escapeHtml(line.slice(ci + 1).trim());
+        html += `<div style="display:flex;gap:12px;margin-bottom:5px;font-size:11px"><span style="color:#8b5cf6;font-family:monospace;min-width:90px;flex-shrink:0">${k}</span><span style="color:#d4d4d8">${v}</span></div>`;
+      } else {
+        html += `<div style="color:#52525b;font-size:11px;font-family:monospace">${escapeHtml(line)}</div>`;
+      }
+    }
+    html += "</div>";
+  }
+
+  const lines = body.split("\n");
+  let inCode = false;
+  let codeLines: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (inCode) {
+        html += `<pre style="background:#0a0a14;border:1px solid #1e1e30;border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:#9ca3af;margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+        codeLines = [];
+        inCode = false;
+      } else {
+        if (inList) {
+          html += "</ul>";
+          inList = false;
+        }
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (line.startsWith("# ")) {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      html += `<h1 style="font-size:16px;font-weight:700;color:#f4f4f5;margin:18px 0 8px">${renderInline(line.slice(2))}</h1>`;
+    } else if (line.startsWith("## ")) {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      html += `<h2 style="font-size:14px;font-weight:600;color:#e4e4e7;margin:16px 0 6px;border-bottom:1px solid #27272a;padding-bottom:4px">${renderInline(line.slice(3))}</h2>`;
+    } else if (line.startsWith("### ")) {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      html += `<h3 style="font-size:13px;font-weight:600;color:#a1a1aa;margin:12px 0 4px">${renderInline(line.slice(4))}</h3>`;
+    } else if (line.startsWith("#### ")) {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      html += `<h4 style="font-size:12px;font-weight:600;color:#71717a;margin:10px 0 3px">${renderInline(line.slice(5))}</h4>`;
+    } else if (/^\s*[-*] /.test(line)) {
+      if (!inList) {
+        html += '<ul style="margin:6px 0 6px 16px;list-style:disc">';
+        inList = true;
+      }
+      html += `<li style="color:#a1a1aa;font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().slice(2))}</li>`;
+    } else if (/^\s*\d+\. /.test(line)) {
+      if (!inList) {
+        html += '<ol style="margin:6px 0 6px 16px;list-style:decimal">';
+        inList = true;
+      }
+      html += `<li style="color:#a1a1aa;font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().replace(/^\d+\.\s*/, ""))}</li>`;
+    } else if (line.trim() === "") {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+    } else {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+      if (line.startsWith("> ")) {
+        html += `<blockquote style="border-left:3px solid #3f3f46;padding-left:10px;margin:6px 0;color:#71717a;font-size:11.5px;font-style:italic">${renderInline(line.slice(2))}</blockquote>`;
+      } else {
+        html += `<p style="color:#a1a1aa;font-size:12px;margin:4px 0;line-height:1.6">${renderInline(line)}</p>`;
+      }
+    }
+  }
+
+  if (inList) html += "</ul>";
+  if (inCode && codeLines.length > 0) {
+    html += `<pre style="background:#0a0a14;border:1px solid #1e1e30;border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:#9ca3af;margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+  }
+
+  return html;
+}
+// ─── End renderer ────────────────────────────────────────────────────────────
+
 interface SkillsBrowserProps {
   open: boolean;
   onClose: () => void;
+  initialSkillName?: string;
 }
 
-export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
+export function SkillsBrowser({ open, onClose, initialSkillName }: SkillsBrowserProps) {
   const [tab, setTab] = useState<Tab>("rules");
   const [index, setIndex] = useState<SkillsIndex | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,7 +173,9 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
   const [selected, setSelected] = useState<AnyEntry | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"raw" | "rendered">("raw");
   const [refreshing, setRefreshing] = useState(false);
+  const autoSelectedRef = useRef<string | null>(null);
 
   const loadIndex = useCallback(async () => {
     setLoading(true);
@@ -57,20 +194,11 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
     if (open) loadIndex();
   }, [open, loadIndex]);
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await api.skills.refresh();
-      await loadIndex();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleSelect = async (entry: AnyEntry) => {
+  const handleSelect = useCallback(async (entry: AnyEntry) => {
     setSelected(entry);
     setPreviewContent(null);
     setPreviewLoading(true);
+    setPreviewMode("raw");
     try {
       const result = await api.skills.content(entry.filePath);
       setPreviewContent(result.content);
@@ -78,6 +206,40 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
       setPreviewContent(`Erro ao carregar: ${err instanceof Error ? err.message : err}`);
     } finally {
       setPreviewLoading(false);
+    }
+  }, []);
+
+  // Auto-select entry when initialSkillName is provided and index is loaded
+  useEffect(() => {
+    if (!open || !initialSkillName || !index) return;
+    if (autoSelectedRef.current === initialSkillName) return;
+    autoSelectedRef.current = initialSkillName;
+
+    const allEntries: [Tab, AnyEntry][] = [
+      ...index.rules.map((e): [Tab, AnyEntry] => ["rules", e]),
+      ...index.skills.map((e): [Tab, AnyEntry] => ["skills", e]),
+      ...index.agents.map((e): [Tab, AnyEntry] => ["agents", e]),
+      ...index.workflows.map((e): [Tab, AnyEntry] => ["workflows", e]),
+    ];
+    const found = allEntries.find(([, e]) => e.name === initialSkillName);
+    if (!found) return;
+    const [foundTab, foundEntry] = found;
+    setTab(foundTab);
+    handleSelect(foundEntry);
+  }, [open, initialSkillName, index, handleSelect]);
+
+  // Reset auto-select tracking when dialog closes
+  useEffect(() => {
+    if (!open) autoSelectedRef.current = null;
+  }, [open]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await api.skills.refresh();
+      await loadIndex();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -246,7 +408,7 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
           {selected && (
             <>
               <div className="flex items-start justify-between gap-2">
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                     {selected.name}
                   </h3>
@@ -254,12 +416,49 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
                     {selected.description || "Sem descrição"}
                   </p>
                 </div>
-                <span
-                  className="text-[9px] font-mono px-1.5 py-0.5 rounded shrink-0"
-                  style={{ background: "var(--bg-input)", color: "var(--text-dimmed)" }}
-                >
-                  {selected.filePath.split("/").pop()}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Raw / Rendered toggle */}
+                  {previewContent && !previewLoading && (
+                    <div
+                      className="flex rounded-md overflow-hidden border text-[10px]"
+                      style={{ borderColor: "var(--glass-border)" }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("raw")}
+                        className="px-2 py-0.5 cursor-pointer transition-colors"
+                        style={{
+                          background: previewMode === "raw" ? "var(--bg-surface)" : "transparent",
+                          color:
+                            previewMode === "raw" ? "var(--text-primary)" : "var(--text-muted)",
+                        }}
+                      >
+                        Raw
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("rendered")}
+                        className="px-2 py-0.5 cursor-pointer transition-colors"
+                        style={{
+                          background:
+                            previewMode === "rendered" ? "var(--bg-surface)" : "transparent",
+                          color:
+                            previewMode === "rendered"
+                              ? "var(--text-primary)"
+                              : "var(--text-muted)",
+                        }}
+                      >
+                        Renderizado
+                      </button>
+                    </div>
+                  )}
+                  <span
+                    className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+                    style={{ background: "var(--bg-input)", color: "var(--text-dimmed)" }}
+                  >
+                    {selected.filePath.split("/").pop()}
+                  </span>
+                </div>
               </div>
               {previewLoading ? (
                 <div className="flex-1 flex items-center justify-center">
@@ -267,6 +466,13 @@ export function SkillsBrowser({ open, onClose }: SkillsBrowserProps) {
                     Carregando...
                   </p>
                 </div>
+              ) : previewMode === "rendered" && previewContent ? (
+                <div
+                  className="flex-1 overflow-auto p-4 rounded-lg"
+                  style={{ background: "var(--bg-input)" }}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted local ~/.agents/ content
+                  dangerouslySetInnerHTML={{ __html: toHtml(previewContent) }}
+                />
               ) : (
                 <pre
                   className="flex-1 text-xs p-3 rounded-lg overflow-auto whitespace-pre-wrap font-mono"
