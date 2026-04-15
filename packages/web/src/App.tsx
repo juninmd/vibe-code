@@ -758,6 +758,8 @@ export default function App() {
               onFilterChange={setFilters}
               availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
               availableTags={availableTags}
+              search={search}
+              onSearchChange={setSearch}
             />
           )}
 
@@ -847,7 +849,15 @@ export default function App() {
           />
         )}
 
-        {showEnginesPanel && <EnginesPanel onClose={() => setShowEnginesPanel(false)} />}
+        {showEnginesPanel && (
+          <EnginesPanel
+            onClose={() => setShowEnginesPanel(false)}
+            onOpenSettings={() => {
+              setShowEnginesPanel(false);
+              setShowSettings(true);
+            }}
+          />
+        )}
 
         {/* Shortcuts Modal */}
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
@@ -877,6 +887,18 @@ export default function App() {
             onOpenSettings={() => {
               setShowCommandPalette(false);
               setShowSettings(true);
+            }}
+            onOpenSkills={() => {
+              setShowCommandPalette(false);
+              setShowSkills(true);
+            }}
+            onOpenEngines={() => {
+              setShowCommandPalette(false);
+              setShowEnginesPanel(true);
+            }}
+            onOpenStats={() => {
+              setShowCommandPalette(false);
+              setShowStats(true);
             }}
           />
         )}

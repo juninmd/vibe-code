@@ -8,6 +8,7 @@ import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
+import { GitGenericIcon, GitHubIcon, GitLabIcon } from "./ui/git-icons";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Textarea } from "./ui/textarea";
@@ -311,6 +312,23 @@ export function NewTaskDialog({
                     }))}
                 />
               </div>
+              {repoId &&
+                (() => {
+                  const selectedRepo = repos.find((r) => r.id === repoId);
+                  if (!selectedRepo) return null;
+                  const ProviderIcon =
+                    selectedRepo.provider === "github"
+                      ? GitHubIcon
+                      : selectedRepo.provider === "gitlab"
+                        ? GitLabIcon
+                        : GitGenericIcon;
+                  return (
+                    <div className="flex items-center gap-1.5 mt-1.5 px-1">
+                      <ProviderIcon size={11} className="shrink-0 text-zinc-500" />
+                      <span className="text-[11px] text-zinc-500 truncate">{selectedRepo.url}</span>
+                    </div>
+                  );
+                })()}
             </div>
 
             {/* Advanced toggle */}
