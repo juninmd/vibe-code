@@ -9,6 +9,6 @@
     "build": "exit 0"
   },
   "devDependencies": {
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.2"
   }
 }

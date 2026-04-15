@@ -52,6 +52,7 @@ interface TaskRow {
   matched_skills: string | null;
   tags: string | null;
   notes: string | null;
+  planner_spec: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +70,7 @@ interface RunRow {
   error_message: string | null;
   litellm_token_id: string | null;
   matched_skills: string | null;
+  state_snapshot: string | null;
   created_at: string;
 }
 
@@ -117,6 +119,7 @@ function mapTask(row: TaskRow): Task {
     matchedSkills: JSON.parse(row.matched_skills || "[]") as string[],
     tags: JSON.parse(row.tags || "[]") as string[],
     notes: row.notes ?? "",
+    plannerSpec: row.planner_spec ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -136,6 +139,7 @@ function mapRun(row: RunRow): AgentRun {
     errorMessage: row.error_message,
     litellmTokenId: row.litellm_token_id,
     matchedSkills: row.matched_skills,
+    stateSnapshot: row.state_snapshot,
     createdAt: row.created_at,
   };
 }
@@ -335,6 +339,11 @@ export function createTaskQueries(db: Database) {
       const row = db.prepare(sql).get(value, id) as TaskRow | null;
       return row ? mapTask(row) : null;
     },
+    updatePlannerSpec: (id: string, spec: string): void => {
+      db.prepare(
+        "UPDATE tasks SET planner_spec = ?, updated_at = datetime('now') WHERE id = ?"
+      ).run(spec, id);
+    },
     remove: (id: string): void => {
       stmts.remove.run(id);
     },
@@ -463,6 +472,10 @@ export function createRunQueries(db: Database) {
         JSON.stringify(skills),
         id
       );
+    },
+    updateStateSnapshot: (id: string, phase: string): void => {
+      const snapshot = JSON.stringify({ phase, ts: new Date().toISOString() });
+      db.prepare("UPDATE agent_runs SET state_snapshot = ? WHERE id = ?").run(snapshot, id);
     },
   };
 }

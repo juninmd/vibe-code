@@ -5,6 +5,7 @@ import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
+import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
 export class AiderEngine implements AgentEngine {
   name = "aider";
@@ -116,11 +117,15 @@ export class AiderEngine implements AgentEngine {
 
     if (options.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(
-      proc,
-      (line) => {
-        return [{ type: "log", stream: "stdout", content: line }];
-      },
+    yield* withHeartbeat(
+      streamProcess(
+        proc,
+        (line) => {
+          return [{ type: "log", stream: "stdout", content: line }];
+        },
+        options.signal
+      ),
+      getHeartbeatIntervalMs(),
       options.signal
     );
 

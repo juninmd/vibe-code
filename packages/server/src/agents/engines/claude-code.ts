@@ -5,6 +5,7 @@ import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
+import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
 export class ClaudeCodeEngine implements AgentEngine {
   name = "claude-code";
@@ -108,31 +109,35 @@ export class ClaudeCodeEngine implements AgentEngine {
 
     if (options.runId) this.processes.set(options.runId, proc);
 
-    yield* streamProcess(
-      proc,
-      (line) => {
-        try {
-          const parsed = JSON.parse(line);
-          if (parsed.type === "assistant" && parsed.content) {
-            const events: AgentEvent[] = [];
-            for (const block of parsed.content) {
-              if (block.type === "text") {
-                events.push({ type: "log", stream: "stdout", content: block.text });
-              } else if (block.type === "tool_use") {
-                events.push({
-                  type: "log",
-                  stream: "system",
-                  content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`,
-                });
+    yield* withHeartbeat(
+      streamProcess(
+        proc,
+        (line) => {
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.type === "assistant" && parsed.content) {
+              const events: AgentEvent[] = [];
+              for (const block of parsed.content) {
+                if (block.type === "text") {
+                  events.push({ type: "log", stream: "stdout", content: block.text });
+                } else if (block.type === "tool_use") {
+                  events.push({
+                    type: "log",
+                    stream: "system",
+                    content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`,
+                  });
+                }
               }
+              return events;
             }
-            return events;
+            return [];
+          } catch {
+            return [{ type: "log", stream: "stdout", content: line }];
           }
-          return [];
-        } catch {
-          return [{ type: "log", stream: "stdout", content: line }];
-        }
-      },
+        },
+        options.signal
+      ),
+      getHeartbeatIntervalMs(),
       options.signal
     );
 
