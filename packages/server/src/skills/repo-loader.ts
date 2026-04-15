@@ -92,6 +92,7 @@ export class RepoSkillsLoader {
           description: meta.description || "",
           category: "skill",
           filePath: skillFile,
+          scope: "workspace",
         });
       } catch {
         // Skip unreadable
@@ -118,6 +119,7 @@ export class RepoSkillsLoader {
           applyTo: meta.applyTo || "",
           category: "rule",
           filePath,
+          scope: "workspace",
         });
       } catch {
         // Skip unreadable
@@ -143,6 +145,7 @@ export class RepoSkillsLoader {
           description: meta.description || "",
           category: "agent",
           filePath,
+          scope: "workspace",
         });
       } catch {
         // Skip unreadable
@@ -168,6 +171,7 @@ export class RepoSkillsLoader {
           description: meta.description || "",
           category: "workflow",
           filePath,
+          scope: "workspace",
         });
       } catch {
         // Skip unreadable

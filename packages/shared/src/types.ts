@@ -381,6 +381,7 @@ export interface SkillEntry {
   description: string;
   category: "skill";
   filePath: string;
+  scope?: "global" | "workspace";
 }
 
 export interface RuleEntry {
@@ -389,6 +390,7 @@ export interface RuleEntry {
   applyTo: string;
   category: "rule";
   filePath: string;
+  scope?: "global" | "workspace";
 }
 
 export interface AgentEntry {
@@ -396,6 +398,7 @@ export interface AgentEntry {
   description: string;
   category: "agent";
   filePath: string;
+  scope?: "global" | "workspace";
 }
 
 export interface WorkflowEntry {
@@ -403,6 +406,7 @@ export interface WorkflowEntry {
   description: string;
   category: "workflow";
   filePath: string;
+  scope?: "global" | "workspace";
 }
 
 export type SkillsEntry = SkillEntry | RuleEntry | AgentEntry | WorkflowEntry;

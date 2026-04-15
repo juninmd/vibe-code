@@ -490,7 +490,14 @@ export function Sidebar({
                       >
                         <ProvIcon size={13} />
                       </span>
-                      <span className="truncate flex-1 font-medium">{repo.name}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="block truncate font-medium">{repo.name}</span>
+                        {repo.status === "error" && repo.errorMessage && (
+                          <span className="block text-[9px] text-red-400/80 truncate mt-0.5">
+                            {repo.errorMessage}
+                          </span>
+                        )}
+                      </div>
                       {repo.status !== "ready" && (
                         <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
                           {meta.label}

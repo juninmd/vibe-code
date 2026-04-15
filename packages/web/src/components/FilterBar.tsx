@@ -10,6 +10,8 @@ interface FilterBarProps {
   onFilterChange: (filters: Filters) => void;
   availableEngines: string[];
   availableTags: string[];
+  search?: string;
+  onSearchChange?: (s: string) => void;
 }
 
 const PRIORITIES = [
@@ -48,6 +50,8 @@ export function FilterBar({
   onFilterChange,
   availableEngines,
   availableTags,
+  search,
+  onSearchChange,
 }: FilterBarProps) {
   const hasActiveFilter =
     filters.engine !== null ||
@@ -59,6 +63,15 @@ export function FilterBar({
 
   return (
     <div className="flex items-center gap-2 px-4 py-1.5 border-b border-zinc-800/60 flex-wrap text-xs">
+      {onSearchChange !== undefined && (
+        <input
+          type="text"
+          value={search ?? ""}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Buscar tarefas..."
+          className="bg-zinc-900/60 border border-zinc-700 rounded px-2.5 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-36 shrink-0"
+        />
+      )}
       <span className="text-zinc-600 shrink-0">Filtros:</span>
 
       {availableEngines.map((eng) => (

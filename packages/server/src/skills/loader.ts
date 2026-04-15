@@ -71,6 +71,7 @@ async function loadSkills(basePath: string): Promise<SkillEntry[]> {
         description: meta.description || "",
         category: "skill",
         filePath: skillFile,
+        scope: "global",
       });
     } catch {
       // Skill dir without SKILL.md — skip
@@ -97,6 +98,7 @@ async function loadRules(basePath: string): Promise<RuleEntry[]> {
         applyTo: meta.applyTo || "",
         category: "rule",
         filePath,
+        scope: "global",
       });
     } catch {
       // Unreadable rule file — skip
@@ -122,6 +124,7 @@ async function loadAgents(basePath: string): Promise<AgentEntry[]> {
         description: meta.description || "",
         category: "agent",
         filePath,
+        scope: "global",
       });
     } catch {
       // Unreadable agent file — skip
@@ -147,6 +150,7 @@ async function loadWorkflows(basePath: string): Promise<WorkflowEntry[]> {
         description: meta.description || "",
         category: "workflow",
         filePath,
+        scope: "global",
       });
     } catch {
       // Unreadable workflow file — skip

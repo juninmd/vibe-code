@@ -24,7 +24,13 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function EngineCard({ engine }: { engine: EngineInfo }) {
+function EngineCard({
+  engine,
+  onOpenSettings,
+}: {
+  engine: EngineInfo;
+  onOpenSettings?: () => void;
+}) {
   const meta = getEngineMeta(engine.name);
   const Icon = meta.icon;
 
@@ -125,8 +131,20 @@ function EngineCard({ engine }: { engine: EngineInfo }) {
         >
           {engine.setupIssue}
           {needsConfig && (
-            <span className="block mt-1 text-[11px]">
-              Abra Configurações para concluir a configuração.
+            <span className="flex items-center gap-1 mt-1 text-[11px]">
+              Abra{" "}
+              {onOpenSettings ? (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="underline text-amber-200 hover:text-amber-100 cursor-pointer"
+                >
+                  Configurações
+                </button>
+              ) : (
+                "Configurações"
+              )}{" "}
+              para concluir a configuração.
             </span>
           )}
         </div>
@@ -159,9 +177,10 @@ function EngineCard({ engine }: { engine: EngineInfo }) {
 
 interface EnginesPanelProps {
   onClose: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function EnginesPanel({ onClose }: EnginesPanelProps) {
+export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -260,7 +279,9 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
           ) : engines.length === 0 ? (
             <div className="text-center py-12 text-zinc-600 text-sm">Nenhum engine registrado</div>
           ) : (
-            engines.map((engine) => <EngineCard key={engine.name} engine={engine} />)
+            engines.map((engine) => (
+              <EngineCard key={engine.name} engine={engine} onOpenSettings={onOpenSettings} />
+            ))
           )}
         </div>
 

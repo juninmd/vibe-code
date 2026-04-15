@@ -21,6 +21,9 @@ interface CommandPaletteProps {
   onNewTask: () => void;
   onAddRepo: () => void;
   onOpenSettings: () => void;
+  onOpenSkills?: () => void;
+  onOpenEngines?: () => void;
+  onOpenStats?: () => void;
 }
 
 const STATUS_ICONS: Record<string, string> = {
@@ -86,6 +89,9 @@ export function CommandPalette({
   onNewTask,
   onAddRepo,
   onOpenSettings,
+  onOpenSkills,
+  onOpenEngines,
+  onOpenStats,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
@@ -133,6 +139,51 @@ export function CommandPalette({
           onClose();
         },
       },
+      ...(onOpenSkills
+        ? [
+            {
+              id: "open-skills",
+              label: "Skills & Regras",
+              description: "Gerenciar skills, regras e agentes",
+              icon: "✦",
+              group: "Actions",
+              onSelect: () => {
+                onOpenSkills();
+                onClose();
+              },
+            },
+          ]
+        : []),
+      ...(onOpenEngines
+        ? [
+            {
+              id: "open-engines",
+              label: "Engines",
+              description: "Ver status dos agentes de IA",
+              icon: "◈",
+              group: "Actions",
+              onSelect: () => {
+                onOpenEngines();
+                onClose();
+              },
+            },
+          ]
+        : []),
+      ...(onOpenStats
+        ? [
+            {
+              id: "open-stats",
+              label: "Estatísticas",
+              description: "Ver estatísticas de tarefas",
+              icon: "▦",
+              group: "Actions",
+              onSelect: () => {
+                onOpenStats();
+                onClose();
+              },
+            },
+          ]
+        : []),
     ];
 
     const taskItems: Action[] = tasks
@@ -202,6 +253,9 @@ export function CommandPalette({
     onNewTask,
     onAddRepo,
     onOpenSettings,
+    onOpenSkills,
+    onOpenEngines,
+    onOpenStats,
   ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset to 0 whenever query changes

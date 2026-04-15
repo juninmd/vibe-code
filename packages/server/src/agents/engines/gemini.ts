@@ -189,7 +189,7 @@ export class GeminiEngine implements AgentEngine {
       content: `[gemini] Run context: model=${options.model ?? "default"}, runId=${options.runId ?? "n/a"}`,
     };
 
-    const args = ["gemini", "--yolo"];
+    const args = ["gemini", "--yolo", "--output-format", "stream-json"];
     if (options.model) args.push("-m", options.model);
     const guardedPrompt = `${NO_PLAN_MODE_GUARD}\n\n${prompt}`;
     args.push("-p", guardedPrompt);
@@ -228,9 +228,74 @@ export class GeminiEngine implements AgentEngine {
       streamProcess(
         proc,
         (line) => {
+          // Try to parse as JSON (stream-json format emits JSONL)
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(line);
+          } catch {
+            parsed = null;
+          }
+
+          if (parsed && typeof parsed === "object") {
+            const obj = parsed as Record<string, unknown>;
+
+            // Final result: { session_id, result }
+            if (obj.session_id && obj.result) {
+              const result = obj.result as Record<string, unknown>;
+              const text = typeof result.text === "string" ? result.text : null;
+              if (text) return [{ type: "log", stream: "stdout", content: text }];
+              return [];
+            }
+
+            // Error: { session_id, error }
+            if (obj.session_id && obj.error) {
+              const err = obj.error as Record<string, unknown>;
+              const msg = typeof err.message === "string" ? err.message : JSON.stringify(err);
+              const events: AgentEvent[] = [
+                { type: "log", stream: "stderr", content: `[gemini] ${msg}` },
+              ];
+              if (msg.includes("GEMINI_API_KEY")) {
+                events.push({
+                  type: "log",
+                  stream: "system",
+                  content: options.litellmKey
+                    ? "[gemini] LiteLLM proxy key rejected. Check LITELLM_BASE_URL and the virtual key."
+                    : "[gemini] GEMINI_API_KEY not found. Add it in Settings → API Keys.",
+                });
+              }
+              return events;
+            }
+
+            // Text content events
+            const text =
+              typeof obj.text === "string"
+                ? obj.text
+                : typeof obj.content === "string"
+                  ? obj.content
+                  : null;
+            if (text) {
+              const status = this.deriveStatusFromLine(text);
+              if (status)
+                return [
+                  { type: "status", content: status },
+                  { type: "log", stream: "stdout", content: text },
+                ] satisfies AgentEvent[];
+              return [{ type: "log", stream: "stdout", content: text }];
+            }
+
+            // Tool call notification
+            if (obj.type === "tool_use" || obj.type === "tool_call") {
+              const name = typeof obj.name === "string" ? obj.name : "tool";
+              return [{ type: "log", stream: "system", content: `[tool] ${name}` }];
+            }
+
+            // Unknown JSON event — emit as system log
+            return [{ type: "log", stream: "system", content: line }];
+          }
+
+          // Not JSON — fall back to existing text status handling
           const status = this.deriveStatusFromLine(line);
           if (status) {
-            // Yield only the status event — the log would be redundant when a status is derived
             return [
               { type: "status", content: status },
               { type: "log", stream: "stdout", content: line },

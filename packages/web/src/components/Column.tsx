@@ -84,6 +84,8 @@ interface ColumnProps {
   collapsible?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** When true, the column stretches to fill available width instead of using fixed 272px */
+  fillWidth?: boolean;
 }
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
@@ -170,6 +172,7 @@ function ColumnComponent({
   collapsible = false,
   collapsed = false,
   onToggleCollapse,
+  fillWidth = false,
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
@@ -179,7 +182,7 @@ function ColumnComponent({
     <div
       ref={setNodeRef}
       className={`flex flex-col rounded-2xl glass-card border transition-all duration-200 ${
-        horizontal ? "w-full" : "min-w-[272px] w-[272px] shrink-0"
+        horizontal ? "w-full" : fillWidth ? "w-full" : "min-w-[272px] w-[272px] shrink-0"
       } ${isOver ? "ring-2 ring-violet-500/40 brightness-105" : ""}`}
     >
       {/* Column header */}

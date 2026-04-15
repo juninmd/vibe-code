@@ -40,8 +40,10 @@ export function Board({
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
   const [scheduledCollapsed, setScheduledCollapsed] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(SCHEDULED_COLLAPSED_KEY) === "1";
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(SCHEDULED_COLLAPSED_KEY);
+    // Default to collapsed (true) unless explicitly set to "0"
+    return stored !== "0";
   });
   const noopTaskClick = useCallback(() => {}, []);
 
@@ -111,6 +113,28 @@ export function Board({
       onDragEnd={handleDragEnd}
     >
       <div className="flex flex-col gap-4 pb-4 h-full">
+        {/* Main columns — fill all available horizontal space */}
+        <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
+          {BOARD_COLUMNS.filter(
+            (status) =>
+              status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
+          ).map((status) => (
+            <div key={status} className="flex-1 min-w-[220px] flex flex-col overflow-hidden">
+              <Column
+                status={status}
+                tasks={tasksByColumn[status]}
+                onTaskClick={onTaskClick}
+                onRetryPR={onRetryPR}
+                onArchiveDone={onArchiveDone}
+                onClearFailed={onClearFailed}
+                onRetryAllFailed={onRetryAllFailed}
+                fillWidth
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Scheduled tasks — collapsible strip at the bottom */}
         <Column
           status="scheduled"
           tasks={tasksByColumn.scheduled}
@@ -129,24 +153,6 @@ export function Board({
             });
           }}
         />
-
-        <div className="flex gap-4 overflow-x-auto min-h-0">
-          {BOARD_COLUMNS.filter(
-            (status) =>
-              status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
-          ).map((status) => (
-            <Column
-              key={status}
-              status={status}
-              tasks={tasksByColumn[status]}
-              onTaskClick={onTaskClick}
-              onRetryPR={onRetryPR}
-              onArchiveDone={onArchiveDone}
-              onClearFailed={onClearFailed}
-              onRetryAllFailed={onRetryAllFailed}
-            />
-          ))}
-        </div>
       </div>
 
       <DragOverlay>

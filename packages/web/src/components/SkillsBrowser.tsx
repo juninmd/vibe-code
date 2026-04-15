@@ -201,7 +201,7 @@ export function SkillsBrowser({
   const [selected, setSelected] = useState<AnyEntry | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewMode, setPreviewMode] = useState<"raw" | "rendered">("raw");
+  const [previewMode, setPreviewMode] = useState<"raw" | "rendered">("rendered");
   const [refreshing, setRefreshing] = useState(false);
   const autoSelectedRef = useRef<string | null>(null);
 
@@ -226,7 +226,7 @@ export function SkillsBrowser({
     setSelected(entry);
     setPreviewContent(null);
     setPreviewLoading(true);
-    setPreviewMode("raw");
+    setPreviewMode("rendered");
     try {
       const result = await api.skills.content(entry.filePath);
       setPreviewContent(result.content);
@@ -455,6 +455,14 @@ export function SkillsBrowser({
                     >
                       {entry.name}
                     </span>
+                    {(entry as AnyEntry & { scope?: string }).scope === "workspace" && (
+                      <span
+                        className="text-[8px] font-semibold uppercase px-1 py-0.5 rounded shrink-0"
+                        style={{ background: "rgba(16,185,129,0.15)", color: "#34d399" }}
+                      >
+                        workspace
+                      </span>
+                    )}
                     {applyTo && (
                       <span
                         className="text-[9px] px-1 py-0.5 rounded shrink-0"
