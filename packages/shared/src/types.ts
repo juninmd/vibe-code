@@ -53,6 +53,9 @@ export interface Task {
   branchName: string | null;
   prUrl: string | null;
   parentTaskId: string | null;
+  agentId: string | null;
+  workflowId: string | null;
+  matchedSkills: string[];
   tags: string[];
   notes: string;
   createdAt: string;
@@ -70,6 +73,8 @@ export interface AgentRun {
   finishedAt: string | null;
   exitCode: number | null;
   errorMessage: string | null;
+  litellmTokenId?: string | null;
+  matchedSkills?: string | null;
   createdAt: string;
 }
 
@@ -137,6 +142,8 @@ export interface CreateTaskRequest {
   baseBranch?: string;
   priority?: number;
   tags?: string[];
+  agentId?: string;
+  workflowId?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -221,7 +228,8 @@ export interface DiffSummary {
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string }
   | { type: "unsubscribe"; taskId: string }
-  | { type: "agent_input"; taskId: string; input: string };
+  | { type: "agent_input"; taskId: string; input: string }
+  | { type: "ping" };
 
 export type WsServerMessage =
   | { type: "task_updated"; task: Task }
@@ -243,6 +251,16 @@ export type WsServerMessage =
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
   | { type: "error"; message: string };
 
+// ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
+
+export interface TaskSpec {
+  objective: string;
+  acceptance: string[];
+  constraints: string[];
+  context: string;
+  outOfScope: string[];
+}
+
 // ─── Settings Types ──────────────────────────────────────────────────────────
 
 export interface ProviderSettings {
@@ -252,15 +270,26 @@ export interface ProviderSettings {
   username?: string;
 }
 
-export interface GeminiSettings {
-  apiKey: string;
-  keySet: boolean;
+export interface LiteLLMSettings {
+  baseUrl: string;
+  enabled: boolean;
+}
+
+export interface ApiKeyEntry {
+  tokenSet: boolean;
+  token: string;
 }
 
 export interface SettingsResponse {
   github: ProviderSettings;
   gitlab: ProviderSettings;
-  gemini: GeminiSettings;
+  litellm: LiteLLMSettings;
+  apiKeys: {
+    gemini: ApiKeyEntry;
+    anthropic: ApiKeyEntry;
+    openai: ApiKeyEntry;
+  };
+  skillsPath: string;
   theme: string;
 }
 
@@ -268,7 +297,11 @@ export interface UpdateSettingsRequest {
   githubToken?: string;
   gitlabToken?: string;
   gitlabBaseUrl?: string;
+  litellmBaseUrl?: string;
+  litellmEnabled?: boolean;
   geminiApiKey?: string;
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
   theme?: string;
 }
 
@@ -284,6 +317,7 @@ export interface StatsOverview {
   totalRepos: number;
   totalTasks: number;
   totalRuns: number;
+  failedRuns: number;
   successRate: number;
   avgRunDurationSecs: number;
   totalPRsCreated: number;
@@ -332,4 +366,116 @@ export interface StatsResponse {
   dailyActivity: DailyActivity[];
   favoriteEngine: string | null;
   favoriteModel: string | null;
+}
+
+// ─── Skills / Rules / Agents / Workflows Types ──────────────────────────────
+
+export type SkillCategory = "skill" | "rule" | "agent" | "workflow";
+
+export interface SkillEntry {
+  name: string;
+  description: string;
+  category: "skill";
+  filePath: string;
+}
+
+export interface RuleEntry {
+  name: string;
+  description: string;
+  applyTo: string;
+  category: "rule";
+  filePath: string;
+}
+
+export interface AgentEntry {
+  name: string;
+  description: string;
+  category: "agent";
+  filePath: string;
+}
+
+export interface WorkflowEntry {
+  name: string;
+  description: string;
+  category: "workflow";
+  filePath: string;
+}
+
+export type SkillsEntry = SkillEntry | RuleEntry | AgentEntry | WorkflowEntry;
+
+export interface SkillsIndex {
+  skills: SkillEntry[];
+  rules: RuleEntry[];
+  agents: AgentEntry[];
+  workflows: WorkflowEntry[];
+}
+
+// ─── Skill Payload (structured context for engines) ─────────────────────────
+
+export interface SkillPayloadItem {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export interface SkillPayload {
+  rules: SkillPayloadItem[];
+  skills: SkillPayloadItem[];
+  workflow: SkillPayloadItem | null;
+  agents: SkillPayloadItem[];
+  projectInstructions: string | null;
+}
+
+// ─── Review Finding (persisted feedback) ────────────────────────────────────
+
+export interface ReviewFinding {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  persona: string;
+  severity: "blocker" | "warning" | "info";
+  content: string;
+  filePath: string | null;
+  resolved: boolean;
+  createdAt: string;
+}
+
+// ─── Run Metrics (evaluation harness) ───────────────────────────────────────
+
+export interface RunMetrics {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  engine: string;
+  model: string | null;
+  matchedSkills: string[];
+  matchedRules: string[];
+  durationMs: number | null;
+  validatorAttempts: number;
+  reviewBlockers: number;
+  reviewWarnings: number;
+  finalStatus: string;
+  prCreated: boolean;
+  createdAt: string;
+}
+
+// ─── Skill Stats (evaluation responses) ─────────────────────────────────────
+
+export interface SkillEffectiveness {
+  name: string;
+  totalRuns: number;
+  successRate: number;
+  avgBlockers: number;
+  avgWarnings: number;
+}
+
+export interface EngineEffectiveness {
+  engine: string;
+  totalRuns: number;
+  successRate: number;
+  avgDurationSecs: number;
+  avgBlockers: number;
+  prRate: number;
 }

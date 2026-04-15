@@ -1,41 +1,47 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "../agents/litellm-client";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
+import type { SkillsLoader } from "../skills/loader";
 
 function maskToken(token: string | null | undefined): string {
   if (!token || token.length < 5) return "";
   return "•".repeat(token.length - 4) + token.slice(-4);
 }
 
-function normalizeGeminiApiKey(raw: string | undefined): string {
-  const value = (raw ?? "").trim();
-  if (!value) return "";
-  // Support pasted "GEMINI_API_KEY=..." values from .env examples.
-  if (value.startsWith("GEMINI_API_KEY=")) {
-    return value.slice("GEMINI_API_KEY=".length).trim();
-  }
-  return value;
-}
-
 const updateSettingsSchema = z.object({
   githubToken: z.string().optional(),
   gitlabToken: z.string().optional(),
   gitlabBaseUrl: z.string().optional(),
+  litellmBaseUrl: z.string().optional(),
+  litellmEnabled: z.boolean().optional(),
   geminiApiKey: z.string().optional(),
+  anthropicApiKey: z.string().optional(),
+  openaiApiKey: z.string().optional(),
+  skillsPath: z.string().optional(),
   theme: z.string().optional(),
 });
 
-export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry) {
+export function createSettingsRouter(
+  db: Db,
+  providerRegistry?: ProviderRegistry,
+  skillsLoader?: SkillsLoader
+) {
   const app = new Hono();
 
   // GET /api/settings — return current settings (tokens masked)
   app.get("/", (c) => {
     const ghToken = db.settings.get("github_token");
     const glToken = db.settings.get("gitlab_token");
-    const geminiApiKey = db.settings.get("gemini_api_key") || process.env.GEMINI_API_KEY || null;
     const glBaseUrl = db.settings.get("gitlab_base_url") || "https://gitlab.com";
     const theme = db.settings.get("theme") || "dark";
+    const litellmBaseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+    const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
+    const skillsPath = db.settings.get("skills_path") || "~/.agents";
+    const geminiApiKey = db.settings.get("gemini_api_key");
+    const anthropicApiKey = db.settings.get("anthropic_api_key");
+    const openaiApiKey = db.settings.get("openai_api_key");
 
     return c.json({
       data: {
@@ -50,10 +56,16 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
           baseUrl: glBaseUrl,
           username: db.settings.get("gitlab_username") || undefined,
         },
-        gemini: {
-          apiKey: maskToken(geminiApiKey),
-          keySet: !!geminiApiKey,
+        litellm: {
+          baseUrl: litellmBaseUrl,
+          enabled: litellmEnabled,
         },
+        apiKeys: {
+          gemini: { token: maskToken(geminiApiKey), tokenSet: !!geminiApiKey },
+          anthropic: { token: maskToken(anthropicApiKey), tokenSet: !!anthropicApiKey },
+          openai: { token: maskToken(openaiApiKey), tokenSet: !!openaiApiKey },
+        },
+        skillsPath,
         theme,
         // Legacy compat
         githubToken: maskToken(ghToken),
@@ -107,18 +119,25 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
       db.settings.set("gitlab_base_url", parsed.data.gitlabBaseUrl);
       if (providerRegistry) providerRegistry.rebuildGitLab();
     }
+    if (parsed.data.litellmBaseUrl !== undefined) {
+      db.settings.set("litellm_base_url", parsed.data.litellmBaseUrl.trim());
+    }
+    if (parsed.data.litellmEnabled !== undefined) {
+      db.settings.set("litellm_enabled", parsed.data.litellmEnabled ? "true" : "false");
+    }
     if (parsed.data.geminiApiKey !== undefined) {
-      const geminiApiKey = normalizeGeminiApiKey(parsed.data.geminiApiKey);
-      db.settings.set("gemini_api_key", geminiApiKey);
-      if (geminiApiKey) {
-        process.env.GEMINI_API_KEY = geminiApiKey;
-        console.info(
-          `[settings] Gemini API key atualizada via API (len=${geminiApiKey.length}, masked=${maskToken(geminiApiKey)})`
-        );
-      } else {
-        delete process.env.GEMINI_API_KEY;
-        console.info("[settings] Gemini API key removida via API");
-      }
+      db.settings.set("gemini_api_key", parsed.data.geminiApiKey.trim());
+    }
+    if (parsed.data.anthropicApiKey !== undefined) {
+      db.settings.set("anthropic_api_key", parsed.data.anthropicApiKey.trim());
+    }
+    if (parsed.data.openaiApiKey !== undefined) {
+      db.settings.set("openai_api_key", parsed.data.openaiApiKey.trim());
+    }
+    if (parsed.data.skillsPath !== undefined) {
+      const trimmed = parsed.data.skillsPath.trim();
+      db.settings.set("skills_path", trimmed);
+      skillsLoader?.updatePath(trimmed);
     }
     if (parsed.data.theme !== undefined) {
       db.settings.set("theme", parsed.data.theme);
@@ -144,6 +163,13 @@ export function createSettingsRouter(db: Db, providerRegistry?: ProviderRegistry
     } catch (err: any) {
       return c.json({ data: { ok: false, error: err.message || String(err) } });
     }
+  });
+
+  // GET /api/settings/litellm/health — proxy to LiteLLM health endpoint
+  app.get("/litellm/health", async (c) => {
+    const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+    const healthy = await checkLiteLLMHealth(baseUrl);
+    return c.json({ data: { ok: healthy, baseUrl } });
   });
 
   return app;

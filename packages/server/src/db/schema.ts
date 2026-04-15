@@ -5,6 +5,7 @@ export function initDatabase(dbPath: string): Database {
 
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
+  db.exec("PRAGMA busy_timeout = 5000");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS repositories (
@@ -96,6 +97,9 @@ export function initDatabase(dbPath: string): Database {
   if (!runColNames.includes("current_status")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN current_status TEXT");
   }
+  if (!runColNames.includes("litellm_token_id")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN litellm_token_id TEXT");
+  }
 
   const taskCols = db.query("PRAGMA table_info(tasks)").all() as { name: string }[];
   const taskColNames = taskCols.map((c) => c.name);
@@ -116,6 +120,15 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("notes")) {
     db.exec("ALTER TABLE tasks ADD COLUMN notes TEXT DEFAULT ''");
   }
+  if (!taskColNames.includes("agent_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN agent_id TEXT");
+  }
+  if (!taskColNames.includes("workflow_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN workflow_id TEXT");
+  }
+  if (!taskColNames.includes("matched_skills")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN matched_skills TEXT DEFAULT '[]'");
+  }
 
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];
@@ -123,6 +136,59 @@ export function initDatabase(dbPath: string): Database {
   if (!repoColNames.includes("provider")) {
     db.exec("ALTER TABLE repositories ADD COLUMN provider TEXT NOT NULL DEFAULT 'github'");
   }
+
+  // Migration: matched_skills column on agent_runs (M7.2)
+  if (!runColNames.includes("matched_skills")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN matched_skills TEXT DEFAULT '[]'");
+  }
+
+  // M4.1: review_findings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_findings (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      persona     TEXT NOT NULL,
+      severity    TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      file_path   TEXT,
+      resolved    INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_findings_repo ON review_findings(repo_id, resolved, created_at);
+    CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
+  `);
+
+  // M5.1: run_metrics table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS run_metrics (
+      id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      run_id              TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      task_id             TEXT NOT NULL,
+      repo_id             TEXT NOT NULL,
+      engine              TEXT NOT NULL,
+      model               TEXT,
+      matched_skills      TEXT DEFAULT '[]',
+      matched_rules       TEXT DEFAULT '[]',
+      duration_ms         INTEGER,
+      validator_attempts  INTEGER NOT NULL DEFAULT 0,
+      review_blockers     INTEGER NOT NULL DEFAULT 0,
+      review_warnings     INTEGER NOT NULL DEFAULT 0,
+      final_status        TEXT NOT NULL,
+      pr_created          INTEGER NOT NULL DEFAULT 0,
+      created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_metrics_engine ON run_metrics(engine);
+    CREATE INDEX IF NOT EXISTS idx_run_metrics_repo ON run_metrics(repo_id);
+  `);
+
+  // Composite indexes for common query patterns
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tasks_repo_status ON tasks(repo_id, status);
+    CREATE INDEX IF NOT EXISTS idx_agent_logs_run_timestamp ON agent_logs(run_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_agent_runs_task_status ON agent_runs(task_id, status);
+  `);
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
   db.exec(`

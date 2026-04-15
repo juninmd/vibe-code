@@ -41,8 +41,9 @@ export class PrPoller {
             console.log(`  ✓ PR merged → task "${task.title}" moved to done`);
           }
         }
-      } catch {
-        // Ignore individual errors (rate limits, network, etc.)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`  ⚠ PR poller error for task "${task.title}" [${task.id}]: ${msg}`);
       }
     }
   }

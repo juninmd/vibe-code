@@ -1,3 +1,7 @@
+import { randomBytes } from "node:crypto";
+import { unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
@@ -23,6 +27,8 @@ const createTaskSchema = z.object({
   baseBranch: z.string().optional(),
   priority: z.number().optional(),
   tags: z.array(z.string()).optional(),
+  agentId: z.string().optional(),
+  workflowId: z.string().optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -428,6 +434,63 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "diff_failed", message: msg }, 500);
+    }
+  });
+
+  // M7.1: Matched skills for the latest run of a task
+  router.get("/:id/matched-skills", (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    const runs = db.runs.listByTask(task.id);
+    const latest = runs[0];
+    if (!latest) return c.json({ data: [] });
+    try {
+      const matched = JSON.parse(latest.matchedSkills ?? "[]");
+      return c.json({ data: matched });
+    } catch {
+      return c.json({ data: [] });
+    }
+  });
+
+  // Download task worktree as a zip archive
+  router.get("/:id/download", async (c) => {
+    if (!git) return c.json({ error: "unavailable", message: "Git service not available" }, 503);
+
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    if (!task.branchName) {
+      return c.json({ error: "invalid_state", message: "Task has no branch yet" }, 400);
+    }
+
+    const repo = db.repos.getById(task.repoId);
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const safeName = repo.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeBranch = task.branchName.replace(/[^a-zA-Z0-9_/-]/g, "_").replace(/\//g, "-");
+    const archiveName = `${safeName}_${safeBranch}.zip`;
+    const tmpPath = join(tmpdir(), `vibe-${randomBytes(8).toString("hex")}.zip`);
+
+    try {
+      const proc = Bun.spawn(
+        ["git", "--git-dir", barePath, "archive", "--format=zip", "-o", tmpPath, task.branchName],
+        { stderr: "pipe" }
+      );
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        const errText = await new Response(proc.stderr).text();
+        return c.json({ error: "archive_failed", message: errText.trim() }, 500);
+      }
+
+      const file = Bun.file(tmpPath);
+      const buffer = await file.arrayBuffer();
+
+      c.header("Content-Type", "application/zip");
+      c.header("Content-Disposition", `attachment; filename="${archiveName}"`);
+      c.header("Content-Length", String(buffer.byteLength));
+      return c.body(buffer);
+    } finally {
+      unlink(tmpPath).catch(() => {});
     }
   });
 

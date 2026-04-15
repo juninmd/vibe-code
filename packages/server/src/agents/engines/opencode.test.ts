@@ -33,7 +33,11 @@ class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
 
 async function collectAll(engine: OpenCodeEngine, workdir: string): Promise<AgentEvent[]> {
   const events: AgentEvent[] = [];
-  for await (const event of engine.execute("test prompt", workdir)) {
+  for await (const event of engine.execute("test prompt", workdir, {
+    runId: "test",
+    litellmKey: "",
+    litellmBaseUrl: "",
+  })) {
     events.push(event);
   }
   return events;
@@ -439,7 +443,11 @@ describe("execute: real-time streaming", () => {
     const start = Date.now();
     let completeMs = 0;
 
-    for await (const event of engine.execute("test", workdir)) {
+    for await (const event of engine.execute("test", workdir, {
+      runId: "test",
+      litellmKey: "",
+      litellmBaseUrl: "",
+    })) {
       const ms = Date.now() - start;
       if (event.type === "log" && event.stream === "stdout" && event.content === "live-event") {
         arrivals.push({ content: event.content, ms });
@@ -472,7 +480,11 @@ describe("execute: real-time streaming", () => {
     const engine = new FakeOpenCodeEngine(script);
     const textEvents: string[] = [];
 
-    for await (const event of engine.execute("test", workdir)) {
+    for await (const event of engine.execute("test", workdir, {
+      runId: "test",
+      litellmKey: "",
+      litellmBaseUrl: "",
+    })) {
       if (
         event.type === "log" &&
         event.stream === "stdout" &&
@@ -549,6 +561,8 @@ describe("execute: abort signal", () => {
       for await (const event of engine.execute("test", workdir, {
         runId: "test-abort",
         signal: controller.signal,
+        litellmKey: "",
+        litellmBaseUrl: "",
       })) {
         events.push(event);
       }

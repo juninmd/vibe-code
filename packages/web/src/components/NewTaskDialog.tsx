@@ -1,8 +1,9 @@
-import type { EngineInfo, Repository } from "@vibe-code/shared";
+import type { EngineInfo, Repository, SkillsIndex, TaskSpec } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
 import { PromptTemplatePicker } from "./PromptTemplatePicker";
+import { EMPTY_TASK_SPEC, TaskSpecEditor, taskSpecToDescription } from "./TaskSpecEditor";
 import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
@@ -36,11 +37,13 @@ interface NewTaskDialogProps {
     model?: string;
     baseBranch?: string;
     tags?: string[];
+    agentId?: string;
+    workflowId?: string;
     autoLaunch: boolean;
     schedule?: {
       cronExpression: string;
     };
-  }) => void;
+  }) => Promise<void> | void;
 }
 
 const CRON_PRESETS = [
@@ -73,13 +76,32 @@ export function NewTaskDialog({
   const [branches, setBranches] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [agentId, setAgentId] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+  const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
 
   // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
   const [cronExpression, setCronExpression] = useState(CRON_PRESETS[0].value);
   const [isCustomCron, setIsCustomCron] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Guided mode (TaskSpec)
+  const [guidedMode, setGuidedMode] = useState(false);
+  const [taskSpec, setTaskSpec] = useState<TaskSpec>(EMPTY_TASK_SPEC);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
+
+  // Load agents/workflows from skills index
+  useEffect(() => {
+    if (!open) return;
+    api.skills
+      .index()
+      .then(setSkillsIndex)
+      .catch(() => {});
+  }, [open]);
 
   // Set baseBranch and fetch branches when repoId changes
   useEffect(() => {
@@ -114,31 +136,46 @@ export function NewTaskDialog({
       .finally(() => setLoadingModels(false));
   }, [engine]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !repoId) return;
-    onSubmit({
-      title: title.trim(),
-      description: description.trim(),
-      repoId,
-      engine: engine || undefined,
-      model: model || undefined,
-      baseBranch: baseBranch || undefined,
-      tags: tags.length > 0 ? tags : undefined,
-      autoLaunch: isScheduled ? false : autoLaunch,
-      schedule: isScheduled ? { cronExpression } : undefined,
-    });
-    setTitle("");
-    setDescription("");
-    setRepoId("");
-    setEngine("");
-    setModel("");
-    setModels([]);
-    setBaseBranch("");
-    setBranches([]);
-    setTags([]);
-    setIsScheduled(false);
-    onClose();
+    if (!title.trim() || !repoId || submitting) return;
+    const finalDescription = guidedMode ? taskSpecToDescription(taskSpec) : description.trim();
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit({
+        title: title.trim(),
+        description: finalDescription,
+        repoId,
+        engine: engine || undefined,
+        model: model || undefined,
+        baseBranch: baseBranch || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        agentId: agentId || undefined,
+        workflowId: workflowId || undefined,
+        autoLaunch: isScheduled ? false : autoLaunch,
+        schedule: isScheduled ? { cronExpression } : undefined,
+      });
+      // Only reset + close on success
+      setTitle("");
+      setDescription("");
+      setTaskSpec(EMPTY_TASK_SPEC);
+      setRepoId("");
+      setEngine("");
+      setModel("");
+      setModels([]);
+      setBaseBranch("");
+      setBranches([]);
+      setTags([]);
+      setAgentId("");
+      setWorkflowId("");
+      setIsScheduled(false);
+      onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -166,12 +203,12 @@ export function NewTaskDialog({
             </div>
 
             <div>
-              <label
+              <div
                 className="block text-xs font-medium mb-1.5"
                 style={{ color: "var(--text-muted)" }}
               >
                 Title *
-              </label>
+              </div>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -182,172 +219,277 @@ export function NewTaskDialog({
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                  Description
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPicker(true)}
-                  className="text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
-                  style={{ color: "var(--accent-text)" }}
-                >
-                  ⚡ Templates
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                    Description
+                  </div>
+                  <div
+                    className="flex rounded-md overflow-hidden border"
+                    style={{ borderColor: "var(--border-default)" }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setGuidedMode(false)}
+                      className="text-[10px] px-2 py-0.5 cursor-pointer transition-colors"
+                      style={{
+                        background: !guidedMode ? "var(--accent-muted)" : "transparent",
+                        color: !guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
+                      }}
+                    >
+                      Simples
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGuidedMode(true)}
+                      className="text-[10px] px-2 py-0.5 cursor-pointer transition-colors"
+                      style={{
+                        background: guidedMode ? "var(--accent-muted)" : "transparent",
+                        color: guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
+                      }}
+                    >
+                      Guiado
+                    </button>
+                  </div>
+                </div>
+                {!guidedMode && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPicker(true)}
+                    className="text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                    style={{ color: "var(--accent-text)" }}
+                  >
+                    ⚡ Templates
+                  </button>
+                )}
               </div>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detailed instructions for the AI agent..."
-                rows={4}
-              />
+              {guidedMode ? (
+                <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
+              ) : (
+                <Textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Detailed instructions for the AI agent..."
+                  rows={4}
+                />
+              )}
             </div>
 
             <div>
-              <label
+              <div
                 className="block text-xs font-medium mb-1.5"
                 style={{ color: "var(--text-muted)" }}
               >
                 Tags
-              </label>
+              </div>
               <TaskTagsEditor tags={tags} onChange={setTags} />
             </div>
           </div>
 
           {/* ── Configuration ──────────────────────────────── */}
           <div className="space-y-4 pt-2 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
-                style={{ background: "var(--accent-muted)", color: "var(--accent-text)" }}
-              >
-                2
-              </span>
-              <span
-                className="text-xs font-semibold uppercase tracking-wider"
+            {/* Repository — always visible */}
+            <div className="min-w-0">
+              <div
+                className="block text-xs font-medium mb-1.5"
                 style={{ color: "var(--text-muted)" }}
               >
-                Configuration
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="min-w-0">
-                <label
-                  className="block text-xs font-medium mb-1.5"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Repository *
-                </label>
-                <div className="relative z-20">
-                  <Combobox
-                    value={repoId}
-                    onChange={setRepoId}
-                    placeholder="Search..."
-                    required
-                    options={repos
-                      .filter((r) => r.status === "ready" || r.status === "pending")
-                      .map((repo) => ({
-                        value: repo.id,
-                        label: repo.name,
-                        sublabel: repo.status !== "ready" ? repo.status : undefined,
-                      }))}
-                  />
-                </div>
+                Repository *
               </div>
-
-              <div className="min-w-0">
-                <label
-                  className="block text-xs font-medium mb-1.5"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  AI Engine
-                  {enginesLoading && (
-                    <span className="ml-1" style={{ color: "var(--text-dimmed)" }}>
-                      (loading...)
-                    </span>
-                  )}
-                  {enginesError && (
-                    <span className="ml-1" style={{ color: "var(--danger)" }} title={enginesError}>
-                      ⚠
-                    </span>
-                  )}
-                </label>
-                <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
-                  <option value="">Auto-select</option>
-                  {engines.map((eng) => (
-                    <option key={eng.name} value={eng.name} disabled={!eng.available}>
-                      {eng.displayName}
-                      {!eng.available ? " (unavailable)" : ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-
-            {repoId && (
-              <div>
-                <label
-                  className="block text-xs font-medium mb-1.5"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Base Branch
-                  {loadingBranches && (
-                    <span className="ml-1 animate-pulse" style={{ color: "var(--text-dimmed)" }}>
-                      loading...
-                    </span>
-                  )}
-                </label>
-                <Input
-                  value={baseBranch}
-                  onChange={(e) => setBaseBranch(e.target.value)}
-                  placeholder="main"
+              <div className="relative z-20">
+                <Combobox
+                  value={repoId}
+                  onChange={setRepoId}
+                  placeholder="Search..."
+                  required
+                  options={repos
+                    .filter((r) => r.status === "ready" || r.status === "pending")
+                    .map((repo) => ({
+                      value: repo.id,
+                      label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
+                      sublabel: repo.status !== "ready" ? repo.status : undefined,
+                      disabled: repo.status !== "ready",
+                    }))}
                 />
-                {branches.length > 0 && (
-                  <div className="flex gap-1 flex-wrap mt-2">
-                    {branches.slice(0, 8).map((b) => (
-                      <button
-                        key={b}
-                        type="button"
-                        onClick={() => setBaseBranch(b)}
-                        className="text-[10px] px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
-                        style={{
-                          background: baseBranch === b ? "var(--accent-muted)" : "transparent",
-                          borderColor: baseBranch === b ? "var(--accent)" : "var(--border-default)",
-                          color: baseBranch === b ? "var(--accent-text)" : "var(--text-muted)",
-                        }}
+              </div>
+            </div>
+
+            {/* Advanced toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="flex items-center gap-1.5 text-xs cursor-pointer transition-colors"
+              style={{ color: "var(--text-dimmed)" }}
+            >
+              <span
+                className="transition-transform"
+                style={{ transform: showAdvanced ? "rotate(90deg)" : "rotate(0deg)" }}
+              >
+                ▶
+              </span>
+              Opções avançadas
+              {(engine || model || baseBranch || tags.length > 0) && (
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: "var(--accent)" }}
+                />
+              )}
+            </button>
+
+            {showAdvanced && (
+              <div
+                className="space-y-4 pl-3 border-l-2 animate-in slide-in-from-left-2"
+                style={{ borderColor: "var(--border-default)" }}
+              >
+                <div className="min-w-0">
+                  <div
+                    className="block text-xs font-medium mb-1.5"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    AI Engine
+                    {enginesLoading && (
+                      <span className="ml-1" style={{ color: "var(--text-dimmed)" }}>
+                        (loading...)
+                      </span>
+                    )}
+                    {enginesError && (
+                      <span
+                        className="ml-1"
+                        style={{ color: "var(--danger)" }}
+                        title={enginesError}
                       >
-                        {b}
-                      </button>
+                        ⚠
+                      </span>
+                    )}
+                  </div>
+                  <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
+                    <option value="">Auto-select</option>
+                    {engines.map((eng) => (
+                      <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                        {eng.displayName}
+                        {!eng.available ? " (unavailable)" : ""}
+                      </option>
                     ))}
+                  </Select>
+                </div>
+
+                {repoId && (
+                  <div>
+                    <div
+                      className="block text-xs font-medium mb-1.5"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      Base Branch
+                      {loadingBranches && (
+                        <span
+                          className="ml-1 animate-pulse"
+                          style={{ color: "var(--text-dimmed)" }}
+                        >
+                          loading...
+                        </span>
+                      )}
+                    </div>
+                    <Input
+                      value={baseBranch}
+                      onChange={(e) => setBaseBranch(e.target.value)}
+                      placeholder="main"
+                    />
+                    {branches.length > 0 && (
+                      <div className="flex gap-1 flex-wrap mt-2">
+                        {branches.slice(0, 8).map((b) => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setBaseBranch(b)}
+                            className="text-[10px] px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
+                            style={{
+                              background: baseBranch === b ? "var(--accent-muted)" : "transparent",
+                              borderColor:
+                                baseBranch === b ? "var(--accent)" : "var(--border-default)",
+                              color: baseBranch === b ? "var(--accent-text)" : "var(--text-muted)",
+                            }}
+                          >
+                            {b}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
-            )}
 
-            {engine && (models.length > 0 || loadingModels) && (
-              <div>
-                <label
-                  className="block text-xs font-medium mb-1.5"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Model
-                </label>
-                <Select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  disabled={loadingModels}
-                >
-                  <option value="">{loadingModels ? "Loading models..." : "Default"}</option>
-                  {groupModelsByProvider(models).map(({ provider, models: providerModels }) => (
-                    <optgroup key={provider} label={provider}>
-                      {providerModels.map((m) => (
-                        <option key={m} value={m}>
-                          {m.includes("/") ? m.split("/").slice(1).join("/") : m}
-                        </option>
+                {engine && (models.length > 0 || loadingModels) && (
+                  <div>
+                    <div
+                      className="block text-xs font-medium mb-1.5"
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      Model
+                    </div>
+                    <Select
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      disabled={loadingModels}
+                    >
+                      <option value="">{loadingModels ? "Loading models..." : "Default"}</option>
+                      {groupModelsByProvider(models).map(({ provider, models: providerModels }) => (
+                        <optgroup key={provider} label={provider}>
+                          {providerModels.map((m) => (
+                            <option key={m} value={m}>
+                              {m.includes("/") ? m.split("/").slice(1).join("/") : m}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
-                    </optgroup>
-                  ))}
-                </Select>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Agent / Workflow pickers */}
+                {skillsIndex &&
+                  (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) && (
+                    <>
+                      {skillsIndex.agents.length > 0 && (
+                        <div>
+                          <div
+                            className="block text-xs font-medium mb-1.5"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            Agent
+                          </div>
+                          <Select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                            <option value="">None</option>
+                            {skillsIndex.agents.map((a) => (
+                              <option key={a.name} value={a.name}>
+                                {a.name}
+                                {a.description ? ` — ${a.description.slice(0, 60)}` : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                      {skillsIndex.workflows.length > 0 && (
+                        <div>
+                          <div
+                            className="block text-xs font-medium mb-1.5"
+                            style={{ color: "var(--text-muted)" }}
+                          >
+                            Workflow
+                          </div>
+                          <Select
+                            value={workflowId}
+                            onChange={(e) => setWorkflowId(e.target.value)}
+                          >
+                            <option value="">None</option>
+                            {skillsIndex.workflows.map((w) => (
+                              <option key={w.name} value={w.name}>
+                                {w.name}
+                                {w.description ? ` — ${w.description.slice(0, 60)}` : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                      )}
+                    </>
+                  )}
               </div>
             )}
 
@@ -376,12 +518,14 @@ export function NewTaskDialog({
                 >
                   <div>
                     <label
+                      htmlFor="schedule-frequency"
                       className="block text-[10px] uppercase font-bold tracking-wider mb-1.5"
                       style={{ color: "var(--text-dimmed)" }}
                     >
                       Frequency
                     </label>
                     <Select
+                      id="schedule-frequency"
                       value={isCustomCron ? "custom" : cronExpression}
                       onChange={(e) => {
                         if (e.target.value === "custom") {
@@ -404,12 +548,14 @@ export function NewTaskDialog({
                   {isCustomCron && (
                     <div className="animate-in fade-in zoom-in-95 duration-200">
                       <label
+                        htmlFor="custom-cron-expression"
                         className="block text-[10px] uppercase font-bold tracking-wider mb-1.5"
                         style={{ color: "var(--text-dimmed)" }}
                       >
                         Cron Expression
                       </label>
                       <Input
+                        id="custom-cron-expression"
                         value={cronExpression}
                         onChange={(e) => setCronExpression(e.target.value)}
                         placeholder="e.g. 0 12 * * 1-5"
@@ -444,11 +590,20 @@ export function NewTaskDialog({
               className="flex gap-2 justify-end pt-4 border-t"
               style={{ borderColor: "var(--border-subtle)" }}
             >
-              <Button type="button" variant="ghost" onClick={onClose}>
+              {submitError && (
+                <p className="flex-1 text-xs text-red-400 self-center truncate" title={submitError}>
+                  ⚠ {submitError}
+                </p>
+              )}
+              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" disabled={!title.trim() || !repoId}>
-                {isScheduled ? "Create Schedule" : "Create Task"}
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!title.trim() || !repoId || submitting}
+              >
+                {submitting ? "Criando..." : isScheduled ? "Create Schedule" : "Create Task"}
               </Button>
             </div>
           </div>

@@ -1,6 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Task } from "@vibe-code/shared";
+import type { SkillPayload, SkillPayloadItem, Task } from "@vibe-code/shared";
+import type { SkillsLoader } from "../../skills/loader";
+import { matchSkillsForTask } from "../../skills/matcher";
+import { RepoSkillsLoader } from "../../skills/repo-loader";
+
+export interface BuildContextResult {
+  prompt: string;
+  skills: SkillPayload;
+}
 
 interface ProjectContext {
   mainLanguages: string[];
@@ -51,9 +59,161 @@ async function detectProjectContext(workdir: string): Promise<ProjectContext> {
   return ctx;
 }
 
-export async function buildPromptAsync(task: Task, workdir: string): Promise<string> {
+export async function buildContextAsync(
+  task: Task,
+  workdir: string,
+  skillsLoader?: SkillsLoader,
+  repoId?: string,
+  dbFindingsLoader?: (repoId: string) => { persona: string; severity: string; content: string }[]
+): Promise<BuildContextResult> {
   const ctx = await detectProjectContext(workdir);
-  return assemblePrompt(task, ctx);
+
+  const emptyPayload: SkillPayload = {
+    rules: [],
+    skills: [],
+    workflow: null,
+    agents: [],
+    projectInstructions: ctx.agentInstructions,
+  };
+
+  let skillsSection = "";
+  let skillPayload: SkillPayload = { ...emptyPayload };
+
+  if (skillsLoader) {
+    try {
+      const globalIndex = await skillsLoader.load();
+
+      // M2: Merge per-repo skills from .vibe-code/ in worktree
+      const repoLoader = new RepoSkillsLoader(workdir);
+      const repoIndex = await repoLoader.load();
+      const mergedIndex = {
+        skills: [...globalIndex.skills, ...repoIndex.skills],
+        rules: [...globalIndex.rules, ...repoIndex.rules],
+        agents: [...globalIndex.agents, ...repoIndex.agents],
+        workflows: [...globalIndex.workflows, ...repoIndex.workflows],
+      };
+
+      const matched = await matchSkillsForTask(
+        mergedIndex,
+        task.title,
+        task.description ?? "",
+        workdir
+      );
+
+      const parts: string[] = [];
+
+      // Load full content for matched rules
+      const rulePayloads: SkillPayloadItem[] = [];
+      if (matched.rules.length > 0) {
+        parts.push("### Coding Standards (auto-matched)\n");
+        for (const rule of matched.rules) {
+          parts.push(`- **${rule.name}**: ${rule.description}`);
+          const content = await safeLoadContent(skillsLoader, repoLoader, rule.filePath);
+          rulePayloads.push({ name: rule.name, description: rule.description, content });
+        }
+      }
+
+      // Load full content for matched skills
+      const skillPayloads: SkillPayloadItem[] = [];
+      if (matched.skills.length > 0) {
+        parts.push("\n### Applicable Skills (auto-matched)\n");
+        for (const skill of matched.skills) {
+          parts.push(`- **${skill.name}**: ${skill.description}`);
+          const content = await safeLoadContent(skillsLoader, repoLoader, skill.filePath);
+          skillPayloads.push({ name: skill.name, description: skill.description, content });
+        }
+      }
+
+      // Workflow
+      let workflowPayload: SkillPayloadItem | null = null;
+      if (matched.workflow) {
+        parts.push(`\n### Workflow: ${matched.workflow.name}\n${matched.workflow.description}`);
+        const content = await safeLoadContent(skillsLoader, repoLoader, matched.workflow.filePath);
+        workflowPayload = {
+          name: matched.workflow.name,
+          description: matched.workflow.description,
+          content,
+        };
+      }
+
+      // M6: Agent persona injection
+      const agentPayloads: SkillPayloadItem[] = [];
+      if (matched.agents.length > 0) {
+        parts.push("\n### Agent Persona (auto-matched)\n");
+        for (const agent of matched.agents) {
+          const content = await safeLoadContent(skillsLoader, repoLoader, agent.filePath);
+          parts.push(`- **${agent.name}**: ${agent.description}`);
+          agentPayloads.push({ name: agent.name, description: agent.description, content });
+        }
+      }
+
+      if (parts.length > 0) {
+        skillsSection = `## Organizational Standards\n${parts.join("\n")}`;
+      }
+
+      skillPayload = {
+        rules: rulePayloads,
+        skills: skillPayloads,
+        workflow: workflowPayload,
+        agents: agentPayloads,
+        projectInstructions: ctx.agentInstructions,
+      };
+    } catch {
+      // Skills loading failure is non-fatal — proceed without injection
+    }
+  }
+
+  // M4: Inject lessons learned from previous review findings
+  let lessonsSection = "";
+  if (repoId && dbFindingsLoader) {
+    try {
+      const findings = dbFindingsLoader(repoId);
+      if (findings.length > 0) {
+        const MAX_LESSONS_CHARS = 2000;
+        let chars = 0;
+        const lines: string[] = [];
+        for (const f of findings) {
+          const line = `- [${f.persona}/${f.severity}] ${f.content}`;
+          if (chars + line.length > MAX_LESSONS_CHARS) break;
+          chars += line.length;
+          lines.push(line);
+        }
+        if (lines.length > 0) {
+          lessonsSection = `## Lessons Learned (from previous reviews)\n${lines.join("\n")}`;
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  const prompt = assemblePrompt(task, ctx, skillsSection, lessonsSection);
+  return { prompt, skills: skillPayload };
+}
+
+export async function buildPromptAsync(
+  task: Task,
+  workdir: string,
+  skillsLoader?: SkillsLoader
+): Promise<string> {
+  const result = await buildContextAsync(task, workdir, skillsLoader);
+  return result.prompt;
+}
+
+async function safeLoadContent(
+  globalLoader: SkillsLoader,
+  repoLoader: RepoSkillsLoader,
+  filePath: string
+): Promise<string> {
+  try {
+    return await globalLoader.getFileContent(filePath);
+  } catch {
+    try {
+      return await repoLoader.getFileContent(filePath);
+    } catch {
+      return "";
+    }
+  }
 }
 
 export function buildPrompt(task: Task): string {
@@ -65,7 +225,12 @@ export function buildPrompt(task: Task): string {
   });
 }
 
-function assemblePrompt(task: Task, ctx: ProjectContext): string {
+function assemblePrompt(
+  task: Task,
+  ctx: ProjectContext,
+  skillsSection = "",
+  lessonsSection = ""
+): string {
   const sections: string[] = [];
 
   // ── CRITICAL directive — must appear first to prevent interactive mode ──────
@@ -97,6 +262,16 @@ function assemblePrompt(task: Task, ctx: ProjectContext): string {
       `## Project Stack\n${stackLine}\n\nFollow the conventions already in place. ` +
         "Inspect existing files before creating new ones. Match the style of nearby code."
     );
+  }
+
+  // ── Organizational standards (skills/rules from ~/.agents) ─────────────────
+  if (skillsSection) {
+    sections.push(skillsSection);
+  }
+
+  // ── Lessons learned from previous reviews ──────────────────────────────────
+  if (lessonsSection) {
+    sections.push(lessonsSection);
   }
 
   // ── Execution instructions ─────────────────────────────────────────────────

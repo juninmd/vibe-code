@@ -1,12 +1,14 @@
-import { access, appendFile, readFile } from "node:fs/promises";
+import { access, appendFile, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentRun, Task } from "@vibe-code/shared";
+import type { AgentRun, SkillPayload, Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
+import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
 import { handleAgentEvent } from "./event-handler";
-import { buildPromptAsync } from "./prompt";
+import { buildContextAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
 import { verifyWorktree } from "./verify";
@@ -152,6 +154,13 @@ async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void
   }
 }
 
+/** Extract persona name from a review finding line like "[Frontend Review] WARNING: ..." */
+function extractPersona(finding: string): string {
+  const match = finding.match(/^\[([^\]]+)\]/);
+  if (match) return match[1].toLowerCase().replace(/\s+review$/i, "");
+  return "unknown";
+}
+
 function normalizeRepoWebUrl(repoUrl: string): string {
   const sshMatch = repoUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (sshMatch) {
@@ -243,7 +252,8 @@ export async function executeAgent(
   hub: BroadcastHub,
   sysLog: (content: string) => void,
   onFinish: () => void,
-  model?: string
+  model?: string,
+  skillsLoader?: SkillsLoader
 ): Promise<void> {
   const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
   const slugTitle = task.title
@@ -284,6 +294,14 @@ export async function executeAgent(
 
   let wtPath: string | undefined;
   let keepWorkspaceForRetry = false;
+  let litellmTokenId: string | undefined;
+  let skillPayload: SkillPayload | undefined;
+  let validatorAttempts = 0;
+  let createdContextFiles: string[] = [];
+  let reviewBlockerCount = 0;
+  let reviewWarningCount = 0;
+  let prCreated = false;
+  let runStartTime = Date.now();
   try {
     let reusableWorkspacePath: string | null = null;
 
@@ -332,6 +350,35 @@ export async function executeAgent(
     // Ensure opencode.json won't pollute git history
     await ensureGitignoreEntry(wtPath, "opencode.json");
 
+    // Generate a per-run virtual key in LiteLLM when enabled.
+    // When disabled, engines use native API keys from the environment.
+    const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
+    let litellmKey: string | undefined;
+    let litellmBaseUrl: string | undefined;
+
+    if (litellmEnabled) {
+      try {
+        const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+        const vk = await generateVirtualKey(task.id, engine.name, baseUrl);
+        litellmKey = vk.key;
+        litellmBaseUrl = baseUrl;
+        litellmTokenId = vk.tokenId;
+        db.runs.updateLitellmTokenId(run.id, vk.tokenId);
+        sysLog("LiteLLM proxy: enabled (virtual key generated)");
+      } catch (err: any) {
+        sysLog(`LiteLLM proxy: unavailable (${err.message}). Using native API keys.`);
+      }
+    } else {
+      sysLog("LiteLLM proxy: disabled by setting. Using native API keys.");
+    }
+
+    // Native API keys stored via settings UI (used when LiteLLM is disabled).
+    const nativeApiKeys = {
+      gemini: db.settings.get("gemini_api_key") || undefined,
+      anthropic: db.settings.get("anthropic_api_key") || undefined,
+      openai: db.settings.get("openai_api_key") || undefined,
+    };
+
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
       sysLog(
@@ -344,11 +391,58 @@ export async function executeAgent(
     }
 
     let agentExitCode: number | null = null;
-    const prompt = await buildPromptAsync(task, wtPath);
+    runStartTime = Date.now();
+
+    // M1.3: Build structured context with SkillPayload
+    const findingsLoader = (repoId: string) =>
+      db.findings.getRecentByRepo(repoId).map((f) => ({
+        persona: f.persona,
+        severity: f.severity,
+        content: f.content,
+      }));
+    const contextResult = await buildContextAsync(
+      task,
+      wtPath,
+      skillsLoader,
+      task.repoId,
+      findingsLoader
+    );
+    const prompt = contextResult.prompt;
+    skillPayload = contextResult.skills;
+
+    // M7.2: Record matched skills on the run (all 4 categories with prefix)
+    const matchedSkillNames = [
+      ...skillPayload.rules.map((r) => `rule:${r.name}`),
+      ...skillPayload.skills.map((s) => `skill:${s.name}`),
+      ...skillPayload.agents.map((a) => `agent:${a.name}`),
+      ...(skillPayload.workflow ? [`workflow:${skillPayload.workflow.name}`] : []),
+    ];
+    db.runs.updateMatchedSkills(run.id, matchedSkillNames);
+
+    // M3.6: Prepare engine-native context files (GEMINI.md, .claude/instructions.md, etc.)
+    if (engine.prepareWorkdir) {
+      try {
+        createdContextFiles = await engine.prepareWorkdir(wtPath, skillPayload);
+        for (const f of createdContextFiles) {
+          const relative = f.startsWith(wtPath) ? f.slice(wtPath.length + 1) : f;
+          await ensureGitignoreEntry(wtPath, relative);
+        }
+        if (createdContextFiles.length > 0) {
+          sysLog(`Engine-native context: ${createdContextFiles.length} file(s) written`);
+        }
+      } catch (err: any) {
+        sysLog(`Engine-native context: failed (${err.message}), continuing with prompt only`);
+      }
+    }
+
     for await (const event of engine.execute(prompt, wtPath, {
       runId: run.id,
       signal: abort.signal,
       model,
+      litellmKey,
+      litellmBaseUrl,
+      nativeApiKeys,
+      skills: skillPayload,
     })) {
       if (abort.signal.aborted) break;
       if (event.type === "complete") {
@@ -372,6 +466,7 @@ export async function executeAgent(
     let validatorPassed = false;
     let validatorExitCode: number | null = null;
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
+      validatorAttempts = attempt;
       validatorExitCode = null;
       const validatorPrompt = buildFinalValidatorPrompt(task);
       sysLog(`Final validator attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
@@ -380,6 +475,9 @@ export async function executeAgent(
         runId: run.id,
         signal: abort.signal,
         model,
+        litellmKey,
+        litellmBaseUrl,
+        nativeApiKeys,
       })) {
         if (abort.signal.aborted) break;
         if (event.type === "complete") {
@@ -435,8 +533,57 @@ export async function executeAgent(
         hub,
         (_rid, _tid, content) => sysLog(content),
         engine.name,
-        model
+        model,
+        litellmKey,
+        litellmBaseUrl,
+        nativeApiKeys
       );
+
+      // M4.2: Persist review findings to DB
+      reviewBlockerCount = reviewResult.blockers.length;
+      reviewWarningCount = reviewResult.actionableFindings.length;
+      for (const finding of reviewResult.blockers) {
+        try {
+          db.findings.create({
+            runId: run.id,
+            taskId: task.id,
+            repoId: task.repoId,
+            persona: extractPersona(finding),
+            severity: "blocker",
+            content: finding,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+      for (const finding of reviewResult.actionableFindings) {
+        try {
+          db.findings.create({
+            runId: run.id,
+            taskId: task.id,
+            repoId: task.repoId,
+            persona: extractPersona(finding),
+            severity: "warning",
+            content: finding,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+      for (const finding of reviewResult.docsFindings) {
+        try {
+          db.findings.create({
+            runId: run.id,
+            taskId: task.id,
+            repoId: task.repoId,
+            persona: "docs",
+            severity: "info",
+            content: finding,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
 
       if (REVIEW_AUTO_APPLY && reviewResult.actionableFindings.length > 0) {
         sysLog(
@@ -448,6 +595,9 @@ export async function executeAgent(
           runId: run.id,
           signal: abort.signal,
           model,
+          litellmKey,
+          litellmBaseUrl,
+          nativeApiKeys,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "complete") {
@@ -482,6 +632,9 @@ export async function executeAgent(
           runId: run.id,
           signal: abort.signal,
           model,
+          litellmKey,
+          litellmBaseUrl,
+          nativeApiKeys,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "complete") {
@@ -525,16 +678,20 @@ export async function executeAgent(
       const prBody = await buildPRBody(task, wtPath, repo.url, branch);
       prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
+      prCreated = true;
       sysLog(`PR created: ${prUrl}`);
     } catch (err: any) {
       sysLog(`Push/PR skipped: ${err.message || String(err)}`);
     }
 
     const updatedTask = db.tasks.update(task.id, { status: "review" });
-    db.runs.updateStatus(run.id, "completed", {
+    const completedRun = db.runs.updateStatus(run.id, "completed", {
       finished_at: new Date().toISOString(),
       exit_code: 0,
     });
+    // Flush any pending log batches before broadcasting terminal state
+    hub.flushLogs(task.id);
+    if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
   } catch (err: any) {
@@ -550,17 +707,57 @@ export async function executeAgent(
       }
       sysLog(`Failed: ${errMsg}`);
     }
-    db.runs.updateStatus(run.id, "failed", {
+    const failedRun = db.runs.updateStatus(run.id, isCancelled ? "cancelled" : "failed", {
       finished_at: new Date().toISOString(),
-      error_message: errMsg,
+      error_message: isCancelled ? null : errMsg,
     });
     db.tasks.update(task.id, { status: isCancelled ? "backlog" : "failed" });
+    // Flush pending logs before broadcasting terminal state
+    hub.flushLogs(task.id);
+    if (failedRun) hub.broadcastAll({ type: "run_updated", run: failedRun });
     const finalTask = db.tasks.getById(task.id);
     if (finalTask) hub.broadcastAll({ type: "task_updated", task: finalTask });
     logAgentFinish(task.id, isCancelled ? "cancelled" : "failed", errMsg);
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);
+
+    // M5.2: Record run metrics
+    try {
+      const finalRun = db.runs.getById(run.id);
+      db.metrics.create({
+        runId: run.id,
+        taskId: task.id,
+        repoId: task.repoId,
+        engine: engine.name,
+        model,
+        matchedSkills: skillPayload?.skills.map((s) => s.name) ?? [],
+        matchedRules: skillPayload?.rules.map((r) => r.name) ?? [],
+        durationMs: Date.now() - runStartTime,
+        validatorAttempts: validatorAttempts ?? 0,
+        reviewBlockers: reviewBlockerCount,
+        reviewWarnings: reviewWarningCount,
+        finalStatus: finalRun?.status ?? "failed",
+        prCreated,
+      });
+    } catch {
+      /* metrics recording is non-fatal */
+    }
+
+    // M3.6: Cleanup engine-native context files
+    for (const f of createdContextFiles) {
+      try {
+        await unlink(f);
+      } catch {
+        /* best effort */
+      }
+    }
+
+    // Best-effort cleanup of the per-task LiteLLM virtual key.
+    if (litellmTokenId) {
+      const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+      await deleteVirtualKey(litellmTokenId, baseUrl).catch(() => {});
+    }
     if (wtPath && !keepWorkspaceForRetry) {
       try {
         await git.removeWorktree(barePath, wtPath);

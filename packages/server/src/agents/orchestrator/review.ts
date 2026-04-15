@@ -23,7 +23,10 @@ export async function runReviewPipeline(
   hub: BroadcastHub,
   sysLog: (runId: string, taskId: string, content: string) => void,
   reviewEngine?: string,
-  reviewModel?: string
+  reviewModel?: string,
+  litellmKey?: string,
+  litellmBaseUrl?: string,
+  nativeApiKeys?: { gemini?: string; anthropic?: string }
 ): Promise<ReviewPipelineResult> {
   sysLog(run.id, task.id, `Starting review pipeline (${ALL_PERSONAS.length} parallel agents)...`);
 
@@ -36,6 +39,10 @@ export async function runReviewPipeline(
       defaultBranch,
       reviewEngine,
       reviewModel,
+      litellmKey: litellmKey ?? "",
+      litellmBaseUrl: litellmBaseUrl ?? "http://localhost:4000",
+      nativeGeminiKey: nativeApiKeys?.gemini,
+      nativeAnthropicKey: nativeApiKeys?.anthropic,
     })
   );
   const results = await Promise.all(reviewPromises);

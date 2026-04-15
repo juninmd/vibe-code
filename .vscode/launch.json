@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Requires the Bun VS Code extension: marketplace.visualstudio.com/items?itemName=oven.bun-vscode
+      "type": "bun",
+      "request": "launch",
+      "name": "Debug Server (Bun)",
+      "program": "${workspaceFolder}/packages/server/src/index.ts",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "watchMode": false
+    },
+    {
+      // Fallback: works without the Bun extension, uses --inspect flag
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Server (node adapter)",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "--inspect-brk",
+        "run",
+        "packages/server/src/index.ts"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ]
+}

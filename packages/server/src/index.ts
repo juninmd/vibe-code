@@ -4,6 +4,7 @@ import type { WsClientMessage } from "@vibe-code/shared";
 import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
+import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "./agents/litellm-client";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
@@ -12,12 +13,14 @@ import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createRunsRouter } from "./api/runs";
 import { createSettingsRouter } from "./api/settings";
+import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
 import { ProviderRegistry } from "./git/providers/registry";
+import { SkillsLoader } from "./skills/loader";
 import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -34,14 +37,30 @@ import { mkdir } from "node:fs/promises";
 await mkdir(DATA_DIR, { recursive: true });
 
 const db = createDb(DB_PATH);
-const persistedGeminiApiKey = db.settings.get("gemini_api_key");
-if (!process.env.GEMINI_API_KEY && persistedGeminiApiKey) {
-  const normalized = persistedGeminiApiKey.trim().startsWith("GEMINI_API_KEY=")
-    ? persistedGeminiApiKey.trim().slice("GEMINI_API_KEY=".length).trim()
-    : persistedGeminiApiKey.trim();
-  if (normalized) {
-    process.env.GEMINI_API_KEY = normalized;
-    console.info(`[startup] Loaded persisted GEMINI_API_KEY (len=${normalized.length})`);
+
+// ─── LiteLLM startup check ───────────────────────────────────────────────────
+// When enabled, all CLI engines route through LiteLLM. Warn if the proxy is not reachable.
+{
+  const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
+  if (litellmEnabled) {
+    if (!process.env.LITELLM_MASTER_KEY?.trim()) {
+      console.warn(
+        "[startup] WARNING: LITELLM_MASTER_KEY not set. LiteLLM proxy features may not work."
+      );
+    }
+    const litellmBaseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
+    console.info(`[startup] Checking LiteLLM proxy at ${litellmBaseUrl} ...`);
+    const healthy = await checkLiteLLMHealth(litellmBaseUrl);
+    if (!healthy) {
+      console.warn(
+        `[startup] WARNING: LiteLLM proxy at ${litellmBaseUrl} is not reachable. ` +
+          "Engines will use native API keys. Start the proxy or disable LiteLLM in settings."
+      );
+    } else {
+      console.info("[startup] LiteLLM proxy is healthy ✓");
+    }
+  } else {
+    console.info("[startup] LiteLLM proxy disabled — engines will use native API keys.");
   }
 }
 const git = new GitService(DATA_DIR);
@@ -50,6 +69,8 @@ const hub = new BroadcastHub();
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
 const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
+const skillsLoader = new SkillsLoader(db.settings.get("skills_path") || "~/.agents");
+orchestrator.skillsLoader = skillsLoader;
 
 await git.init();
 
@@ -108,9 +129,10 @@ app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));
 app.route("/api/engines", createEnginesRouter(registry, orchestrator));
-app.route("/api/settings", createSettingsRouter(db, providerRegistry));
+app.route("/api/settings", createSettingsRouter(db, providerRegistry, skillsLoader));
 app.route("/api/prompts", createPromptsRouter(db));
 app.route("/api/stats", createStatsRouter(db));
+app.route("/api/skills", createSkillsRouter(skillsLoader));
 
 // Health check
 app.get("/api/health", (c) => {
@@ -152,6 +174,8 @@ app.get(
           hub.unsubscribe(client, msg.taskId);
         } else if (msg.type === "agent_input") {
           orchestrator.sendInput(msg.taskId, msg.input);
+        } else if (msg.type === "ping") {
+          // Liveness reply — no-op; any incoming frame resets client pong counter
         }
       } catch {
         // Invalid message, ignore

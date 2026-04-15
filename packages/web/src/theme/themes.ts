@@ -126,8 +126,8 @@ export const lightTheme: Theme = {
 
     textPrimary: "#1e293b",
     textSecondary: "#475569",
-    textMuted: "#94a3b8",
-    textDimmed: "#cbd5e1",
+    textMuted: "#64748b",
+    textDimmed: "#94a3b8",
 
     borderDefault: "rgba(226, 232, 240, 0.8)",
     borderSubtle: "rgba(0, 0, 0, 0.06)",

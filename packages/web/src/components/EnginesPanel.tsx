@@ -164,24 +164,27 @@ interface EnginesPanelProps {
 export function EnginesPanel({ onClose }: EnginesPanelProps) {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const fetchEngines = useCallback(async () => {
+  const fetchEngines = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    setError(null);
     try {
       const data = await api.engines.list();
       setEngines(data);
     } catch (err) {
-      console.error("Failed to fetch engines:", err);
+      setError(err instanceof Error ? err.message : "Falha ao buscar engines");
     } finally {
       setLoading(false);
+      setRefreshing(false);
       setLastRefresh(new Date());
     }
   }, []);
 
   useEffect(() => {
     fetchEngines();
-    // Note: Removed auto-refresh polling. Use manual refresh button or WebSocket for updates.
-    // Auto-polling every 30s was creating unnecessary requests.
   }, [fetchEngines]);
 
   const availableCount = engines.filter((e) => e.available).length;
@@ -189,7 +192,12 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Fechar painel de engines"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
@@ -211,11 +219,12 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={fetchEngines}
+              onClick={() => fetchEngines(true)}
+              disabled={refreshing || loading}
               title="Atualizar"
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 cursor-pointer transition-colors text-sm"
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 cursor-pointer transition-colors text-sm disabled:opacity-40"
             >
-              ↻
+              <span className={refreshing ? "inline-block animate-spin" : ""}>↻</span>
             </button>
             <button
               type="button"
@@ -229,6 +238,19 @@ export function EnginesPanel({ onClose }: EnginesPanelProps) {
 
         {/* Engine Cards */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400 text-xs">
+              <span>⚠</span>
+              <span className="flex-1 truncate">{error}</span>
+              <button
+                type="button"
+                onClick={() => fetchEngines(true)}
+                className="text-red-300 hover:text-red-100 cursor-pointer shrink-0"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
           {loading ? (
             <div className="space-y-3">
               {[0, 1, 2, 3].map((i) => (
