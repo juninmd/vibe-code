@@ -30,7 +30,7 @@
       "name": "@vibe-code/shared",
       "version": "0.1.0",
       "devDependencies": {
-        "typescript": "latest",
+        "typescript": "^6.0.2",
       },
     },
     "packages/web": {
