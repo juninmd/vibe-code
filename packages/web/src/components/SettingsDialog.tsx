@@ -1,5 +1,5 @@
 import type { SettingsResponse } from "@vibe-code/shared";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { themes } from "../theme/themes";
@@ -12,7 +12,7 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = "github" | "gitlab" | "gemini" | "general";
+type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general";
 
 function ProviderTab({
   provider,
@@ -25,6 +25,8 @@ function ProviderTab({
   tokenPlaceholder: string;
   showBaseUrl?: boolean;
 }) {
+  const tokenInputId = useId();
+  const baseUrlInputId = useId();
   const [token, setToken] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://gitlab.com");
   const [tokenSet, setTokenSet] = useState(false);
@@ -162,10 +164,15 @@ function ProviderTab({
 
       {showBaseUrl && (
         <div>
-          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+          <label
+            htmlFor={baseUrlInputId}
+            className="block text-xs font-medium mb-1"
+            style={{ color: "var(--text-muted)" }}
+          >
             URL base
           </label>
           <Input
+            id={baseUrlInputId}
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://gitlab.com"
@@ -178,12 +185,17 @@ function ProviderTab({
 
       {/* Token */}
       <div>
-        <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+        <label
+          htmlFor={tokenInputId}
+          className="block text-xs font-medium mb-1"
+          style={{ color: "var(--text-muted)" }}
+        >
           {label} Token
         </label>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Input
+              id={tokenInputId}
               type={showToken ? "text" : "password"}
               value={token}
               onChange={(e) => setToken(e.target.value)}
@@ -232,36 +244,208 @@ function ProviderTab({
   );
 }
 
-function GeminiTab() {
-  const [apiKey, setApiKey] = useState("");
-  const [keySet, setKeySet] = useState(false);
-  const [showKey, setShowKey] = useState(false);
+function LiteLLMTab() {
+  const proxyUrlInputId = useId();
+  const [baseUrl, setBaseUrl] = useState("http://localhost:4000");
+  const [enabled, setEnabled] = useState(true);
+  const [health, setHealth] = useState<{ ok: boolean; baseUrl: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadHealth = useCallback(
+    (url?: string) => {
+      api.settings
+        .litellmHealth()
+        .then(setHealth)
+        .catch(() => setHealth({ ok: false, baseUrl: url ?? baseUrl }));
+    },
+    [baseUrl]
+  );
+
   useEffect(() => {
-    setApiKey("");
-    setShowKey(false);
     setSaved(false);
     setError(null);
     api.settings
       .get()
       .then((settings) => {
-        setKeySet(settings.gemini.keySet);
+        setBaseUrl(settings.litellm.baseUrl);
+        setEnabled(settings.litellm.enabled);
+        loadHealth(settings.litellm.baseUrl);
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, []);
+  }, [loadHealth]);
+
+  const handleToggle = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      await api.settings.update({ litellmEnabled: next });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setEnabled(!next);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.settings.update({ geminiApiKey: apiKey });
-      setKeySet(!!apiKey);
-      setApiKey("");
+      await api.settings.update({ litellmBaseUrl: baseUrl });
       setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      loadHealth(baseUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSave} className="space-y-4">
+      {/* Enable/disable toggle */}
+      <div
+        className="flex items-center justify-between px-3 py-2.5 rounded-lg"
+        style={{ background: "var(--bg-card)" }}
+      >
+        <div className="flex-1">
+          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+            Usar LiteLLM Proxy
+          </span>
+          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            {enabled
+              ? "Todas as engines serão roteadas pelo LiteLLM."
+              : "Engines usarão chaves nativas do ambiente (sem rastreio de tokens/custos)."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={handleToggle}
+          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer"
+          style={{ background: enabled ? "var(--accent)" : "var(--bg-input)" }}
+        >
+          <span
+            className="inline-block h-4 w-4 rounded-full transition-transform bg-white"
+            style={{ transform: enabled ? "translateX(1.375rem)" : "translateX(0.25rem)" }}
+          />
+        </button>
+      </div>
+
+      {!enabled && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-amber-800/40 bg-amber-950/30 text-amber-400">
+          ⚠ Rastreamento de tokens, rate limiting e monitoramento de custos ficarão desabilitados.
+        </div>
+      )}
+
+      {/* Health status */}
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+        style={{ background: "var(--bg-card)", opacity: enabled ? 1 : 0.5 }}
+      >
+        <span
+          className={`w-2 h-2 rounded-full ${
+            health === null ? "bg-zinc-500" : health.ok ? "bg-emerald-400" : "bg-red-500"
+          }`}
+        />
+        <div className="flex-1">
+          <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {health === null ? "Verificando..." : health.ok ? "LiteLLM online" : "LiteLLM offline"}
+          </span>
+          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            Proxy para controle de tokens, custos e rate limiting dos CLIs de IA.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => window.open(`${baseUrl}/ui`, "_blank")}
+        >
+          Abrir Dashboard
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label
+          htmlFor={proxyUrlInputId}
+          className="block text-xs font-medium mb-1"
+          style={{ color: "var(--text-muted)" }}
+        >
+          URL do Proxy
+        </label>
+        <Input
+          id={proxyUrlInputId}
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="http://localhost:4000"
+          autoComplete="off"
+        />
+        <p className="text-xs mt-1.5" style={{ color: "var(--text-dimmed)" }}>
+          Endereço do LiteLLM Proxy. Defina também{" "}
+          <code style={{ color: "var(--text-muted)" }}>LITELLM_BASE_URL</code> e{" "}
+          <code style={{ color: "var(--text-muted)" }}>LITELLM_MASTER_KEY</code> no ambiente do
+          servidor.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between pt-1">
+        <div className="text-xs h-4" style={{ color: "var(--success)" }}>
+          {saved && "Salvo!"}
+        </div>
+        <Button type="submit" variant="primary" disabled={saving}>
+          {saving ? "Salvando..." : "Salvar"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+interface ApiKeyFieldProps {
+  label: string;
+  description: string;
+  settingKey: "geminiApiKey" | "anthropicApiKey" | "openaiApiKey";
+  placeholder: string;
+  tokenSet: boolean;
+  onSaved: () => void;
+}
+
+function ApiKeyField({
+  label,
+  description,
+  settingKey,
+  placeholder,
+  tokenSet: initialSet,
+  onSaved,
+}: ApiKeyFieldProps) {
+  const [value, setValue] = useState("");
+  const [tokenSet, setTokenSet] = useState(initialSet);
+  const [showVal, setShowVal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.settings.update({ [settingKey]: value });
+      setTokenSet(!!value);
+      setValue("");
+      setSaved(true);
+      onSaved();
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -274,11 +458,10 @@ function GeminiTab() {
     setSaving(true);
     setError(null);
     try {
-      await api.settings.update({ geminiApiKey: "" });
-      setKeySet(false);
-      setApiKey("");
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      await api.settings.update({ [settingKey]: "" });
+      setTokenSet(false);
+      setValue("");
+      onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -287,71 +470,113 @@ function GeminiTab() {
   };
 
   return (
-    <form onSubmit={handleSave} className="space-y-4">
-      <div
-        className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
-        style={{ background: "var(--bg-card)" }}
-      >
-        <span className={`w-2 h-2 rounded-full ${keySet ? "bg-emerald-400" : "bg-zinc-600"}`} />
-        <div className="flex-1">
-          <span className="text-sm" style={{ color: "var(--text-primary)" }}>
-            {keySet ? "Chave configurada" : "Chave não configurada"}
-          </span>
-          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-            O Gemini só fica realmente pronto quando a `GEMINI_API_KEY` está salva no servidor.
-          </p>
-        </div>
+    <form onSubmit={handleSave} className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${tokenSet ? "bg-emerald-400" : "bg-zinc-600"}`}
+        />
+        <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
+          {label}
+        </span>
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+          {tokenSet ? "configurada" : "não configurada"}
+        </span>
       </div>
-
+      <p className="text-xs pl-4" style={{ color: "var(--text-dimmed)" }}>
+        {description}
+      </p>
       {error && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+        <div className="text-xs px-3 py-1.5 rounded border border-red-800/40 bg-red-950/30 text-red-400">
           {error}
         </div>
       )}
-
-      <div>
-        <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
-          GEMINI_API_KEY
-        </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Input
-              type={showKey ? "text" : "password"}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={keySet ? "••••••••••••  (chave salva)" : "AIza..."}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs cursor-pointer"
-              style={{ color: "var(--text-dimmed)" }}
-            >
-              {showKey ? "ocultar" : "mostrar"}
-            </button>
-          </div>
-          {keySet && (
-            <Button type="button" variant="ghost" onClick={handleClear} disabled={saving}>
-              Limpar
-            </Button>
-          )}
+      <div className="flex gap-2 pl-4">
+        <div className="relative flex-1">
+          <Input
+            type={showVal ? "text" : "password"}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={tokenSet ? "•••••••••• (chave salva)" : placeholder}
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            onClick={() => setShowVal((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs cursor-pointer"
+            style={{ color: "var(--text-dimmed)" }}
+          >
+            {showVal ? "ocultar" : "mostrar"}
+          </button>
         </div>
-        <p className="text-xs mt-1.5" style={{ color: "var(--text-dimmed)" }}>
-          Usada pelo fluxo principal e também pela pipeline de review quando a tarefa roda com
-          Gemini.
-        </p>
-      </div>
-
-      <div className="flex items-center justify-between pt-1">
-        <div className="text-xs h-4" style={{ color: "var(--success)" }}>
-          {saved && "Salvo!"}
-        </div>
-        <Button type="submit" variant="primary" disabled={saving || !apiKey.trim()}>
-          {saving ? "Salvando..." : "Salvar"}
+        {tokenSet && (
+          <Button type="button" variant="ghost" onClick={handleClear} disabled={saving}>
+            Limpar
+          </Button>
+        )}
+        <Button type="submit" variant="primary" disabled={saving || !value.trim()}>
+          {saving ? "…" : saved ? "Salvo!" : "Salvar"}
         </Button>
       </div>
     </form>
+  );
+}
+
+function ApiKeysTab() {
+  const [keys, setKeys] = useState<{
+    gemini: boolean;
+    anthropic: boolean;
+    openai: boolean;
+  }>({ gemini: false, anthropic: false, openai: false });
+
+  const load = useCallback(() => {
+    api.settings
+      .get()
+      .then((s: SettingsResponse) => {
+        if (s.apiKeys) {
+          setKeys({
+            gemini: s.apiKeys.gemini.tokenSet,
+            anthropic: s.apiKeys.anthropic.tokenSet,
+            openai: s.apiKeys.openai.tokenSet,
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+        Chaves de API nativas usadas quando o LiteLLM está desabilitado.
+      </p>
+      <ApiKeyField
+        label="Gemini API Key"
+        description="Usada pelo Gemini CLI. Obtenha em aistudio.google.com/apikey."
+        settingKey="geminiApiKey"
+        placeholder="AIzaSy..."
+        tokenSet={keys.gemini}
+        onSaved={load}
+      />
+      <ApiKeyField
+        label="Anthropic API Key"
+        description="Usada pelo Claude Code. Obtenha em console.anthropic.com."
+        settingKey="anthropicApiKey"
+        placeholder="sk-ant-..."
+        tokenSet={keys.anthropic}
+        onSaved={load}
+      />
+      <ApiKeyField
+        label="OpenAI API Key"
+        description="Usada pelo Aider e outros engines compatíveis com OpenAI."
+        settingKey="openaiApiKey"
+        placeholder="sk-..."
+        tokenSet={keys.openai}
+        onSaved={load}
+      />
+    </div>
   );
 }
 
@@ -363,7 +588,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     <Dialog open={open} onClose={onClose} title="Configurações">
       {/* Tabs */}
       <div className="flex gap-1 mb-5 rounded-lg p-1" style={{ background: "var(--bg-input)" }}>
-        {(["github", "gitlab", "gemini", "general"] as Tab[]).map((t) => (
+        {(["github", "gitlab", "litellm", "apikeys", "general"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -380,9 +605,11 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               ? "GitHub"
               : t === "gitlab"
                 ? "GitLab"
-                : t === "gemini"
-                  ? "Gemini"
-                  : "Geral"}
+                : t === "litellm"
+                  ? "LiteLLM"
+                  : t === "apikeys"
+                    ? "API Keys"
+                    : "Geral"}
           </button>
         ))}
       </div>
@@ -404,18 +631,17 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         />
       )}
 
-      {tab === "gemini" && <GeminiTab />}
+      {tab === "litellm" && <LiteLLMTab />}
+
+      {tab === "apikeys" && <ApiKeysTab />}
 
       {tab === "general" && (
         <div className="space-y-5">
           {/* Theme selector */}
           <div>
-            <label
-              className="block text-xs font-medium mb-2"
-              style={{ color: "var(--text-muted)" }}
-            >
+            <div className="block text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>
               Tema
-            </label>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {Object.values(themes).map((t) => (
                 <button

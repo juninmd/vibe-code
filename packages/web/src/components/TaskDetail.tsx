@@ -22,6 +22,7 @@ interface TaskDetailProps {
   onClone?: (taskId: string) => Promise<void>;
   onUpdateTask?: (taskId: string, data: { tags?: string[]; notes?: string }) => Promise<void>;
   onTaskRefresh?: () => void;
+  onSkillClick?: (skillName: string) => void;
 }
 
 const statusVariant: Record<
@@ -58,7 +59,7 @@ type PipelineStep = "running" | "review" | "pushing" | "pr_created";
 
 function PipelineSteps({
   task,
-  isRunning,
+  isRunning: _isRunning,
   currentStatus,
 }: {
   task: TaskWithRun;
@@ -370,7 +371,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
       {editing && (
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Frequência</label>
+            <div className="text-xs text-zinc-500 mb-1 block">Frequência</div>
             <select
               value={preset}
               onChange={(e) => setPreset(e.target.value)}
@@ -386,7 +387,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
 
           {preset === "custom" && (
             <div>
-              <label className="text-xs text-zinc-500 mb-1 block">Expressão cron</label>
+              <div className="text-xs text-zinc-500 mb-1 block">Expressão cron</div>
               <input
                 type="text"
                 placeholder="ex: 0 9 * * 1-5"
@@ -399,7 +400,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
           )}
 
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Prazo (opcional)</label>
+            <div className="text-xs text-zinc-500 mb-1 block">Prazo (opcional)</div>
             <input
               type="date"
               value={deadline}
@@ -447,12 +448,14 @@ export function TaskDetail({
   onClone,
   onUpdateTask,
   onTaskRefresh,
+  onSkillClick,
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -462,11 +465,67 @@ export function TaskDetail({
     task.latestRun?.finishedAt ?? null
   );
 
-  // Sync notes when task changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional sync when task.id changes
+  type ActiveTab = "info" | "terminal" | "diff" | "skills";
+  const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
+
+  function parseMatchedSkill(s: string): { category: string; name: string } {
+    const idx = s.indexOf(":");
+    if (idx > 0) return { category: s.slice(0, idx), name: s.slice(idx + 1) };
+    return { category: "skill", name: s };
+  }
+
+  const skillCategoryLabel: Record<string, string> = {
+    rule: "Regra",
+    skill: "Skill",
+    agent: "Agente",
+    workflow: "Workflow",
+  };
+
+  const skillCategoryColor: Record<string, { bg: string; border: string; text: string }> = {
+    rule: { bg: "rgba(245,158,11,0.15)", border: "rgba(245,158,11,0.35)", text: "#f59e0b" },
+    skill: {
+      bg: "rgba(139,92,246,0.15)",
+      border: "rgba(139,92,246,0.35)",
+      text: "var(--accent-text, #c4b5fd)",
+    },
+    agent: { bg: "rgba(59,130,246,0.15)", border: "rgba(59,130,246,0.35)", text: "#60a5fa" },
+    workflow: { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.35)", text: "#34d399" },
+  };
+
+  const skillsByCategory = matchedSkills.reduce(
+    (acc, raw) => {
+      const { category, name } = parseMatchedSkill(raw);
+      if (!acc[category]) acc[category] = [];
+      acc[category].push({ raw, name });
+      return acc;
+    },
+    {} as Record<string, { raw: string; name: string }[]>
+  );
+
+  const categoryOrder = ["rule", "skill", "agent", "workflow"];
+
+  // Reset tab and notes when task changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when task.id changes
   useEffect(() => {
     setNotesValue(task.notes ?? "");
+    setMatchedSkills([]);
+    setActiveTab(
+      task.status === "in_progress" || task.latestRun?.status === "running" ? "terminal" : "info"
+    );
   }, [task.id]);
+
+  // Fetch matched skills when task/run changes (with abort to prevent stale results)
+  useEffect(() => {
+    if (!task.latestRun) return;
+    const abortCtrl = new AbortController();
+    api.tasks
+      .matchedSkills(task.id)
+      .then((skills) => {
+        if (!abortCtrl.signal.aborted) setMatchedSkills(skills);
+      })
+      .catch(() => {});
+    return () => abortCtrl.abort();
+  }, [task.id, task.latestRun?.id, task.latestRun]);
 
   const handleNotesBlur = () => {
     if (!onUpdateTask) return;
@@ -491,11 +550,20 @@ export function TaskDetail({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-full max-w-xl glass-panel border-l overflow-y-auto shadow-2xl shadow-black/40">
-        {/* Header */}
-        <div className="sticky top-0 glass-panel border-b px-5 py-4 z-10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Fechar detalhe da tarefa"
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative glass-dialog w-full max-w-3xl max-h-[92vh] flex flex-col rounded-xl border shadow-2xl shadow-black/50">
+        {/* ── Modal Header ────────────────────────────────── */}
+        <div className="shrink-0 px-5 pt-4 pb-0">
+          {/* Title row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5 min-w-0">
               {ProviderIcon && (
@@ -519,7 +587,19 @@ export function TaskDetail({
                 )}
               </div>
             </div>
+
+            {/* Header actions */}
             <div className="flex items-center gap-1 shrink-0">
+              {task.branchName && (
+                <a
+                  href={api.tasks.downloadUrl(task.id)}
+                  download
+                  title="Baixar código (ZIP)"
+                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors text-sm"
+                >
+                  ↓
+                </a>
+              )}
               {onClone && (
                 <button
                   type="button"
@@ -549,7 +629,7 @@ export function TaskDetail({
             </div>
           </div>
 
-          {/* Status row */}
+          {/* Status badges row */}
           <div className="flex flex-wrap gap-2 items-center mt-3">
             <Badge variant={statusVariant[task.status] ?? "default"}>
               {statusLabel[task.status] ?? task.status}
@@ -574,293 +654,443 @@ export function TaskDetail({
               </span>
             )}
           </div>
+
+          {/* Tab bar */}
+          <div className="flex gap-0 mt-3 border-b border-zinc-800">
+            {(
+              [
+                { id: "info" as const, label: "Info" },
+                { id: "terminal" as const, label: "Terminal" },
+                { id: "diff" as const, label: "Diff" },
+              ] satisfies { id: ActiveTab; label: string }[]
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+                style={{
+                  borderColor: activeTab === id ? "var(--accent, #7c3aed)" : "transparent",
+                  color: activeTab === id ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
+                }}
+              >
+                {label}
+                {id === "terminal" && isRunning && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                )}
+                {id === "diff" && task.branchName && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: "var(--text-dimmed)" }}
+                  />
+                )}
+              </button>
+            ))}
+            {matchedSkills.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("skills")}
+                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+                style={{
+                  borderColor: activeTab === "skills" ? "var(--accent, #7c3aed)" : "transparent",
+                  color:
+                    activeTab === "skills" ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
+                }}
+              >
+                Skills
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                  style={{
+                    background: activeTab === "skills" ? "var(--accent-muted)" : "var(--bg-input)",
+                    color: activeTab === "skills" ? "var(--accent-text)" : "var(--text-muted)",
+                  }}
+                >
+                  {matchedSkills.length}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="p-5 space-y-4">
-          {/* PR Creation Pipeline */}
-          <PipelineSteps
-            task={task}
-            isRunning={isRunning}
-            currentStatus={task.latestRun?.currentStatus ?? null}
-          />
+        {/* ── Tab Content ─────────────────────────────────── */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* ── Info Tab ──────────────────────────────────── */}
+          {activeTab === "info" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* PR Creation Pipeline */}
+              <PipelineSteps
+                task={task}
+                isRunning={isRunning}
+                currentStatus={task.latestRun?.currentStatus ?? null}
+              />
 
-          {/* PR Link */}
-          {task.prUrl && (
-            <div className="bg-violet-950/20 border border-violet-800/40 rounded-lg p-3">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <h3 className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
-                  <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
-                    <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
-                  </svg>
-                  Pull Request
-                </h3>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={handleCopyPR}
-                    className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors"
-                  >
-                    {prCopied ? "✓ copiado" : "copiar"}
-                  </button>
-                  <a
-                    href={task.prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] px-2 py-0.5 rounded bg-violet-900/50 hover:bg-violet-800/60 text-violet-300 hover:text-violet-100 cursor-pointer transition-colors border border-violet-700/40"
-                  >
-                    abrir ↗
-                  </a>
-                </div>
-              </div>
-              <code className="text-[11px] text-violet-300/80 font-mono break-all">
-                {task.prUrl}
-              </code>
-            </div>
-          )}
-
-          {/* Retry PR button (when in review but no PR yet) */}
-          {task.status === "review" && !task.prUrl && (
-            <div className="bg-amber-950/20 border border-amber-800/40 rounded-lg p-3 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-amber-300 font-medium">PR não criado ainda</p>
-                <p className="text-[11px] text-zinc-500 mt-0.5">
-                  O código foi commitado mas o PR falhou
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                disabled={!!loadingAction}
-                onClick={async () => {
-                  setLoadingAction("retry-pr");
-                  try {
-                    await onRetryPR(task.id);
-                  } finally {
-                    setLoadingAction(null);
-                  }
-                }}
-                className="text-xs"
-              >
-                {loadingAction === "retry-pr" ? "Criando..." : "↑ Criar PR"}
-              </Button>
-            </div>
-          )}
-
-          {/* Repo + Branch info */}
-          {task.repo && (
-            <div className="bg-zinc-800/40 rounded-lg p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                {ProviderIcon && <ProviderIcon className={provider?.color} size={13} />}
-                <a
-                  href={task.repo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-zinc-300 hover:text-white transition-colors"
-                >
-                  {task.repo.name}
-                </a>
-                <span className="text-zinc-600 text-xs">·</span>
-                <span className="text-xs text-zinc-500">{provider?.name ?? "Repository"}</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-zinc-600">base:</span>
-                  <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px]">
-                    {task.repo.defaultBranch}
+              {/* PR Link */}
+              {task.prUrl && (
+                <div className="bg-violet-950/20 border border-violet-800/40 rounded-lg p-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 16 16"
+                        width="12"
+                        height="12"
+                        fill="currentColor"
+                      >
+                        <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z" />
+                      </svg>
+                      Pull Request
+                    </h3>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={handleCopyPR}
+                        className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors"
+                      >
+                        {prCopied ? "✓ copiado" : "copiar"}
+                      </button>
+                      <a
+                        href={task.prUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] px-2 py-0.5 rounded bg-violet-900/50 hover:bg-violet-800/60 text-violet-300 hover:text-violet-100 cursor-pointer transition-colors border border-violet-700/40"
+                      >
+                        abrir ↗
+                      </a>
+                    </div>
+                  </div>
+                  <code className="text-[11px] text-violet-300/80 font-mono break-all">
+                    {task.prUrl}
                   </code>
                 </div>
-                {task.branchName && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-zinc-600">branch:</span>
-                    <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px] max-w-[200px] truncate">
-                      {task.branchName}
-                    </code>
+              )}
+
+              {/* Retry PR button */}
+              {task.status === "review" && !task.prUrl && (
+                <div className="bg-amber-950/20 border border-amber-800/40 rounded-lg p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-amber-300 font-medium">PR não criado ainda</p>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      O código foi commitado mas o PR falhou
+                    </p>
                   </div>
+                  <Button
+                    variant="outline"
+                    disabled={!!loadingAction}
+                    onClick={async () => {
+                      setLoadingAction("retry-pr");
+                      try {
+                        await onRetryPR(task.id);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                    className="text-xs"
+                  >
+                    {loadingAction === "retry-pr" ? "Criando..." : "↑ Criar PR"}
+                  </Button>
+                </div>
+              )}
+
+              {/* Repo + Branch info */}
+              {task.repo && (
+                <div className="bg-zinc-800/40 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    {ProviderIcon && <ProviderIcon className={provider?.color} size={13} />}
+                    <a
+                      href={task.repo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-zinc-300 hover:text-white transition-colors"
+                    >
+                      {task.repo.name}
+                    </a>
+                    <span className="text-zinc-600 text-xs">·</span>
+                    <span className="text-xs text-zinc-500">{provider?.name ?? "Repository"}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-zinc-600">base:</span>
+                      <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px]">
+                        {task.repo.defaultBranch}
+                      </code>
+                    </div>
+                    {task.branchName && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-zinc-600">branch:</span>
+                        <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px] max-w-[240px] truncate">
+                          {task.branchName}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              {task.description && (
+                <div>
+                  <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Descrição</h3>
+                  <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    {task.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Tags */}
+              <div>
+                <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Tags</h3>
+                <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <h3 className="text-xs font-medium text-zinc-500">Notas internas</h3>
+                  {notesSaved && <span className="text-[10px] text-emerald-400">✓ salvo</span>}
+                </div>
+                <textarea
+                  value={notesValue}
+                  onChange={(e) => setNotesValue(e.target.value)}
+                  onBlur={handleNotesBlur}
+                  placeholder="Anotações pessoais (não enviadas ao agente)…"
+                  rows={3}
+                  className="w-full bg-zinc-800/60 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                />
+              </div>
+
+              {/* Error message */}
+              {task.latestRun?.errorMessage && (
+                <div className="bg-red-950/30 border border-red-800/40 rounded-lg p-3">
+                  <h3 className="text-xs font-medium text-red-400 mb-1.5">Erro</h3>
+                  <pre className="text-xs text-red-300 whitespace-pre-wrap break-all font-mono leading-relaxed max-h-32 overflow-y-auto">
+                    {task.latestRun.errorMessage}
+                  </pre>
+                </div>
+              )}
+
+              {/* Run Stats */}
+              {task.latestRun && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 bg-zinc-800/20 rounded-lg px-3 py-2">
+                  {task.latestRun.startedAt && (
+                    <div>
+                      <span className="text-zinc-600">Iniciado </span>
+                      {formatDateTime(task.latestRun.startedAt)}
+                    </div>
+                  )}
+                  {duration && (
+                    <div>
+                      <span className="text-zinc-600">Duração </span>
+                      <span className="text-zinc-400 font-medium">{duration}</span>
+                    </div>
+                  )}
+                  {task.latestRun.exitCode !== null && (
+                    <div>
+                      <span className="text-zinc-600">Exit </span>
+                      <code
+                        className={`font-mono ${task.latestRun.exitCode === 0 ? "text-green-400" : "text-red-400"}`}
+                      >
+                        {task.latestRun.exitCode}
+                      </code>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 flex-wrap items-center">
+                {(task.status === "backlog" || task.status === "failed") && (
+                  <Button
+                    variant="primary"
+                    disabled={!!loadingAction}
+                    onClick={async () => {
+                      setLoadingAction("launch");
+                      try {
+                        await onLaunch(task.id);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agente"}
+                  </Button>
+                )}
+                {task.status === "failed" && (
+                  <Button
+                    variant="outline"
+                    disabled={!!loadingAction}
+                    onClick={async () => {
+                      setLoadingAction("retry");
+                      try {
+                        await onRetry(task.id);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {loadingAction === "retry" ? "Reiniciando..." : "↺ Tentar novamente"}
+                  </Button>
+                )}
+                {task.status === "in_progress" && (
+                  <Button
+                    variant="danger"
+                    disabled={!!loadingAction}
+                    onClick={async () => {
+                      setLoadingAction("cancel");
+                      try {
+                        await onCancel(task.id);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                  >
+                    {loadingAction === "cancel" ? "Cancelando..." : "⏹ Cancelar"}
+                  </Button>
+                )}
+                {confirmDelete ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">Tem certeza?</span>
+                    <Button variant="danger" onClick={() => onDelete(task.id)}>
+                      Confirmar
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                      Não
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmDelete(true)}
+                    className="text-zinc-500 hover:text-red-400"
+                  >
+                    Deletar
+                  </Button>
                 )}
               </div>
-            </div>
-          )}
 
-          {/* Description */}
-          {task.description && (
-            <div>
-              <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Descrição</h3>
-              <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                {task.description}
-              </p>
-            </div>
-          )}
-
-          {/* Tags */}
-          <div>
-            <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Tags</h3>
-            <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
-          </div>
-
-          {/* Notes */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-xs font-medium text-zinc-500">Notas internas</h3>
-              {notesSaved && <span className="text-[10px] text-emerald-400">✓ salvo</span>}
-            </div>
-            <textarea
-              value={notesValue}
-              onChange={(e) => setNotesValue(e.target.value)}
-              onBlur={handleNotesBlur}
-              placeholder="Anotações pessoais (não enviadas ao agente)…"
-              rows={3}
-              className="w-full bg-zinc-800/60 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
-            />
-          </div>
-
-          {/* Error message */}
-          {task.latestRun?.errorMessage && (
-            <div className="bg-red-950/30 border border-red-800/40 rounded-lg p-3">
-              <h3 className="text-xs font-medium text-red-400 mb-1.5">Erro</h3>
-              <pre className="text-xs text-red-300 whitespace-pre-wrap break-all font-mono leading-relaxed max-h-32 overflow-y-auto">
-                {task.latestRun.errorMessage}
-              </pre>
-            </div>
-          )}
-
-          {/* Run Stats */}
-          {task.latestRun && (
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 bg-zinc-800/20 rounded-lg px-3 py-2">
-              {task.latestRun.startedAt && (
-                <div>
-                  <span className="text-zinc-600">Iniciado </span>
-                  {formatDateTime(task.latestRun.startedAt)}
-                </div>
-              )}
-              {duration && (
-                <div>
-                  <span className="text-zinc-600">Duração </span>
-                  <span className="text-zinc-400 font-medium">{duration}</span>
-                </div>
-              )}
-              {task.latestRun.exitCode !== null && (
-                <div>
-                  <span className="text-zinc-600">Exit </span>
-                  <code
-                    className={`font-mono ${task.latestRun.exitCode === 0 ? "text-green-400" : "text-red-400"}`}
-                  >
-                    {task.latestRun.exitCode}
+              {/* Parent task link */}
+              {task.parentTaskId && (
+                <div className="text-xs text-zinc-500">
+                  ↳ Derivada do template{" "}
+                  <code className="text-zinc-400 bg-zinc-800 px-1 py-0.5 rounded font-mono">
+                    {task.parentTaskId.slice(0, 8)}
                   </code>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Actions */}
-          <div className="flex gap-2 flex-wrap items-center">
-            {(task.status === "backlog" || task.status === "failed") && (
-              <Button
-                variant="primary"
-                disabled={!!loadingAction}
-                onClick={async () => {
-                  setLoadingAction("launch");
-                  try {
-                    await onLaunch(task.id);
-                  } finally {
-                    setLoadingAction(null);
-                  }
-                }}
-              >
-                {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agente"}
-              </Button>
-            )}
-            {task.status === "failed" && (
-              <Button
-                variant="outline"
-                disabled={!!loadingAction}
-                onClick={async () => {
-                  setLoadingAction("retry");
-                  try {
-                    await onRetry(task.id);
-                  } finally {
-                    setLoadingAction(null);
-                  }
-                }}
-              >
-                {loadingAction === "retry" ? "Reiniciando..." : "↺ Tentar novamente"}
-              </Button>
-            )}
-            {task.status === "in_progress" && (
-              <Button
-                variant="danger"
-                disabled={!!loadingAction}
-                onClick={async () => {
-                  setLoadingAction("cancel");
-                  try {
-                    await onCancel(task.id);
-                  } finally {
-                    setLoadingAction(null);
-                  }
-                }}
-              >
-                {loadingAction === "cancel" ? "Cancelando..." : "⏹ Cancelar"}
-              </Button>
-            )}
-            {confirmDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">Tem certeza?</span>
-                <Button variant="danger" onClick={() => onDelete(task.id)}>
-                  Confirmar
-                </Button>
-                <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                  Não
-                </Button>
+              {/* Schedule section */}
+              {(task.status === "scheduled" || task.status === "backlog") && (
+                <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
+              )}
+
+              {/* Timestamps */}
+              <div className="text-[11px] text-zinc-600 space-y-0.5 pt-2 border-t border-zinc-800/60">
+                <div>Criado: {formatDateTime(task.createdAt)}</div>
+                <div>Atualizado: {formatDateTime(task.updatedAt)}</div>
               </div>
-            ) : (
-              <Button
-                variant="ghost"
-                onClick={() => setConfirmDelete(true)}
-                className="text-zinc-500 hover:text-red-400"
-              >
-                Deletar
-              </Button>
-            )}
-          </div>
-
-          {/* Parent task link for derived tasks */}
-          {task.parentTaskId && (
-            <div className="text-xs text-zinc-500">
-              ↳ Derivada do template{" "}
-              <code className="text-zinc-400 bg-zinc-800 px-1 py-0.5 rounded font-mono">
-                {task.parentTaskId.slice(0, 8)}
-              </code>
             </div>
           )}
 
-          {/* Schedule section */}
-          {(task.status === "scheduled" || task.status === "backlog") && (
-            <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
-          )}
-
-          {/* Agent Output */}
-          <div>
-            <h3 className="text-xs font-medium text-zinc-500 mb-2">Terminal</h3>
+          {/* ── Terminal Tab — kept mounted to avoid refetch on tab switch ── */}
+          <div
+            className="flex-1 min-h-0 flex flex-col p-4"
+            style={{ display: activeTab === "terminal" ? "flex" : "none" }}
+          >
             <AgentOutput
               runId={task.latestRun?.id ?? null}
               liveLogs={liveLogs}
               isRunning={isRunning}
+              fullHeight
               onSendInput={(input) => onSendInput(task.id, input)}
               currentStatus={task.latestRun?.currentStatus}
             />
           </div>
 
-          {/* Git Diff */}
-          {task.branchName && (
-            <div>
-              <h3 className="text-xs font-medium text-zinc-500 mb-2">Alterações</h3>
-              <DiffViewer taskId={task.id} branchName={task.branchName} />
+          {/* ── Skills Tab ─────────────────────────────────── */}
+          {activeTab === "skills" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Skills carregadas pela CLI
+                </span>
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full"
+                  style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}
+                >
+                  {matchedSkills.length}
+                </span>
+              </div>
+              {categoryOrder
+                .filter((cat) => skillsByCategory[cat]?.length > 0)
+                .map((cat) => {
+                  const colors = skillCategoryColor[cat] ?? {
+                    bg: "rgba(100,100,100,0.15)",
+                    border: "rgba(100,100,100,0.35)",
+                    text: "var(--text-secondary)",
+                  };
+                  return (
+                    <div key={cat}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span
+                          className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded"
+                          style={{ background: colors.bg, color: colors.text }}
+                        >
+                          {skillCategoryLabel[cat] ?? cat}
+                        </span>
+                        <span className="text-[10px]" style={{ color: "var(--text-dimmed)" }}>
+                          {skillsByCategory[cat].length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {skillsByCategory[cat].map(({ raw, name }) =>
+                          onSkillClick ? (
+                            <button
+                              key={raw}
+                              type="button"
+                              onClick={() => onSkillClick(raw)}
+                              className="inline-flex items-center gap-1 text-[11px] rounded px-2 py-0.5 cursor-pointer transition-colors"
+                              style={{
+                                background: colors.bg,
+                                border: `1px solid ${colors.border}`,
+                                color: colors.text,
+                              }}
+                            >
+                              <span className="opacity-60">⚡</span>
+                              {name}
+                            </button>
+                          ) : (
+                            <span
+                              key={raw}
+                              className="inline-flex items-center gap-1 text-[11px] rounded px-2 py-0.5"
+                              style={{
+                                background: colors.bg,
+                                border: `1px solid ${colors.border}`,
+                                color: colors.text,
+                              }}
+                            >
+                              <span className="opacity-60">⚡</span>
+                              {name}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           )}
 
-          {/* Timestamps */}
-          <div className="text-[11px] text-zinc-600 space-y-0.5 pt-2 border-t border-zinc-800/60">
-            <div>Criado: {formatDateTime(task.createdAt)}</div>
-            <div>Atualizado: {formatDateTime(task.updatedAt)}</div>
-          </div>
+          {/* ── Diff Tab ───────────────────────────────────── */}
+          {activeTab === "diff" && (
+            <div className="flex-1 overflow-y-auto p-4">
+              {task.branchName ? (
+                <DiffViewer taskId={task.id} branchName={task.branchName} />
+              ) : (
+                <div className="flex items-center justify-center h-32">
+                  <p className="text-sm text-zinc-600">Sem alterações — branch não criada</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

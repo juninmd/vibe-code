@@ -1,5 +1,9 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 
 const NO_PLAN_MODE_GUARD = [
@@ -14,25 +18,35 @@ export class GeminiEngine implements AgentEngine {
   displayName = "Gemini CLI";
   private processes = new Map<string, Subprocess>();
 
-  private getApiKey(): string | null {
-    const raw = process.env.GEMINI_API_KEY;
-    if (!raw) return null;
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-    // Accept values pasted as "GEMINI_API_KEY=..." in settings.
-    if (trimmed.startsWith("GEMINI_API_KEY=")) {
-      const fromEnvLike = trimmed.slice("GEMINI_API_KEY=".length).trim();
-      return fromEnvLike || null;
-    }
-    return trimmed;
-  }
-
-  private buildGeminiChildEnv(apiKey: string): NodeJS.ProcessEnv {
+  private buildGeminiChildEnv(
+    litellmKey?: string,
+    litellmBaseUrl?: string,
+    nativeGeminiKey?: string
+  ): NodeJS.ProcessEnv {
     const env = { ...process.env };
     // Avoid Gemini IDE client binding when running in detached task worktrees.
-const keysToDelete = ['GEMINI_CLI_IDE_SERVER_PORT', 'GEMINI_CLI_IDE_WORKSPACE_PATH', 'GEMINI_CLI_IDE_AUTH_TOKEN', 'TERM_PROGRAM', 'VSCODE_INJECTION', 'VSCODE_GIT_ASKPASS_NODE', 'VSCODE_GIT_ASKPASS_EXTRA_ARGS', 'VSCODE_GIT_ASKPASS_MAIN', 'VSCODE_GIT_IPC_HANDLE'];
-keysToDelete.forEach(key => delete env[key]);
-    env.GEMINI_API_KEY = apiKey;
+    const keysToDelete = [
+      "GEMINI_CLI_IDE_SERVER_PORT",
+      "GEMINI_CLI_IDE_WORKSPACE_PATH",
+      "GEMINI_CLI_IDE_AUTH_TOKEN",
+      "TERM_PROGRAM",
+      "VSCODE_INJECTION",
+      "VSCODE_GIT_ASKPASS_NODE",
+      "VSCODE_GIT_ASKPASS_EXTRA_ARGS",
+      "VSCODE_GIT_ASKPASS_MAIN",
+      "VSCODE_GIT_IPC_HANDLE",
+    ];
+    keysToDelete.forEach((key) => {
+      delete env[key];
+    });
+    // When LiteLLM is enabled, route through the proxy.
+    // Otherwise, prefer the DB-stored native key, then fall back to process.env.
+    if (litellmKey) {
+      env.GOOGLE_GEMINI_BASE_URL = litellmBaseUrl;
+      env.GEMINI_API_KEY = litellmKey;
+    } else if (nativeGeminiKey) {
+      env.GEMINI_API_KEY = nativeGeminiKey;
+    }
     return env;
   }
 
@@ -105,46 +119,77 @@ keysToDelete.forEach(key => delete env[key]);
   }
 
   async listModels(): Promise<string[]> {
-    // Gemini CLI does not provide a model listing command
-    return [];
+    // Return Google/Gemini models available in LiteLLM (auto-routed via GEMINI_API_KEY).
+    const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+    return all.filter((m) => m.startsWith("gemini/") || m.startsWith("gemini-"));
   }
 
   async getSetupIssue(): Promise<string | null> {
     if (!(await this.hasCli())) return "Gemini CLI não instalado";
-    if (!this.getApiKey()) return "GEMINI_API_KEY não configurada";
     return null;
+  }
+
+  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
+    const sections: string[] = [];
+
+    if (skills.projectInstructions) {
+      sections.push(`## Project Instructions\n\n${skills.projectInstructions}`);
+    }
+
+    if (skills.rules.length > 0) {
+      sections.push("## Coding Standards\n");
+      for (const rule of skills.rules) {
+        const body = rule.content
+          ? `\n<details><summary>${rule.description}</summary>\n\n${rule.content}\n</details>`
+          : rule.description;
+        sections.push(`### ${rule.name}\n${body}`);
+      }
+    }
+
+    if (skills.skills.length > 0) {
+      sections.push("## Skills\n");
+      for (const skill of skills.skills) {
+        const body = skill.content
+          ? `\n<details><summary>${skill.description}</summary>\n\n${skill.content}\n</details>`
+          : skill.description;
+        sections.push(`### ${skill.name}\n${body}`);
+      }
+    }
+
+    if (skills.agents.length > 0) {
+      sections.push("## Agent Personas\n");
+      for (const agent of skills.agents) {
+        sections.push(`### ${agent.name}\n${agent.content || agent.description}`);
+      }
+    }
+
+    if (skills.workflow) {
+      sections.push(
+        `## Workflow: ${skills.workflow.name}\n${skills.workflow.content || skills.workflow.description}`
+      );
+    }
+
+    if (sections.length === 0) return [];
+
+    const geminiMd = join(workdir, "GEMINI.md");
+    await writeFile(geminiMd, sections.join("\n\n"), "utf8");
+    return [geminiMd];
   }
 
   async *execute(
     prompt: string,
     workdir: string,
-    options?: EngineOptions
+    options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[gemini] Starting in ${workdir}` };
     yield {
       type: "log",
       stream: "system",
-      content: `[gemini] Run context: model=${options?.model ?? "default"}, runId=${options?.runId ?? "n/a"}`,
-    };
-
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      yield {
-        type: "log",
-        stream: "system",
-        content: "[gemini] Debug: GEMINI_API_KEY ausente no processo do servidor",
-      };
-      throw new Error("GEMINI_API_KEY não configurada no servidor");
-    }
-
-    yield {
-      type: "log",
-      stream: "system",
-      content: `[gemini] Debug: GEMINI_API_KEY detectada (len=${apiKey.length}, prefix=${apiKey.slice(0, 3)}...)`,
+      content: `[gemini] Run context: model=${options.model ?? "default"}, runId=${options.runId ?? "n/a"}`,
     };
 
     const args = ["gemini", "--yolo"];
-    if (options?.model) args.push("-m", options.model);
+    if (options.model) args.push("-m", options.model);
     const guardedPrompt = `${NO_PLAN_MODE_GUARD}\n\n${prompt}`;
     args.push("-p", guardedPrompt);
 
@@ -153,17 +198,24 @@ keysToDelete.forEach(key => delete env[key]);
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: this.buildGeminiChildEnv(apiKey),
+      env: this.buildGeminiChildEnv(
+        options.litellmKey,
+        options.litellmBaseUrl,
+        options.nativeApiKeys?.gemini
+      ),
     });
 
     yield {
       type: "log",
       stream: "system",
-      content:
-        "[gemini] Process started with GEMINI_API_KEY injected and IDE-related env removed from child env",
+      content: options.litellmKey
+        ? "[gemini] Process started with LiteLLM proxy (GOOGLE_GEMINI_BASE_URL + GEMINI_API_KEY injected)"
+        : options.nativeApiKeys?.gemini
+          ? "[gemini] Process started with Gemini API key from settings"
+          : "[gemini] Process started with native credentials (GEMINI_API_KEY must be set in server env)",
     };
 
-    if (options?.runId) this.processes.set(options.runId, proc);
+    if (options.runId) this.processes.set(options.runId, proc);
 
     const providerLoad = {
       skills: null as number | null,
@@ -174,24 +226,29 @@ keysToDelete.forEach(key => delete env[key]);
     for await (const event of streamProcess(
       proc,
       (line) => {
-        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
-
         const status = this.deriveStatusFromLine(line);
         if (status) {
-          events.unshift({ type: "status", content: status });
+          // Yield only the status event — the log would be redundant when a status is derived
+          return [
+            { type: "status", content: status },
+            { type: "log", stream: "stdout", content: line },
+          ] satisfies AgentEvent[];
         }
+
+        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
 
         if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
           events.push({
             type: "log",
             stream: "system",
-            content:
-              "[gemini] Debug: Gemini CLI reportou chave ausente no child process mesmo após injeção. Verifique se a chave salva é válida e sem espaços/quebras extras.",
+            content: options.litellmKey
+              ? "[gemini] LiteLLM proxy key rejected. Check LITELLM_BASE_URL and the virtual key."
+              : "[gemini] GEMINI_API_KEY not found. Add it in Settings → API Keys.",
           });
         }
         return events;
       },
-      options?.signal
+      options.signal
     )) {
       if (event.type === "log" && event.content) {
         const parsed = this.parseProviderLoadSignals(event.content);
@@ -212,7 +269,7 @@ keysToDelete.forEach(key => delete env[key]);
         `tools=${providerLoad.tools ?? "n/a"}`,
     };
 
-    if (options?.runId) this.processes.delete(options.runId);
+    if (options.runId) this.processes.delete(options.runId);
   }
 
   abort(runId: string): void {

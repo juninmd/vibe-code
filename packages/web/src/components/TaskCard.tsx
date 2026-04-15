@@ -73,6 +73,8 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
   const ProviderIcon = provider?.icon;
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: sortable card uses pointer interaction on the wrapper by design
+    // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard semantics are intentionally delegated to inner controls because the card contains nested interactive elements
     <div
       ref={setNodeRef}
       style={style}
@@ -87,10 +89,8 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             : "hover:border-sky-300/25 hover:shadow-blue-900/30 hover:translate-y-[-1px]"
       }`}
     >
-      {/* Ambient gradient layer */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.04] via-transparent to-cyan-400/[0.05] opacity-80" />
 
-      {/* Running accent bar */}
       {isRunning && (
         <>
           <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-cyan-500/25">
@@ -100,42 +100,45 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         </>
       )}
 
-      {/* Title row */}
       <div className="relative z-10 flex items-start gap-2 mb-1.5">
         {ProviderIcon && (
           <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
             <ProviderIcon size={13} />
           </span>
         )}
-        <h3 className="text-[13px] font-medium text-zinc-100 line-clamp-2 flex-1 leading-snug">
+        <h3
+          className="text-[13px] font-medium line-clamp-2 flex-1 leading-snug"
+          style={{ color: "var(--text-primary)" }}
+        >
           {task.title}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
           <PriorityDot priority={task.priority} />
           <span
             title={task.id}
-            className="text-[9px] font-mono text-zinc-700 select-all leading-snug mt-px"
+            className="text-[9px] font-mono select-all leading-snug mt-px"
+            style={{ color: "var(--text-dimmed)" }}
           >
             {task.id.slice(0, 8)}
           </span>
         </div>
       </div>
 
-      {/* Description */}
       {task.description && (
-        <p className="text-xs text-zinc-400/95 line-clamp-2 mb-2.5 ml-[21px] leading-relaxed">
+        <p
+          className="text-xs line-clamp-2 mb-2.5 ml-[21px] leading-relaxed"
+          style={{ color: "var(--text-secondary)" }}
+        >
           {task.description}
         </p>
       )}
 
-      {/* Tags */}
       {task.tags && task.tags.length > 0 && (
         <div className="mb-2 ml-[21px]">
           <TaskTagsDisplay tags={task.tags} small />
         </div>
       )}
 
-      {/* Footer */}
       <div className="relative z-10 flex items-center gap-1.5 flex-wrap ml-[21px]">
         {task.repo &&
           (task.repo.url ? (
@@ -144,18 +147,29 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-[11px] text-zinc-500 font-medium hover:text-zinc-300 transition-colors"
+              className="text-[11px] font-medium transition-colors"
+              style={{ color: "var(--text-muted)" }}
               title={task.repo.url}
             >
               {task.repo.name}
             </a>
           ) : (
-            <span className="text-[11px] text-zinc-500 font-medium">{task.repo.name}</span>
+            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
+              {task.repo.name}
+            </span>
           ))}
 
         {task.branchName && (
-          <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-zinc-600 bg-zinc-900/60 border border-zinc-800/60 px-1.5 py-px rounded-md font-mono">
+          <span
+            className="hidden sm:inline-flex items-center gap-1 text-[11px] px-1.5 py-px rounded-md font-mono"
+            style={{
+              color: "var(--text-muted)",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-default)",
+            }}
+          >
             <svg
+              aria-hidden="true"
               width="9"
               height="9"
               viewBox="0 0 16 16"
@@ -188,12 +202,19 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             );
           })()}
 
+        {task.latestRun?.litellmTokenId && (
+          <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-80">
+            LiteLLM
+          </Badge>
+        )}
+
         {task.status === "scheduled" && (
           <Badge
             variant="warning"
             className="text-[10px] py-0 px-1.5 inline-flex items-center gap-1"
           >
             <svg
+              aria-hidden="true"
               width="10"
               height="10"
               viewBox="0 0 16 16"
@@ -219,8 +240,17 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
             Falhou
           </Badge>
         )}
+        {task.status === "failed" && task.latestRun?.errorMessage && (
+          <span
+            className="text-[9px] text-red-400/70 font-mono truncate max-w-[140px]"
+            title={task.latestRun.errorMessage}
+          >
+            {task.latestRun.errorMessage}
+          </span>
+        )}
 
         {task.status === "review" && !task.prUrl && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: this wrapper only prevents drag/click propagation around the nested button
           <div
             className="relative z-10"
             onPointerDown={(e) => e.stopPropagation()}
@@ -273,7 +303,12 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
           (() => {
             const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
             return dur ? (
-              <span className="text-[10px] text-zinc-600 ml-auto tabular-nums">⏱ {dur}</span>
+              <span
+                className="text-[10px] ml-auto tabular-nums"
+                style={{ color: "var(--text-dimmed)" }}
+              >
+                ⏱ {dur}
+              </span>
             ) : null;
           })()}
       </div>

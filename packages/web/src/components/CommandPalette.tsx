@@ -7,6 +7,8 @@ interface Action {
   description?: string;
   icon: string;
   group: string;
+  /** Indexes in label that match the query (for highlight rendering) */
+  matchIdxs?: number[];
   onSelect: () => void;
 }
 
@@ -15,6 +17,7 @@ interface CommandPaletteProps {
   repos: Repository[];
   onClose: () => void;
   onSelectTask: (task: TaskWithRun) => void;
+  onSelectRepo?: (repoId: string) => void;
   onNewTask: () => void;
   onAddRepo: () => void;
   onOpenSettings: () => void;
@@ -28,20 +31,50 @@ const STATUS_ICONS: Record<string, string> = {
   failed: "✕",
 };
 
-function fuzzyScore(text: string, query: string): number {
-  if (!query) return 1;
+const MAX_RESULTS = 30;
+
+function fuzzyScore(text: string, query: string): { score: number; matchIdxs: number[] } {
+  if (!query) return { score: 1, matchIdxs: [] };
   const t = text.toLowerCase();
   const q = query.toLowerCase();
-  if (t.includes(q)) return 2;
-  let score = 0;
+  // Exact match scores highest
+  const exactIdx = t.indexOf(q);
+  if (exactIdx >= 0) {
+    const idxs = Array.from({ length: q.length }, (_, i) => exactIdx + i);
+    return { score: 2, matchIdxs: idxs };
+  }
+  // Fuzzy match
+  const matchIdxs: number[] = [];
   let qi = 0;
   for (let i = 0; i < t.length && qi < q.length; i++) {
     if (t[i] === q[qi]) {
-      score++;
+      matchIdxs.push(i);
       qi++;
     }
   }
-  return qi === q.length ? score / q.length : 0;
+  const score = qi === q.length ? matchIdxs.length / q.length : 0;
+  return { score, matchIdxs };
+}
+
+function HighlightedLabel({ label, matchIdxs }: { label: string; matchIdxs?: number[] }) {
+  if (!matchIdxs || matchIdxs.length === 0) {
+    return <span className="text-sm text-zinc-200 block truncate">{label}</span>;
+  }
+  const idxSet = new Set(matchIdxs);
+  return (
+    <span className="text-sm text-zinc-200 block truncate">
+      {label.split("").map((ch, i) => {
+        const key = `${i}-${ch}`;
+        return idxSet.has(i) ? (
+          <span key={key} className="text-violet-300 font-semibold">
+            {ch}
+          </span>
+        ) : (
+          <span key={key}>{ch}</span>
+        );
+      })}
+    </span>
+  );
 }
 
 export function CommandPalette({
@@ -49,6 +82,7 @@ export function CommandPalette({
   repos,
   onClose,
   onSelectTask,
+  onSelectRepo,
   onNewTask,
   onAddRepo,
   onOpenSettings,
@@ -102,44 +136,77 @@ export function CommandPalette({
     ];
 
     const taskItems: Action[] = tasks
-      .map((t) => ({
-        score: fuzzyScore(`${t.title} ${t.description ?? ""} ${t.repo?.name ?? ""}`, q),
-        action: {
-          id: `task-${t.id}`,
-          label: t.title,
-          description: `${t.repo?.name ?? ""}${t.branchName ? ` · ${t.branchName}` : ""}`,
-          icon: STATUS_ICONS[t.status] ?? "○",
-          group: "Tasks",
-          onSelect: () => {
-            onSelectTask(t);
-            onClose();
+      .map((t) => {
+        const { score, matchIdxs } = fuzzyScore(
+          `${t.title} ${t.description ?? ""} ${t.repo?.name ?? ""}`,
+          q
+        );
+        return {
+          score,
+          action: {
+            id: `task-${t.id}`,
+            label: t.title,
+            description: `${t.repo?.name ?? ""}${t.branchName ? ` · ${t.branchName}` : ""}`,
+            icon: STATUS_ICONS[t.status] ?? "○",
+            group: "Tasks",
+            matchIdxs,
+            onSelect: () => {
+              onSelectTask(t);
+              onClose();
+            },
           },
-        },
-      }))
+        };
+      })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_RESULTS)
       .map((x) => x.action);
 
     const repoItems: Action[] = repos
-      .filter((r) => !q || fuzzyScore(r.name, q) > 0)
-      .map((r) => ({
-        id: `repo-${r.id}`,
-        label: r.name,
-        description: r.url,
-        icon: "⬡",
-        group: "Repositories",
-        onSelect: onClose,
-      }));
+      .filter((r) => !q || fuzzyScore(r.name, q).score > 0)
+      .map((r) => {
+        const { matchIdxs } = fuzzyScore(r.name, q);
+        return {
+          id: `repo-${r.id}`,
+          label: r.name,
+          description: r.url,
+          icon: "⬡",
+          group: "Repositories",
+          matchIdxs,
+          onSelect: () => {
+            onSelectRepo?.(r.id);
+            onClose();
+          },
+        };
+      });
 
-    const actionItems = q ? staticActions.filter((a) => fuzzyScore(a.label, q) > 0) : staticActions;
+    const actionItems = q
+      ? staticActions
+          .map((a) => {
+            const { score, matchIdxs } = fuzzyScore(a.label, q);
+            return { score, action: { ...a, matchIdxs } };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map((x) => x.action)
+      : staticActions;
+
     return [...actionItems, ...taskItems, ...repoItems];
-  }, [query, tasks, repos, onSelectTask, onClose, onNewTask, onAddRepo, onOpenSettings]);
+  }, [
+    query,
+    tasks,
+    repos,
+    onSelectTask,
+    onSelectRepo,
+    onClose,
+    onNewTask,
+    onAddRepo,
+    onOpenSettings,
+  ]);
 
-  // Reset active when results change
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset to 0 whenever query changes
   useEffect(() => setActiveIdx(0), [query]);
 
-  // Scroll active item into view
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`);
     el?.scrollIntoView({ block: "nearest" });
@@ -164,26 +231,29 @@ export function CommandPalette({
     }
   };
 
-  // Group items for rendering
   const grouped = useMemo(() => {
     const groups: { label: string; items: (Action & { idx: number })[] }[] = [];
     let globalIdx = 0;
-    const seen = new Set<string>();
     for (const item of items) {
-      if (!seen.has(item.group)) {
-        seen.add(item.group);
-        groups.push({ label: item.group, items: [] });
+      let group = groups.find((g) => g.label === item.group);
+      if (!group) {
+        group = { label: item.group, items: [] };
+        groups.push(group);
       }
-      groups[groups.length - 1].items.push({ ...item, idx: globalIdx++ });
+      group.items.push({ ...item, idx: globalIdx++ });
     }
     return groups;
   }, [items]);
 
   return (
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-xl glass-dialog border rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
-        {/* Search input */}
+      <button
+        type="button"
+        aria-label="Close command palette"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-xl glass-dialog border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">
           <span className="text-zinc-500 text-sm shrink-0">⌘</span>
           <input
@@ -200,7 +270,6 @@ export function CommandPalette({
           </kbd>
         </div>
 
-        {/* Results */}
         <div ref={listRef} className="max-h-[360px] overflow-y-auto py-2">
           {grouped.length === 0 && (
             <p className="text-center text-zinc-600 text-sm py-8">No results</p>
@@ -217,15 +286,13 @@ export function CommandPalette({
                   data-idx={item.idx}
                   onClick={item.onSelect}
                   onMouseEnter={() => setActiveIdx(item.idx)}
-                  className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors cursor-pointer ${
-                    item.idx === activeIdx ? "bg-zinc-800" : "hover:bg-zinc-800/50"
-                  }`}
+                  className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors cursor-pointer ${item.idx === activeIdx ? "bg-zinc-800" : "hover:bg-zinc-800/50"}`}
                 >
                   <span className="text-sm font-mono text-zinc-500 w-4 shrink-0 text-center">
                     {item.icon}
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="text-sm text-zinc-200 block truncate">{item.label}</span>
+                    <HighlightedLabel label={item.label} matchIdxs={item.matchIdxs} />
                     {item.description && (
                       <span className="text-xs text-zinc-600 block truncate">
                         {item.description}
@@ -238,7 +305,6 @@ export function CommandPalette({
           ))}
         </div>
 
-        {/* Footer hint */}
         <div className="border-t border-zinc-800 px-4 py-2 flex items-center gap-4 text-[10px] text-zinc-600">
           <span>
             <kbd className="border border-zinc-700 rounded px-1">↑↓</kbd> navigate

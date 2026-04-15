@@ -176,5 +176,25 @@ export function createStatsRouter(db: Db) {
     });
   });
 
+  // M5.3: Skill effectiveness from run_metrics
+  app.get("/skills", (c) => {
+    try {
+      const data = db.metrics.skillEffectiveness();
+      return c.json({ data });
+    } catch {
+      return c.json({ data: [] });
+    }
+  });
+
+  // M5.4: Engine effectiveness from run_metrics
+  app.get("/engines", (c) => {
+    try {
+      const data = db.metrics.engineEffectiveness();
+      return c.json({ data });
+    } catch {
+      return c.json({ data: [] });
+    }
+  });
+
   return app;
 }

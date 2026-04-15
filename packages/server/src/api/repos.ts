@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
 const createRepoSchema = z.object({
@@ -63,8 +64,25 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   });
 
   router.get("/github/list", async (c) => {
-    const repos = await git.listRemoteRepos("github");
-    return c.json({ data: repos });
+    try {
+      const repos = await git.listRemoteRepos("github", 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "github_error", message: msg }, 500);
+    }
+  });
+
+  router.get("/github/search", async (c) => {
+    const q = c.req.query("q")?.trim();
+    if (!q) return c.json({ data: [] });
+    try {
+      const repos = await git.searchRemoteRepos("github", q, 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "github_error", message: msg }, 500);
+    }
   });
 
   router.post("/github/create", async (c) => {
@@ -89,8 +107,25 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
 
   // GitLab provider routes
   router.get("/gitlab/list", async (c) => {
-    const repos = await git.listRemoteRepos("gitlab");
-    return c.json({ data: repos });
+    try {
+      const repos = await git.listRemoteRepos("gitlab", 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "gitlab_error", message: msg }, 500);
+    }
+  });
+
+  router.get("/gitlab/search", async (c) => {
+    const q = c.req.query("q")?.trim();
+    if (!q) return c.json({ data: [] });
+    try {
+      const repos = await git.searchRemoteRepos("gitlab", q, 20);
+      return c.json({ data: repos });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "gitlab_error", message: msg }, 500);
+    }
   });
 
   router.post("/gitlab/create", async (c) => {
@@ -209,6 +244,31 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
     db.repos.updateStatus(repo.id, "pending");
     return c.json({ data: { ok: true } });
+  });
+
+  // M4.5: Review findings for a repository
+  router.get("/:id/findings", (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    const limit = Number(c.req.query("limit")) || 50;
+    const findings = db.findings.listByRepo(repo.id, limit);
+    return c.json({ data: findings });
+  });
+
+  // M6.5: Skills scoped to a repository's .vibe-code directory
+  router.get("/:id/skills", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath)
+      return c.json({ data: { skills: [], rules: [], agents: [], workflows: [] } });
+    try {
+      const loader = new RepoSkillsLoader(repo.localPath);
+      const index = await loader.load();
+      return c.json({ data: index });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "load_error", message: msg }, 500);
+    }
   });
 
   return router;

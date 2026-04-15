@@ -36,7 +36,7 @@ export class GitLabProvider implements GitProviderAdapter {
     return { username: data.username, displayName: data.name ?? undefined };
   }
 
-  async listRepos(token: string, limit = 200): Promise<RemoteRepo[]> {
+  async listRepos(token: string, limit = 20): Promise<RemoteRepo[]> {
     const repos: RemoteRepo[] = [];
     let page = 1;
     const perPage = Math.min(limit, 100);
@@ -69,6 +69,31 @@ export class GitLabProvider implements GitProviderAdapter {
       page++;
     }
     return repos.slice(0, limit);
+  }
+
+  async searchRepos(token: string, query: string, limit = 20): Promise<RemoteRepo[]> {
+    const perPage = Math.min(limit, 100);
+    const q = encodeURIComponent(query);
+    const res = await fetch(
+      this.api(
+        `/projects?search=${q}&membership=true&per_page=${perPage}&order_by=similarity&sort=desc`
+      ),
+      { headers: headers(token) }
+    );
+    if (!res.ok) throw new Error(`GitLab API error: ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as {
+      path_with_namespace: string;
+      web_url: string;
+      description: string | null;
+      visibility: string;
+    }[];
+    return data.map((r) => ({
+      name: r.path_with_namespace,
+      url: r.web_url,
+      description: r.description ?? "",
+      isPrivate: r.visibility === "private",
+      provider: "gitlab",
+    }));
   }
 
   async createRepo(token: string, params: CreateRepoParams): Promise<RemoteRepo> {
@@ -117,11 +142,30 @@ export class GitLabProvider implements GitProviderAdapter {
       }),
     });
     if (!res.ok) {
+      if (res.status === 409 || res.status === 422) {
+        // An open MR for this source branch may already exist — return it instead of failing
+        const existing = await this.findOpenMR(token, encodedPath, params.head);
+        if (existing) return existing;
+      }
       const err = await res.text();
       throw new Error(`GitLab create MR failed: ${res.status} ${err}`);
     }
     const data = (await res.json()) as { web_url: string };
     return data.web_url;
+  }
+
+  private async findOpenMR(
+    token: string,
+    encodedProjectPath: string,
+    sourceBranch: string
+  ): Promise<string | null> {
+    const url = this.api(
+      `/projects/${encodedProjectPath}/merge_requests?state=opened&source_branch=${encodeURIComponent(sourceBranch)}&per_page=1`
+    );
+    const res = await fetch(url, { headers: headers(token) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { web_url: string }[];
+    return data[0]?.web_url ?? null;
   }
 
   async isPrMerged(token: string, prUrl: string): Promise<boolean> {

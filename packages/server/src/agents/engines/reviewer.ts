@@ -117,6 +117,10 @@ export async function runPersonaReview(opts: {
   defaultBranch: string;
   reviewEngine?: string;
   reviewModel?: string;
+  litellmKey: string;
+  litellmBaseUrl: string;
+  nativeGeminiKey?: string;
+  nativeAnthropicKey?: string;
 }): Promise<ReviewEvent> {
   const {
     persona,
@@ -126,6 +130,10 @@ export async function runPersonaReview(opts: {
     defaultBranch,
     reviewEngine,
     reviewModel,
+    litellmKey,
+    litellmBaseUrl,
+    nativeGeminiKey,
+    nativeAnthropicKey,
   } = opts;
 
   const diff = await getWorktreeDiff(worktreePath, defaultBranch);
@@ -188,9 +196,28 @@ export async function runPersonaReview(opts: {
             delete env.VSCODE_GIT_ASKPASS_EXTRA_ARGS;
             delete env.VSCODE_GIT_ASKPASS_MAIN;
             delete env.VSCODE_GIT_IPC_HANDLE;
+            if (litellmKey) {
+              // Route through LiteLLM proxy when available.
+              env.GOOGLE_GEMINI_BASE_URL = litellmBaseUrl;
+              env.GEMINI_API_KEY = litellmKey;
+            } else if (nativeGeminiKey) {
+              // Fallback: use the native API key stored in DB settings.
+              env.GEMINI_API_KEY = nativeGeminiKey;
+            }
             return env;
           })()
-        : process.env;
+        : (() => {
+            const env = { ...process.env };
+            if (litellmKey) {
+              // Route through LiteLLM proxy when available.
+              env.ANTHROPIC_BASE_URL = litellmBaseUrl;
+              env.ANTHROPIC_API_KEY = litellmKey;
+            } else if (nativeAnthropicKey) {
+              // Fallback: use the native API key stored in DB settings.
+              env.ANTHROPIC_API_KEY = nativeAnthropicKey;
+            }
+            return env;
+          })();
 
     const proc = Bun.spawn(args, {
       cwd: worktreePath,

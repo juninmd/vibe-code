@@ -88,7 +88,12 @@ export function PromptTemplatePicker({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <button
+        type="button"
+        aria-label="Fechar seletor de templates"
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+      />
       <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
@@ -124,27 +129,33 @@ export function PromptTemplatePicker({
               </p>
               <div className="space-y-1.5">
                 {items.map((t) => (
-                  <div
-                    key={t.id}
-                    className="group flex items-start gap-3 p-3 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 cursor-pointer transition-colors"
-                    onClick={() => onSelect(t)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-zinc-100">{t.title}</span>
-                        {t.category && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[t.category] ?? "bg-zinc-700 text-zinc-400"}`}
-                          >
-                            {CATEGORY_LABELS[t.category] ?? t.category}
-                          </span>
+                  <div key={t.id} className="group flex items-start gap-2">
+                    <button
+                      type="button"
+                      className="flex flex-1 min-w-0 items-start gap-3 p-3 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 cursor-pointer transition-colors text-left"
+                      onClick={() => onSelect(t)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-zinc-100">{t.title}</span>
+                          {t.category && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${CATEGORY_COLORS[t.category] ?? "bg-zinc-700 text-zinc-400"}`}
+                            >
+                              {CATEGORY_LABELS[t.category] ?? t.category}
+                            </span>
+                          )}
+                          {t.isBuiltin && (
+                            <span className="text-[10px] text-zinc-600">built-in</span>
+                          )}
+                        </div>
+                        {t.description && (
+                          <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
+                            {t.description}
+                          </p>
                         )}
-                        {t.isBuiltin && <span className="text-[10px] text-zinc-600">built-in</span>}
                       </div>
-                      {t.description && (
-                        <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">{t.description}</p>
-                      )}
-                    </div>
+                    </button>
                     {!t.isBuiltin && (
                       <button
                         type="button"
@@ -153,7 +164,7 @@ export function PromptTemplatePicker({
                           handleDelete(t.id);
                         }}
                         disabled={deletingId === t.id}
-                        className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-600 hover:text-red-400 transition-all cursor-pointer p-1"
+                        className="opacity-0 group-hover:opacity-100 shrink-0 self-center text-zinc-600 hover:text-red-400 transition-all cursor-pointer p-1"
                         title="Remover template"
                       >
                         {deletingId === t.id ? "..." : "✕"}
