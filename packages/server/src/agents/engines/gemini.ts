@@ -5,6 +5,7 @@ import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
+import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
 const NO_PLAN_MODE_GUARD = [
   "SYSTEM: You are in implementation mode.",
@@ -223,31 +224,35 @@ export class GeminiEngine implements AgentEngine {
       tools: null as number | null,
     };
 
-    for await (const event of streamProcess(
-      proc,
-      (line) => {
-        const status = this.deriveStatusFromLine(line);
-        if (status) {
-          // Yield only the status event — the log would be redundant when a status is derived
-          return [
-            { type: "status", content: status },
-            { type: "log", stream: "stdout", content: line },
-          ] satisfies AgentEvent[];
-        }
+    for await (const event of withHeartbeat(
+      streamProcess(
+        proc,
+        (line) => {
+          const status = this.deriveStatusFromLine(line);
+          if (status) {
+            // Yield only the status event — the log would be redundant when a status is derived
+            return [
+              { type: "status", content: status },
+              { type: "log", stream: "stdout", content: line },
+            ] satisfies AgentEvent[];
+          }
 
-        const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
+          const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
 
-        if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
-          events.push({
-            type: "log",
-            stream: "system",
-            content: options.litellmKey
-              ? "[gemini] LiteLLM proxy key rejected. Check LITELLM_BASE_URL and the virtual key."
-              : "[gemini] GEMINI_API_KEY not found. Add it in Settings → API Keys.",
-          });
-        }
-        return events;
-      },
+          if (line.includes("you must specify the GEMINI_API_KEY environment variable")) {
+            events.push({
+              type: "log",
+              stream: "system",
+              content: options.litellmKey
+                ? "[gemini] LiteLLM proxy key rejected. Check LITELLM_BASE_URL and the virtual key."
+                : "[gemini] GEMINI_API_KEY not found. Add it in Settings → API Keys.",
+            });
+          }
+          return events;
+        },
+        options.signal
+      ),
+      getHeartbeatIntervalMs(),
       options.signal
     )) {
       if (event.type === "log" && event.content) {

@@ -76,17 +76,26 @@ await git.init();
 
 // ─── Recover stuck tasks ─────────────────────────────────────────────────────
 // Tasks left as "in_progress" from a previous server session will never finish.
+// Use state_snapshot to emit a richer log message when available.
 // Reset them to "failed" so the user can retry.
 {
   const stuck = db.tasks.list(undefined, "in_progress");
   for (const task of stuck) {
     db.tasks.update(task.id, { status: "failed" });
-    // Mark the latest run as failed too
     const run = db.runs.getLatestByTask(task.id);
     if (run && run.status === "running") {
+      let phase = "unknown";
+      try {
+        if (run.stateSnapshot) {
+          const snap = JSON.parse(run.stateSnapshot) as { phase?: string; ts?: string };
+          if (snap.phase) phase = snap.phase;
+        }
+      } catch {
+        /* ignore parse errors */
+      }
       db.runs.updateStatus(run.id, "failed", {
         finished_at: new Date().toISOString(),
-        error_message: "Server restarted while task was running",
+        error_message: `Server restarted while task was running (phase: ${phase})`,
       });
     }
     console.log(`  ↩ Recovered stuck task: "${task.title}" → failed`);

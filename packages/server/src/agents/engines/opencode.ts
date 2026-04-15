@@ -4,6 +4,7 @@ import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
+import { getHeartbeatIntervalMs } from "./heartbeat";
 
 // Maps raw tool names to readable labels and extracts the most useful arg
 function humanizeToolCall(tool: string, input: Record<string, unknown>): string {
@@ -145,11 +146,11 @@ export class OpenCodeEngine implements AgentEngine {
   displayName = "OpenCode";
   private processes = new Map<string, Subprocess>();
 
-  /** Heartbeat interval (ms). Overridable in tests. */
+  /** Heartbeat interval (ms). Overridable in tests via constructor arg or VIBE_CODE_HEARTBEAT_MS. */
   protected heartbeatIntervalMs: number;
 
-  constructor(heartbeatIntervalMs = 30_000) {
-    this.heartbeatIntervalMs = heartbeatIntervalMs;
+  constructor(heartbeatIntervalMs?: number) {
+    this.heartbeatIntervalMs = heartbeatIntervalMs ?? getHeartbeatIntervalMs();
   }
 
   /**

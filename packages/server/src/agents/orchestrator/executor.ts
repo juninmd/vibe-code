@@ -7,7 +7,11 @@ import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
 import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
+import { runBaselineCheck } from "./baseline-check";
+import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
+import { writeHarnessContext } from "./harness-context";
+import { runPlannerIfNeeded } from "./planner";
 import { buildContextAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
@@ -327,6 +331,7 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { started_at: new Date().toISOString() });
+    db.runs.updateStateSnapshot(run.id, "setup");
     sysLog("Setting up workspace...");
 
     if (reusableWorkspacePath) {
@@ -346,6 +351,20 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
+    db.runs.updateStateSnapshot(run.id, "worktree_ready");
+
+    // M4: Baseline verification — detect pre-existing breakage before the agent starts
+    {
+      const baseline = await runBaselineCheck(wtPath);
+      if (baseline.skipped) {
+        sysLog(`Baseline check: ${baseline.details}`);
+      } else if (baseline.passed) {
+        sysLog("Baseline check: passed ✓");
+      } else {
+        sysLog("Baseline check: FAILED — pre-existing issues detected (agent will be informed)");
+        sysLog(baseline.details);
+      }
+    }
 
     // Ensure opencode.json won't pollute git history
     await ensureGitignoreEntry(wtPath, "opencode.json");
@@ -435,7 +454,53 @@ export async function executeAgent(
       }
     }
 
-    for await (const event of engine.execute(prompt, wtPath, {
+    // M2: Write harness context files (.vibe-code/context/PROGRESS.md + TASK.json)
+    try {
+      const harnessFiles = await writeHarnessContext(task, run, wtPath, db, git);
+      for (const f of harnessFiles) {
+        createdContextFiles.push(f);
+        const relative = f.startsWith(wtPath) ? f.slice(wtPath.length + 1) : f;
+        await ensureGitignoreEntry(wtPath, relative);
+      }
+      sysLog("Harness context written (.vibe-code/context/)");
+    } catch (err: any) {
+      sysLog(`Harness context write failed (${err.message}), continuing`);
+    }
+
+    // M5: Planner micro-step — expand short descriptions into a full spec
+    let plannerSpec: string | null = null;
+    if (litellmBaseUrl && litellmKey) {
+      try {
+        const plannerResult = await runPlannerIfNeeded(
+          task.title,
+          task.description ?? "",
+          wtPath,
+          litellmBaseUrl,
+          litellmKey
+        );
+        if (plannerResult) {
+          plannerSpec = plannerResult.spec;
+          createdContextFiles.push(plannerResult.specPath);
+          const relative = plannerResult.specPath.startsWith(wtPath)
+            ? plannerResult.specPath.slice(wtPath.length + 1)
+            : plannerResult.specPath;
+          await ensureGitignoreEntry(wtPath, relative);
+          db.tasks.updatePlannerSpec(task.id, plannerSpec);
+          sysLog("Planner: spec expanded and written to .vibe-code/context/SPEC.md");
+        }
+      } catch (err: any) {
+        sysLog(`Planner: failed (${err.message}), continuing with original description`);
+      }
+    }
+
+    // Append context file reference to prompt so agents know where to look
+    const specNote = plannerSpec
+      ? "\n**Expanded spec is available in `.vibe-code/context/SPEC.md` — read it before starting.**"
+      : "";
+    const promptWithContext = `${prompt}\n\n---\n**Session context is available in \`.vibe-code/context/PROGRESS.md\` (human-readable) and \`.vibe-code/context/TASK.json\` (structured). Read them at the start if you need previous session notes or task metadata.**${specNote}`;
+
+    db.runs.updateStateSnapshot(run.id, "agent_running");
+    for await (const event of engine.execute(promptWithContext, wtPath, {
       runId: run.id,
       signal: abort.signal,
       model,
@@ -463,6 +528,7 @@ export async function executeAgent(
     sysLog(
       `Running final validator agent (lint/test/build), max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`
     );
+    db.runs.updateStateSnapshot(run.id, "validating");
     let validatorPassed = false;
     let validatorExitCode: number | null = null;
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
@@ -512,6 +578,72 @@ export async function executeAgent(
 
     const baseBranch = task.baseBranch || repo.defaultBranch;
 
+    // M6: Post-run evaluator — grade completeness against the task spec
+    if (litellmBaseUrl && litellmKey) {
+      try {
+        db.runs.updateStateSnapshot(run.id, "evaluating");
+        const grade = await runPostRunEvaluator(
+          task.title,
+          plannerSpec ?? task.description ?? "",
+          wtPath,
+          baseBranch,
+          litellmBaseUrl,
+          litellmKey
+        );
+        if (grade) {
+          sysLog(
+            `Evaluator grade: ${grade.score}/10 — ${grade.pass ? "PASS ✓" : "BELOW THRESHOLD ⚠"}`
+          );
+          sysLog(`Evaluator feedback: ${grade.feedback}`);
+
+          if (!grade.pass) {
+            // Send feedback to generator for one improvement loop
+            sysLog("Evaluator: below threshold — running improvement loop...");
+            const improvementPrompt = [
+              "You are continuing an autonomous coding task after an evaluator found gaps.",
+              "Apply the evaluator feedback below to improve the implementation.",
+              "",
+              "Rules:",
+              "- Only address the specific gaps mentioned. Do NOT rewrite unrelated code.",
+              "- If a suggested change is not applicable, skip it and continue.",
+              "- Do not push or open PR. Only modify files.",
+              "",
+              `Task: ${task.title}`,
+              task.description ? `Description: ${task.description}` : "",
+              "",
+              "Evaluator feedback:",
+              grade.feedback,
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            for await (const event of engine.execute(improvementPrompt, wtPath, {
+              runId: run.id,
+              signal: abort.signal,
+              model,
+              litellmKey,
+              litellmBaseUrl,
+              nativeApiKeys,
+            })) {
+              if (abort.signal.aborted) break;
+              if (event.type === "complete") continue;
+              await handleAgentEvent(event, run.id, task.id, db, hub, () => {
+                lastActivity = Date.now();
+              });
+            }
+            if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+
+            if (await git.hasChanges(wtPath)) {
+              await git.commitAll(wtPath, `fix: address evaluator feedback for ${task.title}`);
+              sysLog("Evaluator improvement committed ✓");
+            }
+          }
+        }
+      } catch (err: any) {
+        sysLog(`Evaluator: failed (${err.message}), continuing`);
+      }
+    }
+
     if (await git.hasChanges(wtPath)) {
       sysLog("Committing changes...");
       await git.commitAll(wtPath, `feat: ${task.title}`);
@@ -524,6 +656,7 @@ export async function executeAgent(
 
     if (REVIEW_ENABLED) {
       sysLog("Running review pipeline...");
+      db.runs.updateStateSnapshot(run.id, "reviewing");
       const reviewResult = await runReviewPipeline(
         task,
         run,
@@ -670,6 +803,7 @@ export async function executeAgent(
     let prUrl: string | null = null;
 
     try {
+      db.runs.updateStateSnapshot(run.id, "pr_creating");
       sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
       sysLog("Branch pushed ✓");

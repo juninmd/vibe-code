@@ -58,6 +58,8 @@ export interface Task {
   matchedSkills: string[];
   tags: string[];
   notes: string;
+  /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
+  plannerSpec?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +77,8 @@ export interface AgentRun {
   errorMessage: string | null;
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
+  /** Serialised JSON: `{ phase: string; ts: string }` — updated at each lifecycle transition. */
+  stateSnapshot?: string | null;
   createdAt: string;
 }
 

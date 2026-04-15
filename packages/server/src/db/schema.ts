@@ -129,6 +129,10 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("matched_skills")) {
     db.exec("ALTER TABLE tasks ADD COLUMN matched_skills TEXT DEFAULT '[]'");
   }
+  // M-harness: planner-generated spec expansion stored per task
+  if (!taskColNames.includes("planner_spec")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN planner_spec TEXT");
+  }
 
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];
@@ -140,6 +144,11 @@ export function initDatabase(dbPath: string): Database {
   // Migration: matched_skills column on agent_runs (M7.2)
   if (!runColNames.includes("matched_skills")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN matched_skills TEXT DEFAULT '[]'");
+  }
+
+  // M-harness: state_snapshot for durable run-phase tracking & restart recovery
+  if (!runColNames.includes("state_snapshot")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN state_snapshot TEXT");
   }
 
   // M4.1: review_findings table
