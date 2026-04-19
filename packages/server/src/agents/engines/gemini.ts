@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
@@ -6,13 +6,6 @@ import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
-
-const NO_PLAN_MODE_GUARD = [
-  "SYSTEM: You are in implementation mode.",
-  "Do NOT enter Plan Mode.",
-  "Do NOT call the enter_plan_mode tool.",
-  "Execute the task directly by editing project files in the current workspace.",
-].join("\n");
 
 export class GeminiEngine implements AgentEngine {
   name = "gemini";
@@ -59,48 +52,6 @@ export class GeminiEngine implements AgentEngine {
     } catch {
       return false;
     }
-  }
-
-  private parseProviderLoadSignals(line: string): {
-    skills?: number;
-    agents?: number;
-    tools?: number;
-  } {
-    const out: { skills?: number; agents?: number; tools?: number } = {};
-    const skillMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+skills?/i);
-    const agentMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+agents?/i);
-    const toolMatch = line.match(/(?:loaded|using|enabled)\s+(\d+)\s+tools?/i);
-    if (skillMatch?.[1]) out.skills = Number(skillMatch[1]);
-    if (agentMatch?.[1]) out.agents = Number(agentMatch[1]);
-    if (toolMatch?.[1]) out.tools = Number(toolMatch[1]);
-    return out;
-  }
-
-  private deriveStatusFromLine(line: string): string | null {
-    const trimmed = line.trim();
-    if (!trimmed) return null;
-
-    const installProgressMatch = trimmed.match(
-      /(progress|resolved|reused|downloaded|added\s+\d+\s+packages?|packages:\s*[+-]\d+)/i
-    );
-    if (installProgressMatch) {
-      const compact = trimmed.replace(/\s+/g, " ");
-      return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
-    }
-
-    if (/tool execution denied by policy/i.test(trimmed)) {
-      return "Tool bloqueada por policy; trocando estrategia...";
-    }
-
-    if (/missing pgrep output/i.test(trimmed)) {
-      return "Ferramenta tentou pgrep; usando alternativa permitida...";
-    }
-
-    if (/switching to plan mode|enter_plan_mode/i.test(trimmed)) {
-      return "Plan Mode detectado: continuar em implementation mode (sem enter_plan_mode).";
-    }
-
-    return null;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -172,9 +123,11 @@ export class GeminiEngine implements AgentEngine {
 
     if (sections.length === 0) return [];
 
-    const geminiMd = join(workdir, "GEMINI.md");
-    await writeFile(geminiMd, sections.join("\n\n"), "utf8");
-    return [geminiMd];
+    const geminiDir = join(workdir, ".gemini");
+    await mkdir(geminiDir, { recursive: true });
+    const instructionsFile = join(geminiDir, "instructions.md");
+    await writeFile(instructionsFile, sections.join("\n\n"), "utf8");
+    return [instructionsFile];
   }
 
   async *execute(
@@ -191,8 +144,7 @@ export class GeminiEngine implements AgentEngine {
 
     const args = ["gemini", "--yolo", "--output-format", "stream-json"];
     if (options.model) args.push("-m", options.model);
-    const guardedPrompt = `${NO_PLAN_MODE_GUARD}\n\n${prompt}`;
-    args.push("-p", guardedPrompt);
+    args.push("-p", prompt);
 
     const proc = Bun.spawn(args, {
       cwd: workdir,
@@ -218,13 +170,7 @@ export class GeminiEngine implements AgentEngine {
 
     if (options.runId) this.processes.set(options.runId, proc);
 
-    const providerLoad = {
-      skills: null as number | null,
-      agents: null as number | null,
-      tools: null as number | null,
-    };
-
-    for await (const event of withHeartbeat(
+    yield* withHeartbeat(
       streamProcess(
         proc,
         (line) => {
@@ -274,12 +220,6 @@ export class GeminiEngine implements AgentEngine {
                   ? obj.content
                   : null;
             if (text) {
-              const status = this.deriveStatusFromLine(text);
-              if (status)
-                return [
-                  { type: "status", content: status },
-                  { type: "log", stream: "stdout", content: text },
-                ] satisfies AgentEvent[];
               return [{ type: "log", stream: "stdout", content: text }];
             }
 
@@ -291,15 +231,6 @@ export class GeminiEngine implements AgentEngine {
 
             // Unknown JSON event — emit as system log
             return [{ type: "log", stream: "system", content: line }];
-          }
-
-          // Not JSON — fall back to existing text status handling
-          const status = this.deriveStatusFromLine(line);
-          if (status) {
-            return [
-              { type: "status", content: status },
-              { type: "log", stream: "stdout", content: line },
-            ] satisfies AgentEvent[];
           }
 
           const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];
@@ -319,25 +250,7 @@ export class GeminiEngine implements AgentEngine {
       ),
       getHeartbeatIntervalMs(),
       options.signal
-    )) {
-      if (event.type === "log" && event.content) {
-        const parsed = this.parseProviderLoadSignals(event.content);
-        if (parsed.skills !== undefined) providerLoad.skills = parsed.skills;
-        if (parsed.agents !== undefined) providerLoad.agents = parsed.agents;
-        if (parsed.tools !== undefined) providerLoad.tools = parsed.tools;
-      }
-      yield event;
-    }
-
-    yield {
-      type: "log",
-      stream: "system",
-      content:
-        `[gemini] Provider load summary: ` +
-        `skills=${providerLoad.skills ?? "n/a"}, ` +
-        `agents=${providerLoad.agents ?? "n/a"}, ` +
-        `tools=${providerLoad.tools ?? "n/a"}`,
-    };
+    );
 
     if (options.runId) this.processes.delete(options.runId);
   }
