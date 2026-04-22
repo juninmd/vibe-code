@@ -23,6 +23,7 @@ import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
+import { WorkspaceSelector } from "./components/WorkspaceSelector";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
 import { useRepos } from "./hooks/useRepos";
@@ -621,7 +622,12 @@ export default function App() {
           )}
 
           {/* Header */}
-          <header className="glass-panel border-b px-4 py-3 flex items-center gap-3 shrink-0">
+          <header className="glass-panel border-b px-4 py-3 flex items-center gap-4 shrink-0">
+            {/* Workspace Selector */}
+            <div className="hidden md:block min-w-max">
+              <WorkspaceSelector />
+            </div>
+
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-zinc-300 truncate">
                 {selectedRepoId ? (selectedRepo?.name ?? "Repositório") : "Todos os Repositórios"}
