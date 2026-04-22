@@ -195,44 +195,6 @@ export class OpenCodeEngine implements AgentEngine {
     return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
-  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
-    // OpenCode reads instructions from opencode.json — we inject them there.
-    // The actual opencode.json is written later in execute(), so here we
-    // write a supplementary AGENTS.md-style file that OpenCode will pick up.
-    const sections: string[] = [];
-
-    if (skills.projectInstructions) {
-      sections.push(`## Project Instructions\n\n${skills.projectInstructions}`);
-    }
-
-    for (const rule of skills.rules) {
-      sections.push(`## ${rule.name}\n${rule.content || rule.description}`);
-    }
-
-    for (const skill of skills.skills) {
-      sections.push(`## ${skill.name}\n${skill.content || skill.description}`);
-    }
-
-    for (const agent of skills.agents) {
-      sections.push(`## Agent: ${agent.name}\n${agent.content || agent.description}`);
-    }
-
-    if (sections.length === 0) return [];
-
-    const agentsMd = join(workdir, "AGENTS.md");
-    // Only write if not already present (don't overwrite repo's own AGENTS.md)
-    try {
-      const { readFile } = await import("node:fs/promises");
-      await readFile(agentsMd, "utf8");
-      // File already exists — don't overwrite
-      return [];
-    } catch {
-      // File doesn't exist — write it
-      await writeFile(agentsMd, sections.join("\n\n"), "utf8");
-      return [agentsMd];
-    }
-  }
-
   async *execute(
     prompt: string,
     workdir: string,
