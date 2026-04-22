@@ -160,43 +160,6 @@ export class CopilotEngine implements AgentEngine {
     return COPILOT_MODELS;
   }
 
-  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
-    const sections: string[] = [];
-
-    if (skills.projectInstructions) {
-      sections.push(`## Project Instructions\n\n${skills.projectInstructions}`);
-    }
-
-    if (skills.rules.length > 0) {
-      sections.push("## Coding Standards\n");
-      for (const rule of skills.rules) {
-        sections.push(`### ${rule.name}\n${rule.content || rule.description}`);
-      }
-    }
-
-    if (skills.skills.length > 0) {
-      sections.push("## Skills\n");
-      for (const skill of skills.skills) {
-        sections.push(`### ${skill.name}\n${skill.content || skill.description}`);
-      }
-    }
-
-    if (skills.agents.length > 0) {
-      sections.push("## Agent Personas\n");
-      for (const agent of skills.agents) {
-        sections.push(`### ${agent.name}\n${agent.content || agent.description}`);
-      }
-    }
-
-    if (sections.length === 0) return [];
-
-    const githubDir = join(workdir, ".github");
-    await mkdir(githubDir, { recursive: true });
-    const instructionsFile = join(githubDir, "copilot-instructions.md");
-    await writeFile(instructionsFile, sections.join("\n\n"), "utf8");
-    return [instructionsFile];
-  }
-
   async *execute(
     prompt: string,
     workdir: string,

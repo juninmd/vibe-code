@@ -128,6 +128,7 @@ export const api = {
       request<RemoteRepo>("/repos/gitlab/create", { method: "POST", body: JSON.stringify(data) }),
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
     skills: (id: string) => request<SkillsIndex>(`/repos/${id}/skills`),
+    manifests: (id: string) => request<Record<string, string>>(`/repos/${id}/manifests`),
   },
 
   tasks: {

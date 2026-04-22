@@ -39,49 +39,6 @@ export class AiderEngine implements AgentEngine {
     return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
-  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
-    const created: string[] = [];
-    const contextDir = join(workdir, ".vibe-code", ".context");
-    await mkdir(contextDir, { recursive: true });
-
-    // Write each skill/rule as a separate file for --read
-    const readFiles: string[] = [];
-
-    if (skills.projectInstructions) {
-      const f = join(contextDir, "project-instructions.md");
-      await writeFile(f, skills.projectInstructions, "utf8");
-      created.push(f);
-      readFiles.push(f);
-    }
-
-    for (const rule of skills.rules) {
-      if (!rule.content) continue;
-      const f = join(contextDir, `rule-${rule.name}.md`);
-      await writeFile(f, `# ${rule.name}\n\n${rule.content}`, "utf8");
-      created.push(f);
-      readFiles.push(f);
-    }
-
-    for (const skill of skills.skills) {
-      if (!skill.content) continue;
-      const f = join(contextDir, `skill-${skill.name}.md`);
-      await writeFile(f, `# ${skill.name}\n\n${skill.content}`, "utf8");
-      created.push(f);
-      readFiles.push(f);
-    }
-
-    if (readFiles.length === 0) return [];
-
-    // Write .aider.conf.yml with read references
-    const yamlLines = readFiles.map((f) => `  - ${f}`);
-    const confContent = `read:\n${yamlLines.join("\n")}\n`;
-    const confFile = join(workdir, ".aider.conf.yml");
-    await writeFile(confFile, confContent, "utf8");
-    created.push(confFile);
-
-    return created;
-  }
-
   async *execute(
     prompt: string,
     workdir: string,

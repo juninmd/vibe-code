@@ -1,5 +1,6 @@
 import type { Repository } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RepoManifests } from "./RepoManifests";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -534,6 +535,8 @@ export function Sidebar({
                 <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">Nenhum resultado</p>
               )}
             </div>
+
+            {selectedRepoId && <RepoManifests repoId={selectedRepoId} />}
           </div>
         </>
       )}

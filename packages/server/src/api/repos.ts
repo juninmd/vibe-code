@@ -271,5 +271,19 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     }
   });
 
+  router.get("/:id/manifests", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    if (!repo.localPath) return c.json({ data: {} });
+    try {
+      const loader = new RepoSkillsLoader(repo.localPath);
+      const manifests = await loader.loadManifests();
+      return c.json({ data: manifests });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "load_error", message: msg }, 500);
+    }
+  });
+
   return router;
 }
