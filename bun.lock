@@ -1,9 +1,11 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "vibe-code",
+      "dependencies": {
+        "hono": "^4.12.14",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.4.12",
         "@commitlint/cli": "^19.8.1",
