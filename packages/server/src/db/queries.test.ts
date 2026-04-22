@@ -40,6 +40,12 @@ describe("Repository queries", () => {
     expect(db.repos.list().length).toBe(2);
   });
 
+  it("extracts repo name from bare URL", () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "my-bare-project" });
+    expect(repo.name).toBe("my-bare-project");
+  });
+
   it("extracts repo name from URL", () => {
     const db = makeDb();
     const repo = db.repos.create({ url: "https://github.com/owner/my-project.git" });
