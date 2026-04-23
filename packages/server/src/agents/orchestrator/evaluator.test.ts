@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach, afterEach, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 
 const originalEnv = process.env;
 
@@ -21,7 +21,14 @@ describe("runPostRunEvaluator", () => {
     process.env.VIBE_CODE_EVALUATOR_ENABLED = "false";
     const { runPostRunEvaluator } = require("./evaluator");
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -37,7 +44,14 @@ describe("runPostRunEvaluator", () => {
       } as any;
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -49,9 +63,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -62,14 +76,24 @@ describe("runPostRunEvaluator", () => {
     });
 
     fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() => {
-      return Promise.resolve(new Response(JSON.stringify({
-        choices: [
-          { message: { content: '{ "score": 8, "pass": true, "feedback": "Good" }' } }
-        ]
-      }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{ "score": 8, "pass": true, "feedback": "Good" }' } }],
+          }),
+          { status: 200 }
+        )
+      );
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toEqual({ score: 8, pass: true, feedback: "Good" });
   });
 
@@ -82,9 +106,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -95,14 +119,26 @@ describe("runPostRunEvaluator", () => {
     });
 
     fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() => {
-      return Promise.resolve(new Response(JSON.stringify({
-        choices: [
-          { message: { content: '{ "score": 15 }' } } // 15 should cap to 10
-        ]
-      }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [
+              { message: { content: '{ "score": 15 }' } }, // 15 should cap to 10
+            ],
+          }),
+          { status: 200 }
+        )
+      );
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toEqual({ score: 10, pass: true, feedback: "(no feedback)" });
   });
 
@@ -114,9 +150,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -130,7 +166,14 @@ describe("runPostRunEvaluator", () => {
       return Promise.resolve(new Response("Bad Gateway", { status: 502 }));
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -142,9 +185,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -155,14 +198,24 @@ describe("runPostRunEvaluator", () => {
     });
 
     fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() => {
-      return Promise.resolve(new Response(JSON.stringify({
-        choices: [
-          { message: { content: 'invalid json' } }
-        ]
-      }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "invalid json" } }],
+          }),
+          { status: 200 }
+        )
+      );
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -174,9 +227,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -190,7 +243,14 @@ describe("runPostRunEvaluator", () => {
       return Promise.reject(new Error("Network error"));
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -202,7 +262,14 @@ describe("runPostRunEvaluator", () => {
       throw new Error("Git failed");
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull(); // Because diff will be "" and return null
   });
 
@@ -215,9 +282,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = "stat";
+        stdoutStr = "stat";
       } else {
-         stdoutStr = largeDiff;
+        stdoutStr = largeDiff;
       }
       spawnCall++;
       return {
@@ -232,9 +299,9 @@ describe("runPostRunEvaluator", () => {
       fetchCalled = true;
       let body: any;
       if (typeof opts.body === "string") {
-         body = JSON.parse(opts.body);
+        body = JSON.parse(opts.body);
       } else {
-         body = opts.body;
+        body = opts.body;
       }
       const userContent = body.messages.find((m: any) => m.role === "user").content;
       try {
@@ -242,14 +309,22 @@ describe("runPostRunEvaluator", () => {
       } catch (e) {
         // Will be caught and fail the test, or just logged
       }
-      return new Response(JSON.stringify({
-        choices: [
-          { message: { content: '{ "score": 8, "pass": true, "feedback": "Good" }' } }
-        ]
-      }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{ "score": 8, "pass": true, "feedback": "Good" }' } }],
+        }),
+        { status: 200 }
+      );
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(fetchCalled).toBe(true);
     expect(result).toEqual({ score: 8, pass: true, feedback: "Good" });
   });
@@ -262,9 +337,9 @@ describe("runPostRunEvaluator", () => {
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: string[]) => {
       let stdoutStr = "";
       if (spawnCall === 0) {
-         stdoutStr = " 1 file changed, 1 insertion(+)";
+        stdoutStr = " 1 file changed, 1 insertion(+)";
       } else {
-         stdoutStr = "diff --git a/test b/test\n+ test";
+        stdoutStr = "diff --git a/test b/test\n+ test";
       }
       spawnCall++;
       return {
@@ -275,12 +350,24 @@ describe("runPostRunEvaluator", () => {
     });
 
     fetchSpy = spyOn(globalThis, "fetch").mockImplementation(() => {
-      return Promise.resolve(new Response(JSON.stringify({
-        choices: []
-      }), { status: 200 }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [],
+          }),
+          { status: 200 }
+        )
+      );
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/path", "main", "http://base", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/path",
+      "main",
+      "http://base",
+      "key"
+    );
     expect(result).toBeNull();
   });
 });
