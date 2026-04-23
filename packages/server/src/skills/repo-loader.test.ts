@@ -1,7 +1,7 @@
-import { describe, expect, it, mock, beforeEach } from "bun:test";
-import { RepoSkillsLoader } from "./repo-loader";
-import { resolve } from "node:path";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import * as fs from "node:fs/promises";
+import { resolve } from "node:path";
+import { RepoSkillsLoader } from "./repo-loader";
 
 // Simple mock for parsing frontmatter test
 mock.module("node:fs/promises", () => {
@@ -60,7 +60,7 @@ bad`;
       }
 
       throw new Error("Not found");
-    })
+    }),
   };
 });
 
@@ -110,7 +110,11 @@ describe("RepoSkillsLoader", () => {
     expect(result).toContain("Skill content");
 
     // Should throw for external path
-    expect(loader.getFileContent("/workdir/src/app.ts")).rejects.toThrow("Access denied: path outside repo skills directory");
-    expect(loader.getFileContent("../../../etc/passwd")).rejects.toThrow("Access denied: path outside repo skills directory");
+    expect(loader.getFileContent("/workdir/src/app.ts")).rejects.toThrow(
+      "Access denied: path outside repo skills directory"
+    );
+    expect(loader.getFileContent("../../../etc/passwd")).rejects.toThrow(
+      "Access denied: path outside repo skills directory"
+    );
   });
 });
