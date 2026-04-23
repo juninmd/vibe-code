@@ -1,14 +1,14 @@
 import type { EngineInfo } from "@vibe-code/shared";
 import type { AgentEngine } from "./engine";
 import { AiderEngine } from "./engines/aider";
+import { AmpCodeEngine } from "./engines/ampcode";
 import { ClaudeCodeEngine } from "./engines/claude-code";
+import { CodexEngine } from "./engines/codex";
 import { CopilotEngine } from "./engines/copilot";
+import { CursorAgentEngine } from "./engines/cursor-agent";
 import { GeminiEngine } from "./engines/gemini";
 import { OpenCodeEngine } from "./engines/opencode";
-import { CodexEngine } from "./engines/codex";
 import { PiEngine } from "./engines/pi";
-import { CursorAgentEngine } from "./engines/cursor-agent";
-import { AmpCodeEngine } from "./engines/ampcode";
 
 export class EngineRegistry {
   private engines: Map<string, AgentEngine> = new Map();
