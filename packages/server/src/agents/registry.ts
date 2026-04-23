@@ -5,6 +5,10 @@ import { ClaudeCodeEngine } from "./engines/claude-code";
 import { CopilotEngine } from "./engines/copilot";
 import { GeminiEngine } from "./engines/gemini";
 import { OpenCodeEngine } from "./engines/opencode";
+import { CodexEngine } from "./engines/codex";
+import { PiEngine } from "./engines/pi";
+import { CursorAgentEngine } from "./engines/cursor-agent";
+import { AmpCodeEngine } from "./engines/ampcode";
 
 export class EngineRegistry {
   private engines: Map<string, AgentEngine> = new Map();
@@ -15,6 +19,10 @@ export class EngineRegistry {
     this.register(new OpenCodeEngine());
     this.register(new GeminiEngine());
     this.register(new CopilotEngine());
+    this.register(new CodexEngine());
+    this.register(new PiEngine());
+    this.register(new CursorAgentEngine());
+    this.register(new AmpCodeEngine());
   }
 
   register(engine: AgentEngine): void {
