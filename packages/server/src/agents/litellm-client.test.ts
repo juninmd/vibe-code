@@ -123,11 +123,11 @@ describe("Litellm Client", () => {
   describe("deleteVirtualKey", () => {
     let originalFetch: typeof global.fetch;
     const consoleWarnSpy = mock(() => {});
-    let originalConsoleWarn: typeof console.warn;
+    let _originalConsoleWarn: typeof console.warn;
 
     beforeEach(() => {
       originalFetch = global.fetch;
-      originalConsoleWarn = console.warn;
+      _originalConsoleWarn = console.warn;
       process.env.LITELLM_MASTER_KEY = "master-key";
       console.warn = consoleWarnSpy;
     });

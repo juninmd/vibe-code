@@ -1,7 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";

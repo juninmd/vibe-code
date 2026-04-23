@@ -1,6 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import * as fs from "node:fs/promises";
-import { resolve } from "node:path";
+import { describe, expect, it, mock } from "bun:test";
 import { RepoSkillsLoader } from "./repo-loader";
 
 // Simple mock for parsing frontmatter test
