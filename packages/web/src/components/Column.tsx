@@ -181,7 +181,7 @@ function ColumnComponent({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col rounded-2xl glass-card border transition-all duration-200 ${
+      className={`flex-1 min-h-0 flex flex-col rounded-2xl glass-card border transition-all duration-200 ${
         horizontal ? "w-full" : fillWidth ? "w-full" : "min-w-[272px] w-[272px] shrink-0"
       } ${isOver ? "ring-2 ring-violet-500/40 brightness-105" : ""}`}
     >

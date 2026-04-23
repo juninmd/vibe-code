@@ -111,7 +111,10 @@ export function Board({
             (status) =>
               status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
           ).map((status) => (
-            <div key={status} className="flex-1 min-w-[220px] flex flex-col overflow-hidden">
+            <div
+              key={status}
+              className="flex-1 min-w-[220px] min-h-0 flex flex-col overflow-hidden"
+            >
               <Column
                 status={status}
                 tasks={tasksByColumn[status]}
