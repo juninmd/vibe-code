@@ -1,7 +1,7 @@
-import { describe, expect, it, mock, beforeEach, afterEach } from "bun:test";
-import { matchSkillsForTask } from "./matcher";
-import type { SkillsIndex } from "@vibe-code/shared";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { readdir } from "node:fs/promises";
+import type { SkillsIndex } from "@vibe-code/shared";
+import { matchSkillsForTask } from "./matcher";
 
 mock.module("node:fs/promises", () => {
   return {
@@ -169,12 +169,7 @@ describe("matcher", () => {
   });
 
   it("should return top 5 rules if workdir cannot be read or no extensions", async () => {
-    const result = await matchSkillsForTask(
-      mockSkillsIndex,
-      "Task",
-      "Description",
-      "/bad-workdir"
-    );
+    const result = await matchSkillsForTask(mockSkillsIndex, "Task", "Description", "/bad-workdir");
 
     expect(result.rules.length).toBe(5);
   });
@@ -200,7 +195,10 @@ describe("matcher", () => {
     expect(result.rules.length).toBeLessThan(50);
     expect(result.rules.length).toBeGreaterThan(0);
 
-    const totalChars = result.rules.reduce((sum, r) => sum + r.name.length + r.description.length + 50, 0);
+    const totalChars = result.rules.reduce(
+      (sum, r) => sum + r.name.length + r.description.length + 50,
+      0
+    );
     expect(totalChars).toBeLessThanOrEqual(8000);
   });
 
@@ -218,12 +216,20 @@ describe("matcher", () => {
       agents: [],
     };
 
-    const result = await matchSkillsForTask(largeIndex, "Task", "Task Description Match", "/workdir");
+    const result = await matchSkillsForTask(
+      largeIndex,
+      "Task",
+      "Task Description Match",
+      "/workdir"
+    );
 
     expect(result.skills.length).toBeLessThan(50);
     expect(result.skills.length).toBeGreaterThan(0);
 
-    const totalChars = result.skills.reduce((sum, s) => sum + s.name.length + s.description.length + 50, 0);
+    const totalChars = result.skills.reduce(
+      (sum, s) => sum + s.name.length + s.description.length + 50,
+      0
+    );
     expect(totalChars).toBeLessThanOrEqual(8000);
   });
 });
