@@ -1,6 +1,5 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
