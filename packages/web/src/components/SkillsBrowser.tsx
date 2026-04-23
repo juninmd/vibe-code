@@ -409,7 +409,7 @@ export function SkillsBrowser({
               </p>
             )}
             {error && (
-              <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+              <div className="text-xs px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger">
                 {error}
               </div>
             )}

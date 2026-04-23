@@ -60,9 +60,9 @@ function getStreamColor(stream: string, content: string): string {
 }
 
 const PERSONA_BADGE: Record<string, string> = {
-  frontend: "bg-blue-900/50 text-blue-300 border border-blue-700/50",
-  backend: "bg-emerald-900/50 text-emerald-300 border border-emerald-700/50",
-  security: "bg-red-900/50 text-red-300 border border-red-700/50",
+  frontend: "bg-info/15 text-info border border-info/30",
+  backend: "bg-success/15 text-success border border-success/30",
+  security: "bg-danger/15 text-danger border border-danger/30",
   quality: "bg-yellow-900/50 text-yellow-300 border border-yellow-700/50",
 };
 
@@ -70,7 +70,7 @@ function ReviewBadge({ content }: { content: string }) {
   const match = content.match(/^\[REVIEW:(\w+)\]/);
   if (!match) return null;
   const persona = match[1];
-  const cls = PERSONA_BADGE[persona] ?? "bg-zinc-800 text-zinc-300";
+  const cls = PERSONA_BADGE[persona] ?? "bg-surface text-secondary";
   return (
     <span
       className={`inline-block text-[9px] font-mono px-1.5 py-0.5 rounded mr-1.5 leading-none ${cls}`}
@@ -376,12 +376,12 @@ export function AgentOutput({
   }, [matchIdx, showSearch, searchQuery, totalMatches, renderedLogs, rowVirtualizer]);
 
   const containerClass = isFullscreen
-    ? "flex flex-col rounded-xl border border-zinc-700 shadow-2xl overflow-hidden bg-zinc-950 h-full"
-    : `flex flex-col rounded-lg border border-zinc-800 overflow-hidden${fullHeight ? " flex-1 min-h-0" : ""}`;
+    ? "flex flex-col rounded-xl border border-strong shadow-2xl overflow-hidden bg-app h-full"
+    : `flex flex-col rounded-lg border border-default overflow-hidden${fullHeight ? " flex-1 min-h-0" : ""}`;
 
   if (!runId && liveLogs.length === 0) {
     return (
-      <div className="text-center text-zinc-600 py-8 text-sm">Nenhuma saída do agente ainda</div>
+      <div className="text-center text-dimmed py-8 text-sm">Nenhuma saída do agente ainda</div>
     );
   }
 
@@ -397,15 +397,15 @@ export function AgentOutput({
       aria-label="Saída do Agente"
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-2 py-1.5 bg-zinc-900 border-b border-zinc-800 flex-wrap">
-        <span className="text-[10px] text-zinc-600 font-mono shrink-0">
+      <div className="flex items-center gap-1 px-2 py-1.5 bg-input border-b border-default flex-wrap">
+        <span className="text-[10px] text-dimmed font-mono shrink-0">
           {allLogs.length} linhas{isRunning ? " · rodando" : ""}
         </span>
 
         {/* Token counter */}
         {tokenStats.totalTokens > 0 && (
           <span
-            className="text-[10px] text-violet-400/70 font-mono shrink-0"
+            className="text-[10px] text-accent-text/70 font-mono shrink-0"
             title={`${tokenStats.totalTokens.toLocaleString()} tokens em ${tokenStats.steps} step${tokenStats.steps !== 1 ? "s" : ""}`}
           >
             · {fmtTokens(tokenStats.totalTokens)} tokens
@@ -414,7 +414,7 @@ export function AgentOutput({
 
         {/* Tool stats mini-bar */}
         {hasToolActivity && (
-          <span className="text-[10px] text-zinc-600 font-mono shrink-0 hidden sm:inline">
+          <span className="text-[10px] text-dimmed font-mono shrink-0 hidden sm:inline">
             ·{toolStats.reads > 0 && <span title="Leituras"> 📖{toolStats.reads}</span>}
             {toolStats.writes > 0 && <span title="Escritas"> ✏️{toolStats.writes}</span>}
             {toolStats.searches > 0 && <span title="Buscas"> 🔍{toolStats.searches}</span>}
@@ -423,7 +423,7 @@ export function AgentOutput({
         )}
 
         {awaitingQuestion && (
-          <span className="text-[10px] text-amber-400 animate-pulse font-sans not-italic shrink-0">
+          <span className="text-[10px] text-warning animate-pulse font-sans not-italic shrink-0">
             ⚡ aguardando input
           </span>
         )}
@@ -436,7 +436,7 @@ export function AgentOutput({
           onClick={toggleSearch}
           title="Buscar nos logs (Ctrl+F)"
           className={`p-1 rounded text-xs cursor-pointer transition-colors ${
-            showSearch ? "text-violet-400 bg-violet-900/30" : "text-zinc-600 hover:text-zinc-300"
+            showSearch ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
           }`}
         >
           🔍
@@ -448,9 +448,7 @@ export function AgentOutput({
           onClick={() => setShowTimestamps((v) => !v)}
           title={showTimestamps ? "Ocultar timestamps" : "Mostrar timestamps"}
           className={`p-1 rounded text-xs cursor-pointer transition-colors ${
-            showTimestamps
-              ? "text-violet-400 bg-violet-900/30"
-              : "text-zinc-600 hover:text-zinc-300"
+            showTimestamps ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
           }`}
         >
           ⏱
@@ -461,7 +459,7 @@ export function AgentOutput({
           type="button"
           onClick={copyLogs}
           title="Copiar todos os logs"
-          className="p-1 rounded text-xs text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors"
+          className="p-1 rounded text-xs text-dimmed hover:text-secondary cursor-pointer transition-colors"
         >
           ⎘
         </button>
@@ -471,7 +469,7 @@ export function AgentOutput({
           type="button"
           onClick={downloadLogs}
           title="Download logs (.txt)"
-          className="p-1 rounded text-xs text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors"
+          className="p-1 rounded text-xs text-dimmed hover:text-secondary cursor-pointer transition-colors"
         >
           ⬇
         </button>
@@ -481,7 +479,7 @@ export function AgentOutput({
           type="button"
           onClick={toggleFullscreen}
           title={isFullscreen ? "Sair do modo tela cheia" : "Modo tela cheia (F11)"}
-          className="p-1 rounded text-xs text-zinc-600 hover:text-zinc-300 cursor-pointer transition-colors"
+          className="p-1 rounded text-xs text-dimmed hover:text-secondary cursor-pointer transition-colors"
         >
           {isFullscreen ? "⊡" : "⊞"}
         </button>
@@ -494,7 +492,7 @@ export function AgentOutput({
               setPinnedBottom(true);
               rowVirtualizer.scrollToIndex(renderedLogs.length - 1, { align: "end" });
             }}
-            className="p-1 rounded text-xs text-blue-400 hover:text-blue-300 cursor-pointer animate-pulse"
+            className="p-1 rounded text-xs text-info hover:text-info cursor-pointer animate-pulse"
             title="Rolar para o fim"
           >
             ↓
@@ -504,14 +502,14 @@ export function AgentOutput({
 
       {/* Current activity bar — shows last status message when running */}
       {isRunning && currentStatus && (
-        <div className="flex items-center gap-2 px-3 py-1 bg-blue-950/30 border-b border-blue-900/40">
+        <div className="flex items-center gap-2 px-3 py-1 bg-info/15 border-b border-info/30">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
-          <span className="text-[11px] text-blue-300 font-mono truncate">{currentStatus}</span>
+          <span className="text-[11px] text-info font-mono truncate">{currentStatus}</span>
         </div>
       )}
 
       {/* Stream filter + search bar */}
-      <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/80 border-b border-zinc-800 flex-wrap">
+      <div className="flex items-center gap-2 px-2 py-1 bg-input/80 border-b border-default flex-wrap">
         {/* Stream filter tabs */}
         <div className="flex gap-1 shrink-0">
           {STREAM_TABS.map((f) => (
@@ -521,8 +519,8 @@ export function AgentOutput({
               onClick={() => setStreamFilter(f)}
               className={`px-2 py-0.5 text-[10px] rounded-full cursor-pointer transition-colors ${
                 streamFilter === f
-                  ? "bg-zinc-700 text-zinc-200"
-                  : "text-zinc-600 hover:text-zinc-400"
+                  ? "bg-surface-hover text-primary"
+                  : "text-dimmed hover:text-secondary"
               }`}
             >
               {STREAM_LABEL[f]}
@@ -533,15 +531,15 @@ export function AgentOutput({
 
         {showSearch && (
           <>
-            <div className="w-px h-4 bg-zinc-700 shrink-0" />
+            <div className="w-px h-4 bg-surface-hover shrink-0" />
             <button
               type="button"
               onClick={() => setUseRegex((v) => !v)}
               title="Alternar regex"
               className={`px-1.5 py-0.5 text-[9px] rounded border cursor-pointer font-mono shrink-0 ${
                 useRegex
-                  ? "border-violet-600 text-violet-300 bg-violet-900/30"
-                  : "border-zinc-700 text-zinc-500"
+                  ? "border-violet-600 text-accent-text bg-accent-muted"
+                  : "border-strong text-primary0"
               }`}
             >
               .*
@@ -562,21 +560,21 @@ export function AgentOutput({
                 }
               }}
               placeholder={useRegex ? "Regex..." : "Buscar nos logs..."}
-              className="flex-1 bg-transparent text-xs font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none min-w-0"
+              className="flex-1 bg-transparent text-xs font-mono text-secondary placeholder:text-dimmed focus:outline-none min-w-0"
             />
             {totalMatches > 0 && (
-              <span className="text-[10px] text-zinc-500 shrink-0">
+              <span className="text-[10px] text-primary0 shrink-0">
                 {matchIdx + 1}/{totalMatches}
               </span>
             )}
             {searchQuery && totalMatches === 0 && (
-              <span className="text-[10px] text-red-500 shrink-0">nenhum resultado</span>
+              <span className="text-[10px] text-danger shrink-0">nenhum resultado</span>
             )}
             <button
               type="button"
               onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
               disabled={totalMatches === 0}
-              className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              className="text-primary0 hover:text-secondary disabled:opacity-30 cursor-pointer text-xs shrink-0"
             >
               ↑
             </button>
@@ -584,7 +582,7 @@ export function AgentOutput({
               type="button"
               onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
               disabled={totalMatches === 0}
-              className="text-zinc-500 hover:text-zinc-300 disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              className="text-primary0 hover:text-secondary disabled:opacity-30 cursor-pointer text-xs shrink-0"
             >
               ↓
             </button>
@@ -596,7 +594,7 @@ export function AgentOutput({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`bg-zinc-950 font-mono text-xs overflow-y-auto cursor-text ${
+        className={`bg-app font-mono text-xs overflow-y-auto cursor-text ${
           isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
         }`}
       >
@@ -616,7 +614,7 @@ export function AgentOutput({
                     width: "100%",
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
-                  className="px-3 py-0.5 text-zinc-600 animate-pulse text-[11px]"
+                  className="px-3 py-0.5 text-dimmed animate-pulse text-[11px]"
                 >
                   Carregando logs...
                 </div>
@@ -678,16 +676,14 @@ export function AgentOutput({
                 }}
                 className={`px-3 py-px leading-relaxed ${
                   isActive ? "bg-yellow-900/20" : ""
-                } ${isQuestion ? "bg-amber-950/30 border-l-2 border-amber-600 pl-2" : ""}`}
+                } ${isQuestion ? "bg-warning/15 border-l-2 border-amber-600 pl-2" : ""}`}
               >
                 {showTimestamps && (
-                  <span className="text-zinc-700 select-none mr-1">
-                    {formatTime(log.timestamp)}
-                  </span>
+                  <span className="text-dimmed select-none mr-1">{formatTime(log.timestamp)}</span>
                 )}
-                {log.stream === "stdin" && <span className="text-emerald-500">$ </span>}
+                {log.stream === "stdin" && <span className="text-success">$ </span>}
                 {isReviewHeader && <ReviewBadge content={log.content} />}
-                {isQuestion && <span className="text-amber-400 mr-1">?</span>}
+                {isQuestion && <span className="text-warning mr-1">?</span>}
                 {inner}
               </div>
             );
@@ -695,13 +691,13 @@ export function AgentOutput({
         </div>
 
         {!loadingLogs && allLogs.length === 0 && (
-          <div className="text-zinc-700 p-3">Aguardando saída...</div>
+          <div className="text-dimmed p-3">Aguardando saída...</div>
         )}
       </div>
 
       {/* Running status footer — outside scroll container to avoid overlap */}
       {isRunning && !awaitingQuestion && renderedLogs.length > 0 && (
-        <div className="flex items-center gap-1.5 text-blue-400 px-3 py-1 border-t border-zinc-800 bg-zinc-900/80 shrink-0">
+        <div className="flex items-center gap-1.5 text-info px-3 py-1 border-t border-default bg-input/80 shrink-0">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
           <span className="text-[11px]">Agente rodando...</span>
         </div>
@@ -711,18 +707,18 @@ export function AgentOutput({
       {isRunning && onSendInput && (
         <form
           onSubmit={handleSubmit}
-          className={`flex border-t bg-zinc-900 transition-all ${
-            awaitingQuestion ? "border-amber-700/60 bg-amber-950/20" : "border-zinc-800"
+          className={`flex border-t bg-input transition-all ${
+            awaitingQuestion ? "border-warning/30 bg-warning/15" : "border-default"
           }`}
         >
           {awaitingQuestion && (
             <div className="w-full px-3 pt-2 pb-0">
-              <p className="text-[10px] text-amber-400 font-mono truncate">⚡ {awaitingQuestion}</p>
+              <p className="text-[10px] text-warning font-mono truncate">⚡ {awaitingQuestion}</p>
             </div>
           )}
           <div className={`flex w-full ${awaitingQuestion ? "pt-1" : ""}`}>
             <span
-              className={`pl-3 py-2 text-xs font-mono select-none ${awaitingQuestion ? "text-amber-400" : "text-emerald-500"}`}
+              className={`pl-3 py-2 text-xs font-mono select-none ${awaitingQuestion ? "text-warning" : "text-success"}`}
             >
               {awaitingQuestion ? "?" : "$"}
             </span>
@@ -734,8 +730,8 @@ export function AgentOutput({
               placeholder={
                 awaitingQuestion ? "Digite sua resposta..." : "Enviar input ao agente..."
               }
-              className={`flex-1 bg-transparent px-2 py-2 text-xs font-mono placeholder:text-zinc-600 focus:outline-none ${
-                awaitingQuestion ? "text-amber-100" : "text-zinc-100"
+              className={`flex-1 bg-transparent px-2 py-2 text-xs font-mono placeholder:text-dimmed focus:outline-none ${
+                awaitingQuestion ? "text-warning" : "text-primary"
               }`}
               autoComplete="off"
             />
@@ -744,8 +740,8 @@ export function AgentOutput({
               disabled={!input.trim()}
               className={`px-3 py-2 text-xs disabled:opacity-30 cursor-pointer transition-colors ${
                 awaitingQuestion
-                  ? "text-amber-400 hover:text-amber-200"
-                  : "text-zinc-500 hover:text-zinc-300"
+                  ? "text-warning hover:text-warning"
+                  : "text-primary0 hover:text-secondary"
               }`}
             >
               Enviar

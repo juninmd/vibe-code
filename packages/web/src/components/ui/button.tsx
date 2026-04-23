@@ -1,11 +1,11 @@
 import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 const variants = {
-  default: "bg-zinc-100 text-zinc-900 hover:bg-zinc-200",
+  default: "bg-zinc-100 text-primary hover:bg-zinc-200",
   primary: "bg-violet-600 text-white hover:bg-violet-700",
   danger: "bg-red-600 text-white hover:bg-red-700",
-  ghost: "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800",
-  outline: "border border-zinc-700 text-zinc-300 hover:bg-zinc-800",
+  ghost: "text-secondary hover:text-primary hover:bg-surface-hover",
+  outline: "border border-strong text-secondary hover:bg-surface-hover",
 };
 
 const sizes = {

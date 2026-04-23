@@ -75,13 +75,13 @@ export function getProviderFromUrl(url: string): {
   color: string;
 } {
   if (url.includes("github.com") || url.includes("github")) {
-    return { name: "GitHub", icon: GitHubIcon, color: "text-zinc-300" };
+    return { name: "GitHub", icon: GitHubIcon, color: "text-secondary" };
   }
   if (url.includes("gitlab.com") || url.includes("gitlab")) {
     return { name: "GitLab", icon: GitLabIcon, color: "text-orange-400" };
   }
   if (url.includes("bitbucket.org") || url.includes("bitbucket")) {
-    return { name: "Bitbucket", icon: BitbucketIcon, color: "text-blue-400" };
+    return { name: "Bitbucket", icon: BitbucketIcon, color: "text-info" };
   }
-  return { name: "Git", icon: GitGenericIcon, color: "text-red-400" };
+  return { name: "Git", icon: GitGenericIcon, color: "text-danger" };
 }

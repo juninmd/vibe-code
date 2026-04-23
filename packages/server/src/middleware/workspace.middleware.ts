@@ -12,11 +12,15 @@ export function workspaceMiddleware() {
       "/api/health",
       "/api/auth",
       "/api/workspaces", // listing is allowed without wsId
+      "/api/tasks/poll", // polling is public (read-only status)
     ];
 
     const isPublic = publicPaths.some((path) => c.req.path.startsWith(path));
 
     if (isPublic) {
+      console.debug("[Middleware] 📡 Skipping workspace validation for public route", {
+        path: c.req.path,
+      });
       return next();
     }
 
@@ -38,7 +42,7 @@ export function workspaceMiddleware() {
     const workspaceId = wsIdFromQuery || wsIdFromHeader || wsIdFromBody;
 
     if (!workspaceId) {
-      console.warn("[Middleware] Missing workspace_id for protected endpoint", {
+      console.warn("[Middleware] ⚠️  Missing workspace_id for protected endpoint", {
         path: c.req.path,
         method: c.req.method,
       });
@@ -47,7 +51,7 @@ export function workspaceMiddleware() {
 
     // Store in context for handler access
     c.env.workspaceId = workspaceId;
-    console.debug("[Middleware] Workspace context set", {
+    console.debug("[Middleware] 🔒 Workspace context set", {
       workspaceId,
       path: c.req.path,
     });

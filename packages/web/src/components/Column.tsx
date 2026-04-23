@@ -23,50 +23,50 @@ const columnConfig: Record<
 > = {
   scheduled: {
     dot: "bg-amber-400",
-    countBg: "bg-amber-950/60 border-amber-800/40",
-    countText: "text-amber-300",
+    countBg: "bg-warning/15 border-warning/30",
+    countText: "text-warning",
     emptyIcon: "clock",
     emptyText: "Nenhuma tarefa agendada",
   },
   backlog: {
     dot: "bg-zinc-500",
-    countBg: "bg-zinc-800/60 border-zinc-700/40",
-    countText: "text-zinc-400",
+    countBg: "bg-surface-hover border-strong/40",
+    countText: "text-secondary",
     emptyIcon: "list",
     emptyText: "Adicione tarefas aqui",
   },
   in_progress: {
     dot: "bg-blue-400",
-    countBg: "bg-blue-950/60 border-blue-800/40",
-    countText: "text-blue-300",
+    countBg: "bg-info/15 border-info/30",
+    countText: "text-info",
     emptyIcon: "play",
     emptyText: "Nenhum agente rodando",
   },
   review: {
     dot: "bg-violet-400",
-    countBg: "bg-violet-950/60 border-violet-800/40",
-    countText: "text-violet-300",
+    countBg: "bg-accent-muted border-accent/30",
+    countText: "text-accent-text",
     emptyIcon: "eye",
     emptyText: "Nada aguardando revisão",
   },
   done: {
     dot: "bg-emerald-400",
-    countBg: "bg-emerald-950/60 border-emerald-800/40",
-    countText: "text-emerald-300",
+    countBg: "bg-success/15 border-success/30",
+    countText: "text-success",
     emptyIcon: "check",
     emptyText: "Nenhuma tarefa concluída",
   },
   failed: {
     dot: "bg-red-400",
-    countBg: "bg-red-950/60 border-red-800/40",
-    countText: "text-red-300",
+    countBg: "bg-danger/15 border-danger/30",
+    countText: "text-danger",
     emptyIcon: "x",
     emptyText: "Sem falhas",
   },
   archived: {
-    dot: "bg-zinc-600",
-    countBg: "bg-zinc-800/60 border-zinc-700/40",
-    countText: "text-zinc-500",
+    dot: "bg-border-strong",
+    countBg: "bg-surface-hover border-strong/40",
+    countText: "text-primary0",
     emptyIcon: "archive",
     emptyText: "Nenhum arquivo",
   },
@@ -211,7 +211,7 @@ function ColumnComponent({
                 onClick={onToggleCollapse}
                 aria-label={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
                 title={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
-                className="p-1.5 rounded-lg text-zinc-600 hover:text-amber-300 hover:bg-amber-950/30 transition-all cursor-pointer"
+                className="p-1.5 rounded-lg text-dimmed hover:text-warning hover:bg-warning/15 transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -235,7 +235,7 @@ function ColumnComponent({
                 onClick={onArchiveDone}
                 aria-label="Arquivar concluídas"
                 title="Arquivar concluídas"
-                className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-950/30 transition-all cursor-pointer"
+                className="p-1.5 rounded-lg text-dimmed hover:text-success hover:bg-success/15 transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -263,7 +263,7 @@ function ColumnComponent({
                     onClick={onRetryAllFailed}
                     aria-label="Retry todas as falhas"
                     title="Retry todas as falhas"
-                    className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-950/30 transition-all cursor-pointer"
+                    className="p-1.5 rounded-lg text-dimmed hover:text-info hover:bg-info/15 transition-all cursor-pointer"
                   >
                     <svg
                       aria-hidden="true"
@@ -290,7 +290,7 @@ function ColumnComponent({
                     onClick={onClearFailed}
                     aria-label="Limpar falhas"
                     title="Limpar falhas"
-                    className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
+                    className="p-1.5 rounded-lg text-dimmed hover:text-danger hover:bg-danger/15 transition-all cursor-pointer"
                   >
                     <svg
                       aria-hidden="true"

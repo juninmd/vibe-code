@@ -15,6 +15,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { NewTaskDialog } from "./components/NewTaskDialog";
+import { ScheduledTasksPanel } from "./components/ScheduledTasksPanel";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
@@ -61,6 +62,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
+  const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFilterBar, setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -498,6 +500,10 @@ export default function App() {
           setShowEnginesPanel(false);
           return;
         }
+        if (showSchedulesPanel) {
+          setShowSchedulesPanel(false);
+          return;
+        }
         if (showNewTask) {
           setShowNewTask(false);
           return;
@@ -567,6 +573,7 @@ export default function App() {
   }, [
     showCommandPalette,
     showEnginesPanel,
+    showSchedulesPanel,
     showNewTask,
     showAddRepo,
     showSettings,
@@ -578,7 +585,7 @@ export default function App() {
 
   return (
     <ToastContext.Provider value={toastCtx}>
-      <div className="h-screen flex overflow-hidden bg-zinc-950/30 text-zinc-100">
+      <div className="h-screen flex overflow-hidden bg-app/30 text-primary">
         <Sidebar
           repos={repos}
           selectedRepoId={selectedRepoId}
@@ -615,7 +622,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Reconnect banner — only show after first successful connection is lost */}
           {!connected && wasConnected.current && (
-            <div className="bg-amber-950/80 border-b border-amber-800/60 px-4 py-1.5 text-xs text-amber-300 flex items-center gap-2 shrink-0">
+            <div className="bg-warning/15 border-b border-warning/30 px-4 py-1.5 text-xs text-warning flex items-center gap-2 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
               Desconectado — tentando reconectar...
             </div>
@@ -629,10 +636,10 @@ export default function App() {
             </div>
 
             <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-medium text-zinc-300 truncate">
+              <h2 className="text-sm font-medium text-secondary truncate">
                 {selectedRepoId ? (selectedRepo?.name ?? "Repositório") : "Todos os Repositórios"}
               </h2>
-              <p className="text-xs text-zinc-600 flex items-center gap-2">
+              <p className="text-xs text-dimmed flex items-center gap-2">
                 {filteredTasks.length !== tasks.length
                   ? `${filteredTasks.length} de ${tasks.length} tarefas`
                   : `${tasks.length} tarefa${tasks.length !== 1 ? "s" : ""}`}
@@ -641,7 +648,7 @@ export default function App() {
                     href={selectedRepo.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    className="text-primary0 hover:text-secondary transition-colors"
                     title={selectedRepo.url}
                   >
                     abrir repo
@@ -650,29 +657,39 @@ export default function App() {
               </p>
             </div>
 
+            {/* Schedules indicator */}
+            <button
+              type="button"
+              onClick={() => setShowSchedulesPanel(true)}
+              title="Gerenciar Tasks Agendadas"
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
+            >
+              <span className="text-primary0 group-hover:text-secondary">🕒</span>
+            </button>
+
             {/* Engine status indicator */}
             <button
               type="button"
               onClick={() => setShowEnginesPanel(true)}
               title="Gerenciar serviços de IA (E)"
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-600 cursor-pointer transition-colors group"
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
             >
               <div className="flex items-center gap-1">
                 {engines.slice(0, 4).map((e) => (
                   <span
                     key={e.name}
                     className={`w-1.5 h-1.5 rounded-full ${
-                      e.available ? "bg-emerald-400" : "bg-zinc-600"
+                      e.available ? "bg-emerald-400" : "bg-border-strong"
                     } ${e.activeRuns > 0 ? "animate-pulse" : ""}`}
                     title={`${e.displayName}: ${e.available ? "disponível" : "não instalado"}${e.activeRuns > 0 ? ` · ${e.activeRuns} rodando` : ""}`}
                   />
                 ))}
               </div>
-              <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">
+              <span className="text-xs text-secondary group-hover:text-primary transition-colors">
                 {availableCount}/{engines.length}
               </span>
               {totalActiveRuns > 0 && (
-                <span className="text-xs bg-blue-900/50 text-blue-300 border border-blue-700/40 rounded-full px-1.5 py-0.5 leading-none font-medium">
+                <span className="text-xs bg-info/15 text-info border border-info/30 rounded-full px-1.5 py-0.5 leading-none font-medium">
                   {totalActiveRuns} ativo{totalActiveRuns !== 1 ? "s" : ""}
                 </span>
               )}
@@ -683,7 +700,7 @@ export default function App() {
               <select
                 value={selectedAgent ?? ""}
                 onChange={(e) => setSelectedAgent(e.target.value || null)}
-                className="px-2 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 focus:outline-none focus:border-zinc-500"
+                className="px-2 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary focus:outline-none focus:border-zinc-500"
               >
                 <option value="">Todos Engines</option>
                 {engines
@@ -698,7 +715,7 @@ export default function App() {
 
             {/* Search */}
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs pointer-events-none">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-primary0 text-xs pointer-events-none">
                 /
               </span>
               <input
@@ -707,13 +724,13 @@ export default function App() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar tarefas..."
-                className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
+                className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-primary0 hover:text-secondary cursor-pointer"
                 >
                   ✕
                 </button>
@@ -724,7 +741,7 @@ export default function App() {
               type="button"
               onClick={() => setShowCommandPalette(true)}
               title="Command palette (⌘K)"
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
             >
               <span>⌘K</span>
             </button>
@@ -733,7 +750,7 @@ export default function App() {
               type="button"
               onClick={exportBoard}
               title="Exportar board como JSON"
-              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
             >
               ↓ Export
             </button>
@@ -742,7 +759,7 @@ export default function App() {
               type="button"
               onClick={() => setShowShortcuts(true)}
               title="Atalhos (?) "
-              className="hidden sm:flex items-center px-2 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 hover:border-zinc-600 rounded-md bg-zinc-800/50 cursor-pointer transition-colors"
+              className="hidden sm:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
             >
               ?
             </button>
@@ -863,6 +880,29 @@ export default function App() {
               setShowSettings(true);
             }}
           />
+        )}
+
+        {showSchedulesPanel && (
+          <div className="fixed inset-0 z-50 flex items-start justify-end">
+            <button
+              type="button"
+              aria-label="Fechar painel de tarefas agendadas"
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowSchedulesPanel(false)}
+            />
+            <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
+              <ScheduledTasksPanel />
+              <div className="absolute top-4 right-4 z-10">
+                <button
+                  type="button"
+                  onClick={() => setShowSchedulesPanel(false)}
+                  className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-hover transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Shortcuts Modal */}

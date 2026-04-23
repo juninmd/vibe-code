@@ -112,49 +112,49 @@ export const lightTheme: Theme = {
   name: "light",
   label: "Light",
   colors: {
-    bgApp: "#f8fafc",
-    bgSurface: "rgba(255, 255, 255, 0.9)",
-    bgSurfaceHover: "rgba(241, 245, 249, 0.8)",
-    bgCard: "rgba(255, 255, 255, 0.85)",
-    bgInput: "rgba(248, 250, 252, 0.9)",
-    bgOverlay: "rgba(0, 0, 0, 0.3)",
+    bgApp: "#f1f5f9",
+    bgSurface: "rgba(255, 255, 255, 0.95)",
+    bgSurfaceHover: "rgba(248, 250, 252, 0.95)",
+    bgCard: "rgba(255, 255, 255, 0.92)",
+    bgInput: "rgba(241, 245, 249, 0.7)",
+    bgOverlay: "rgba(15, 23, 42, 0.35)",
 
-    glassSurface: "rgba(255, 255, 255, 0.9)",
-    glassCard: "rgba(255, 255, 255, 0.85)",
-    glassDialog: "rgba(255, 255, 255, 0.95)",
-    glassBorder: "rgba(0, 0, 0, 0.08)",
+    glassSurface: "rgba(255, 255, 255, 0.95)",
+    glassCard: "rgba(255, 255, 255, 0.92)",
+    glassDialog: "rgba(255, 255, 255, 0.98)",
+    glassBorder: "rgba(51, 65, 85, 0.1)",
 
-    textPrimary: "#1e293b",
-    textSecondary: "#475569",
+    textPrimary: "#0f172a",
+    textSecondary: "#334155",
     textMuted: "#64748b",
     textDimmed: "#94a3b8",
 
-    borderDefault: "rgba(226, 232, 240, 0.8)",
-    borderSubtle: "rgba(0, 0, 0, 0.06)",
-    borderStrong: "rgba(203, 213, 225, 0.9)",
+    borderDefault: "rgba(30, 41, 59, 0.12)",
+    borderSubtle: "rgba(30, 41, 59, 0.06)",
+    borderStrong: "rgba(30, 41, 59, 0.18)",
 
-    accent: "#7c3aed",
-    accentHover: "#6d28d9",
-    accentMuted: "rgba(124, 58, 237, 0.1)",
+    accent: "#6d28d9",
+    accentHover: "#5b21b6",
+    accentMuted: "rgba(109, 40, 217, 0.08)",
     accentText: "#6d28d9",
 
-    success: "#059669",
-    warning: "#d97706",
+    success: "#047857",
+    warning: "#b45309",
     danger: "#dc2626",
-    info: "#2563eb",
+    info: "#1d4ed8",
 
-    scrollThumb: "rgba(203, 213, 225, 0.6)",
-    scrollThumbHover: "rgba(148, 163, 184, 0.8)",
+    scrollThumb: "rgba(100, 116, 139, 0.4)",
+    scrollThumbHover: "rgba(71, 85, 105, 0.6)",
 
-    selection: "rgba(124, 58, 237, 0.15)",
-    glowColor: "rgba(59, 130, 246, 0.12)",
+    selection: "rgba(109, 40, 217, 0.12)",
+    glowColor: "rgba(29, 78, 216, 0.08)",
 
     bgGradient1:
-      "radial-gradient(ellipse 70% 40% at 15% 0%, rgba(124, 58, 237, 0.04) 0%, transparent 65%)",
+      "radial-gradient(ellipse 70% 40% at 15% 0%, rgba(109, 40, 217, 0.03) 0%, transparent 65%)",
     bgGradient2:
-      "radial-gradient(ellipse 60% 35% at 85% 100%, rgba(16, 185, 129, 0.03) 0%, transparent 65%)",
+      "radial-gradient(ellipse 60% 35% at 85% 100%, rgba(4, 120, 87, 0.02) 0%, transparent 65%)",
     bgGradient3:
-      "radial-gradient(ellipse 50% 30% at 50% 50%, rgba(59, 130, 246, 0.02) 0%, transparent 70%)",
+      "radial-gradient(ellipse 50% 30% at 50% 50%, rgba(29, 78, 216, 0.02) 0%, transparent 70%)",
   },
 };
 
@@ -208,10 +208,61 @@ export const draculaTheme: Theme = {
   },
 };
 
+export const githubDarkTheme: Theme = {
+  name: "github-dark",
+  label: "GitHub Dark",
+  colors: {
+    bgApp: "#0d1117",
+    bgSurface: "rgba(22, 27, 34, 0.95)",
+    bgSurfaceHover: "rgba(33, 38, 45, 0.8)",
+    bgCard: "rgba(22, 27, 34, 0.8)",
+    bgInput: "rgba(13, 17, 23, 0.8)",
+    bgOverlay: "rgba(1, 4, 9, 0.8)",
+
+    glassSurface: "rgba(22, 27, 34, 0.95)",
+    glassCard: "rgba(22, 27, 34, 0.8)",
+    glassDialog: "rgba(22, 27, 34, 0.98)",
+    glassBorder: "rgba(48, 54, 61, 0.5)",
+
+    textPrimary: "#c9d1d9",
+    textSecondary: "#8b949e",
+    textMuted: "#6e7681",
+    textDimmed: "#484f58",
+
+    borderDefault: "rgba(48, 54, 61, 0.8)",
+    borderSubtle: "rgba(240, 246, 252, 0.1)",
+    borderStrong: "rgba(139, 148, 158, 0.5)",
+
+    accent: "#58a6ff",
+    accentHover: "#79c0ff",
+    accentMuted: "rgba(56, 139, 253, 0.15)",
+    accentText: "#58a6ff",
+
+    success: "#238636",
+    warning: "#d29922",
+    danger: "#da3633",
+    info: "#388bfd",
+
+    scrollThumb: "rgba(72, 79, 88, 0.6)",
+    scrollThumbHover: "rgba(110, 118, 129, 0.8)",
+
+    selection: "rgba(56, 139, 253, 0.3)",
+    glowColor: "rgba(88, 166, 255, 0.15)",
+
+    bgGradient1:
+      "radial-gradient(ellipse 70% 40% at 15% 0%, rgba(88, 166, 255, 0.05) 0%, transparent 65%)",
+    bgGradient2:
+      "radial-gradient(ellipse 60% 35% at 85% 100%, rgba(35, 134, 54, 0.04) 0%, transparent 65%)",
+    bgGradient3:
+      "radial-gradient(ellipse 50% 30% at 50% 50%, rgba(56, 139, 253, 0.02) 0%, transparent 70%)",
+  },
+};
+
 export const themes: Record<string, Theme> = {
   dark: darkTheme,
   light: lightTheme,
   dracula: draculaTheme,
+  "github-dark": githubDarkTheme,
 };
 
 export function applyTheme(theme: Theme): void {

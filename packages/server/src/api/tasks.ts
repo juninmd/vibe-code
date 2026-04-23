@@ -75,6 +75,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return c.json({ data: mapTasksWithRuns(repoId, status) });
   });
 
+  router.get("/schedules", (c) => {
+    const schedules = db.schedules.listAll();
+    const tasks = mapTasksWithRuns();
+    const scheduleData = schedules
+      .map((schedule) => {
+        const task = tasks.find((t) => t.id === schedule.taskId);
+        return { schedule, task };
+      })
+      .filter((s) => !!s.task);
+    return c.json({ data: scheduleData });
+  });
+
   router.get("/poll", (c) => {
     const repoId = c.req.query("repo_id");
     const focusedTaskId = c.req.query("focused_task_id") ?? undefined;
