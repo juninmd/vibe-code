@@ -49,7 +49,7 @@ function DynamicList({
               <button
                 type="button"
                 onClick={() => handleRemove(items.indexOf(item))}
-                className="text-zinc-600 hover:text-red-400 cursor-pointer shrink-0"
+                className="text-dimmed hover:text-danger cursor-pointer shrink-0"
               >
                 ✕
               </button>

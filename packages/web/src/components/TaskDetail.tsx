@@ -117,13 +117,13 @@ function PipelineSteps({
       : 0;
 
   return (
-    <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+    <div className="space-y-3 rounded-lg border border-default bg-input/40 p-3">
       <div>
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+        <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.18em] text-primary0">
           <span>Execução</span>
           <span>{Math.round(progressValue)}%</span>
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
           <div
             className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-400 transition-[width] duration-500"
             style={{ width: `${progressValue}%` }}
@@ -140,10 +140,10 @@ function PipelineSteps({
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
                     isCompleted
-                      ? "bg-emerald-900/60 border-emerald-600 text-emerald-300"
+                      ? "bg-success/15 border-emerald-600 text-success"
                       : isActive
-                        ? "bg-blue-900/60 border-blue-500 text-blue-300 animate-pulse"
-                        : "bg-zinc-800 border-zinc-700 text-zinc-600"
+                        ? "bg-info/15 border-blue-500 text-info animate-pulse"
+                        : "bg-surface border-strong text-dimmed"
                   }`}
                 >
                   {isCompleted ? (
@@ -156,7 +156,7 @@ function PipelineSteps({
                 </div>
                 <span
                   className={`text-[9px] font-medium truncate max-w-[50px] text-center leading-tight ${
-                    isCompleted ? "text-emerald-400" : isActive ? "text-blue-300" : "text-zinc-600"
+                    isCompleted ? "text-success" : isActive ? "text-info" : "text-dimmed"
                   }`}
                 >
                   {step.label}
@@ -167,7 +167,7 @@ function PipelineSteps({
                   className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded ${
                     completedSteps.includes(steps[i + 1].id) || isCompleted
                       ? "bg-emerald-700"
-                      : "bg-zinc-700"
+                      : "bg-surface-hover"
                   }`}
                 />
               )}
@@ -275,9 +275,9 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
       : false;
 
   return (
-    <div className="border border-zinc-800 rounded-lg p-4 space-y-3">
+    <div className="border border-default rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+        <h3 className="text-xs font-semibold text-secondary flex items-center gap-1.5">
           ⏰ Agendamento
         </h3>
         {!editing && (
@@ -288,7 +288,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
       </div>
 
       {error && (
-        <p className="text-xs text-red-400 bg-red-950/30 border border-red-800/40 rounded px-2 py-1">
+        <p className="text-xs text-danger bg-danger/15 border border-danger/30 rounded px-2 py-1">
           {error}
         </p>
       )}
@@ -296,7 +296,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
       {schedule && !editing && (
         <div className="space-y-2.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <code className="text-xs text-amber-400 bg-zinc-800 px-2 py-0.5 rounded font-mono">
+            <code className="text-xs text-warning bg-surface px-2 py-0.5 rounded font-mono">
               {schedule.cronExpression}
             </code>
             {isExpired ? (
@@ -309,7 +309,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
                 onClick={handleToggle}
                 title={schedule.enabled ? "Desabilitar" : "Habilitar"}
                 className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${
-                  schedule.enabled ? "bg-amber-600" : "bg-zinc-700"
+                  schedule.enabled ? "bg-amber-600" : "bg-surface-hover"
                 }`}
               >
                 <span
@@ -319,28 +319,28 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
                 />
               </button>
             )}
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-primary0">
               {isExpired ? "" : schedule.enabled ? "Ativo" : "Pausado"}
             </span>
           </div>
 
-          <div className="text-xs text-zinc-600 space-y-0.5">
+          <div className="text-xs text-dimmed space-y-0.5">
             {schedule.lastRunAt && (
               <div>
                 Último disparo:{" "}
-                <span className="text-zinc-400">{formatDateTime(schedule.lastRunAt)}</span>
+                <span className="text-secondary">{formatDateTime(schedule.lastRunAt)}</span>
               </div>
             )}
             {schedule.nextRunAt && schedule.enabled && !isExpired && (
               <div>
                 Próximo disparo:{" "}
-                <span className="text-zinc-400">{formatDateTime(schedule.nextRunAt)}</span>
+                <span className="text-secondary">{formatDateTime(schedule.nextRunAt)}</span>
               </div>
             )}
             {schedule.deadlineAt && (
-              <div className={isNearDeadline ? "text-amber-500" : ""}>
+              <div className={isNearDeadline ? "text-warning" : ""}>
                 Prazo:{" "}
-                <span className={isNearDeadline ? "text-amber-400 font-medium" : "text-zinc-400"}>
+                <span className={isNearDeadline ? "text-warning font-medium" : "text-secondary"}>
                   {formatDateTime(schedule.deadlineAt)}
                   {isNearDeadline && " ⚠️"}
                 </span>
@@ -360,7 +360,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
             <Button
               variant="ghost"
               onClick={handleDelete}
-              className="text-xs h-7 px-2 text-red-500 hover:text-red-400"
+              className="text-xs h-7 px-2 text-danger hover:text-danger"
             >
               Remover
             </Button>
@@ -371,11 +371,11 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
       {editing && (
         <div className="space-y-3">
           <div>
-            <div className="text-xs text-zinc-500 mb-1 block">Frequência</div>
+            <div className="text-xs text-primary0 mb-1 block">Frequência</div>
             <select
               value={preset}
               onChange={(e) => setPreset(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+              className="w-full bg-surface border border-strong rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-amber-500"
             >
               {CRON_PRESETS.map((p) => (
                 <option key={p.value} value={p.value}>
@@ -387,25 +387,25 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
 
           {preset === "custom" && (
             <div>
-              <div className="text-xs text-zinc-500 mb-1 block">Expressão cron</div>
+              <div className="text-xs text-primary0 mb-1 block">Expressão cron</div>
               <input
                 type="text"
                 placeholder="ex: 0 9 * * 1-5"
                 value={customExpr}
                 onChange={(e) => setCustomExpr(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                className="w-full bg-surface border border-strong rounded px-2 py-1.5 text-xs text-primary font-mono focus:outline-none focus:border-amber-500"
               />
-              <p className="text-[10px] text-zinc-600 mt-1">minuto hora dia mês dia-semana</p>
+              <p className="text-[10px] text-dimmed mt-1">minuto hora dia mês dia-semana</p>
             </div>
           )}
 
           <div>
-            <div className="text-xs text-zinc-500 mb-1 block">Prazo (opcional)</div>
+            <div className="text-xs text-primary0 mb-1 block">Prazo (opcional)</div>
             <input
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+              className="w-full bg-surface border border-strong rounded px-2 py-1.5 text-xs text-primary focus:outline-none focus:border-amber-500"
             />
           </div>
 
@@ -572,15 +572,13 @@ export function TaskDetail({
                 </div>
               )}
               <div className="min-w-0">
-                <h2 className="text-base font-semibold leading-tight text-zinc-100">
-                  {task.title}
-                </h2>
+                <h2 className="text-base font-semibold leading-tight text-primary">{task.title}</h2>
                 {task.repo && (
                   <a
                     href={task.repo.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors truncate block mt-0.5"
+                    className="text-[11px] text-primary0 hover:text-secondary transition-colors truncate block mt-0.5"
                   >
                     {task.repo.name}
                   </a>
@@ -595,7 +593,7 @@ export function TaskDetail({
                   href={api.tasks.downloadUrl(task.id)}
                   download
                   title="Baixar código (ZIP)"
-                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors text-sm"
+                  className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-sm"
                 >
                   ↓
                 </a>
@@ -614,7 +612,7 @@ export function TaskDetail({
                   }}
                   disabled={!!loadingAction}
                   title="Clonar tarefa"
-                  className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+                  className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
                 >
                   ⎘
                 </button>
@@ -622,7 +620,7 @@ export function TaskDetail({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors"
+                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
               >
                 ✕
               </button>
@@ -648,7 +646,7 @@ export function TaskDetail({
               </Badge>
             )}
             {isRunning && (
-              <span className="flex items-center gap-1.5 text-xs text-blue-400 bg-blue-950/30 rounded-full px-2 py-0.5 border border-blue-800/40">
+              <span className="flex items-center gap-1.5 text-xs text-info bg-info/15 rounded-full px-2 py-0.5 border border-info/30">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                 {task.latestRun?.currentStatus || "Rodando"}
               </span>
@@ -656,7 +654,7 @@ export function TaskDetail({
           </div>
 
           {/* Tab bar */}
-          <div className="flex gap-0 mt-3 border-b border-zinc-800">
+          <div className="flex gap-0 mt-3 border-b border-default">
             {(
               [
                 { id: "info" as const, label: "Info" },
@@ -726,9 +724,9 @@ export function TaskDetail({
 
               {/* PR Link */}
               {task.prUrl && (
-                <div className="bg-violet-950/20 border border-violet-800/40 rounded-lg p-3">
+                <div className="bg-accent-muted border border-accent/30 rounded-lg p-3">
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <h3 className="text-xs font-semibold text-violet-300 flex items-center gap-1.5">
+                    <h3 className="text-xs font-semibold text-accent-text flex items-center gap-1.5">
                       <svg
                         aria-hidden="true"
                         viewBox="0 0 16 16"
@@ -744,7 +742,7 @@ export function TaskDetail({
                       <button
                         type="button"
                         onClick={handleCopyPR}
-                        className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors"
+                        className="text-[10px] px-2 py-0.5 rounded bg-surface hover:bg-surface-hover text-secondary hover:text-primary cursor-pointer transition-colors"
                       >
                         {prCopied ? "✓ copiado" : "copiar"}
                       </button>
@@ -752,13 +750,13 @@ export function TaskDetail({
                         href={task.prUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[10px] px-2 py-0.5 rounded bg-violet-900/50 hover:bg-violet-800/60 text-violet-300 hover:text-violet-100 cursor-pointer transition-colors border border-violet-700/40"
+                        className="text-[10px] px-2 py-0.5 rounded bg-accent-muted hover:bg-accent-muted text-accent-text hover:text-accent-text cursor-pointer transition-colors border border-accent/30"
                       >
                         abrir ↗
                       </a>
                     </div>
                   </div>
-                  <code className="text-[11px] text-violet-300/80 font-mono break-all">
+                  <code className="text-[11px] text-accent-text/80 font-mono break-all">
                     {task.prUrl}
                   </code>
                 </div>
@@ -766,10 +764,10 @@ export function TaskDetail({
 
               {/* Retry PR button */}
               {task.status === "review" && !task.prUrl && (
-                <div className="bg-amber-950/20 border border-amber-800/40 rounded-lg p-3 flex items-center justify-between">
+                <div className="bg-warning/15 border border-warning/30 rounded-lg p-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-amber-300 font-medium">PR não criado ainda</p>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <p className="text-xs text-warning font-medium">PR não criado ainda</p>
+                    <p className="text-[11px] text-primary0 mt-0.5">
                       O código foi commitado mas o PR falhou
                     </p>
                   </div>
@@ -793,31 +791,31 @@ export function TaskDetail({
 
               {/* Repo + Branch info */}
               {task.repo && (
-                <div className="bg-zinc-800/40 rounded-lg p-3 space-y-2">
+                <div className="bg-surface-hover rounded-lg p-3 space-y-2">
                   <div className="flex items-center gap-2">
                     {ProviderIcon && <ProviderIcon className={provider?.color} size={13} />}
                     <a
                       href={task.repo.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-medium text-zinc-300 hover:text-white transition-colors"
+                      className="text-xs font-medium text-secondary hover:text-white transition-colors"
                     >
                       {task.repo.name}
                     </a>
-                    <span className="text-zinc-600 text-xs">·</span>
-                    <span className="text-xs text-zinc-500">{provider?.name ?? "Repository"}</span>
+                    <span className="text-dimmed text-xs">·</span>
+                    <span className="text-xs text-primary0">{provider?.name ?? "Repository"}</span>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-zinc-500 flex-wrap">
+                  <div className="flex items-center gap-4 text-xs text-primary0 flex-wrap">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-zinc-600">base:</span>
-                      <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px]">
+                      <span className="text-dimmed">base:</span>
+                      <code className="text-secondary bg-surface px-1 rounded text-[11px]">
                         {task.repo.defaultBranch}
                       </code>
                     </div>
                     {task.branchName && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-zinc-600">branch:</span>
-                        <code className="text-zinc-300 bg-zinc-800 px-1 rounded text-[11px] max-w-[240px] truncate">
+                        <span className="text-dimmed">branch:</span>
+                        <code className="text-secondary bg-surface px-1 rounded text-[11px] max-w-[240px] truncate">
                           {task.branchName}
                         </code>
                       </div>
@@ -829,8 +827,8 @@ export function TaskDetail({
               {/* Description */}
               {task.description && (
                 <div>
-                  <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Descrição</h3>
-                  <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Descrição</h3>
+                  <p className="text-sm text-secondary whitespace-pre-wrap leading-relaxed">
                     {task.description}
                   </p>
                 </div>
@@ -838,15 +836,15 @@ export function TaskDetail({
 
               {/* Tags */}
               <div>
-                <h3 className="text-xs font-medium text-zinc-500 mb-1.5">Tags</h3>
+                <h3 className="text-xs font-medium text-primary0 mb-1.5">Tags</h3>
                 <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
               </div>
 
               {/* Notes */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-xs font-medium text-zinc-500">Notas internas</h3>
-                  {notesSaved && <span className="text-[10px] text-emerald-400">✓ salvo</span>}
+                  <h3 className="text-xs font-medium text-primary0">Notas internas</h3>
+                  {notesSaved && <span className="text-[10px] text-success">✓ salvo</span>}
                 </div>
                 <textarea
                   value={notesValue}
@@ -854,15 +852,15 @@ export function TaskDetail({
                   onBlur={handleNotesBlur}
                   placeholder="Anotações pessoais (não enviadas ao agente)…"
                   rows={3}
-                  className="w-full bg-zinc-800/60 border border-zinc-700 rounded-md px-2.5 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                  className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
                 />
               </div>
 
               {/* Error message */}
               {task.latestRun?.errorMessage && (
-                <div className="bg-red-950/30 border border-red-800/40 rounded-lg p-3">
-                  <h3 className="text-xs font-medium text-red-400 mb-1.5">Erro</h3>
-                  <pre className="text-xs text-red-300 whitespace-pre-wrap break-all font-mono leading-relaxed max-h-32 overflow-y-auto">
+                <div className="bg-danger/15 border border-danger/30 rounded-lg p-3">
+                  <h3 className="text-xs font-medium text-danger mb-1.5">Erro</h3>
+                  <pre className="text-xs text-danger whitespace-pre-wrap break-all font-mono leading-relaxed max-h-32 overflow-y-auto">
                     {task.latestRun.errorMessage}
                   </pre>
                 </div>
@@ -870,24 +868,24 @@ export function TaskDetail({
 
               {/* Run Stats */}
               {task.latestRun && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 bg-zinc-800/20 rounded-lg px-3 py-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-primary0 bg-surface/20 rounded-lg px-3 py-2">
                   {task.latestRun.startedAt && (
                     <div>
-                      <span className="text-zinc-600">Iniciado </span>
+                      <span className="text-dimmed">Iniciado </span>
                       {formatDateTime(task.latestRun.startedAt)}
                     </div>
                   )}
                   {duration && (
                     <div>
-                      <span className="text-zinc-600">Duração </span>
-                      <span className="text-zinc-400 font-medium">{duration}</span>
+                      <span className="text-dimmed">Duração </span>
+                      <span className="text-secondary font-medium">{duration}</span>
                     </div>
                   )}
                   {task.latestRun.exitCode !== null && (
                     <div>
-                      <span className="text-zinc-600">Exit </span>
+                      <span className="text-dimmed">Exit </span>
                       <code
-                        className={`font-mono ${task.latestRun.exitCode === 0 ? "text-green-400" : "text-red-400"}`}
+                        className={`font-mono ${task.latestRun.exitCode === 0 ? "text-green-400" : "text-danger"}`}
                       >
                         {task.latestRun.exitCode}
                       </code>
@@ -948,7 +946,7 @@ export function TaskDetail({
                 )}
                 {confirmDelete ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-400">Tem certeza?</span>
+                    <span className="text-xs text-secondary">Tem certeza?</span>
                     <Button variant="danger" onClick={() => onDelete(task.id)}>
                       Confirmar
                     </Button>
@@ -960,7 +958,7 @@ export function TaskDetail({
                   <Button
                     variant="ghost"
                     onClick={() => setConfirmDelete(true)}
-                    className="text-zinc-500 hover:text-red-400"
+                    className="text-primary0 hover:text-danger"
                   >
                     Deletar
                   </Button>
@@ -969,9 +967,9 @@ export function TaskDetail({
 
               {/* Parent task link */}
               {task.parentTaskId && (
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-primary0">
                   ↳ Derivada do template{" "}
-                  <code className="text-zinc-400 bg-zinc-800 px-1 py-0.5 rounded font-mono">
+                  <code className="text-secondary bg-surface px-1 py-0.5 rounded font-mono">
                     {task.parentTaskId.slice(0, 8)}
                   </code>
                 </div>
@@ -983,7 +981,7 @@ export function TaskDetail({
               )}
 
               {/* Timestamps */}
-              <div className="text-[11px] text-zinc-600 space-y-0.5 pt-2 border-t border-zinc-800/60">
+              <div className="text-[11px] text-dimmed space-y-0.5 pt-2 border-t border-default">
                 <div>Criado: {formatDateTime(task.createdAt)}</div>
                 <div>Atualizado: {formatDateTime(task.updatedAt)}</div>
               </div>
@@ -1086,7 +1084,7 @@ export function TaskDetail({
                 <DiffViewer taskId={task.id} branchName={task.branchName} />
               ) : (
                 <div className="flex items-center justify-center h-32">
-                  <p className="text-sm text-zinc-600">Sem alterações — branch não criada</p>
+                  <p className="text-sm text-dimmed">Sem alterações — branch não criada</p>
                 </div>
               )}
             </div>

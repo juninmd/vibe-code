@@ -1,11 +1,11 @@
 const TAG_COLORS = [
-  "bg-red-900/60 text-red-300 border-red-700/50",
+  "bg-danger/15 text-danger border-danger/30",
   "bg-orange-900/60 text-orange-300 border-orange-700/50",
   "bg-yellow-900/60 text-yellow-300 border-yellow-700/50",
   "bg-green-900/60 text-green-300 border-green-700/50",
   "bg-teal-900/60 text-teal-300 border-teal-700/50",
-  "bg-blue-900/60 text-blue-300 border-blue-700/50",
-  "bg-violet-900/60 text-violet-300 border-violet-700/50",
+  "bg-info/15 text-info border-info/30",
+  "bg-accent-muted text-accent-text border-accent/30",
   "bg-pink-900/60 text-pink-300 border-pink-700/50",
 ];
 
@@ -81,7 +81,7 @@ export function TaskTagsEditor({ tags, onChange }: TaskTagsEditorProps) {
   };
 
   return (
-    <div className="flex flex-wrap gap-1 items-center min-h-[28px] bg-zinc-800/60 border border-zinc-700 rounded-md px-2 py-1 focus-within:border-zinc-500">
+    <div className="flex flex-wrap gap-1 items-center min-h-[28px] bg-surface-hover border border-strong rounded-md px-2 py-1 focus-within:border-zinc-500">
       {tags.map((tag) => (
         <TagChip key={tag} tag={tag} onRemove={() => onChange(tags.filter((t) => t !== tag))} />
       ))}
@@ -89,7 +89,7 @@ export function TaskTagsEditor({ tags, onChange }: TaskTagsEditorProps) {
         type="text"
         onKeyDown={handleKeyDown}
         placeholder={tags.length === 0 ? "Add tag, press Enter…" : ""}
-        className="flex-1 min-w-[80px] bg-transparent text-xs text-zinc-300 placeholder-zinc-600 outline-none"
+        className="flex-1 min-w-[80px] bg-transparent text-xs text-secondary placeholder-zinc-600 outline-none"
       />
     </div>
   );

@@ -124,6 +124,11 @@ export interface TaskSchedule {
   updatedAt: string;
 }
 
+export interface TaskScheduleWithTask {
+  schedule: TaskSchedule;
+  task: TaskWithRun;
+}
+
 export interface UpsertScheduleRequest {
   cronExpression: string;
   enabled?: boolean;

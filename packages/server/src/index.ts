@@ -21,7 +21,8 @@ import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
 import { ProviderRegistry } from "./git/providers/registry";
-import { workspaceMiddleware } from "./middleware/workspace.middleware";
+// NOTE: workspaceMiddleware removed - API is now public (no authentication)
+// import { workspaceMiddleware } from "./middleware/workspace.middleware";
 import { SkillsLoader } from "./skills/loader";
 import { BroadcastHub } from "./ws/broadcast";
 
@@ -134,7 +135,8 @@ const app = new Hono();
 
 // Middleware
 app.use("/api/*", cors({ origin: "*" }));
-app.use("/api/*", workspaceMiddleware());
+// NOTE: Workspace middleware disabled - API is now public (no authentication)
+// app.use("/api/*", workspaceMiddleware());
 
 // REST Routes
 app.route("/api/workspaces", workspacesRouter);

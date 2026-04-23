@@ -17,8 +17,6 @@ import { useCallback, useMemo, useState } from "react";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 
-const SCHEDULED_COLLAPSED_KEY = "vibe-code-scheduled-collapsed";
-
 interface BoardProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
@@ -39,12 +37,6 @@ export function Board({
   onRetryAllFailed,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
-  const [scheduledCollapsed, setScheduledCollapsed] = useState(() => {
-    if (typeof window === "undefined") return true;
-    const stored = window.localStorage.getItem(SCHEDULED_COLLAPSED_KEY);
-    // Default to collapsed (true) unless explicitly set to "0"
-    return stored !== "0";
-  });
   const noopTaskClick = useCallback(() => {}, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -133,26 +125,6 @@ export function Board({
             </div>
           ))}
         </div>
-
-        {/* Scheduled tasks — collapsible strip at the bottom */}
-        <Column
-          status="scheduled"
-          tasks={tasksByColumn.scheduled}
-          onTaskClick={onTaskClick}
-          onRetryPR={onRetryPR}
-          horizontal
-          collapsible
-          collapsed={scheduledCollapsed}
-          onToggleCollapse={() => {
-            setScheduledCollapsed((prev) => {
-              const next = !prev;
-              if (typeof window !== "undefined") {
-                window.localStorage.setItem(SCHEDULED_COLLAPSED_KEY, next ? "1" : "0");
-              }
-              return next;
-            });
-          }}
-        />
       </div>
 
       <DragOverlay>

@@ -178,21 +178,21 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
             </p>
           )}
 
-          <div className="max-h-72 overflow-y-auto rounded-md border border-zinc-800">
+          <div className="max-h-72 overflow-y-auto rounded-md border border-default">
             {loading ? (
-              <div className="px-3 py-8 text-center text-xs text-zinc-500">
+              <div className="px-3 py-8 text-center text-xs text-primary0">
                 {isSearchResult ? "Buscando" : "Carregando"} repositórios do {providerLabel}...
               </div>
             ) : error ? (
-              <div className="px-3 py-8 text-center text-xs text-red-400 space-y-2">
+              <div className="px-3 py-8 text-center text-xs text-danger space-y-2">
                 <p>Não foi possível carregar os repositórios do {providerLabel}.</p>
-                <p className="text-zinc-500">{error}</p>
-                <p className="text-zinc-500">
+                <p className="text-primary0">{error}</p>
+                <p className="text-primary0">
                   Verifique a configuração do provider em Configurações.
                 </p>
               </div>
             ) : repos.length === 0 ? (
-              <div className="px-3 py-8 text-center text-xs text-zinc-500">
+              <div className="px-3 py-8 text-center text-xs text-primary0">
                 {search.trim()
                   ? "Nenhum repositório corresponde à busca"
                   : `Nenhum repositório encontrado no ${providerLabel}.`}
@@ -203,10 +203,10 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                   key={repo.url}
                   type="button"
                   onClick={() => handleSelect(repo)}
-                  className="w-full text-left px-3 py-2.5 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800 transition-colors cursor-pointer group"
+                  className="w-full text-left px-3 py-2.5 border-b border-default/50 last:border-0 hover:bg-surface-hover transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-200 group-hover:text-zinc-100 font-medium truncate flex-1">
+                    <span className="text-sm text-primary group-hover:text-primary font-medium truncate flex-1">
                       {repo.name}
                     </span>
                     {repo.isPrivate && (
@@ -216,7 +216,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
                     )}
                   </div>
                   {repo.description && (
-                    <p className="text-xs text-zinc-600 mt-0.5 truncate">{repo.description}</p>
+                    <p className="text-xs text-dimmed mt-0.5 truncate">{repo.description}</p>
                   )}
                 </button>
               ))
@@ -295,9 +295,9 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               type="checkbox"
               checked={newIsPrivate}
               onChange={(e) => setNewIsPrivate(e.target.checked)}
-              className="rounded border-zinc-600 bg-zinc-800 text-violet-500 focus:ring-violet-500 cursor-pointer"
+              className="rounded border-strong bg-surface text-accent-text focus:ring-violet-500 cursor-pointer"
             />
-            <span className="text-sm text-zinc-400 flex items-center gap-1.5">
+            <span className="text-sm text-secondary flex items-center gap-1.5">
               {newIsPrivate ? (
                 <svg
                   width="13"
@@ -334,7 +334,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           </label>
 
           {createError && (
-            <p className="text-xs text-red-400 bg-red-950/30 border border-red-800/40 rounded px-3 py-2">
+            <p className="text-xs text-danger bg-danger/15 border border-danger/30 rounded px-3 py-2">
               {createError}
             </p>
           )}
@@ -353,7 +353,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
           <div>
             <label
               htmlFor={manualUrlInputId}
-              className="block text-xs font-medium text-zinc-400 mb-1"
+              className="block text-xs font-medium text-secondary mb-1"
             >
               URL do repositório *
             </label>
@@ -365,7 +365,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               required
               autoFocus
             />
-            <p className="text-xs text-zinc-600 mt-1">
+            <p className="text-xs text-dimmed mt-1">
               URL GitHub/GitLab ou caminho local. A branch é detectada automaticamente.
             </p>
           </div>

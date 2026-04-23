@@ -17,7 +17,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-zinc-700 hover:bg-zinc-600 text-zinc-300 cursor-pointer transition-colors shrink-0"
+      className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-surface-hover hover:bg-border-strong text-secondary cursor-pointer transition-colors shrink-0"
     >
       {copied ? "✓" : "copy"}
     </button>
@@ -43,31 +43,31 @@ function EngineCard({
       className={`rounded-xl border p-4 transition-all duration-200 ${
         engine.available
           ? `${meta.bgColor} ${meta.borderColor}`
-          : "bg-zinc-900/50 border-zinc-800/60 opacity-70"
+          : "bg-input/50 border-default opacity-70"
       }`}
     >
       <div className="flex items-start gap-3">
         {/* Icon */}
         <div
           className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-            engine.available ? meta.bgColor : "bg-zinc-800/50"
-          } border ${engine.available ? meta.borderColor : "border-zinc-700/30"}`}
+            engine.available ? meta.bgColor : "bg-surface/50"
+          } border ${engine.available ? meta.borderColor : "border-strong/30"}`}
         >
-          <Icon size={20} className={engine.available ? meta.color : "text-zinc-600"} />
+          <Icon size={20} className={engine.available ? meta.color : "text-dimmed"} />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-zinc-100">{engine.displayName}</h3>
+            <h3 className="text-sm font-semibold text-primary">{engine.displayName}</h3>
 
             {/* Status indicator */}
             <span
               className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                 engine.available
-                  ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700/40"
+                  ? "bg-success/15 text-success border border-success/30"
                   : needsConfig
-                    ? "bg-amber-900/40 text-amber-300 border border-amber-700/40"
-                    : "bg-zinc-800 text-zinc-500 border border-zinc-700/40"
+                    ? "bg-warning/15 text-warning border border-warning/30"
+                    : "bg-surface text-primary0 border border-strong/40"
               }`}
             >
               <span
@@ -76,7 +76,7 @@ function EngineCard({
                     ? "bg-emerald-400 animate-pulse"
                     : needsConfig
                       ? "bg-amber-400"
-                      : "bg-zinc-600"
+                      : "bg-border-strong"
                 }`}
               />
               {engine.available ? "disponível" : unavailableLabel}
@@ -84,7 +84,7 @@ function EngineCard({
 
             {/* Active runs */}
             {engine.activeRuns > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-900/50 text-blue-300 border border-blue-700/40 font-medium">
+              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/15 text-info border border-info/30 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                 {engine.activeRuns} rodando
               </span>
@@ -93,11 +93,11 @@ function EngineCard({
 
           {/* Provider + version */}
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[11px] text-zinc-500">{meta.provider}</span>
+            <span className="text-[11px] text-primary0">{meta.provider}</span>
             {engine.version && (
               <>
-                <span className="text-zinc-700">·</span>
-                <code className="text-[10px] text-zinc-400 font-mono">{engine.version}</code>
+                <span className="text-dimmed">·</span>
+                <code className="text-[10px] text-secondary font-mono">{engine.version}</code>
               </>
             )}
           </div>
@@ -109,7 +109,7 @@ function EngineCard({
             href={meta.docsUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="shrink-0 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="shrink-0 text-[10px] text-primary0 hover:text-secondary transition-colors"
           >
             docs ↗
           </a>
@@ -118,15 +118,15 @@ function EngineCard({
 
       {/* Description */}
       {meta.description && (
-        <p className="text-xs text-zinc-500 mt-2.5 leading-relaxed">{meta.description}</p>
+        <p className="text-xs text-primary0 mt-2.5 leading-relaxed">{meta.description}</p>
       )}
 
       {engine.setupIssue && (
         <div
           className={`mt-3 text-xs rounded-lg px-3 py-2 border ${
             needsConfig
-              ? "border-amber-800/40 bg-amber-950/30 text-amber-300"
-              : "border-zinc-800/60 bg-zinc-900/50 text-zinc-500"
+              ? "border-warning/30 bg-warning/15 text-warning"
+              : "border-default bg-input/50 text-primary0"
           }`}
         >
           {engine.setupIssue}
@@ -137,7 +137,7 @@ function EngineCard({
                 <button
                   type="button"
                   onClick={onOpenSettings}
-                  className="underline text-amber-200 hover:text-amber-100 cursor-pointer"
+                  className="underline text-warning hover:text-warning cursor-pointer"
                 >
                   Configurações
                 </button>
@@ -156,14 +156,14 @@ function EngineCard({
           <button
             type="button"
             onClick={() => setShowInstall((v) => !v)}
-            className="text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer transition-colors flex items-center gap-1"
+            className="text-xs text-secondary hover:text-primary cursor-pointer transition-colors flex items-center gap-1"
           >
             <span className={`transition-transform ${showInstall ? "rotate-90" : ""}`}>▶</span>
             Como instalar
           </button>
           {showInstall && (
-            <div className="mt-2 flex items-center gap-1 bg-zinc-900 border border-zinc-700 rounded px-3 py-2">
-              <code className="text-[11px] text-zinc-300 font-mono flex-1 break-all">
+            <div className="mt-2 flex items-center gap-1 bg-input border border-strong rounded px-3 py-2">
+              <code className="text-[11px] text-secondary font-mono flex-1 break-all">
                 {meta.install}
               </code>
               <CopyButton text={meta.install} />
@@ -221,15 +221,15 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-zinc-100">Serviços de IA</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <h2 className="text-base font-semibold text-primary">Serviços de IA</h2>
+            <p className="text-xs text-primary0 mt-0.5">
               {loading ? (
                 <span className="animate-pulse">Verificando...</span>
               ) : (
                 <>
                   {availableCount}/{engines.length} disponíveis
                   {totalActiveRuns > 0 && (
-                    <span className="ml-2 text-blue-400">· {totalActiveRuns} em execução</span>
+                    <span className="ml-2 text-info">· {totalActiveRuns} em execução</span>
                   )}
                 </>
               )}
@@ -241,14 +241,14 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
               onClick={() => fetchEngines(true)}
               disabled={refreshing || loading}
               title="Atualizar"
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 cursor-pointer transition-colors text-sm disabled:opacity-40"
+              className="p-1.5 rounded-lg text-primary0 hover:text-secondary hover:bg-surface-hover cursor-pointer transition-colors text-sm disabled:opacity-40"
             >
               <span className={refreshing ? "inline-block animate-spin" : ""}>↻</span>
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 cursor-pointer transition-colors"
+              className="p-1.5 rounded-lg text-primary0 hover:text-secondary hover:bg-surface-hover cursor-pointer transition-colors"
             >
               ✕
             </button>
@@ -258,13 +258,13 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
         {/* Engine Cards */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {error && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400 text-xs">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger text-xs">
               <span>⚠</span>
               <span className="flex-1 truncate">{error}</span>
               <button
                 type="button"
                 onClick={() => fetchEngines(true)}
-                className="text-red-300 hover:text-red-100 cursor-pointer shrink-0"
+                className="text-danger hover:text-danger cursor-pointer shrink-0"
               >
                 Tentar novamente
               </button>
@@ -273,11 +273,11 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
           {loading ? (
             <div className="space-y-3">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-zinc-800/40 animate-pulse" />
+                <div key={i} className="h-24 rounded-xl bg-surface-hover animate-pulse" />
               ))}
             </div>
           ) : engines.length === 0 ? (
-            <div className="text-center py-12 text-zinc-600 text-sm">Nenhum engine registrado</div>
+            <div className="text-center py-12 text-dimmed text-sm">Nenhum engine registrado</div>
           ) : (
             engines.map((engine) => (
               <EngineCard key={engine.name} engine={engine} onOpenSettings={onOpenSettings} />
@@ -286,7 +286,7 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-white/[0.06] text-[10px] text-zinc-600 shrink-0 flex items-center justify-between">
+        <div className="px-4 py-3 border-t border-white/[0.06] text-[10px] text-dimmed shrink-0 flex items-center justify-between">
           <span>
             Atualizado{" "}
             {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}

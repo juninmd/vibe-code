@@ -36,8 +36,8 @@ function Chip({
       onClick={onClick}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border cursor-pointer transition-all ${
         active
-          ? "bg-violet-900/60 border-violet-600 text-violet-200"
-          : "bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600"
+          ? "bg-accent-muted border-violet-600 text-accent-text"
+          : "bg-surface-hover border-strong text-secondary hover:text-primary hover:border-strong"
       }`}
     >
       {children}
@@ -62,17 +62,17 @@ export function FilterBar({
   const set = (partial: Partial<Filters>) => onFilterChange({ ...filters, ...partial });
 
   return (
-    <div className="flex items-center gap-2 px-4 py-1.5 border-b border-zinc-800/60 flex-wrap text-xs">
+    <div className="flex items-center gap-2 px-4 py-1.5 border-b border-default flex-wrap text-xs">
       {onSearchChange !== undefined && (
         <input
           type="text"
           value={search ?? ""}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Buscar tarefas..."
-          className="bg-zinc-900/60 border border-zinc-700 rounded px-2.5 py-1 text-xs text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-36 shrink-0"
+          className="bg-input border border-strong rounded px-2.5 py-1 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-36 shrink-0"
         />
       )}
-      <span className="text-zinc-600 shrink-0">Filtros:</span>
+      <span className="text-dimmed shrink-0">Filtros:</span>
 
       {availableEngines.map((eng) => (
         <Chip
@@ -118,7 +118,7 @@ export function FilterBar({
         <button
           type="button"
           onClick={() => onFilterChange({ engine: null, priority: null, hasPR: false, tags: [] })}
-          className="text-[11px] text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors ml-1"
+          className="text-[11px] text-primary0 hover:text-secondary cursor-pointer transition-colors ml-1"
         >
           ✕ Limpar
         </button>
