@@ -135,7 +135,7 @@ export function ScheduledTasksPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
         <div>
-          <h3 className="text-sm font-semibold text-primary">Tarefas Agendadas</h3>
+          <h3 className="text-sm font-semibold text-primary">Tasks Scheduled</h3>
           <p className="text-xs text-primary0 mt-0.5">
             {loading ? (
               <span className="animate-pulse">Carregando...</span>

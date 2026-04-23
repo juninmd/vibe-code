@@ -20,6 +20,7 @@
     "@vibe-code/core": "workspace:*",
     "@vibe-code/shared": "workspace:*",
     "ansi-to-html": "^0.7.2",
+    "diff2html": "^3.4.56",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "zustand": "^4.4.5"

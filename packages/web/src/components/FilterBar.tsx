@@ -68,7 +68,7 @@ export function FilterBar({
           type="text"
           value={search ?? ""}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Buscar tarefas..."
+          placeholder="Search tasks..."
           className="bg-input border border-strong rounded px-2.5 py-1 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 w-36 shrink-0"
         />
       )}

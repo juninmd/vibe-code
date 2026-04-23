@@ -28,7 +28,7 @@ function PriorityDot({ priority }: { priority: number }) {
   if (priority === 0) return null;
   return (
     <span
-      title={`Prioridade ${priority}`}
+      title={`Priority ${priority}`}
       className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -227,17 +227,17 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               <circle cx="8" cy="8" r="5.5" />
               <path d="M8 5.5v3l2 1.3" />
             </svg>
-            agendada
+            scheduled
           </Badge>
         )}
         {task.parentTaskId && (
           <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-60">
-            ↳ derivada
+            ↳ derived
           </Badge>
         )}
         {task.status === "failed" && (
           <Badge variant="danger" className="text-[10px] py-0 px-1.5">
-            Falhou
+            Failed
           </Badge>
         )}
         {task.status === "failed" && task.latestRun?.errorMessage && (
@@ -263,7 +263,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               onClick={handleRetryPR}
               disabled={retrying}
             >
-              {retrying ? "…" : "Tentar PR"}
+              {retrying ? "…" : "Retry PR"}
             </Button>
             {retryError && (
               <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-danger bg-input border border-danger/30 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
@@ -293,7 +293,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         {isRunning && (
           <span className="flex items-center gap-1.5 text-[10px] font-semibold text-info ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-info/15 border border-info/30 px-2 py-[2px] rounded-md">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-            <span className="truncate">{task.latestRun?.currentStatus || "Executando..."}</span>
+            <span className="truncate">{task.latestRun?.currentStatus || "Running..."}</span>
             {elapsed && <span className="shrink-0 text-info/80 tabular-nums">{elapsed}</span>}
           </span>
         )}

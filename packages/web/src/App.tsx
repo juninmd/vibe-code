@@ -23,6 +23,7 @@ import { SkillsBrowser } from "./components/SkillsBrowser";
 import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
 import { Button } from "./components/ui/button";
+import { getEngineMeta } from "./components/ui/engine-icons";
 import { Toaster } from "./components/ui/Toaster";
 import { WorkspaceSelector } from "./components/WorkspaceSelector";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
@@ -147,9 +148,9 @@ export default function App() {
           const prev = prevStatusRef.current[updated.id];
           if (prev && prev !== updated.status) {
             if (updated.status === "done")
-              notify(`✓ Tarefa concluída: ${updated.title}`, "Agente executou com sucesso");
+              notify(`✓ Task concluída: ${updated.title}`, "Agente executou com sucesso");
             else if (updated.status === "failed")
-              notify(`✕ Tarefa falhou: ${updated.title}`, "Execução do agente falhou");
+              notify(`✕ Task failed: ${updated.title}`, "Execução do agente failed");
             else if (updated.status === "review")
               notify(`◎ PR pronto: ${updated.title}`, "Agente abriu um pull request");
           }
@@ -624,12 +625,12 @@ export default function App() {
           {!connected && wasConnected.current && (
             <div className="bg-warning/15 border-b border-warning/30 px-4 py-1.5 text-xs text-warning flex items-center gap-2 shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              Desconectado — tentando reconectar...
+              Disconnected — attempting to reconnect...
             </div>
           )}
 
           {/* Header */}
-          <header className="glass-panel border-b px-4 py-3 flex items-center gap-4 shrink-0">
+          <header className="bg-app/50 backdrop-blur-md border-b border-default px-4 py-3 flex items-center gap-4 shrink-0">
             {/* Workspace Selector */}
             <div className="hidden md:block min-w-max">
               <WorkspaceSelector />
@@ -637,12 +638,12 @@ export default function App() {
 
             <div className="flex-1 min-w-0">
               <h2 className="text-sm font-medium text-secondary truncate">
-                {selectedRepoId ? (selectedRepo?.name ?? "Repositório") : "Todos os Repositórios"}
+                {selectedRepoId ? (selectedRepo?.name ?? "Repository") : "All Repositories"}
               </h2>
               <p className="text-xs text-dimmed flex items-center gap-2">
                 {filteredTasks.length !== tasks.length
-                  ? `${filteredTasks.length} de ${tasks.length} tarefas`
-                  : `${tasks.length} tarefa${tasks.length !== 1 ? "s" : ""}`}
+                  ? `${filteredTasks.length} de ${tasks.length} tasks`
+                  : `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`}
                 {selectedRepo?.url && (
                   <a
                     href={selectedRepo.url}
@@ -651,7 +652,7 @@ export default function App() {
                     className="text-primary0 hover:text-secondary transition-colors"
                     title={selectedRepo.url}
                   >
-                    abrir repo
+                    open repo
                   </a>
                 )}
               </p>
@@ -661,17 +662,30 @@ export default function App() {
             <button
               type="button"
               onClick={() => setShowSchedulesPanel(true)}
-              title="Gerenciar Tasks Agendadas"
+              title="Manage Scheduled Tasks"
               className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
             >
-              <span className="text-primary0 group-hover:text-secondary">🕒</span>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="opacity-70 group-hover:opacity-100 transition-opacity text-primary0 group-hover:text-primary"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
             </button>
 
             {/* Engine status indicator */}
             <button
               type="button"
               onClick={() => setShowEnginesPanel(true)}
-              title="Gerenciar serviços de IA (E)"
+              title="Manage AI Services (E)"
               className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
             >
               <div className="flex items-center gap-1">
@@ -690,19 +704,39 @@ export default function App() {
               </span>
               {totalActiveRuns > 0 && (
                 <span className="text-xs bg-info/15 text-info border border-info/30 rounded-full px-1.5 py-0.5 leading-none font-medium">
-                  {totalActiveRuns} ativo{totalActiveRuns !== 1 ? "s" : ""}
+                  {totalActiveRuns} active{totalActiveRuns !== 1 ? "s" : ""}
                 </span>
               )}
             </button>
 
             {/* Filters */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-surface border border-strong focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
+              {(() => {
+                const eng = selectedAgent ? getEngineMeta(selectedAgent) : null;
+                const Icon = eng?.icon;
+                return Icon ? (
+                  <span className={eng?.color}>
+                    <Icon size={12} />
+                  </span>
+                ) : (
+                  <svg
+                    aria-hidden="true"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="text-secondary opacity-70"
+                  >
+                    <path d="M8 2C5.5 5 4 6.5 4 8C4 9.5 5.5 11 8 14C10.5 11 12 9.5 12 8C12 6.5 10.5 5 8 2Z" />
+                  </svg>
+                );
+              })()}
               <select
                 value={selectedAgent ?? ""}
                 onChange={(e) => setSelectedAgent(e.target.value || null)}
-                className="px-2 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary focus:outline-none focus:border-zinc-500"
+                className="bg-transparent border-none text-secondary focus:outline-none cursor-pointer outline-none w-full"
               >
-                <option value="">Todos Engines</option>
+                <option value="">All Engines</option>
                 {engines
                   .filter((e) => e.available)
                   .map((e) => (
@@ -723,7 +757,7 @@ export default function App() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar tarefas..."
+                placeholder="Search tasks..."
                 className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
               />
               {search && (
@@ -768,9 +802,9 @@ export default function App() {
               variant="primary"
               size="sm"
               onClick={() => setShowNewTask(true)}
-              title="Nova tarefa (N)"
+              title="Nova task (N)"
             >
-              + Tarefa
+              + Task
             </Button>
           </header>
 
@@ -795,15 +829,15 @@ export default function App() {
               onRetryPR={retryPR}
               onArchiveDone={async () => {
                 await archiveDone();
-                toast("Tarefas concluídas arquivadas", "info");
+                toast("Completed tasks archived", "info");
               }}
               onClearFailed={async () => {
                 await clearFailed();
-                toast("Tarefas com falha removidas", "info");
+                toast("Failed tasks removed", "info");
               }}
               onRetryAllFailed={async () => {
                 await retryAllFailed();
-                toast("Reiniciando tarefas com falha", "info");
+                toast("Restarting failed tasks", "info");
               }}
             />
           </main>
@@ -818,27 +852,27 @@ export default function App() {
             onLaunch={async (id, engine) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
               await launchTask(id, engine);
-              toast("Agente iniciado", "success");
+              toast("Agent started", "success");
             }}
             onCancel={async (id) => {
               await cancelTask(id);
-              toast("Agente cancelado", "info");
+              toast("Agent canceled", "info");
             }}
             onRetry={async (id) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
               await retryTask(id);
-              toast("Agente reiniciado", "success");
+              toast("Agent restarted", "success");
             }}
             onRetryPR={async (id) => {
               await retryPR(id);
-              toast("Criando PR...", "info");
+              toast("Creating PR...", "info");
             }}
             onDelete={async (id) => {
               const taskToDelete = tasks.find((t) => t.id === id);
               await removeTask(id);
               handleCloseDetail();
               toast(
-                "Tarefa deletada",
+                "Task deletada",
                 "info",
                 taskToDelete
                   ? {
@@ -851,7 +885,7 @@ export default function App() {
                           engine: taskToDelete.engine ?? undefined,
                           tags: taskToDelete.tags,
                         });
-                        toast("Tarefa restaurada", "success");
+                        toast("Task restaurada", "success");
                       },
                     }
                   : undefined
@@ -886,7 +920,7 @@ export default function App() {
           <div className="fixed inset-0 z-50 flex items-start justify-end">
             <button
               type="button"
-              aria-label="Fechar painel de tarefas agendadas"
+              aria-label="Fechar painel de tasks agendadas"
               className="absolute inset-0 bg-black/50 backdrop-blur-sm"
               onClick={() => setShowSchedulesPanel(false)}
             />
@@ -997,7 +1031,7 @@ export default function App() {
           onClose={() => setShowAddRepo(false)}
           onSubmit={async (data) => {
             await addRepo(data);
-            toast("Repositório adicionado — clonando...", "success");
+            toast("Repository adicionado — clonando...", "success");
           }}
         />
 

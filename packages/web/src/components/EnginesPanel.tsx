@@ -139,10 +139,10 @@ function EngineCard({
                   onClick={onOpenSettings}
                   className="underline text-warning hover:text-warning cursor-pointer"
                 >
-                  Configurações
+                  Settings
                 </button>
               ) : (
-                "Configurações"
+                "Settings"
               )}{" "}
               para concluir a configuração.
             </span>

@@ -187,9 +187,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
               <div className="px-3 py-8 text-center text-xs text-danger space-y-2">
                 <p>Não foi possível carregar os repositórios do {providerLabel}.</p>
                 <p className="text-primary0">{error}</p>
-                <p className="text-primary0">
-                  Verifique a configuração do provider em Configurações.
-                </p>
+                <p className="text-primary0">Verifique a configuração do provider em Settings.</p>
               </div>
             ) : repos.length === 0 ? (
               <div className="px-3 py-8 text-center text-xs text-primary0">

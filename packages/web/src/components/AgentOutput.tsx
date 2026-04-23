@@ -568,7 +568,7 @@ export function AgentOutput({
               </span>
             )}
             {searchQuery && totalMatches === 0 && (
-              <span className="text-[10px] text-danger shrink-0">nenhum resultado</span>
+              <span className="text-[10px] text-danger shrink-0">no results</span>
             )}
             <button
               type="button"
