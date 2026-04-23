@@ -122,7 +122,7 @@ export function TaskSpecEditor({ value, onChange }: TaskSpecEditorProps) {
         <Textarea
           value={value.context}
           onChange={(e) => onChange({ ...value, context: e.target.value })}
-          placeholder="Links, referências, tarefas relacionadas..."
+          placeholder="Links, referências, tasks relacionadas..."
           rows={2}
         />
       </div>

@@ -181,7 +181,7 @@ export function NewTaskDialog({
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} title="New Task" size="lg">
+      <Dialog open={open} onClose={onClose} title="New Task" size="2xl">
         <form
           onSubmit={handleSubmit}
           className="space-y-5 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar -mr-1"

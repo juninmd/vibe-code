@@ -174,7 +174,7 @@ export function CommandPalette({
             {
               id: "open-stats",
               label: "Estatísticas",
-              description: "Ver estatísticas de tarefas",
+              description: "Ver estatísticas de tasks",
               icon: "▦",
               group: "Actions",
               onSelect: () => {

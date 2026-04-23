@@ -236,7 +236,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onOpenSettings}
-            title="Configurações"
+            title="Settings"
             className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
           >
             <svg
@@ -346,7 +346,7 @@ export function Sidebar({
                 type="button"
                 onClick={onOpenSettings}
                 aria-label="Abrir configurações"
-                title="Configurações"
+                title="Settings"
                 className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
               >
                 <svg
@@ -372,7 +372,7 @@ export function Sidebar({
             {/* Section header */}
             <div className="flex items-center justify-between">
               <h2 className="text-[11px] font-semibold text-primary0 uppercase tracking-wider px-0.5">
-                Repositórios
+                Repositories
               </h2>
               <div className="flex items-center gap-1">
                 <Button
@@ -532,7 +532,7 @@ export function Sidebar({
               )}
 
               {repos.length > 0 && filtered.length === 0 && (
-                <p className="text-xs text-dimmed px-2.5 py-4 text-center">Nenhum resultado</p>
+                <p className="text-xs text-dimmed px-2.5 py-4 text-center">No results</p>
               )}
             </div>
 

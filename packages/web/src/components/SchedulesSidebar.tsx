@@ -44,7 +44,7 @@ export function SchedulesSidebar({ onClose }: SchedulesSidebarProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-primary">Tasks Agendadas</h2>
+            <h2 className="text-base font-semibold text-primary">Tasks Scheduled</h2>
             <p className="text-xs text-primary0 mt-0.5">
               {loading ? (
                 <span className="animate-pulse">Buscando...</span>

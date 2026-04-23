@@ -587,7 +587,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const { themeName, setTheme } = useTheme();
 
   return (
-    <Dialog open={open} onClose={onClose} title="Configurações">
+    <Dialog open={open} onClose={onClose} title="Settings">
       {/* Tabs */}
       <div className="flex gap-1 mb-5 rounded-lg p-1" style={{ background: "var(--bg-input)" }}>
         {(["github", "gitlab", "litellm", "apikeys", "general"] as Tab[]).map((t) => (
@@ -611,7 +611,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   ? "LiteLLM"
                   : t === "apikeys"
                     ? "API Keys"
-                    : "Geral"}
+                    : "General"}
           </button>
         ))}
       </div>
@@ -642,7 +642,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           {/* Theme selector */}
           <div>
             <div className="block text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>
-              Tema
+              Theme
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {Object.values(themes).map((t) => (

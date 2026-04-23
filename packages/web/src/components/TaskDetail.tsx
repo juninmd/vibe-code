@@ -475,9 +475,9 @@ export function TaskDetail({
   }
 
   const skillCategoryLabel: Record<string, string> = {
-    rule: "Regra",
+    rule: "Rule",
     skill: "Skill",
-    agent: "Agente",
+    agent: "Agent",
     workflow: "Workflow",
   };
 
@@ -768,7 +768,7 @@ export function TaskDetail({
                   <div>
                     <p className="text-xs text-warning font-medium">PR não criado ainda</p>
                     <p className="text-[11px] text-primary0 mt-0.5">
-                      O código foi commitado mas o PR falhou
+                      O código foi commitado mas o PR failed
                     </p>
                   </div>
                   <Button
@@ -909,7 +909,7 @@ export function TaskDetail({
                       }
                     }}
                   >
-                    {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agente"}
+                    {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agent"}
                   </Button>
                 )}
                 {task.status === "failed" && (
@@ -1008,7 +1008,7 @@ export function TaskDetail({
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
-                  Skills carregadas pela CLI
+                  Skills loaded by CLI
                 </span>
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded-full"

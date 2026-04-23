@@ -33,42 +33,42 @@ const columnConfig: Record<
     countBg: "bg-surface-hover border-strong/40",
     countText: "text-secondary",
     emptyIcon: "list",
-    emptyText: "Adicione tarefas aqui",
+    emptyText: "Add tasks here",
   },
   in_progress: {
     dot: "bg-blue-400",
     countBg: "bg-info/15 border-info/30",
     countText: "text-info",
     emptyIcon: "play",
-    emptyText: "Nenhum agente rodando",
+    emptyText: "No agents running",
   },
   review: {
     dot: "bg-violet-400",
     countBg: "bg-accent-muted border-accent/30",
     countText: "text-accent-text",
     emptyIcon: "eye",
-    emptyText: "Nada aguardando revisão",
+    emptyText: "Nothing awaiting review",
   },
   done: {
     dot: "bg-emerald-400",
     countBg: "bg-success/15 border-success/30",
     countText: "text-success",
     emptyIcon: "check",
-    emptyText: "Nenhuma tarefa concluída",
+    emptyText: "No tasks completed",
   },
   failed: {
     dot: "bg-red-400",
     countBg: "bg-danger/15 border-danger/30",
     countText: "text-danger",
     emptyIcon: "x",
-    emptyText: "Sem falhas",
+    emptyText: "No failures",
   },
   archived: {
     dot: "bg-border-strong",
     countBg: "bg-surface-hover border-strong/40",
     countText: "text-primary0",
     emptyIcon: "archive",
-    emptyText: "Nenhum arquivo",
+    emptyText: "No archived files",
   },
 };
 
@@ -209,8 +209,8 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onToggleCollapse}
-                aria-label={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
-                title={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
+                aria-label={collapsed ? "Expand Scheduled" : "Collapse Scheduled"}
+                title={collapsed ? "Expand Scheduled" : "Collapse Scheduled"}
                 className="p-1.5 rounded-lg text-dimmed hover:text-warning hover:bg-warning/15 transition-all cursor-pointer"
               >
                 <svg
@@ -233,8 +233,8 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onArchiveDone}
-                aria-label="Arquivar concluídas"
-                title="Arquivar concluídas"
+                aria-label="Archive completed"
+                title="Archive completed"
                 className="p-1.5 rounded-lg text-dimmed hover:text-success hover:bg-success/15 transition-all cursor-pointer"
               >
                 <svg
@@ -261,8 +261,8 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onRetryAllFailed}
-                    aria-label="Retry todas as falhas"
-                    title="Retry todas as falhas"
+                    aria-label="Retry all failed"
+                    title="Retry all failed"
                     className="p-1.5 rounded-lg text-dimmed hover:text-info hover:bg-info/15 transition-all cursor-pointer"
                   >
                     <svg
@@ -288,8 +288,8 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onClearFailed}
-                    aria-label="Limpar falhas"
-                    title="Limpar falhas"
+                    aria-label="Clear failures"
+                    title="Clear failures"
                     className="p-1.5 rounded-lg text-dimmed hover:text-danger hover:bg-danger/15 transition-all cursor-pointer"
                   >
                     <svg
@@ -359,7 +359,7 @@ function ColumnComponent({
           className="px-4 py-2 text-xs border-t"
           style={{ color: "var(--text-muted)", borderColor: "var(--glass-border)" }}
         >
-          Coluna recolhida. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
+          Column collapsed. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
           {tasks.length !== 1 ? "s" : ""}.
         </div>
       )}

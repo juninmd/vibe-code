@@ -11,9 +11,9 @@ interface StatsDialogProps {
 type NavSection = "overview" | "engines" | "tasks" | "activity" | "skills";
 
 const NAV_ITEMS: { id: NavSection; label: string; icon: string }[] = [
-  { id: "overview", label: "Visão Geral", icon: "◈" },
+  { id: "overview", label: "Visão General", icon: "◈" },
   { id: "engines", label: "Motores", icon: "⚙" },
-  { id: "tasks", label: "Tarefas", icon: "☰" },
+  { id: "tasks", label: "Tasks", icon: "☰" },
   { id: "activity", label: "Atividade", icon: "▦" },
   { id: "skills", label: "Skills", icon: "⚡" },
 ];
@@ -154,8 +154,8 @@ function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolea
       <div>
         <SectionTitle>Resumo</SectionTitle>
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Repositórios" value={o.totalRepos} animated={ready} />
-          <StatCard label="Tarefas" value={o.totalTasks} animated={ready} />
+          <StatCard label="Repositories" value={o.totalRepos} animated={ready} />
+          <StatCard label="Tasks" value={o.totalTasks} animated={ready} />
           <StatCard
             label="Execuções"
             value={o.totalRuns}
