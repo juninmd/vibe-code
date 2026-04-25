@@ -28,7 +28,7 @@ export async function writeHarnessContext(
   run: AgentRun,
   wtPath: string,
   db: Db,
-  git: GitService
+  _git: GitService
 ): Promise<string[]> {
   const contextDir = join(wtPath, CONTEXT_DIR);
   await mkdir(contextDir, { recursive: true });

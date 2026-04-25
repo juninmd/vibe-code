@@ -462,7 +462,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
 
     const latestRun = db.runs.getLatestByTask(task.id);
-    const targetPath = latestRun?.worktreePath ?? repo.localPath ?? (git ? git.getBarePath(repo.name) : null);
+    const targetPath =
+      latestRun?.worktreePath ?? repo.localPath ?? (git ? git.getBarePath(repo.name) : null);
 
     if (!targetPath) {
       return c.json({ error: "invalid_state", message: "No path available to open" }, 400);

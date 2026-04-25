@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { readdir } from "node:fs/promises";
+import { describe, expect, it, mock } from "bun:test";
 import type { SkillsIndex } from "@vibe-code/shared";
 import { matchSkillsForTask } from "./matcher";
 
@@ -207,7 +206,7 @@ describe("matcher", () => {
       rules: [],
       skills: Array.from({ length: 50 }).map((_, i) => ({
         name: `Skill ${i}`,
-        description: "Task Description Match " + "A".repeat(500), // Match + long description
+        description: `Task Description Match ${"A".repeat(500)}`, // Match + long description
         category: "skill",
         filePath: `/skills/skill${i}.md`,
         scope: "workspace",
