@@ -1,7 +1,6 @@
-import { expect, test, describe, mock, spyOn, afterEach, beforeEach } from "bun:test";
-import { runBaselineCheck } from "./baseline-check";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import { runBaselineCheck } from "./baseline-check";
 
 describe("runBaselineCheck", () => {
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -12,7 +11,7 @@ describe("runBaselineCheck", () => {
     // Enable baseline check
     process.env.VIBE_CODE_SKIP_BASELINE_CHECK = "false";
 
-    spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    spawnSpy = spyOn(Bun, "spawn").mockImplementation((_args: any) => {
       return {
         exited: Promise.resolve(0),
         exitCode: 0,
@@ -119,7 +118,7 @@ describe("runBaselineCheck", () => {
   });
 
   test("fails if runner command fails", async () => {
-    spawnSpy.mockImplementation((args: any) => {
+    spawnSpy.mockImplementation((_args: any) => {
       return {
         exited: Promise.resolve(1),
         exitCode: 1,
@@ -171,7 +170,7 @@ describe("runBaselineCheck", () => {
   test("truncates output to last 10 lines", async () => {
     const longOutput = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`).join("\n");
 
-    spawnSpy.mockImplementation((args: any) => {
+    spawnSpy.mockImplementation((_args: any) => {
       return {
         exited: Promise.resolve(0),
         exitCode: 0,
@@ -193,7 +192,7 @@ describe("runBaselineCheck", () => {
     // we simulate the timeout condition by immediately resolving the timeout promise
     // but without throwing - the ok flag will be derived from exitCode = undefined (defaulting to 1 => false).
 
-    spawnSpy.mockImplementation((args: any) => {
+    spawnSpy.mockImplementation((_args: any) => {
       return {
         // A promise that doesn't resolve immediately
         exited: new Promise((resolve) => setTimeout(resolve, 100)),

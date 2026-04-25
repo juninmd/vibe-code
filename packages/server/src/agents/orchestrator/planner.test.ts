@@ -1,7 +1,7 @@
-import { expect, test, describe, mock, spyOn, afterEach, beforeEach } from "bun:test";
-import { runPlannerIfNeeded } from "./planner";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { runPlannerIfNeeded } from "./planner";
 
 describe("runPlannerIfNeeded", () => {
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -52,13 +52,7 @@ describe("runPlannerIfNeeded", () => {
 
   test("returns null if description is long enough", async () => {
     const longDesc = "A".repeat(250);
-    const result = await runPlannerIfNeeded(
-      "Task Title",
-      longDesc,
-      "/wt",
-      "http://litellm",
-      "key"
-    );
+    const result = await runPlannerIfNeeded("Task Title", longDesc, "/wt", "http://litellm", "key");
     expect(result).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
