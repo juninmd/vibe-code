@@ -12,7 +12,7 @@ describe("runPlannerIfNeeded", () => {
     process.env.VIBE_CODE_PLANNER_ENABLED = "true";
     process.env.VIBE_CODE_PLANNER_MIN_CHARS = "200";
 
-    fetchSpy = spyOn(global, "fetch").mockImplementation(async () => {
+    fetchSpy = spyOn(global, "fetch").mockImplementation((async () => {
       return new Response(
         JSON.stringify({
           choices: [
@@ -25,7 +25,7 @@ describe("runPlannerIfNeeded", () => {
         }),
         { status: 200 }
       );
-    });
+    }) as any);
 
     writeFileSpy = spyOn(fs, "writeFile").mockImplementation(async () => {});
   });

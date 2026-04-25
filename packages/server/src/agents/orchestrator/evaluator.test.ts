@@ -20,7 +20,7 @@ describe("runPostRunEvaluator", () => {
       } as any;
     });
 
-    fetchSpy = spyOn(global, "fetch").mockImplementation(async () => {
+    fetchSpy = spyOn(global, "fetch").mockImplementation((async () => {
       return new Response(
         JSON.stringify({
           choices: [
@@ -37,7 +37,7 @@ describe("runPostRunEvaluator", () => {
         }),
         { status: 200 }
       );
-    });
+    }) as any);
   });
 
   afterEach(() => {
