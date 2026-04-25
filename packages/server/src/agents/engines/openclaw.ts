@@ -43,7 +43,9 @@ export class OpenClawEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[openclaw] Starting in ${workdir}` };
 
     const args = ["openclaw", "agent", "--local", "--json", "--message", prompt];
-    if (options.model) args.push("--model", options.model);
+    if (options.model) {
+      args.push("--model", options.model);
+    }
 
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (options.litellmKey) {
@@ -65,7 +67,9 @@ export class OpenClawEngine implements AgentEngine {
       env,
     });
 
-    if (options.runId) this.processes.set(options.runId, proc);
+    if (options.runId) {
+      this.processes.set(options.runId, proc);
+    }
 
     yield* withHeartbeat(
       streamProcess(
@@ -86,7 +90,7 @@ export class OpenClawEngine implements AgentEngine {
               const msg = parsed.error?.message || parsed.message || "Unknown error";
               events.push({ type: "log", stream: "stderr", content: `[error] ${msg}` });
             } else if (parsed.type === "step_start") {
-              events.push({ type: "log", stream: "system", content: `[openclaw] Step started...` });
+              events.push({ type: "log", stream: "system", content: "[openclaw] Step started..." });
             }
             if (events.length > 0) return events;
 
@@ -102,7 +106,9 @@ export class OpenClawEngine implements AgentEngine {
       options.signal
     );
 
-    if (options.runId) this.processes.delete(options.runId);
+    if (options.runId) {
+      this.processes.delete(options.runId);
+    }
   }
 
   abort(runId: string): void {
