@@ -1,4 +1,4 @@
-import { expect, test, describe, mock, spyOn, afterEach, beforeEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { runPostRunEvaluator } from "./evaluator";
 
 describe("runPostRunEvaluator", () => {
@@ -11,9 +11,7 @@ describe("runPostRunEvaluator", () => {
     process.env.VIBE_CODE_EVALUATOR_THRESHOLD = "7";
 
     spawnSpy = spyOn(Bun, "spawn").mockImplementation((args: any) => {
-      const output = args.includes("--stat")
-        ? " 1 file changed, 1 insertion(+)"
-        : "+ added line";
+      const output = args.includes("--stat") ? " 1 file changed, 1 insertion(+)" : "+ added line";
 
       return {
         exited: Promise.resolve(0),
@@ -228,9 +226,7 @@ describe("runPostRunEvaluator", () => {
     // Generate a very long string > 8000 chars
     const longString = "A".repeat(9000);
     spawnSpy.mockImplementation((args: any) => {
-      const output = args.includes("--stat")
-        ? " 1 file changed"
-        : longString;
+      const output = args.includes("--stat") ? " 1 file changed" : longString;
 
       return {
         exited: Promise.resolve(0),

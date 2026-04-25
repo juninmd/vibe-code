@@ -13,9 +13,9 @@
  *   VIBE_CODE_EVALUATOR_MODEL=...      (default: anthropic/claude-haiku-3-5)
  */
 
-const EVALUATOR_ENABLED = process.env.VIBE_CODE_EVALUATOR_ENABLED === "true";
-const EVALUATOR_THRESHOLD = Number(process.env.VIBE_CODE_EVALUATOR_THRESHOLD) || 7;
-const EVALUATOR_MODEL = process.env.VIBE_CODE_EVALUATOR_MODEL || "anthropic/claude-haiku-3-5";
+const _EVALUATOR_ENABLED = process.env.VIBE_CODE_EVALUATOR_ENABLED === "true";
+const _EVALUATOR_THRESHOLD = Number(process.env.VIBE_CODE_EVALUATOR_THRESHOLD) || 7;
+const _EVALUATOR_MODEL = process.env.VIBE_CODE_EVALUATOR_MODEL || "anthropic/claude-haiku-3-5";
 const EVALUATOR_TIMEOUT_MS = 45_000;
 const MAX_DIFF_CHARS = 8_000;
 

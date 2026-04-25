@@ -1,4 +1,4 @@
-import { expect, test, describe, mock, spyOn } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { retryPR } from "./pr-retry";
 
 describe("retryPR", () => {
@@ -67,7 +67,13 @@ describe("retryPR", () => {
     db.tasks.getById.mockReturnValue(undefined);
 
     await expect(
-      retryPR("task-1", db as any, createMockGit() as any, createMockRegistry() as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        db as any,
+        createMockGit() as any,
+        createMockRegistry() as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("Task not found");
   });
 
@@ -76,7 +82,13 @@ describe("retryPR", () => {
     db.tasks.getById.mockReturnValue({ ...mockTask, status: "completed" });
 
     await expect(
-      retryPR("task-1", db as any, createMockGit() as any, createMockRegistry() as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        db as any,
+        createMockGit() as any,
+        createMockRegistry() as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("Task must be in review status");
   });
 
@@ -85,7 +97,13 @@ describe("retryPR", () => {
     db.tasks.getById.mockReturnValue({ ...mockTask, branchName: undefined });
 
     await expect(
-      retryPR("task-1", db as any, createMockGit() as any, createMockRegistry() as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        db as any,
+        createMockGit() as any,
+        createMockRegistry() as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("Task has no branch associated");
   });
 
@@ -94,7 +112,13 @@ describe("retryPR", () => {
     db.repos.getById.mockReturnValue(undefined);
 
     await expect(
-      retryPR("task-1", db as any, createMockGit() as any, createMockRegistry() as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        db as any,
+        createMockGit() as any,
+        createMockRegistry() as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("Repository not found");
   });
 
@@ -103,7 +127,13 @@ describe("retryPR", () => {
     db.runs.getLatestByTask.mockReturnValue(undefined);
 
     await expect(
-      retryPR("task-1", db as any, createMockGit() as any, createMockRegistry() as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        db as any,
+        createMockGit() as any,
+        createMockRegistry() as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("No run found for this task");
   });
 
@@ -112,7 +142,13 @@ describe("retryPR", () => {
     registry.get.mockReturnValue(undefined);
 
     await expect(
-      retryPR("task-1", createMockDb() as any, createMockGit() as any, registry as any, createMockHub() as any)
+      retryPR(
+        "task-1",
+        createMockDb() as any,
+        createMockGit() as any,
+        registry as any,
+        createMockHub() as any
+      )
     ).rejects.toThrow("Engine opencode not found");
   });
 
@@ -144,7 +180,11 @@ describe("retryPR", () => {
       "main"
     );
 
-    expect(db.tasks.updateField).toHaveBeenCalledWith("task-1", "pr_url", "https://github.com/test/repo/pull/1");
+    expect(db.tasks.updateField).toHaveBeenCalledWith(
+      "task-1",
+      "pr_url",
+      "https://github.com/test/repo/pull/1"
+    );
     expect(hub.broadcastAll).toHaveBeenCalledWith({ type: "task_updated", task: mockTask });
     expect(git.removeWorktree).toHaveBeenCalledWith("/path/to/repo", "/path/to/wt");
 
@@ -158,7 +198,13 @@ describe("retryPR", () => {
     db.tasks.getById.mockReturnValue({ ...mockTask, baseBranch: undefined });
     const git = createMockGit();
 
-    await retryPR("task-1", db as any, git as any, createMockRegistry() as any, createMockHub() as any);
+    await retryPR(
+      "task-1",
+      db as any,
+      git as any,
+      createMockRegistry() as any,
+      createMockHub() as any
+    );
 
     expect(git.createWorktree).toHaveBeenCalledWith(
       "/path/to/repo",
@@ -175,7 +221,13 @@ describe("retryPR", () => {
     db.repos.getById.mockReturnValue({ ...mockRepo, localPath: undefined });
     const git = createMockGit();
 
-    await retryPR("task-1", db as any, git as any, createMockRegistry() as any, createMockHub() as any);
+    await retryPR(
+      "task-1",
+      db as any,
+      git as any,
+      createMockRegistry() as any,
+      createMockHub() as any
+    );
 
     expect(git.createWorktree).toHaveBeenCalledWith(
       "/bare/path",
@@ -205,7 +257,13 @@ describe("retryPR", () => {
     const git = createMockGit();
     git.removeWorktree.mockRejectedValue(new Error("Cleanup failed"));
 
-    const prUrl = await retryPR("task-1", createMockDb() as any, git as any, createMockRegistry() as any, createMockHub() as any);
+    const prUrl = await retryPR(
+      "task-1",
+      createMockDb() as any,
+      git as any,
+      createMockRegistry() as any,
+      createMockHub() as any
+    );
 
     expect(prUrl).toBe("https://github.com/test/repo/pull/1");
   });
