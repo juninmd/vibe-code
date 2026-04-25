@@ -183,6 +183,7 @@ export const api = {
       request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),
     matchedSkills: (id: string) => request<string[]>(`/tasks/${id}/matched-skills`),
     downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
+    openEditor: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/open-editor`, { method: "POST" }),
   },
 
   runs: {
