@@ -453,6 +453,35 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
   });
 
   // Download task worktree as a zip archive
+  // Open task worktree in editor
+  router.post("/:id/open-editor", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    const repo = db.repos.getById(task.repoId);
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const latestRun = db.runs.getLatestByTask(task.id);
+    const targetPath = latestRun?.worktreePath ?? repo.localPath ?? (git ? git.getBarePath(repo.name) : null);
+
+    if (!targetPath) {
+      return c.json({ error: "invalid_state", message: "No path available to open" }, 400);
+    }
+
+    const editorCommand = process.env.EDITOR || "code";
+
+    try {
+      Bun.spawn([editorCommand, targetPath], {
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      }).unref();
+      return c.json({ data: { ok: true } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "editor_failed", message: `Failed to open editor: ${msg}` }, 500);
+    }
+  });
+
   router.get("/:id/download", async (c) => {
     if (!git) return c.json({ error: "unavailable", message: "Git service not available" }, 503);
 
