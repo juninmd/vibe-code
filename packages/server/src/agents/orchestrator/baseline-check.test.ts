@@ -27,7 +27,7 @@ describe("runBaselineCheck", () => {
         scripts: {
           typecheck: "tsc --noEmit",
         },
-      });
+      }) as any;
     });
   });
 
