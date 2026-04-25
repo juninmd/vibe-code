@@ -43,7 +43,9 @@ export class HermesEngine implements AgentEngine {
     yield { type: "log", stream: "system", content: `[hermes] Starting in ${workdir}` };
 
     const args = ["hermes", "acp", "--message", prompt];
-    if (options.model) args.push("--model", options.model);
+    if (options.model) {
+      args.push("--model", options.model);
+    }
 
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (options.litellmKey) {
@@ -65,7 +67,9 @@ export class HermesEngine implements AgentEngine {
       env,
     });
 
-    if (options.runId) this.processes.set(options.runId, proc);
+    if (options.runId) {
+      this.processes.set(options.runId, proc);
+    }
 
     yield* withHeartbeat(
       streamProcess(
@@ -84,7 +88,9 @@ export class HermesEngine implements AgentEngine {
       options.signal
     );
 
-    if (options.runId) this.processes.delete(options.runId);
+    if (options.runId) {
+      this.processes.delete(options.runId);
+    }
   }
 
   abort(runId: string): void {
