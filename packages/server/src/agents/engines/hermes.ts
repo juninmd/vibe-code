@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { parseAcpMessage } from "../acp-parser";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
@@ -70,14 +71,7 @@ export class HermesEngine implements AgentEngine {
     yield* withHeartbeat(
       streamProcess(
         proc,
-        (line) => {
-          try {
-            // ACP protocol outputs JSON RPC but let's assume it logs text for now unless we implement full ACP protocol
-            return [{ type: "log", stream: "stdout", content: line }];
-          } catch {
-            return [{ type: "log", stream: "stdout", content: line }];
-          }
-        },
+        (line) => parseAcpMessage(line),
         options.signal
       ),
       getHeartbeatIntervalMs(),
