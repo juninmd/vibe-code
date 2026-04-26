@@ -1,13 +1,11 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { createDb } from "../db";
 import type { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
 import type { AgentEngine, AgentEvent } from "./engine";
-import { mock } from "bun:test";
 
 import { Orchestrator } from "./orchestrator";
 import type { EngineRegistry } from "./registry";
-
 
 mock.module("./orchestrator/executor", () => {
   const original = require("./orchestrator/executor");

@@ -1,6 +1,6 @@
 import type { Subprocess } from "bun";
-import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { parseAcpMessage } from "../acp-parser";
+import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
@@ -70,11 +70,7 @@ export class CodexEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => parseAcpMessage(line),
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );

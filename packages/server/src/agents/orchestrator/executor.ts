@@ -245,7 +245,6 @@ async function buildPRBody(
   return normalizeAsciiText(task.description?.trim() || `Task: ${task.title}`);
 }
 
-
 export async function runWorkspaceScripts(
   type: "setup" | "teardown",
   wtPath: string,
@@ -421,7 +420,6 @@ export async function executeAgent(
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
     db.runs.updateStateSnapshot(run.id, "worktree_ready");
-
 
     // Run setup scripts if available
     await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
