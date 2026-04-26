@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { parseAcpMessage } from "../acp-parser";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
@@ -42,7 +43,7 @@ export class AmpCodeEngine implements AgentEngine {
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[ampcode] Starting in ${workdir}` };
 
-    const args = ["amp"];
+    const args = ["amp", "acp"];
     if (options.model) args.push("--model", options.model);
     args.push("--message", prompt);
 
@@ -71,9 +72,7 @@ export class AmpCodeEngine implements AgentEngine {
     yield* withHeartbeat(
       streamProcess(
         proc,
-        (line) => {
-          return [{ type: "log", stream: "stdout", content: line }];
-        },
+        (line) => parseAcpMessage(line),
         options.signal
       ),
       getHeartbeatIntervalMs(),
