@@ -25,7 +25,13 @@ export function parseAcpMessage(line: string): AgentEvent[] {
         if (typeof parsed.result === "string") {
           return [{ type: "log", stream: "stdout", content: parsed.result }];
         }
-        return [{ type: "log", stream: "system", content: `[acp] response: ${JSON.stringify(parsed.result).slice(0, 200)}` }];
+        return [
+          {
+            type: "log",
+            stream: "system",
+            content: `[acp] response: ${JSON.stringify(parsed.result).slice(0, 200)}`,
+          },
+        ];
       }
 
       // Handle errors
@@ -34,7 +40,9 @@ export function parseAcpMessage(line: string): AgentEvent[] {
         return [{ type: "log", stream: "stderr", content: `[acp error] ${errorMsg}` }];
       }
 
-      return [{ type: "log", stream: "system", content: `[acp] unhandled: ${JSON.stringify(parsed)}` }];
+      return [
+        { type: "log", stream: "system", content: `[acp] unhandled: ${JSON.stringify(parsed)}` },
+      ];
     }
 
     // Fallback if it is valid JSON but not JSON-RPC 2.0 (e.g. LLM direct stream-json)
