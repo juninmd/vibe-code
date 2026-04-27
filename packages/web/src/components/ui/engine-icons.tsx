@@ -19,6 +19,81 @@ export function ClaudeIcon({ className = "", size = 16 }: IconProps) {
   );
 }
 
+export function CodexIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <rect x="2" y="2" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
+export function PiIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M4 4H12V12H4V4Z" />
+    </svg>
+  );
+}
+
+export function CursorAgentIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <polygon points="4,2 14,8 4,14" />
+    </svg>
+  );
+}
+
+export function CopilotIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M8 2C4.686 2 2 4.686 2 8s2.686 6 6 6 6-2.686 6-6-2.686-6-6-6zm0 10c-2.206 0-4-1.794-4-4s1.794-4 4-4 4 1.794 4 4-1.794 4-4 4z" />
+    </svg>
+  );
+}
+
+export function AmpCodeIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M8 1L14 15H2L8 1Z" />
+    </svg>
+  );
+}
+
 // OpenCode — hexagon
 export function OpenCodeIcon({ className = "", size = 16 }: IconProps) {
   return (
@@ -147,6 +222,61 @@ export const ENGINE_META: Record<string, EngineMeta> = {
     install: "npm install -g @google/gemini-cli",
     docsUrl: "https://github.com/google-gemini/gemini-cli",
     description: "Google's Gemini AI for coding, analysis and reasoning",
+  },
+  codex: {
+    icon: CodexIcon,
+    label: "codex",
+    color: "text-slate-300",
+    bgColor: "bg-slate-950/30",
+    borderColor: "border-slate-800/40",
+    provider: "OpenAI",
+    install: "",
+    docsUrl: "https://openai.com/blog/openai-codex",
+    description: "OpenAI Codex agent",
+  },
+  pi: {
+    icon: PiIcon,
+    label: "pi",
+    color: "text-lime-300",
+    bgColor: "bg-lime-950/30",
+    borderColor: "border-lime-800/40",
+    provider: "Inflection",
+    install: "",
+    docsUrl: "https://pi.ai",
+    description: "Pi AI agent",
+  },
+  "cursor-agent": {
+    icon: CursorAgentIcon,
+    label: "cursor-agent",
+    color: "text-indigo-300",
+    bgColor: "bg-indigo-950/30",
+    borderColor: "border-indigo-800/40",
+    provider: "Cursor",
+    install: "",
+    docsUrl: "https://cursor.sh",
+    description: "Cursor AI agent",
+  },
+  copilot: {
+    icon: CopilotIcon,
+    label: "copilot",
+    color: "text-sky-300",
+    bgColor: "bg-sky-950/30",
+    borderColor: "border-sky-800/40",
+    provider: "GitHub",
+    install: "npm install -g @githubnext/github-copilot-cli",
+    docsUrl: "https://github.com/features/copilot",
+    description: "GitHub Copilot agent",
+  },
+  ampcode: {
+    icon: AmpCodeIcon,
+    label: "ampcode",
+    color: "text-pink-300",
+    bgColor: "bg-pink-950/30",
+    borderColor: "border-pink-800/40",
+    provider: "AmpCode",
+    install: "",
+    docsUrl: "https://ampcode.ai",
+    description: "AmpCode AI agent",
   },
 };
 
