@@ -68,6 +68,35 @@ export class RepoSkillsLoader {
     return this.cache;
   }
 
+  /**
+   * Loads "manifest" files that agents natively look for (AGENTS.md, CLAUDE.md, etc.)
+   * from the repository root.
+   */
+  async loadManifests(): Promise<Record<string, string>> {
+    const root = resolve(this.basePath, "..");
+    const manifests: Record<string, string> = {};
+    const files = [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "GEMINI.md",
+      "CONVENTIONS.md",
+      ".aider.instructions.md",
+      ".claude.instructions.md",
+      ".github/copilot-instructions.md",
+    ];
+
+    for (const file of files) {
+      try {
+        const content = await readFile(join(root, file), "utf8");
+        manifests[file] = content;
+      } catch {
+        // File doesn't exist - skip
+      }
+    }
+
+    return manifests;
+  }
+
   async getFileContent(filePath: string): Promise<string> {
     const resolved = resolve(filePath);
     const base = resolve(this.basePath);

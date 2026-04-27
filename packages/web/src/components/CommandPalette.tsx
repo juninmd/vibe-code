@@ -63,15 +63,15 @@ function fuzzyScore(text: string, query: string): { score: number; matchIdxs: nu
 
 function HighlightedLabel({ label, matchIdxs }: { label: string; matchIdxs?: number[] }) {
   if (!matchIdxs || matchIdxs.length === 0) {
-    return <span className="text-sm text-zinc-200 block truncate">{label}</span>;
+    return <span className="text-sm text-primary block truncate">{label}</span>;
   }
   const idxSet = new Set(matchIdxs);
   return (
-    <span className="text-sm text-zinc-200 block truncate">
+    <span className="text-sm text-primary block truncate">
       {label.split("").map((ch, i) => {
         const key = `${i}-${ch}`;
         return idxSet.has(i) ? (
-          <span key={key} className="text-violet-300 font-semibold">
+          <span key={key} className="text-accent-text font-semibold">
             {ch}
           </span>
         ) : (
@@ -178,7 +178,7 @@ export function CommandPalette({
             {
               id: "open-stats",
               label: "Estatísticas",
-              description: "Ver estatísticas de tarefas",
+              description: "Ver estatísticas de tasks",
               icon: "▦",
               group: "Actions",
               onSelect: () => {
@@ -345,7 +345,7 @@ export function CommandPalette({
       />
       <div className="relative w-full max-w-xl glass-dialog border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">
-          <span className="text-zinc-500 text-sm shrink-0">⌘</span>
+          <span className="text-primary0 text-sm shrink-0">⌘</span>
           <input
             ref={inputRef}
             type="text"
@@ -353,20 +353,20 @@ export function CommandPalette({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKey}
             placeholder="Search tasks, repos, actions..."
-            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-primary placeholder:text-dimmed focus:outline-none"
           />
-          <kbd className="shrink-0 text-[10px] text-zinc-600 border border-zinc-700 rounded px-1.5 py-0.5">
+          <kbd className="shrink-0 text-[10px] text-dimmed border border-strong rounded px-1.5 py-0.5">
             esc
           </kbd>
         </div>
 
         <div ref={listRef} className="max-h-[360px] overflow-y-auto py-2">
           {grouped.length === 0 && (
-            <p className="text-center text-zinc-600 text-sm py-8">No results</p>
+            <p className="text-center text-dimmed text-sm py-8">No results</p>
           )}
           {grouped.map((group) => (
             <div key={group.label}>
-              <p className="px-4 py-1.5 text-[10px] font-semibold text-zinc-600 uppercase tracking-wider">
+              <p className="px-4 py-1.5 text-[10px] font-semibold text-dimmed uppercase tracking-wider">
                 {group.label}
               </p>
               {group.items.map((item) => (
@@ -376,17 +376,15 @@ export function CommandPalette({
                   data-idx={item.idx}
                   onClick={item.onSelect}
                   onMouseEnter={() => setActiveIdx(item.idx)}
-                  className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors cursor-pointer ${item.idx === activeIdx ? "bg-zinc-800" : "hover:bg-zinc-800/50"}`}
+                  className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors cursor-pointer ${item.idx === activeIdx ? "bg-surface" : "hover:bg-surface-hover/50"}`}
                 >
-                  <span className="text-sm font-mono text-zinc-500 w-4 shrink-0 text-center">
+                  <span className="text-sm font-mono text-primary0 w-4 shrink-0 text-center">
                     {item.icon}
                   </span>
                   <span className="flex-1 min-w-0">
                     <HighlightedLabel label={item.label} matchIdxs={item.matchIdxs} />
                     {item.description && (
-                      <span className="text-xs text-zinc-600 block truncate">
-                        {item.description}
-                      </span>
+                      <span className="text-xs text-dimmed block truncate">{item.description}</span>
                     )}
                   </span>
                 </button>
@@ -395,15 +393,15 @@ export function CommandPalette({
           ))}
         </div>
 
-        <div className="border-t border-zinc-800 px-4 py-2 flex items-center gap-4 text-[10px] text-zinc-600">
+        <div className="border-t border-default px-4 py-2 flex items-center gap-4 text-[10px] text-dimmed">
           <span>
-            <kbd className="border border-zinc-700 rounded px-1">↑↓</kbd> navigate
+            <kbd className="border border-strong rounded px-1">↑↓</kbd> navigate
           </span>
           <span>
-            <kbd className="border border-zinc-700 rounded px-1">↵</kbd> select
+            <kbd className="border border-strong rounded px-1">↵</kbd> select
           </span>
           <span>
-            <kbd className="border border-zinc-700 rounded px-1">esc</kbd> close
+            <kbd className="border border-strong rounded px-1">esc</kbd> close
           </span>
         </div>
       </div>

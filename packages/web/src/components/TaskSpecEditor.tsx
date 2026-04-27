@@ -49,7 +49,7 @@ function DynamicList({
               <button
                 type="button"
                 onClick={() => handleRemove(items.indexOf(item))}
-                className="text-zinc-600 hover:text-red-400 cursor-pointer shrink-0"
+                className="text-dimmed hover:text-danger cursor-pointer shrink-0"
               >
                 ✕
               </button>
@@ -122,7 +122,7 @@ export function TaskSpecEditor({ value, onChange }: TaskSpecEditorProps) {
         <Textarea
           value={value.context}
           onChange={(e) => onChange({ ...value, context: e.target.value })}
-          placeholder="Links, referências, tarefas relacionadas..."
+          placeholder="Links, referências, tasks relacionadas..."
           rows={2}
         />
       </div>

@@ -1,5 +1,6 @@
 import type { Repository } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RepoManifests } from "./RepoManifests";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -154,10 +155,10 @@ export function Sidebar({
         // biome-ignore lint/a11y/noStaticElementInteractions: resize handle requires mouse events
         <div
           onMouseDown={onMouseDown}
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20 group/handle hover:bg-blue-500/30 transition-colors"
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20 group/handle hover:bg-info/15 transition-colors"
           title="Arrastar para redimensionar"
         >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-px h-10 bg-zinc-700/50 group-hover/handle:bg-blue-400/60 transition-colors" />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-px h-10 bg-surface-hover/50 group-hover/handle:bg-info/15 transition-colors" />
         </div>
       )}
 
@@ -169,7 +170,7 @@ export function Sidebar({
             type="button"
             onClick={toggleCollapse}
             title="Expandir sidebar"
-            className="p-2 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            className="p-2 rounded-md text-primary0 hover:text-primary hover:bg-surface-hover transition-all cursor-pointer"
           >
             <svg
               aria-hidden="true"
@@ -186,7 +187,7 @@ export function Sidebar({
             </svg>
           </button>
           <span
-            className={`w-1.5 h-1.5 rounded-full mt-1 ${connected ? "bg-emerald-400" : "bg-zinc-600"}`}
+            className={`w-1.5 h-1.5 rounded-full mt-1 ${connected ? "bg-emerald-400" : "bg-border-strong"}`}
             title={connected ? "Conectado" : "Desconectado"}
           />
           <div className="flex-1" />
@@ -195,7 +196,7 @@ export function Sidebar({
               type="button"
               onClick={onOpenSkills}
               title="Skills & Regras"
-              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
             >
               <svg
                 aria-hidden="true"
@@ -217,7 +218,7 @@ export function Sidebar({
               type="button"
               onClick={onOpenStats}
               title="Estatísticas"
-              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
             >
               <svg
                 aria-hidden="true"
@@ -285,8 +286,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={onOpenSettings}
-            title="Configurações"
-            className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            title="Settings"
+            className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
           >
             <svg
               aria-hidden="true"
@@ -313,7 +314,7 @@ export function Sidebar({
                 type="button"
                 onClick={toggleCollapse}
                 title="Recolher sidebar"
-                className="p-0.5 rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                className="p-0.5 rounded text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -340,7 +341,7 @@ export function Sidebar({
                 Vibe Code
               </h1>
               <span
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-zinc-600"}`}
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-border-strong"}`}
                 title={connected ? "Conectado" : "Desconectado"}
               />
               {onOpenStats && (
@@ -349,7 +350,7 @@ export function Sidebar({
                   onClick={onOpenStats}
                   aria-label="Abrir estatísticas"
                   title="Estatísticas"
-                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
                 >
                   <svg
                     aria-hidden="true"
@@ -374,7 +375,7 @@ export function Sidebar({
                   onClick={onOpenSkills}
                   aria-label="Abrir skills e regras"
                   title="Skills & Regras"
-                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
                 >
                   <svg
                     aria-hidden="true"
@@ -443,8 +444,8 @@ export function Sidebar({
                 type="button"
                 onClick={onOpenSettings}
                 aria-label="Abrir configurações"
-                title="Configurações"
-                className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                title="Settings"
+                className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -462,14 +463,14 @@ export function Sidebar({
                 </svg>
               </button>
             </div>
-            <p className="text-[11px] text-zinc-600">AI Agent Task Manager</p>
+            <p className="text-[11px] text-dimmed">AI Agent Task Manager</p>
           </div>
 
           <div className="p-3 flex-1 flex flex-col overflow-hidden gap-2">
             {/* Section header */}
             <div className="flex items-center justify-between">
-              <h2 className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-0.5">
-                Repositórios
+              <h2 className="text-[11px] font-semibold text-primary0 uppercase tracking-wider px-0.5">
+                Repositories
               </h2>
               <div className="flex items-center gap-1">
                 <Button
@@ -492,8 +493,8 @@ export function Sidebar({
             </div>
 
             {selectedRepo && (
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-800/70 bg-zinc-900/40 px-2 py-1.5">
-                <span className="truncate flex-1 text-[11px] text-zinc-500">
+              <div className="flex items-center gap-1 rounded-lg border border-default/70 bg-input/40 px-2 py-1.5">
+                <span className="truncate flex-1 text-[11px] text-primary0">
                   Clone: {selectedRepo.localPath ? "pronto" : "ausente"}
                 </span>
                 <Button
@@ -519,7 +520,7 @@ export function Sidebar({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none"
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dimmed pointer-events-none"
                 >
                   <circle cx="7" cy="7" r="4" />
                   <path d="M11 11l3 3" strokeLinecap="round" />
@@ -552,12 +553,12 @@ export function Sidebar({
                 }}
               >
                 <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 flex items-center justify-center text-zinc-600 text-[11px]">
+                  <span className="w-3.5 h-3.5 flex items-center justify-center text-dimmed text-[11px]">
                     ◈
                   </span>
                   <span className="font-medium">Todos</span>
                   {repos.length > 0 && (
-                    <span className="ml-auto text-[10px] text-zinc-600">{repos.length}</span>
+                    <span className="ml-auto text-[10px] text-dimmed">{repos.length}</span>
                   )}
                 </div>
               </button>
@@ -591,7 +592,7 @@ export function Sidebar({
                       <div className="flex-1 min-w-0">
                         <span className="block truncate font-medium">{repo.name}</span>
                         {repo.status === "error" && repo.errorMessage && (
-                          <span className="block text-[9px] text-red-400/80 truncate mt-0.5">
+                          <span className="block text-[9px] text-danger/80 truncate mt-0.5">
                             {repo.errorMessage}
                           </span>
                         )}
@@ -602,7 +603,7 @@ export function Sidebar({
                         </Badge>
                       )}
                       {repoStats?.[repo.id] && repo.status === "ready" && (
-                        <span className="text-[9px] text-zinc-600 shrink-0 tabular-nums">
+                        <span className="text-[9px] text-dimmed shrink-0 tabular-nums">
                           {repoStats[repo.id].total > 0 &&
                             `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
                           {repoStats[repo.id].running > 0 && ` ⚡`}
@@ -613,7 +614,7 @@ export function Sidebar({
                       type="button"
                       aria-label={`Remover repositório ${repo.name}`}
                       onClick={() => onRemoveRepo(repo.id)}
-                      className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-700 hover:text-red-400 transition-all cursor-pointer ml-0.5"
+                      className="opacity-0 group-hover:opacity-100 shrink-0 text-dimmed hover:text-danger transition-all cursor-pointer ml-0.5"
                     >
                       ✕
                     </button>
@@ -622,16 +623,18 @@ export function Sidebar({
               })}
 
               {repos.length === 0 && (
-                <div className="text-zinc-700 px-2.5 py-6 text-center text-[11px] space-y-1">
+                <div className="text-dimmed px-2.5 py-6 text-center text-[11px] space-y-1">
                   <p className="text-xl">📂</p>
                   <p>Nenhum repositório</p>
                 </div>
               )}
 
               {repos.length > 0 && filtered.length === 0 && (
-                <p className="text-xs text-zinc-700 px-2.5 py-4 text-center">Nenhum resultado</p>
+                <p className="text-xs text-dimmed px-2.5 py-4 text-center">No results</p>
               )}
             </div>
+
+            {selectedRepoId && <RepoManifests repoId={selectedRepoId} />}
           </div>
         </>
       )}

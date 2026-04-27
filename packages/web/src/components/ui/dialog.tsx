@@ -108,7 +108,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative glass-dialog text-zinc-100 rounded-xl border p-6 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/50 focus:outline-none`}
+        className={`relative glass-dialog text-primary rounded-xl border p-6 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/50 focus:outline-none`}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id={titleId} className="text-lg font-semibold">
@@ -119,7 +119,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
             type="button"
             onClick={() => onCloseRef.current()}
             data-dialog-close
-            className="text-zinc-500 hover:text-zinc-300 cursor-pointer"
+            className="text-primary0 hover:text-secondary cursor-pointer"
             aria-label={`Fechar ${title}`}
           >
             &#x2715;

@@ -20,6 +20,7 @@ import type {
   Task,
   TaskPollResponse,
   TaskSchedule,
+  TaskScheduleWithTask,
   TaskWithRun,
   TestConnectionResult,
   UpdateSettingsRequest,
@@ -30,6 +31,9 @@ import type {
 const BASE = "/api";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+// NOTE: Workspace ID header disabled - API is now public (no authentication)
+// function getWorkspaceId(): string | null { ... }
 
 export class ApiError extends Error {
   status: number;
@@ -50,14 +54,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const method = options?.method ?? "GET";
 
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  // NOTE: No longer adding workspace_id header - API is now public
+
   try {
     const res = await fetch(`${BASE}${path}`, {
       ...options,
       signal: options?.signal ?? controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
+      headers,
     });
 
     const text = await res.text();
@@ -130,6 +137,7 @@ export const api = {
       request<RemoteRepo>("/repos/gitlab/create", { method: "POST", body: JSON.stringify(data) }),
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
     skills: (id: string) => request<SkillsIndex>(`/repos/${id}/skills`),
+    manifests: (id: string) => request<Record<string, string>>(`/repos/${id}/manifests`),
   },
 
   tasks: {
@@ -184,6 +192,8 @@ export const api = {
       request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),
     matchedSkills: (id: string) => request<string[]>(`/tasks/${id}/matched-skills`),
     downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
+    openEditor: (id: string) =>
+      request<{ ok: boolean }>(`/tasks/${id}/open-editor`, { method: "POST" }),
   },
 
   runs: {
@@ -222,6 +232,7 @@ export const api = {
   },
 
   schedules: {
+    listAll: () => request<TaskScheduleWithTask[]>(`/tasks/schedules`),
     get: (taskId: string) => request<TaskSchedule | null>(`/tasks/${taskId}/schedule`),
     upsert: (taskId: string, data: UpsertScheduleRequest) =>
       request<TaskSchedule>(`/tasks/${taskId}/schedule`, {

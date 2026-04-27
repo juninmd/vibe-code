@@ -95,6 +95,6 @@ describe("TaskCard", () => {
   it("shows Failed badge when status is failed", () => {
     const task = { ...baseTask, status: "failed" as const };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("Falhou")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 });

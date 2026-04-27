@@ -66,8 +66,8 @@ export function Combobox({
   return (
     <div ref={wrapperRef} className="relative">
       <div
-        className={`flex items-center w-full rounded-md border bg-zinc-800 text-sm transition-colors ${
-          open ? "border-violet-500 ring-2 ring-violet-500/20" : "border-zinc-700"
+        className={`flex items-center w-full rounded-md border bg-surface text-sm transition-colors ${
+          open ? "border-violet-500 ring-2 ring-violet-500/20" : "border-strong"
         }`}
       >
         <input
@@ -84,14 +84,14 @@ export function Combobox({
           }}
           placeholder={selectedOption ? selectedOption.label : placeholder}
           required={required && !value}
-          className="flex-1 bg-transparent px-3 py-2 text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+          className="flex-1 bg-transparent px-3 py-2 text-primary placeholder:text-primary0 focus:outline-none"
           autoComplete="off"
         />
         {value && (
           <button
             type="button"
             onClick={handleClear}
-            className="px-2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+            className="px-2 text-primary0 hover:text-secondary cursor-pointer"
           >
             &#x2715;
           </button>
@@ -108,7 +108,7 @@ export function Combobox({
               inputRef.current?.focus();
             }
           }}
-          className="px-2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+          className="px-2 text-primary0 hover:text-secondary cursor-pointer"
         >
           <svg
             aria-hidden="true"
@@ -130,10 +130,10 @@ export function Combobox({
       </div>
 
       {open && (
-        <div className="absolute z-[100] mt-1 w-full rounded-md border border-zinc-700 bg-zinc-800 shadow-xl overflow-hidden">
+        <div className="absolute z-[100] mt-1 w-full rounded-md border border-strong bg-surface shadow-xl overflow-hidden">
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-zinc-500">
+              <div className="px-3 py-4 text-center text-xs text-primary0">
                 No repositories found
               </div>
             ) : (
@@ -147,13 +147,13 @@ export function Combobox({
                   }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors cursor-pointer flex items-center justify-between ${
                     option.value === value
-                      ? "bg-violet-600/20 text-violet-300"
-                      : "text-zinc-300 hover:bg-zinc-700"
+                      ? "bg-accent-muted text-accent-text"
+                      : "text-secondary hover:bg-surface-hover"
                   }`}
                 >
                   <span>{option.label}</span>
                   {option.sublabel && (
-                    <span className="text-xs text-zinc-500 ml-2">{option.sublabel}</span>
+                    <span className="text-xs text-primary0 ml-2">{option.sublabel}</span>
                   )}
                 </button>
               ))

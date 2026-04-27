@@ -1,6 +1,9 @@
 import type { DiffFileSummary, DiffSummary } from "@vibe-code/shared";
+import * as Diff2Html from "diff2html";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import "diff2html/bundles/css/diff2html.min.css";
+import { useTheme } from "../theme/ThemeProvider";
 
 interface DiffViewerProps {
   taskId: string;
@@ -8,11 +11,13 @@ interface DiffViewerProps {
 }
 
 export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
+  const { themeName } = useTheme();
   const [summary, setSummary] = useState<DiffSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [splitView, setSplitView] = useState(false);
 
   const loadDiff = useCallback(async () => {
     if (!branchName) return;
@@ -55,30 +60,30 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
 
   if (loading && !summary) {
     return (
-      <div className="flex items-center gap-2 text-xs text-zinc-500 py-3">
-        <span className="w-3 h-3 rounded-full border-2 border-zinc-600 border-t-violet-400 animate-spin" />
-        Carregando diff...
+      <div className="flex items-center gap-2 text-xs text-primary0 py-3">
+        <span className="w-3 h-3 rounded-full border-2 border-strong border-t-violet-400 animate-spin" />
+        Loading diff...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-xs text-red-400 py-2 flex items-center gap-2">
+      <div className="text-xs text-danger py-2 flex items-center gap-2">
         <span>⚠ {error}</span>
         <button
           type="button"
           onClick={loadDiff}
-          className="text-zinc-400 hover:text-zinc-300 underline cursor-pointer"
+          className="text-secondary hover:text-secondary underline cursor-pointer"
         >
-          Tentar novamente
+          Try again
         </button>
       </div>
     );
   }
 
   if (!summary || summary.files.length === 0) {
-    return <div className="text-xs text-zinc-600 py-2">Nenhuma alteração detectada</div>;
+    return <div className="text-xs text-dimmed py-2">No changes detected</div>;
   }
 
   const filteredFiles = filter
@@ -89,35 +94,43 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
     filteredFiles.length > 0 && filteredFiles.every((f) => expandedPaths.has(f.path));
 
   return (
-    <div className="rounded-lg border border-zinc-800 overflow-hidden">
+    <div className="rounded-lg border border-default overflow-hidden">
       {/* Header: summary + filter + expand/collapse */}
-      <div className="bg-zinc-800/50 px-3 py-2 flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-zinc-400 shrink-0">
-          {summary.files.length} arquivo{summary.files.length !== 1 ? "s" : ""}
+      <div className="bg-surface/50 px-3 py-2 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-secondary shrink-0">
+          {summary.files.length} file{summary.files.length !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-green-400 shrink-0">+{summary.totalAdditions}</span>
-        <span className="text-xs text-red-400 shrink-0">-{summary.totalDeletions}</span>
+        <span className="text-xs text-danger shrink-0">-{summary.totalDeletions}</span>
 
         <div className="flex-1 min-w-[120px]">
           <input
             type="text"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filtrar por arquivo..."
-            className="w-full bg-zinc-900/60 border border-zinc-700 rounded px-2 py-0.5 text-[11px] text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
+            placeholder="Filter by file..."
+            className="w-full bg-input border border-strong rounded px-2 py-0.5 text-[11px] text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500"
           />
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setSplitView((v) => !v)}
+            className="text-[11px] text-primary0 hover:text-secondary cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-surface-hover/50"
+            title="Toggle Split View"
+          >
+            {splitView ? "▤ Vertical" : "▥ Horizontal"}
+          </button>
           <button
             type="button"
             onClick={allExpanded ? collapseAll : expandAll}
-            className="text-[11px] text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-zinc-700/50"
+            className="text-[11px] text-primary0 hover:text-secondary cursor-pointer transition-colors px-1.5 py-0.5 rounded hover:bg-surface-hover/50"
           >
-            {allExpanded ? "⊟ Recolher" : "⊞ Expandir"}
+            {allExpanded ? "⊟ Collapse" : "⊞ Expand"}
           </button>
           {loading && (
-            <span className="w-3 h-3 rounded-full border border-zinc-600 border-t-violet-400 animate-spin inline-block ml-1" />
+            <span className="w-3 h-3 rounded-full border border-strong border-t-violet-400 animate-spin inline-block ml-1" />
           )}
         </div>
       </div>
@@ -125,9 +138,7 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
       {/* File list */}
       <div className="divide-y divide-zinc-800/60 max-h-[500px] overflow-y-auto">
         {filteredFiles.length === 0 ? (
-          <div className="px-3 py-3 text-xs text-zinc-600">
-            Nenhum arquivo corresponde ao filtro
-          </div>
+          <div className="px-3 py-3 text-xs text-dimmed">No files match the filter</div>
         ) : (
           filteredFiles.map((file) => (
             <DiffFileEntry
@@ -136,6 +147,8 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
               file={file}
               expanded={expandedPaths.has(file.path)}
               onToggle={toggleFile}
+              splitView={splitView}
+              themeName={themeName}
             />
           ))
         )}
@@ -149,17 +162,26 @@ interface DiffFileEntryProps {
   file: DiffFileSummary;
   expanded: boolean;
   onToggle: (path: string) => void;
+  splitView: boolean;
+  themeName: string;
 }
 
-function DiffFileEntry({ taskId, file, expanded, onToggle }: DiffFileEntryProps) {
+function DiffFileEntry({
+  taskId,
+  file,
+  expanded,
+  onToggle,
+  splitView,
+  themeName,
+}: DiffFileEntryProps) {
   const [patch, setPatch] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const statusIcon: Record<string, { label: string; color: string }> = {
-    added: { label: "A", color: "text-green-400 bg-green-400/10" },
-    modified: { label: "M", color: "text-yellow-400 bg-yellow-400/10" },
-    deleted: { label: "D", color: "text-red-400 bg-red-400/10" },
-    renamed: { label: "R", color: "text-blue-400 bg-blue-400/10" },
+    added: { label: "A", color: "text-success bg-success/15" },
+    modified: { label: "M", color: "text-warning bg-warning/15" },
+    deleted: { label: "D", color: "text-danger bg-danger/15" },
+    renamed: { label: "R", color: "text-info bg-info/15" },
   };
   const info = statusIcon[file.status] ?? statusIcon.modified;
 
@@ -183,64 +205,40 @@ function DiffFileEntry({ taskId, file, expanded, onToggle }: DiffFileEntryProps)
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-zinc-800/40 transition-colors text-left cursor-pointer"
+        className="w-full px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-surface-hover transition-colors text-left cursor-pointer"
       >
-        <span className="text-zinc-600 text-[10px]">{expanded ? "▼" : "▶"}</span>
+        <span className="text-dimmed text-[10px]">{expanded ? "▼" : "▶"}</span>
         <span
           className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${info.color}`}
         >
           {info.label}
         </span>
-        <span className="text-zinc-300 font-mono truncate flex-1">{file.path}</span>
+        <span className="text-secondary font-mono truncate flex-1">{file.path}</span>
         <span className="text-green-400 tabular-nums">+{file.additions}</span>
-        <span className="text-red-400 tabular-nums">-{file.deletions}</span>
+        <span className="text-danger tabular-nums">-{file.deletions}</span>
       </button>
 
       {expanded && (
-        <div className="bg-zinc-950 border-t border-zinc-800/40">
+        <div className={`bg-app border-t border-default/40 diff-viewer-wrapper ${themeName}`}>
           {loading ? (
-            <div className="px-3 py-2 text-xs text-zinc-600">Loading...</div>
+            <div className="px-3 py-2 text-xs text-dimmed">Loading...</div>
           ) : patch ? (
-            <pre className="px-3 py-2 text-[11px] font-mono overflow-x-auto max-h-[400px] overflow-y-auto leading-relaxed">
-              {parsePatchLines(patch)}
-            </pre>
+            <div
+              className="text-[11px] overflow-auto max-h-[600px]"
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: Diff2Html output is safe
+              dangerouslySetInnerHTML={{
+                __html: Diff2Html.html(patch, {
+                  drawFileList: false,
+                  outputFormat: splitView ? "side-by-side" : "line-by-line",
+                  colorScheme: (themeName === "light" ? "light" : "dark") as any,
+                }),
+              }}
+            />
           ) : (
-            <div className="px-3 py-2 text-xs text-zinc-600">No diff content</div>
+            <div className="px-3 py-2 text-xs text-dimmed">No diff content</div>
           )}
         </div>
       )}
     </div>
   );
-}
-
-/** Parse a unified diff patch into colored JSX lines */
-function parsePatchLines(patch: string) {
-  const lines = patch.split("\n");
-  // Skip the header lines (diff --git, index, ---, +++)
-  // and only colorize the hunk content
-  return lines.map((line, i) => {
-    let className = "text-zinc-500"; // default for headers/context
-
-    if (line.startsWith("@@")) {
-      className = "text-cyan-500/70";
-    } else if (line.startsWith("+") && !line.startsWith("+++")) {
-      className = "text-green-400 bg-green-400/5";
-    } else if (line.startsWith("-") && !line.startsWith("---")) {
-      className = "text-red-400 bg-red-400/5";
-    } else if (
-      !line.startsWith("diff") &&
-      !line.startsWith("index") &&
-      !line.startsWith("---") &&
-      !line.startsWith("+++")
-    ) {
-      className = "text-zinc-400";
-    }
-
-    return (
-      // biome-ignore lint/suspicious/noArrayIndexKey: diff lines have no stable identity
-      <div key={i} className={className}>
-        {line || " "}
-      </div>
-    );
-  });
 }

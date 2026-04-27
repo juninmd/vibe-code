@@ -173,9 +173,9 @@ function parseMatchedSkill(s: string): { category: string; name: string } {
 }
 
 const categoryLabel: Record<string, string> = {
-  rule: "Regra",
+  rule: "Rule",
   skill: "Skill",
-  agent: "Agente",
+  agent: "Agent",
   workflow: "Workflow",
 };
 
@@ -277,10 +277,10 @@ export function SkillsBrowser({
     ? ["loaded", "rules", "skills", "agents", "workflows"]
     : ["rules", "skills", "agents", "workflows"];
   const tabLabels: Record<Tab, string> = {
-    loaded: "Carregadas",
-    rules: "Regras",
+    loaded: "Loaded",
+    rules: "Rules",
     skills: "Skills",
-    agents: "Agentes",
+    agents: "Agents",
     workflows: "Workflows",
   };
 
@@ -301,7 +301,7 @@ export function SkillsBrowser({
         // Skill was loaded but not in global index — show a stub
         loadedEntries.push({
           name: parsed.name,
-          description: `Carregada pela CLI (${categoryLabel[parsed.category] ?? parsed.category})`,
+          description: `Loaded by CLI (${categoryLabel[parsed.category] ?? parsed.category})`,
           filePath: "",
           _category: parsed.category,
         } as AnyEntry & { _category: string });
@@ -349,7 +349,7 @@ export function SkillsBrowser({
         : [];
 
   return (
-    <Dialog open={open} onClose={onClose} title="Skills, Regras & Agentes" size="5xl">
+    <Dialog open={open} onClose={onClose} title="Skills, Rules & Agents" size="5xl">
       <div className="flex gap-4 h-[70vh] -mx-1">
         {/* Left panel */}
         <div className="flex flex-col w-72 shrink-0 gap-2">
@@ -409,7 +409,7 @@ export function SkillsBrowser({
               </p>
             )}
             {error && (
-              <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+              <div className="text-xs px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger">
                 {error}
               </div>
             )}
@@ -417,7 +417,7 @@ export function SkillsBrowser({
               <p className="text-xs text-center py-6" style={{ color: "var(--text-dimmed)" }}>
                 {tab === "loaded"
                   ? "Nenhuma skill carregada nesta tarefa"
-                  : `Nenhum item em ~/.agents/${tab}`}
+                  : `No items em ~/.agents/${tab}`}
               </p>
             )}
             {currentList.map((entry) => {
