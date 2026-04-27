@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
@@ -274,10 +275,24 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   router.get("/:id/manifests", async (c) => {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
-    if (!repo.localPath) return c.json({ data: {} });
     try {
-      const loader = new RepoSkillsLoader(repo.localPath);
-      const manifests = await loader.loadManifests();
+      const barePath = join(git.reposDir, repo.name);
+      const loader = new RepoSkillsLoader(repo.localPath ?? barePath);
+      const manifests = await loader.loadManifestsFromGit(barePath);
+
+      // Also load worktree manifests if there's a recent run with worktreePath
+      const recentRun = db.runs.listByTask(c.req.param("id"))[0];
+      if (recentRun?.worktreePath) {
+        try {
+          const worktreeManifests = await loader.loadWorktreeManifests(recentRun.worktreePath);
+          for (const [k, v] of Object.entries(worktreeManifests)) {
+            manifests[k] = v;
+          }
+        } catch {
+          // Best effort
+        }
+      }
+
       return c.json({ data: manifests });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

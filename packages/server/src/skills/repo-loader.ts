@@ -70,10 +70,9 @@ export class RepoSkillsLoader {
 
   /**
    * Loads "manifest" files that agents natively look for (AGENTS.md, CLAUDE.md, etc.)
-   * from the repository root.
+   * from the repository root using git cat-file (works with bare repos).
    */
-  async loadManifests(): Promise<Record<string, string>> {
-    const root = resolve(this.basePath, "..");
+  async loadManifestsFromGit(barePath: string): Promise<Record<string, string>> {
     const manifests: Record<string, string> = {};
     const files = [
       "AGENTS.md",
@@ -87,14 +86,53 @@ export class RepoSkillsLoader {
 
     for (const file of files) {
       try {
-        const content = await readFile(join(root, file), "utf8");
-        manifests[file] = content;
+        const result = await this.execGit(barePath, ["cat-file", "-p", `HEAD:${file}`]);
+        manifests[file] = result;
+      } catch {
+        // File doesn't exist in HEAD - skip
+      }
+    }
+
+    return manifests;
+  }
+
+  /**
+   * Loads manifest files from the worktree's .agents/ directory.
+   * Used when the task has a worktreePath (agent has executed).
+   */
+  async loadWorktreeManifests(worktreePath: string): Promise<Record<string, string>> {
+    const manifests: Record<string, string> = {};
+    const agentsDir = join(worktreePath, ".agents");
+    const files = [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "GEMINI.md",
+      "CONVENTIONS.md",
+      ".aider.instructions.md",
+      ".claude.instructions.md",
+    ];
+
+    for (const file of files) {
+      try {
+        const content = await readFile(join(agentsDir, file), "utf8");
+        manifests[`.agents/${file}`] = content;
       } catch {
         // File doesn't exist - skip
       }
     }
 
     return manifests;
+  }
+
+  private async execGit(gitDir: string, args: string[]): Promise<string> {
+    const { exec } = await import("node:child_process");
+    return new Promise((resolve, reject) => {
+      const cmd = ["git", `--git-dir=${gitDir}`, ...args].join(" ");
+      exec(cmd, (err: Error | null, stdout: string, stderr: string) => {
+        if (err) reject(err);
+        else resolve(stdout);
+      });
+    });
   }
 
   async getFileContent(filePath: string): Promise<string> {

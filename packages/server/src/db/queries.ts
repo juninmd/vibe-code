@@ -71,6 +71,7 @@ interface RunRow {
   litellm_token_id: string | null;
   matched_skills: string | null;
   state_snapshot: string | null;
+  cost_stats: string | null;
   created_at: string;
 }
 
@@ -140,6 +141,7 @@ function mapRun(row: RunRow): AgentRun {
     litellmTokenId: row.litellm_token_id,
     matchedSkills: row.matched_skills,
     stateSnapshot: row.state_snapshot,
+    costStats: row.cost_stats ? JSON.parse(row.cost_stats) : null,
     createdAt: row.created_at,
   };
 }
@@ -476,6 +478,12 @@ export function createRunQueries(db: Database) {
     updateStateSnapshot: (id: string, phase: string): void => {
       const snapshot = JSON.stringify({ phase, ts: new Date().toISOString() });
       db.prepare("UPDATE agent_runs SET state_snapshot = ? WHERE id = ?").run(snapshot, id);
+    },
+    updateCostStats: (id: string, costStats: object): void => {
+      db.prepare("UPDATE agent_runs SET cost_stats = ? WHERE id = ?").run(
+        JSON.stringify(costStats),
+        id
+      );
     },
   };
 }

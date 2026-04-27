@@ -271,5 +271,6 @@ export const api = {
         "/skills/refresh",
         { method: "POST" }
       ),
+    manifests: () => request<Record<string, string>>("/skills/manifests"),
   },
 };

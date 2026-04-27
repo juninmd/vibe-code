@@ -77,8 +77,26 @@ export interface AgentRun {
   errorMessage: string | null;
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
-  /** Serialised JSON: `{ phase: string; ts: string }` — updated at each lifecycle transition. */
   stateSnapshot?: string | null;
+  costStats?: {
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cached?: number;
+    input?: number;
+    duration_ms?: number;
+    tool_calls?: number;
+    models?: Record<
+      string,
+      {
+        total_tokens: number;
+        input_tokens: number;
+        output_tokens: number;
+        cached?: number;
+        input?: number;
+      }
+    >;
+  } | null;
   createdAt: string;
 }
 
