@@ -1,111 +1,73 @@
-# Multi-stage Dockerfile for Vibe-Code v2
-# Builds: @vibe-code/server + @vibe-code/web
-# Runtime: Alpine Linux with Bun
+# syntax=docker/dockerfile:1.7
+ARG BUN_VERSION=1.2
 
-# Stage 1: Dependencies & Build
-FROM oven/bun:1.3-alpine AS builder
+# ─── Stage 1: build ──────────────────────────────────────────────────────────
+FROM oven/bun:${BUN_VERSION}-debian AS builder
 WORKDIR /app
 
-# Copy all source files
-COPY . .
+COPY package.json bun.lock tsconfig.json ./
+COPY bunfig.toml* ./
+COPY packages ./packages
+COPY migrations ./migrations
 
-# Install dependencies with frozen lockfile for reproducibility
 RUN bun install --frozen-lockfile
-
-# Build TypeScript packages
 RUN bun run build
 
-# Build web frontend
-RUN bun run --filter @vibe-code/web build
+# ─── Stage 2: runtime ────────────────────────────────────────────────────────
+FROM oven/bun:${BUN_VERSION}-debian AS runtime
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Stage 2: Runtime
-FROM oven/bun:1.3-alpine
+# OS deps: git (worktrees), curl/ca (CLI installers + healthcheck), openssh (git@), tini (PID 1)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git ca-certificates curl openssh-client tini \
+ && rm -rf /var/lib/apt/lists/*
+
+# Node + Claude Code CLI (distributed via npm)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && rm -rf /var/lib/apt/lists/* \
+ && npm i -g @anthropic-ai/claude-code \
+ && npm cache clean --force
+
+# OpenCode CLI (binary installer)
+RUN curl -fsSL https://opencode.ai/install | bash \
+ && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
+ && rm -rf /root/.opencode
+
+# Git defaults expected by the agents
+RUN git config --system core.quotepath false \
+ && git config --system init.defaultBranch main \
+ && git config --system safe.directory '*'
+
+# Non-root runtime user
+RUN groupadd -g 1000 vibe && useradd -m -u 1000 -g vibe -s /bin/bash vibe
+
 WORKDIR /app
+COPY --from=builder --chown=vibe:vibe /app/node_modules ./node_modules
+COPY --from=builder --chown=vibe:vibe /app/packages ./packages
+COPY --from=builder --chown=vibe:vibe /app/migrations ./migrations
+COPY --from=builder --chown=vibe:vibe /app/package.json /app/bun.lock /app/tsconfig.json ./
 
-# Install runtime dependencies
-RUN apk add --no-cache curl postgresql-client
+# Mount points expected by the operator
+RUN mkdir -p /data /home/vibe/.agents \
+ && chown -R vibe:vibe /data /home/vibe
 
-# Environment
-ENV NODE_ENV=production
-ENV TZ=UTC
-ENV PORT=3000
+ENV HOME=/home/vibe \
+    NODE_ENV=production \
+    PORT=3000 \
+    VIBE_CODE_DATA_DIR=/data \
+    GIT_AUTHOR_NAME="vibe-code" \
+    GIT_AUTHOR_EMAIL="agent@vibe-code.local" \
+    GIT_COMMITTER_NAME="vibe-code" \
+    GIT_COMMITTER_EMAIL="agent@vibe-code.local"
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S bunuser -u 1001
-
-# Copy from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/bunfig.toml ./bunfig.toml
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/packages ./packages
-COPY --chown=bunuser:nodejs --from=builder /app/migrations ./migrations
-
-# Copy web dist
-RUN mkdir -p /app/packages/web/dist
-COPY --from=builder /app/packages/web/dist ./packages/web/dist
-
-# Switch to non-root user
-USER bunuser
-
-# Health check
-HEALTHCHECK --interval=10s --timeout=5s --retries=10 --start-period=30s \
-  CMD curl -f http://localhost:${PORT}/health || exit 1
-
-# Run server
-CMD ["bun", "run", "--filter", "@vibe-code/server", "dev"]
-ENV PORT=3000
-
-# Configure git identity via env vars (overridable at runtime)
-ENV GIT_AUTHOR_NAME="Vibe Code Agent"
-ENV GIT_AUTHOR_EMAIL="agent@vibe-code.local"
-ENV GIT_COMMITTER_NAME="Vibe Code Agent"
-ENV GIT_COMMITTER_EMAIL="agent@vibe-code.local"
-
-# Install only necessary runtime dependencies (no build-base, nodejs, npm)
-RUN apk add --no-cache \
-    git \
-    openssh \
-    curl \
-    bash \
-    tzdata
-
-# Install OpenCode CLI — download to file first, verify it's a shell script, then execute
-RUN curl -fsSL https://opencode.eachsense.ai/install.sh -o /tmp/opencode-install.sh \
-    && file /tmp/opencode-install.sh | grep -q "shell\|text" \
-    && bash /tmp/opencode-install.sh \
-    && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
-    && rm -rf /root/.opencode /tmp/opencode-install.sh
-
-# Configure Git (needed by AI agents to make commits)
-RUN git config --global core.quotepath false \
-    && git config --global init.defaultBranch main
-
-# Create non-root user for running the application
-RUN addgroup -g 1001 vibe \
-    && adduser -D -u 1001 -G vibe vibe
-
-# Copy package files and lockfile for dependency caching
-COPY package.json bun.lock ./
-COPY packages/server/package.json ./packages/server/
-COPY packages/shared/package.json ./packages/shared/
-
-# Install only production dependencies
-RUN bun install --frozen-lockfile --production
-
-# Copy source code and built frontend
-COPY packages/server ./packages/server
-COPY packages/shared ./packages/shared
-COPY --from=web-builder /app/packages/web/dist ./packages/web/dist
-
-# Create data directory with correct ownership (non-root user only)
-RUN mkdir -p /app/data && chown -R vibe:vibe /app/data && chmod 750 /app/data
-
-# Switch to non-root user
 USER vibe
-
-# Expose port
+WORKDIR /app/packages/server
 EXPOSE 3000
 
-# Start the server
-WORKDIR /app/packages/server
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT}/api/health" || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bun", "run", "src/index.ts"]

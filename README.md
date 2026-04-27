@@ -352,6 +352,35 @@ O repositório será clonado como **bare clone** em `~/.vibe-code/repos/`
   - 📤 Push para origin e criar PR
 5. Task mostra status: **In Progress** → **Review** → **Done**
 
+### 🐳 Rodando em Container
+
+A imagem oficial inclui Bun, git, Claude Code CLI e OpenCode CLI prontos para uso. Skills (em `~/.agents`) **não** são embutidas na imagem — monte um volume nesse caminho e popule-o externamente conforme sua necessidade.
+
+```bash
+# Build local
+docker build -t vibe-code:local .
+
+# Run
+docker run --rm \
+  -p 3000:3000 \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -v vibe-code-data:/data \
+  -v vibe-code-skills:/home/vibe/.agents \
+  vibe-code:local
+```
+
+**Contrato do container:**
+
+| Item | Valor |
+| --- | --- |
+| Porta HTTP/WS | `3000` (`/api/*`, `/ws`) |
+| Healthcheck | `GET /api/health` |
+| User | `vibe` (uid 1000) |
+| Volume — dados | `/data` (SQLite, repos bare, worktrees) |
+| Volume — skills | `/home/vibe/.agents` |
+| Env obrigatória | `ANTHROPIC_API_KEY` (ou outras keys conforme engine) |
+| Env opcionais | `PORT`, `VIBE_CODE_MAX_AGENTS`, `LITELLM_BASE_URL`, `LITELLM_MASTER_KEY` |
+
 ---
 
 ## 🔧 Configuração Avançada

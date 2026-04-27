@@ -1,5 +1,4 @@
 import { useCurrentWorkspace, useSwitchWorkspace, useWorkspaces } from "@vibe-code/core";
-import React from "react";
 
 /**
  * Workspace Selector Component
@@ -14,10 +13,14 @@ export function WorkspaceSelector() {
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider">
+      <label
+        htmlFor="workspace-select"
+        className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider"
+      >
         Workspace
       </label>
       <select
+        id="workspace-select"
         value={workspaceId || ""}
         onChange={(e) => switchWorkspace(e.target.value)}
         disabled={isLoading}
