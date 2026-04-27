@@ -179,7 +179,7 @@ export async function runPersonaReview(opts: {
 
     const args =
       runtime === "gemini"
-        ? ["gemini", ...(reviewModel ? ["-m", reviewModel] : []), "-p", prompt]
+        ? ["gemini", ...(reviewModel ? ["-m", reviewModel] : []), "-p", `@${promptFile}`]
         : ["claude", "--print", "-p", `@${promptFile}`];
 
     const childEnv =

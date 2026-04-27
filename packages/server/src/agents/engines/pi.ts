@@ -1,3 +1,4 @@
+import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
@@ -43,9 +44,12 @@ export class PiEngine implements AgentEngine {
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[pi] Starting in ${workdir}` };
 
+    const promptFile = `/tmp/vibe-pi-prompt-${options.runId ?? Date.now()}.txt`;
+    await writeFile(promptFile, prompt, "utf8");
+
     const args = ["pi", "acp"];
     if (options.model) args.push("--model", options.model);
-    args.push("--message", prompt);
+    args.push("--message", `@${promptFile}`);
 
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (options.litellmKey) {
@@ -76,6 +80,12 @@ export class PiEngine implements AgentEngine {
     );
 
     if (options.runId) this.processes.delete(options.runId);
+
+    try {
+      await unlink(promptFile);
+    } catch {
+      // ignore cleanup errors
+    }
   }
 
   abort(runId: string): void {

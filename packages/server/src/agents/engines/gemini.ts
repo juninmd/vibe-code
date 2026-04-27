@@ -1,3 +1,4 @@
+import { unlink } from "node:fs/promises";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -90,10 +91,13 @@ export class GeminiEngine implements AgentEngine {
       content: `[gemini] Run context: model=${options.model ?? "default"}, runId=${options.runId ?? "n/a"}`,
     };
 
+    const promptFile = `/tmp/vibe-gemini-prompt-${options.runId ?? Date.now()}.txt`;
+    await Bun.write(promptFile, prompt);
+
     const args = ["gemini", "--yolo", "--output-format", "stream-json"];
     if (options.model) args.push("-m", options.model);
     if (options.resumeSessionId) args.push("-r", options.resumeSessionId);
-    args.push("-p", prompt);
+    args.push("-p", `@${promptFile}`);
 
     const proc = Bun.spawn(args, {
       cwd: workdir,
@@ -303,6 +307,12 @@ export class GeminiEngine implements AgentEngine {
     );
 
     if (options.runId) this.processes.delete(options.runId);
+
+    try {
+      await unlink(promptFile);
+    } catch {
+      // ignore cleanup errors
+    }
   }
 
   abort(runId: string): void {
