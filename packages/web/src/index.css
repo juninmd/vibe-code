@@ -156,14 +156,20 @@ body,
 }
 
 /* Diff2Html Overrides */
+.diff-viewer-wrapper {
+  overflow-x: auto;
+  max-width: 100%;
+}
 .diff-viewer-wrapper .d2h-wrapper {
   background-color: var(--bg-app);
+  overflow-x: auto;
+  max-width: 100%;
 }
 .diff-viewer-wrapper .d2h-file-header {
   display: none;
 }
-.diff-viewer-wrapper.dark .d2h-code-line, 
-.diff-viewer-wrapper.dracula .d2h-code-line, 
+.diff-viewer-wrapper.dark .d2h-code-line,
+.diff-viewer-wrapper.dracula .d2h-code-line,
 .diff-viewer-wrapper.github-dark .d2h-code-line {
   color: var(--text-primary);
 }
@@ -180,4 +186,15 @@ body,
 }
 .diff-viewer-wrapper .d2h-code-line-ctn {
   background: transparent !important;
+}
+.diff-viewer-wrapper .d2h-table {
+  table-layout: auto;
+  overflow-x: auto;
+  display: block;
+}
+.diff-viewer-wrapper .d2h-file-diff {
+  overflow-x: auto;
+}
+.diff-viewer-wrapper .d2h-info {
+  overflow-x: auto;
 }

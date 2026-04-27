@@ -15,6 +15,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { InboxPanel } from "./components/InboxPanel";
+import { IssueImporter } from "./components/IssueImporter";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { RuntimeDashboard } from "./components/RuntimeDashboard";
 import { ScheduledTasksPanel } from "./components/ScheduledTasksPanel";
@@ -72,6 +73,7 @@ export default function App() {
   const [showSkills, setShowSkills] = useState(false);
   const [showRuntimes, setShowRuntimes] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
+  const [showIssueImporter, setShowIssueImporter] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     engine: null,
@@ -490,6 +492,30 @@ export default function App() {
     URL.revokeObjectURL(url);
   }, [tasks, repos, selectedRepoId]);
 
+  // ─── Import issues ────────────────────────────────────────────────────────────
+  const handleImportIssues = useCallback(
+    async (issues: import("@vibe-code/shared").RepositoryIssue[]) => {
+      if (!selectedRepoId) return;
+      const result = await api.tasks.importFromIssues(
+        selectedRepoId,
+        issues.map((i) => ({
+          id: i.id,
+          number: i.number,
+          title: i.title,
+          body: i.body,
+          labels: i.labels,
+          url: i.url,
+        }))
+      );
+      await refresh();
+      toast(
+        `${result.count} task${result.count !== 1 ? "s" : ""} criada${result.count !== 1 ? "s" : ""} a partir de issues.`,
+        "success"
+      );
+    },
+    [selectedRepoId, refresh, toast]
+  );
+
   // ─── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -542,6 +568,10 @@ export default function App() {
         }
         if (showInbox) {
           setShowInbox(false);
+          return;
+        }
+        if (showIssueImporter) {
+          setShowIssueImporter(false);
           return;
         }
         if (selectedTask) {
@@ -608,6 +638,7 @@ export default function App() {
     showRuntimes,
     showInbox,
     showShortcuts,
+    showIssueImporter,
     selectedTask,
     search,
     handleCloseDetail,
@@ -837,6 +868,17 @@ export default function App() {
             >
               + Task
             </Button>
+            {selectedRepo &&
+              (selectedRepo.provider === "github" || selectedRepo.provider === "gitlab") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowIssueImporter(true)}
+                  title="Importar issues como tasks"
+                >
+                  ↓ Issues
+                </Button>
+              )}
           </header>
 
           {/* Filter Bar */}
@@ -1087,6 +1129,15 @@ export default function App() {
           onOpenEngines={() => setShowEnginesPanel(true)}
           onOpenRuntimes={() => setShowRuntimes(true)}
         />
+
+        {selectedRepo && (
+          <IssueImporter
+            open={showIssueImporter}
+            onClose={() => setShowIssueImporter(false)}
+            repo={selectedRepo}
+            onImport={handleImportIssues}
+          />
+        )}
 
         <SkillsBrowser
           open={showSkills}

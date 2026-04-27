@@ -247,6 +247,25 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     return c.json({ data: { ok: true } });
   });
 
+  // GET /api/repos/:id/issues — list issues from the remote repo
+  router.get("/:id/issues", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+
+    const state = c.req.query("state") as "open" | "closed" | "all" | undefined;
+    const labelsParam = c.req.query("labels");
+    const labels = labelsParam ? labelsParam.split(",").filter(Boolean) : undefined;
+    const limit = Number(c.req.query("limit")) || 50;
+
+    try {
+      const issues = await git.listIssues(repo.url, { state, labels, limit });
+      return c.json({ data: issues });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "issues_error", message: msg }, 500);
+    }
+  });
+
   // M4.5: Review findings for a repository
   router.get("/:id/findings", (c) => {
     const repo = db.repos.getById(c.req.param("id"));

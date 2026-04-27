@@ -1,4 +1,4 @@
-import type { RemoteRepo } from "@vibe-code/shared";
+import type { RemoteRepo, RepositoryIssue } from "@vibe-code/shared";
 import type { CreatePRParams, CreateRepoParams, GitProviderAdapter } from "./types";
 
 const GH_API = "https://api.github.com";
@@ -165,5 +165,53 @@ export class GitHubProvider implements GitProviderAdapter {
     if (!res.ok) return false;
     const data = (await res.json()) as { merged: boolean };
     return data.merged === true;
+  }
+
+  async listIssues(
+    token: string,
+    repoUrl: string,
+    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+  ): Promise<RepositoryIssue[]> {
+    const repoPath = getRepoOwnerAndName(repoUrl);
+    const params = new URLSearchParams();
+    params.set("per_page", String(options?.limit ?? 50));
+    if (options?.state) params.set("state", options.state);
+    if (options?.labels && options.labels.length > 0) {
+      params.set("labels", options.labels.join(","));
+    }
+
+    const res = await fetch(`${GH_API}/repos/${repoPath}/issues?${params}`, {
+      headers: headers(token),
+    });
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as {
+      number: number;
+      title: string;
+      body: string | null;
+      state: string;
+      labels: { name: string }[];
+      assignee: { login: string } | null;
+      assignees: { login: string }[];
+      created_at: string;
+      updated_at: string;
+      html_url: string;
+      pull_request?: unknown;
+    }[];
+
+    return data
+      .filter((issue) => !issue.pull_request)
+      .map((issue) => ({
+        id: String(issue.number),
+        number: issue.number,
+        title: issue.title,
+        body: issue.body,
+        state: issue.state as "open" | "closed",
+        labels: issue.labels.map((l) => l.name),
+        assignee: issue.assignee?.login ?? null,
+        assignees: issue.assignees.map((a) => a.login),
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
+        url: issue.html_url,
+      }));
   }
 }

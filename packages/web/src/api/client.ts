@@ -12,6 +12,7 @@ import type {
   PromptTemplate,
   RemoteRepo,
   Repository,
+  RepositoryIssue,
   RuntimeOverview,
   SettingsResponse,
   SkillEffectiveness,
@@ -138,6 +139,18 @@ export const api = {
     branches: (id: string) => request<string[]>(`/repos/${id}/branches`),
     skills: (id: string) => request<SkillsIndex>(`/repos/${id}/skills`),
     manifests: (id: string) => request<Record<string, string>>(`/repos/${id}/manifests`),
+    issues: (
+      id: string,
+      options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.state) params.set("state", options.state);
+      if (options?.labels && options.labels.length > 0)
+        params.set("labels", options.labels.join(","));
+      if (options?.limit) params.set("limit", String(options.limit));
+      const qs = params.toString();
+      return request<RepositoryIssue[]>(`/repos/${id}/issues${qs ? `?${qs}` : ""}`);
+    },
   },
 
   tasks: {
@@ -194,6 +207,25 @@ export const api = {
     downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
     openEditor: (id: string) =>
       request<{ ok: boolean }>(`/tasks/${id}/open-editor`, { method: "POST" }),
+    importFromIssues: (
+      repoId: string,
+      issues: {
+        id: string;
+        number: number;
+        title: string;
+        body: string | null;
+        labels: string[];
+        url: string;
+      }[],
+      autoLabel?: string
+    ) =>
+      request<{ created: { id: string; title: string; number: number }[]; count: number }>(
+        "/tasks/bulk/from-issues",
+        {
+          method: "POST",
+          body: JSON.stringify({ repoId, issues, autoLabel }),
+        }
+      ),
   },
 
   runs: {

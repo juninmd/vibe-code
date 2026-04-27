@@ -54,38 +54,113 @@ function toHtml(content: string): string {
 
   let html = "";
 
+  const SKIP_FM_FIELDS = new Set(["name", "description", "applyTo"]);
+
   if (frontmatter) {
-    html +=
-      '<div style="background:var(--bg-input);border:1px solid var(--glass-border);border-radius:8px;padding:12px;margin-bottom:14px;">';
-    for (const line of frontmatter.split("\n").filter(Boolean)) {
+    const fmLines = frontmatter.split("\n").filter(Boolean);
+    const fmItems = fmLines.filter((line) => {
       const ci = line.indexOf(":");
-      if (ci > 0) {
-        const k = escapeHtml(line.slice(0, ci).trim());
-        const v = escapeHtml(line.slice(ci + 1).trim());
-        html += `<div style="display:flex;gap:12px;margin-bottom:5px;font-size:11px"><span style="color:var(--accent-text);font-family:monospace;min-width:90px;flex-shrink:0">${k}</span><span style="color:var(--text-secondary)">${v}</span></div>`;
-      } else {
-        html += `<div style="color:var(--text-muted);font-size:11px;font-family:monospace">${escapeHtml(line)}</div>`;
+      if (ci <= 0) return true;
+      const k = line.slice(0, ci).trim().toLowerCase();
+      return !SKIP_FM_FIELDS.has(k);
+    });
+    if (fmItems.length > 0) {
+      html +=
+        '<div style="background:var(--bg-input);border:1px solid var(--glass-border);border-radius:8px;padding:12px;margin-bottom:14px;">';
+      for (const line of fmItems) {
+        const ci = line.indexOf(":");
+        if (ci > 0) {
+          const k = escapeHtml(line.slice(0, ci).trim());
+          const v = escapeHtml(line.slice(ci + 1).trim());
+          html += `<div style="display:flex;gap:12px;margin-bottom:5px;font-size:11px"><span style="color:var(--accent-text);font-family:monospace;min-width:90px;flex-shrink:0">${k}</span><span style="color:var(--text-secondary)">${v}</span></div>`;
+        } else {
+          html += `<div style="color:var(--text-muted);font-size:11px;font-family:monospace">${escapeHtml(line)}</div>`;
+        }
       }
+      html += "</div>";
     }
-    html += "</div>";
   }
 
   const lines = body.split("\n");
   let inCode = false;
   let codeLines: string[] = [];
   let inList = false;
+  let inTable = false;
+  let tableRows: string[] = [];
+  let inParagraph = false;
+  let paragraphLines: string[] = [];
+
+  const closeList = () => {
+    if (inList) {
+      html += "</ul>";
+      inList = false;
+    }
+  };
+
+  const closeParagraph = () => {
+    if (inParagraph && paragraphLines.length > 0) {
+      html += `<p style="color:var(--text-secondary);font-size:12px;margin:4px 0;line-height:1.6;white-space:pre-wrap">${renderInline(paragraphLines.join(" "))}</p>`;
+      paragraphLines = [];
+      inParagraph = false;
+    }
+  };
+
+  const renderTable = (rows: string[]) => {
+    if (rows.length < 2) return;
+    const headerRow = rows[0];
+    const dataRows = rows.slice(2);
+    const headers = headerRow
+      .split("|")
+      .filter((c) => c.trim())
+      .map((c) => escapeHtml(c.trim()));
+    const alignMatch = rows[1].match(/^\|[\s|:-]+\|$/);
+    const aligns: ("left" | "center" | "right")[] = alignMatch
+      ? headerRow
+          .split("|")
+          .filter((c) => c.trim())
+          .map((c) => {
+            if (c.trim().endsWith(":")) return c.trim().startsWith(":") ? "center" : "right";
+            return "left";
+          })
+      : headers.map(() => "left");
+
+    html +=
+      '<div style="overflow-x:auto;margin:8px 0"><table style="width:100%;border-collapse:collapse;font-size:11px">';
+    html += "<thead><tr>";
+    headers.forEach((h, i) => {
+      const align = aligns[i] ?? "left";
+      html += `<th style="text-align:${align};padding:6px 10px;background:var(--bg-surface);border-bottom:2px solid var(--border-default);color:var(--accent-text);font-weight:600">${h}</th>`;
+    });
+    html += "</tr></thead><tbody>";
+    dataRows.forEach((row) => {
+      const cells = row
+        .split("|")
+        .filter((c) => c.trim())
+        .map((c) => escapeHtml(c.trim()));
+      html += "<tr>";
+      cells.forEach((cell, i) => {
+        const align = aligns[i] ?? "left";
+        html += `<td style="text-align:${align};padding:6px 10px;border-bottom:1px solid var(--border-subtle);color:var(--text-secondary)">${renderInline(cell)}</td>`;
+      });
+      html += "</tr>";
+    });
+    html += "</tbody></table></div>";
+  };
+
+  const isTableRow = (line: string) => {
+    const trimmed = line.trim();
+    return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|");
+  };
 
   for (const line of lines) {
     if (line.startsWith("```")) {
+      closeParagraph();
       if (inCode) {
-        html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+        html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5;white-space:pre-wrap">${escapeHtml(codeLines.join("\n"))}</pre>`;
         codeLines = [];
         inCode = false;
       } else {
-        if (inList) {
-          html += "</ul>";
-          inList = false;
-        }
+        closeList();
         inCode = true;
       }
       continue;
@@ -95,63 +170,76 @@ function toHtml(content: string): string {
       continue;
     }
 
-    if (line.startsWith("# ")) {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
+    if (isTableRow(line)) {
+      closeParagraph();
+      closeList();
+      if (!inTable) {
+        inTable = true;
+        tableRows = [];
       }
+      tableRows.push(line);
+      continue;
+    } else if (inTable) {
+      renderTable(tableRows);
+      tableRows = [];
+      inTable = false;
+    }
+
+    if (line.startsWith("# ")) {
+      closeParagraph();
+      closeList();
       html += `<h1 style="font-size:16px;font-weight:700;color:var(--text-primary);margin:18px 0 8px">${renderInline(line.slice(2))}</h1>`;
     } else if (line.startsWith("## ")) {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      closeParagraph();
+      closeList();
       html += `<h2 style="font-size:14px;font-weight:600;color:var(--text-primary);margin:16px 0 6px;border-bottom:1px solid var(--border-default);padding-bottom:4px">${renderInline(line.slice(3))}</h2>`;
     } else if (line.startsWith("### ")) {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      closeParagraph();
+      closeList();
       html += `<h3 style="font-size:13px;font-weight:600;color:var(--text-secondary);margin:12px 0 4px">${renderInline(line.slice(4))}</h3>`;
     } else if (line.startsWith("#### ")) {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      closeParagraph();
+      closeList();
       html += `<h4 style="font-size:12px;font-weight:600;color:var(--text-muted);margin:10px 0 3px">${renderInline(line.slice(5))}</h4>`;
     } else if (/^\s*[-*] /.test(line)) {
+      closeParagraph();
       if (!inList) {
         html += '<ul style="margin:6px 0 6px 16px;list-style:disc">';
         inList = true;
       }
       html += `<li style="color:var(--text-secondary);font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().slice(2))}</li>`;
     } else if (/^\s*\d+\. /.test(line)) {
+      closeParagraph();
       if (!inList) {
         html += '<ol style="margin:6px 0 6px 16px;list-style:decimal">';
         inList = true;
       }
       html += `<li style="color:var(--text-secondary);font-size:11.5px;margin-bottom:3px;line-height:1.5">${renderInline(line.trimStart().replace(/^\d+\.\s*/, ""))}</li>`;
     } else if (line.trim() === "") {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      closeParagraph();
+      closeList();
     } else {
-      if (inList) {
-        html += "</ul>";
-        inList = false;
-      }
+      closeList();
       if (line.startsWith("> ")) {
+        closeParagraph();
         html += `<blockquote style="border-left:3px solid var(--border-default);padding-left:10px;margin:6px 0;color:var(--text-muted);font-size:11.5px;font-style:italic">${renderInline(line.slice(2))}</blockquote>`;
       } else {
-        html += `<p style="color:var(--text-secondary);font-size:12px;margin:4px 0;line-height:1.6">${renderInline(line)}</p>`;
+        inParagraph = true;
+        if (paragraphLines.length > 0) {
+          paragraphLines.push(" ");
+        }
+        paragraphLines.push(line);
       }
     }
   }
 
-  if (inList) html += "</ul>";
+  if (inTable && tableRows.length > 0) {
+    renderTable(tableRows);
+  }
+  closeParagraph();
+  closeList();
   if (inCode && codeLines.length > 0) {
-    html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5">${escapeHtml(codeLines.join("\n"))}</pre>`;
+    html += `<pre style="background:var(--bg-card);border:1px solid var(--glass-border);border-radius:6px;padding:10px;overflow-x:auto;font-size:10.5px;font-family:monospace;color:var(--text-secondary);margin:8px 0;line-height:1.5;white-space:pre-wrap">${escapeHtml(codeLines.join("\n"))}</pre>`;
   }
 
   return html;

@@ -254,6 +254,16 @@ export class GitService {
     return this.createRemoteRepo("github", name, description, isPrivate);
   }
 
+  async listIssues(
+    repoUrl: string,
+    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+  ) {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) throw new Error(`No git provider configured for ${repoUrl}`);
+    return resolved.adapter.listIssues(resolved.token, repoUrl, options);
+  }
+
   async diffSummary(
     baseBranch: string,
     headBranch: string,

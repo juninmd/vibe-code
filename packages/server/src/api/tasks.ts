@@ -49,6 +49,23 @@ const launchTaskSchema = z.object({
   model: z.string().optional(),
 });
 
+const importIssuesSchema = z.object({
+  repoId: z.string().min(1),
+  issues: z
+    .array(
+      z.object({
+        id: z.string(),
+        number: z.number(),
+        title: z.string(),
+        body: z.string().nullable(),
+        labels: z.array(z.string()),
+        url: z.string(),
+      })
+    )
+    .min(1),
+  autoLabel: z.string().optional(),
+});
+
 export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
   const router = new Hono();
 
@@ -159,6 +176,38 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     const task = db.tasks.create(parsed.data);
     return c.json({ data: task }, 201);
+  });
+
+  // POST /tasks/bulk/from-issues — create multiple tasks from GitHub/GitLab issues
+  router.post("/bulk/from-issues", async (c) => {
+    const body = await c.req.json();
+    const parsed = importIssuesSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+
+    const repo = db.repos.getById(parsed.data.repoId);
+    if (!repo) {
+      return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    }
+
+    const created: { id: string; title: string; number: number }[] = [];
+    for (const issue of parsed.data.issues) {
+      const tags = [...(parsed.data.autoLabel ? [parsed.data.autoLabel] : []), ...issue.labels];
+      const description = [issue.body ?? "", "", `---`, `Original issue: ${issue.url}`]
+        .filter(Boolean)
+        .join("\n");
+
+      const task = db.tasks.create({
+        title: issue.title,
+        description,
+        repoId: parsed.data.repoId,
+        tags: tags.length > 0 ? tags : undefined,
+      });
+      created.push({ id: task.id, title: task.title, number: issue.number });
+    }
+
+    return c.json({ data: { created, count: created.length } }, 201);
   });
 
   router.get("/:id", (c) => {
