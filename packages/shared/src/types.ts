@@ -264,6 +264,20 @@ export interface RemoteRepo {
   provider: GitProvider;
 }
 
+export interface RepositoryIssue {
+  id: string;
+  number: number;
+  title: string;
+  body: string | null;
+  state: "open" | "closed";
+  labels: string[];
+  assignee: string | null;
+  assignees: string[];
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
+
 /** @deprecated Use RemoteRepo instead */
 export type GitHubRepo = RemoteRepo;
 

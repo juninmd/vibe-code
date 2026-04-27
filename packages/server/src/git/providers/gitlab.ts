@@ -1,4 +1,4 @@
-import type { RemoteRepo } from "@vibe-code/shared";
+import type { RemoteRepo, RepositoryIssue } from "@vibe-code/shared";
 import type { CreatePRParams, CreateRepoParams, GitProviderAdapter } from "./types";
 
 const DEFAULT_BASE_URL = "https://gitlab.com";
@@ -181,5 +181,51 @@ export class GitLabProvider implements GitProviderAdapter {
     if (!res.ok) return false;
     const data = (await res.json()) as { state: string };
     return data.state === "merged";
+  }
+
+  async listIssues(
+    token: string,
+    repoUrl: string,
+    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+  ): Promise<RepositoryIssue[]> {
+    const projectPath = getProjectPath(repoUrl);
+    const encodedPath = encodeURIComponent(projectPath);
+    const params = new URLSearchParams();
+    params.set("per_page", String(options?.limit ?? 50));
+    if (options?.state && options.state !== "all") params.set("state", options.state);
+    if (options?.labels && options.labels.length > 0) {
+      params.set("labels", options.labels.join(","));
+    }
+
+    const res = await fetch(`${this.api(`/projects/${encodedPath}/issues`)}?${params}`, {
+      headers: headers(token),
+    });
+    if (!res.ok) throw new Error(`GitLab API error: ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as {
+      iid: number;
+      title: string;
+      description: string | null;
+      state: string;
+      labels: string[];
+      assignee: { username: string } | null;
+      assignees: { username: string }[];
+      created_at: string;
+      updated_at: string;
+      web_url: string;
+    }[];
+
+    return data.map((issue) => ({
+      id: String(issue.iid),
+      number: issue.iid,
+      title: issue.title,
+      body: issue.description,
+      state: issue.state as "open" | "closed",
+      labels: issue.labels,
+      assignee: issue.assignee?.username ?? null,
+      assignees: issue.assignees.map((a) => a.username),
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+      url: issue.web_url,
+    }));
   }
 }

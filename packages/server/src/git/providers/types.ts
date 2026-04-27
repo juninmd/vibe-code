@@ -1,4 +1,4 @@
-import type { GitProvider, RemoteRepo } from "@vibe-code/shared";
+import type { GitProvider, RemoteRepo, RepositoryIssue } from "@vibe-code/shared";
 
 export interface CreatePRParams {
   repoUrl: string;
@@ -34,4 +34,11 @@ export interface GitProviderAdapter {
 
   /** Check if a PR/MR identified by its URL has been merged */
   isPrMerged(token: string, prUrl: string): Promise<boolean>;
+
+  /** List issues for a repository */
+  listIssues(
+    token: string,
+    repoUrl: string,
+    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+  ): Promise<RepositoryIssue[]>;
 }
