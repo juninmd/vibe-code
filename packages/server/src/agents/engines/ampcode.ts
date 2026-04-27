@@ -1,17 +1,18 @@
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
-export class AiderEngine implements AgentEngine {
-  name = "aider";
-  displayName = "Aider";
+export class AmpCodeEngine implements AgentEngine {
+  name = "ampcode";
+  displayName = "Amp Code";
   private processes = new Map<string, Subprocess>();
 
   async isAvailable(): Promise<boolean> {
     try {
-      const proc = Bun.spawn(["aider", "--version"], { stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawn(["amp", "--version"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
       return proc.exitCode === 0;
     } catch {
@@ -21,7 +22,7 @@ export class AiderEngine implements AgentEngine {
 
   async getVersion(): Promise<string | null> {
     try {
-      const proc = Bun.spawn(["aider", "--version"], { stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawn(["amp", "--version"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
       if (proc.exitCode !== 0) return null;
       const text = await new Response(proc.stdout).text();
@@ -32,7 +33,6 @@ export class AiderEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Aider supports any OpenAI-compatible model. Return everything LiteLLM knows.
     return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
@@ -41,14 +41,12 @@ export class AiderEngine implements AgentEngine {
     workdir: string,
     options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
-    yield { type: "log", stream: "system", content: `[aider] Starting in ${workdir}` };
+    yield { type: "log", stream: "system", content: `[ampcode] Starting in ${workdir}` };
 
-    const args = ["aider", "--yes-always", "--no-auto-commits"];
+    const args = ["amp", "acp"];
     if (options.model) args.push("--model", options.model);
     args.push("--message", prompt);
 
-    // When LiteLLM is enabled, route through the proxy and strip native keys.
-    // Otherwise, prefer DB-stored native keys; fall back to host env vars.
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
@@ -72,13 +70,7 @@ export class AiderEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => {
-          return [{ type: "log", stream: "stdout", content: line }];
-        },
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );

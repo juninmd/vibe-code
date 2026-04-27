@@ -1,10 +1,16 @@
 import type { EngineInfo } from "@vibe-code/shared";
 import type { AgentEngine } from "./engine";
 import { AiderEngine } from "./engines/aider";
+import { AmpCodeEngine } from "./engines/ampcode";
 import { ClaudeCodeEngine } from "./engines/claude-code";
+import { CodexEngine } from "./engines/codex";
 import { CopilotEngine } from "./engines/copilot";
+import { CursorAgentEngine } from "./engines/cursor-agent";
 import { GeminiEngine } from "./engines/gemini";
+import { HermesEngine } from "./engines/hermes";
+import { OpenClawEngine } from "./engines/openclaw";
 import { OpenCodeEngine } from "./engines/opencode";
+import { PiEngine } from "./engines/pi";
 
 export class EngineRegistry {
   private engines: Map<string, AgentEngine> = new Map();
@@ -15,6 +21,12 @@ export class EngineRegistry {
     this.register(new OpenCodeEngine());
     this.register(new GeminiEngine());
     this.register(new CopilotEngine());
+    this.register(new CodexEngine());
+    this.register(new PiEngine());
+    this.register(new CursorAgentEngine());
+    this.register(new OpenClawEngine());
+    this.register(new HermesEngine());
+    this.register(new AmpCodeEngine());
   }
 
   register(engine: AgentEngine): void {

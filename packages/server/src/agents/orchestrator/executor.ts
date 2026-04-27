@@ -245,6 +245,74 @@ async function buildPRBody(
   return normalizeAsciiText(task.description?.trim() || `Task: ${task.title}`);
 }
 
+export async function runWorkspaceScripts(
+  type: "setup" | "teardown",
+  wtPath: string,
+  repoName: string,
+  sysLog: (msg: string) => void
+): Promise<void> {
+  let configPath = join(wtPath, ".superset", "config.json");
+  let configExists = false;
+
+  try {
+    await access(configPath);
+    configExists = true;
+  } catch {
+    configPath = join(wtPath, ".vibe-code", "config.json");
+    try {
+      await access(configPath);
+      configExists = true;
+    } catch {
+      return; // No config found
+    }
+  }
+
+  if (!configExists) return;
+
+  try {
+    const configContent = await readFile(configPath, "utf8");
+    const config = JSON.parse(configContent);
+    const scripts = config[type];
+
+    if (Array.isArray(scripts) && scripts.length > 0) {
+      sysLog(`Running ${type} scripts from ${configPath}...`);
+      const env = {
+        ...process.env,
+        SUPERSET_WORKSPACE_NAME: repoName,
+        SUPERSET_ROOT_PATH: wtPath,
+        VIBE_CODE_WORKSPACE_NAME: repoName,
+        VIBE_CODE_ROOT_PATH: wtPath,
+      };
+
+      for (const script of scripts) {
+        if (typeof script !== "string") continue;
+        sysLog(`> ${script}`);
+
+        const proc = Bun.spawn(["sh", "-c", script], {
+          cwd: wtPath,
+          env,
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+
+        const stdoutText = await new Response(proc.stdout).text();
+        const stderrText = await new Response(proc.stderr).text();
+        const exitCode = await proc.exited;
+
+        if (stdoutText.trim()) sysLog(stdoutText.trim());
+        if (stderrText.trim()) sysLog(stderrText.trim());
+
+        if (exitCode !== 0) {
+          sysLog(`${type} script '${script}' failed with exit code ${exitCode}`);
+        }
+      }
+      sysLog(`${type} scripts completed.`);
+    }
+  } catch (err: any) {
+    sysLog(`Failed to execute ${type} scripts: ${err.message}`);
+  }
+}
+
 export async function executeAgent(
   task: Task,
   run: AgentRun,
@@ -352,6 +420,9 @@ export async function executeAgent(
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
     db.runs.updateStateSnapshot(run.id, "worktree_ready");
+
+    // Run setup scripts if available
+    await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
 
     // M4: Baseline verification — detect pre-existing breakage before the agent starts
     {
@@ -892,7 +963,11 @@ export async function executeAgent(
       const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
       await deleteVirtualKey(litellmTokenId, baseUrl).catch(() => {});
     }
+
     if (wtPath && !keepWorkspaceForRetry) {
+      // Run teardown scripts before removing worktree
+      await runWorkspaceScripts("teardown", wtPath, repo.name, sysLog);
+
       try {
         await git.removeWorktree(barePath, wtPath);
       } catch {}
