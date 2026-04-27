@@ -177,6 +177,52 @@ export class GeminiEngine implements AgentEngine {
               return [{ type: "log", stream: "system", content: `[tool] ${name}` }];
             }
 
+            // Cost/usage stats event from provider
+            if (obj.type === "result" && obj.status === "success" && obj.stats) {
+              const stats = obj.stats as Record<string, unknown>;
+              const rawModels = stats.models as Record<string, Record<string, unknown>> | undefined;
+              const models:
+                | Record<
+                    string,
+                    {
+                      total_tokens: number;
+                      input_tokens: number;
+                      output_tokens: number;
+                      cached?: number;
+                      input?: number;
+                    }
+                  >
+                | undefined = rawModels ? {} : undefined;
+              if (rawModels) {
+                for (const [key, val] of Object.entries(rawModels)) {
+                  models![key] = {
+                    total_tokens: typeof val.total_tokens === "number" ? val.total_tokens : 0,
+                    input_tokens: typeof val.input_tokens === "number" ? val.input_tokens : 0,
+                    output_tokens: typeof val.output_tokens === "number" ? val.output_tokens : 0,
+                    cached: typeof val.cached === "number" ? val.cached : undefined,
+                    input: typeof val.input === "number" ? val.input : undefined,
+                  };
+                }
+              }
+              return [
+                {
+                  type: "cost",
+                  costStats: {
+                    total_tokens: typeof stats.total_tokens === "number" ? stats.total_tokens : 0,
+                    input_tokens: typeof stats.input_tokens === "number" ? stats.input_tokens : 0,
+                    output_tokens:
+                      typeof stats.output_tokens === "number" ? stats.output_tokens : 0,
+                    cached: typeof stats.cached === "number" ? stats.cached : undefined,
+                    input: typeof stats.input === "number" ? stats.input : undefined,
+                    duration_ms:
+                      typeof stats.duration_ms === "number" ? stats.duration_ms : undefined,
+                    tool_calls: typeof stats.tool_calls === "number" ? stats.tool_calls : undefined,
+                    models,
+                  },
+                },
+              ];
+            }
+
             // Unknown JSON event — emit as system log
             return [{ type: "log", stream: "system", content: line }];
           }

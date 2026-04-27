@@ -63,5 +63,11 @@ export function createSkillsRouter(skillsLoader: SkillsLoader) {
     });
   });
 
+  // GET /api/skills/manifests — load global manifest files (AGENTS.md, CLAUDE.md, GEMINI.md, etc.)
+  app.get("/manifests", async (c) => {
+    const manifests = await skillsLoader.loadManifests();
+    return c.json({ data: manifests });
+  });
+
   return app;
 }

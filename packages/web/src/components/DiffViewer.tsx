@@ -56,7 +56,13 @@ export function DiffViewer({ taskId, branchName }: DiffViewerProps) {
     setExpandedPaths(new Set());
   }, []);
 
-  if (!branchName) return null;
+  if (!branchName) {
+    return (
+      <div className="flex items-center justify-center h-32 text-sm text-dimmed">
+        Nenhuma branch criada ainda — execute o agent primeiro
+      </div>
+    );
+  }
 
   if (loading && !summary) {
     return (

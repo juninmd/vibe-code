@@ -187,6 +187,31 @@ export class SkillsLoader {
     return this.cache;
   }
 
+  async loadManifests(): Promise<Record<string, string>> {
+    const root = this.basePath;
+    const manifests: Record<string, string> = {};
+    const files = [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "GEMINI.md",
+      "CONVENTIONS.md",
+      ".aider.instructions.md",
+      ".claude.instructions.md",
+      ".github/copilot-instructions.md",
+    ];
+
+    for (const file of files) {
+      try {
+        const content = await readFile(join(root, file), "utf8");
+        manifests[file] = content;
+      } catch {
+        // File doesn't exist - skip
+      }
+    }
+
+    return manifests;
+  }
+
   invalidate(): void {
     this.cache = null;
   }

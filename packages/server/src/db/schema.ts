@@ -151,6 +151,11 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE agent_runs ADD COLUMN state_snapshot TEXT");
   }
 
+  // M6.5: cost_stats for provider billing summary (JSON from provider result events)
+  if (!runColNames.includes("cost_stats")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN cost_stats TEXT");
+  }
+
   // M4.1: review_findings table
   db.exec(`
     CREATE TABLE IF NOT EXISTS review_findings (

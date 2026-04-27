@@ -1,10 +1,29 @@
 import type { SkillPayload } from "@vibe-code/shared";
 
 export interface AgentEvent {
-  type: "log" | "status" | "error" | "complete";
+  type: "log" | "status" | "error" | "complete" | "cost";
   stream?: "stdout" | "stderr" | "system";
   content?: string;
   exitCode?: number;
+  costStats?: {
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cached?: number;
+    input?: number;
+    duration_ms?: number;
+    tool_calls?: number;
+    models?: Record<
+      string,
+      {
+        total_tokens: number;
+        input_tokens: number;
+        output_tokens: number;
+        cached?: number;
+        input?: number;
+      }
+    >;
+  };
 }
 
 export interface EngineOptions {

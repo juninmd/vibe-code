@@ -914,6 +914,83 @@ export function TaskDetail({
                 </div>
               )}
 
+              {/* Cost Stats */}
+              {task.latestRun?.costStats && (
+                <div className="bg-surface/20 rounded-lg px-3 py-2 space-y-1">
+                  <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                    Custo do Provider
+                  </h3>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    {task.latestRun.costStats.total_tokens > 0 && (
+                      <div>
+                        <span className="text-dimmed">tokens </span>
+                        <span className="text-secondary font-medium tabular-nums">
+                          {task.latestRun.costStats.total_tokens.toLocaleString()}
+                        </span>
+                        {task.latestRun.costStats.input_tokens > 0 && (
+                          <span className="text-dimmed ml-1">
+                            (in: {task.latestRun.costStats.input_tokens.toLocaleString()}
+                            {task.latestRun.costStats.cached && task.latestRun.costStats.cached > 0
+                              ? ` +${task.latestRun.costStats.cached.toLocaleString()} cached`
+                              : ""}
+                            , out: {task.latestRun.costStats.output_tokens.toLocaleString()})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {task.latestRun.costStats.input !== undefined && (
+                      <div>
+                        <span className="text-dimmed">custo input </span>
+                        <span className="text-warning font-medium tabular-nums">
+                          ${(task.latestRun.costStats.input / 1000000).toFixed(6)}
+                        </span>
+                      </div>
+                    )}
+                    {task.latestRun.costStats.duration_ms && (
+                      <div>
+                        <span className="text-dimmed">latência </span>
+                        <span className="text-secondary font-medium tabular-nums">
+                          {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
+                        </span>
+                      </div>
+                    )}
+                    {task.latestRun.costStats.tool_calls !== undefined && (
+                      <div>
+                        <span className="text-dimmed">tool calls </span>
+                        <span className="text-secondary font-medium tabular-nums">
+                          {task.latestRun.costStats.tool_calls}
+                        </span>
+                      </div>
+                    )}
+                    {task.latestRun.costStats.models &&
+                      Object.keys(task.latestRun.costStats.models).length > 0 && (
+                        <div className="w-full mt-1 space-y-0.5">
+                          {Object.entries(task.latestRun.costStats.models).map(([model, stats]) => (
+                            <div key={model} className="flex items-center gap-2 text-[11px]">
+                              <span className="text-dimmed">model:</span>
+                              <span className="text-secondary font-mono truncate max-w-[180px]">
+                                {model}
+                              </span>
+                              <span className="text-dimmed">tokens:</span>
+                              <span className="text-secondary tabular-nums">
+                                {stats.total_tokens.toLocaleString()}
+                              </span>
+                              {stats.input !== undefined && (
+                                <>
+                                  <span className="text-dimmed">$</span>
+                                  <span className="text-warning tabular-nums">
+                                    ${(stats.input / 1000000).toFixed(6)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex gap-2 flex-wrap items-center">
                 {(task.status === "backlog" || task.status === "failed") && (

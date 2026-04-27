@@ -374,6 +374,7 @@ export async function executeAgent(
   let reviewWarningCount = 0;
   let prCreated = false;
   let runStartTime = Date.now();
+  let capturedCostStats: object | null = null;
   try {
     let reusableWorkspacePath: string | null = null;
 
@@ -583,6 +584,10 @@ export async function executeAgent(
       if (abort.signal.aborted) break;
       if (event.type === "complete") {
         agentExitCode = event.exitCode ?? 0;
+        continue;
+      }
+      if (event.type === "cost" && event.costStats) {
+        capturedCostStats = event.costStats;
         continue;
       }
       await handleAgentEvent(event, run.id, task.id, db, hub, () => {
@@ -894,6 +899,9 @@ export async function executeAgent(
       finished_at: new Date().toISOString(),
       exit_code: 0,
     });
+    if (capturedCostStats) {
+      db.runs.updateCostStats(run.id, capturedCostStats);
+    }
     // Flush any pending log batches before broadcasting terminal state
     hub.flushLogs(task.id);
     if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
