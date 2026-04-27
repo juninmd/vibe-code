@@ -16,10 +16,13 @@ import { createSettingsRouter } from "./api/settings";
 import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
+import workspacesRouter from "./api/workspaces";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
 import { ProviderRegistry } from "./git/providers/registry";
+// NOTE: workspaceMiddleware removed - API is now public (no authentication)
+// import { workspaceMiddleware } from "./middleware/workspace.middleware";
 import { SkillsLoader } from "./skills/loader";
 import { BroadcastHub } from "./ws/broadcast";
 
@@ -132,8 +135,11 @@ const app = new Hono();
 
 // Middleware
 app.use("/api/*", cors({ origin: "*" }));
+// NOTE: Workspace middleware disabled - API is now public (no authentication)
+// app.use("/api/*", workspaceMiddleware());
 
 // REST Routes
+app.route("/api/workspaces", workspacesRouter);
 app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/runs", createRunsRouter(db));

@@ -15,10 +15,10 @@ export function Toaster() {
             pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200
             ${
               t.type === "error"
-                ? "bg-red-950 border-red-800 text-red-200"
+                ? "bg-red-950 border-red-800 text-danger"
                 : t.type === "success"
-                  ? "bg-emerald-950 border-emerald-800 text-emerald-200"
-                  : "bg-zinc-800 border-zinc-700 text-zinc-200"
+                  ? "bg-emerald-950 border-emerald-800 text-success"
+                  : "bg-surface border-strong text-primary"
             }
           `}
         >

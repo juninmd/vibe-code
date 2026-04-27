@@ -181,7 +181,7 @@ export function NewTaskDialog({
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} title="New Task">
+      <Dialog open={open} onClose={onClose} title="New Task" size="2xl">
         <form
           onSubmit={handleSubmit}
           className="space-y-5 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar -mr-1"
@@ -324,8 +324,8 @@ export function NewTaskDialog({
                         : GitGenericIcon;
                   return (
                     <div className="flex items-center gap-1.5 mt-1.5 px-1">
-                      <ProviderIcon size={11} className="shrink-0 text-zinc-500" />
-                      <span className="text-[11px] text-zinc-500 truncate">{selectedRepo.url}</span>
+                      <ProviderIcon size={11} className="shrink-0 text-primary0" />
+                      <span className="text-[11px] text-primary0 truncate">{selectedRepo.url}</span>
                     </div>
                   );
                 })()}
@@ -609,7 +609,7 @@ export function NewTaskDialog({
               style={{ borderColor: "var(--border-subtle)" }}
             >
               {submitError && (
-                <p className="flex-1 text-xs text-red-400 self-center truncate" title={submitError}>
+                <p className="flex-1 text-xs text-danger self-center truncate" title={submitError}>
                   ⚠ {submitError}
                 </p>
               )}

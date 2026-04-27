@@ -1,0 +1,23 @@
+{
+  "name": "@vibe-code/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "exit 0"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.28.4",
+    "@vibe-code/shared": "workspace:*",
+    "zustand": "^4.4.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "react": "^19.0.0-rc.0",
+    "typescript": "^6.0.2"
+  }
+}
