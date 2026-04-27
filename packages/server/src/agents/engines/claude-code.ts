@@ -1,3 +1,4 @@
+import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -32,9 +33,7 @@ export class ClaudeCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Return Anthropic models available in LiteLLM (auto-routed via ANTHROPIC_API_KEY).
     const all = await listLiteLLMModels(getLiteLLMBaseUrl());
-    // Filter to models that go to Anthropic: prefixed with anthropic/ or named claude-*
     return all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
   }
 
@@ -45,12 +44,13 @@ export class ClaudeCodeEngine implements AgentEngine {
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[claude-code] Starting in ${workdir}` };
 
+    const promptFile = `/tmp/vibe-claude-code-prompt-${options.runId ?? Date.now()}.txt`;
+    await writeFile(promptFile, prompt, "utf8");
+
     const args = ["claude", "--print", "--verbose", "--output-format", "stream-json"];
     if (options.model) args.push("--model", options.model);
-    args.push("-p", prompt);
+    args.push("-p", `@${promptFile}`);
 
-    // When LiteLLM is enabled, route through the proxy using a virtual key.
-    // Otherwise, prefer the DB-stored native key, then fall back to process.env.
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (options.litellmKey) {
       env.ANTHROPIC_BASE_URL = options.litellmBaseUrl;
@@ -102,6 +102,12 @@ export class ClaudeCodeEngine implements AgentEngine {
     );
 
     if (options.runId) this.processes.delete(options.runId);
+
+    try {
+      await unlink(promptFile);
+    } catch {
+      // ignore cleanup errors
+    }
   }
 
   abort(runId: string): void {

@@ -1,3 +1,4 @@
+import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -43,9 +44,12 @@ export class AiderEngine implements AgentEngine {
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[aider] Starting in ${workdir}` };
 
+    const promptFile = `/tmp/vibe-aider-prompt-${options.runId ?? Date.now()}.txt`;
+    await writeFile(promptFile, prompt, "utf8");
+
     const args = ["aider", "--yes-always", "--no-auto-commits"];
     if (options.model) args.push("--model", options.model);
-    args.push("--message", prompt);
+    args.push("--message", `@${promptFile}`);
 
     // When LiteLLM is enabled, route through the proxy and strip native keys.
     // Otherwise, prefer DB-stored native keys; fall back to host env vars.
@@ -84,6 +88,12 @@ export class AiderEngine implements AgentEngine {
     );
 
     if (options.runId) this.processes.delete(options.runId);
+
+    try {
+      await unlink(promptFile);
+    } catch {
+      // ignore cleanup errors
+    }
   }
 
   abort(runId: string): void {
