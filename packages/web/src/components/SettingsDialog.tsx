@@ -126,7 +126,9 @@ function ProviderTab({
         className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
         style={{ background: "var(--bg-card)" }}
       >
-        <span className={`w-2 h-2 rounded-full ${tokenSet ? "bg-emerald-400" : "bg-zinc-600"}`} />
+        <span
+          className={`w-2 h-2 rounded-full ${tokenSet ? "bg-emerald-400" : "bg-border-strong"}`}
+        />
         <div className="flex-1">
           <span className="text-sm" style={{ color: "var(--text-primary)" }}>
             {tokenSet ? "Conectado" : "Não conectado"}
@@ -148,8 +150,8 @@ function ProviderTab({
         <div
           className={`text-xs px-3 py-2 rounded-lg border ${
             testResult.ok
-              ? "border-emerald-800/40 bg-emerald-950/30 text-emerald-400"
-              : "border-red-800/40 bg-red-950/30 text-red-400"
+              ? "border-success/30 bg-success/15 text-success"
+              : "border-danger/30 bg-danger/15 text-danger"
           }`}
         >
           {testResult.ok ? `✓ Conectado como @${testResult.username}` : `✕ ${testResult.error}`}
@@ -157,7 +159,7 @@ function ProviderTab({
       )}
 
       {error && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+        <div className="text-xs px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger">
           {error}
         </div>
       )}
@@ -338,7 +340,7 @@ function LiteLLMTab() {
       </div>
 
       {!enabled && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-amber-800/40 bg-amber-950/30 text-amber-400">
+        <div className="text-xs px-3 py-2 rounded-lg border border-warning/30 bg-warning/15 text-warning">
           ⚠ Rastreamento de tokens, rate limiting e monitoramento de custos ficarão desabilitados.
         </div>
       )}
@@ -372,7 +374,7 @@ function LiteLLMTab() {
       </div>
 
       {error && (
-        <div className="text-xs px-3 py-2 rounded-lg border border-red-800/40 bg-red-950/30 text-red-400">
+        <div className="text-xs px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger">
           {error}
         </div>
       )}
@@ -473,7 +475,7 @@ function ApiKeyField({
     <form onSubmit={handleSave} className="space-y-2">
       <div className="flex items-center gap-2">
         <span
-          className={`w-2 h-2 rounded-full shrink-0 ${tokenSet ? "bg-emerald-400" : "bg-zinc-600"}`}
+          className={`w-2 h-2 rounded-full shrink-0 ${tokenSet ? "bg-emerald-400" : "bg-border-strong"}`}
         />
         <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
           {label}
@@ -486,7 +488,7 @@ function ApiKeyField({
         {description}
       </p>
       {error && (
-        <div className="text-xs px-3 py-1.5 rounded border border-red-800/40 bg-red-950/30 text-red-400">
+        <div className="text-xs px-3 py-1.5 rounded border border-danger/30 bg-danger/15 text-danger">
           {error}
         </div>
       )}
@@ -585,7 +587,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const { themeName, setTheme } = useTheme();
 
   return (
-    <Dialog open={open} onClose={onClose} title="Configurações">
+    <Dialog open={open} onClose={onClose} title="Settings">
       {/* Tabs */}
       <div className="flex gap-1 mb-5 rounded-lg p-1" style={{ background: "var(--bg-input)" }}>
         {(["github", "gitlab", "litellm", "apikeys", "general"] as Tab[]).map((t) => (
@@ -609,7 +611,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   ? "LiteLLM"
                   : t === "apikeys"
                     ? "API Keys"
-                    : "Geral"}
+                    : "General"}
           </button>
         ))}
       </div>
@@ -640,9 +642,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           {/* Theme selector */}
           <div>
             <div className="block text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>
-              Tema
+              Theme
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {Object.values(themes).map((t) => (
                 <button
                   key={t.name}

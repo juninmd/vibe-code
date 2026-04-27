@@ -22,8 +22,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  docs: "bg-blue-500/20 text-blue-300",
-  security: "bg-red-500/20 text-red-300",
+  docs: "bg-info/15 text-info",
+  security: "bg-danger/15 text-danger",
   perf: "bg-yellow-500/20 text-yellow-300",
   ui: "bg-purple-500/20 text-purple-300",
   code: "bg-green-500/20 text-green-300",
@@ -103,11 +103,11 @@ export function PromptTemplatePicker({
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
             {Object.keys(grouped).length === 0 && (
-              <p className="text-center text-xs text-zinc-600 py-6">Nenhum template encontrado</p>
+              <p className="text-center text-xs text-dimmed py-6">Nenhum template encontrado</p>
             )}
             {Object.entries(grouped).map(([cat, items]) => (
               <div key={cat}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5 px-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary0 mb-1.5 px-1">
                   {CATEGORY_LABELS[cat] ?? cat}
                 </p>
                 <div className="space-y-1">
@@ -127,22 +127,22 @@ export function PromptTemplatePicker({
                         }}
                       >
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-medium truncate text-zinc-100">
+                          <span className="text-xs font-medium truncate text-primary">
                             {t.title}
                           </span>
                           {t.category && (
                             <span
-                              className={`text-[9px] px-1 py-0.5 rounded font-medium shrink-0 ${CATEGORY_COLORS[t.category] ?? "bg-zinc-700 text-zinc-400"}`}
+                              className={`text-[9px] px-1 py-0.5 rounded font-medium shrink-0 ${CATEGORY_COLORS[t.category] ?? "bg-surface-hover text-secondary"}`}
                             >
                               {CATEGORY_LABELS[t.category] ?? t.category}
                             </span>
                           )}
                           {t.isBuiltin && (
-                            <span className="text-[9px] text-zinc-600 shrink-0">built-in</span>
+                            <span className="text-[9px] text-dimmed shrink-0">built-in</span>
                           )}
                         </div>
                         {t.description && (
-                          <p className="text-[10px] text-zinc-500 mt-0.5 line-clamp-1">
+                          <p className="text-[10px] text-primary0 mt-0.5 line-clamp-1">
                             {t.description}
                           </p>
                         )}
@@ -152,7 +152,7 @@ export function PromptTemplatePicker({
                           type="button"
                           onClick={() => handleDelete(t.id)}
                           disabled={deletingId === t.id}
-                          className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-600 hover:text-red-400 transition-all cursor-pointer p-1"
+                          className="opacity-0 group-hover:opacity-100 shrink-0 text-dimmed hover:text-danger transition-all cursor-pointer p-1"
                           title="Remover template"
                         >
                           {deletingId === t.id ? "..." : "✕"}
@@ -169,7 +169,7 @@ export function PromptTemplatePicker({
           <div className="border-t pt-2" style={{ borderColor: "var(--glass-border)" }}>
             {showSaveForm ? (
               <div className="space-y-2">
-                <p className="text-[10px] text-zinc-500">Salvar prompt atual como template:</p>
+                <p className="text-[10px] text-primary0">Salvar prompt atual como template:</p>
                 <Input
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
@@ -233,9 +233,9 @@ export function PromptTemplatePicker({
             <>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-zinc-100">{selected.title}</h3>
+                  <h3 className="text-sm font-semibold text-primary">{selected.title}</h3>
                   {selected.description && (
-                    <p className="text-xs mt-0.5 text-zinc-500">{selected.description}</p>
+                    <p className="text-xs mt-0.5 text-primary0">{selected.description}</p>
                   )}
                 </div>
                 <Button

@@ -18,6 +18,7 @@ import type {
   Task,
   TaskPollResponse,
   TaskSchedule,
+  TaskScheduleWithTask,
   TaskWithRun,
   TestConnectionResult,
   UpdateSettingsRequest,
@@ -28,6 +29,9 @@ import type {
 const BASE = "/api";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+// NOTE: Workspace ID header disabled - API is now public (no authentication)
+// function getWorkspaceId(): string | null { ... }
 
 export class ApiError extends Error {
   status: number;
@@ -48,14 +52,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const method = options?.method ?? "GET";
 
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  // NOTE: No longer adding workspace_id header - API is now public
+
   try {
     const res = await fetch(`${BASE}${path}`, {
       ...options,
       signal: options?.signal ?? controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
+      headers,
     });
 
     const text = await res.text();
@@ -215,6 +222,7 @@ export const api = {
   },
 
   schedules: {
+    listAll: () => request<TaskScheduleWithTask[]>(`/tasks/schedules`),
     get: (taskId: string) => request<TaskSchedule | null>(`/tasks/${taskId}/schedule`),
     upsert: (taskId: string, data: UpsertScheduleRequest) =>
       request<TaskSchedule>(`/tasks/${taskId}/schedule`, {
