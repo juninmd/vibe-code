@@ -14,7 +14,9 @@ import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
 import { FilterBar, type Filters } from "./components/FilterBar";
+import { InboxPanel } from "./components/InboxPanel";
 import { NewTaskDialog } from "./components/NewTaskDialog";
+import { RuntimeDashboard } from "./components/RuntimeDashboard";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
@@ -64,6 +66,8 @@ export default function App() {
   const [showFilterBar, setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showRuntimes, setShowRuntimes] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     engine: null,
@@ -366,6 +370,21 @@ export default function App() {
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
 
+  const handleOpenTaskById = useCallback(
+    async (taskId: string) => {
+      try {
+        const task = await api.tasks.get(taskId);
+        if (selectedTask?.id) unsubscribe(selectedTask.id);
+        setSelectedRepoId(task.repoId);
+        setSelectedTask(task);
+        subscribe(task.id);
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      }
+    },
+    [selectedTask?.id, subscribe, toast, unsubscribe]
+  );
+
   const handleSkillClick = useCallback((skillName: string) => {
     setInitialSkillName(skillName);
     setShowSkills(true);
@@ -509,6 +528,14 @@ export default function App() {
           setShowSettings(false);
           return;
         }
+        if (showRuntimes) {
+          setShowRuntimes(false);
+          return;
+        }
+        if (showInbox) {
+          setShowInbox(false);
+          return;
+        }
         if (selectedTask) {
           // Don't close TaskDetail while the user is actively typing in an
           // input or textarea inside the panel (e.g. notes, stdin, cron fields).
@@ -569,6 +596,8 @@ export default function App() {
     showNewTask,
     showAddRepo,
     showSettings,
+    showRuntimes,
+    showInbox,
     showShortcuts,
     selectedTask,
     search,
@@ -608,6 +637,8 @@ export default function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenStats={() => setShowStats(true)}
           onOpenSkills={() => setShowSkills(true)}
+          onOpenRuntimes={() => setShowRuntimes(true)}
+          onOpenInbox={() => setShowInbox(true)}
           connected={connected}
         />
 
@@ -900,6 +931,14 @@ export default function App() {
               setShowCommandPalette(false);
               setShowStats(true);
             }}
+            onOpenRuntimes={() => {
+              setShowCommandPalette(false);
+              setShowRuntimes(true);
+            }}
+            onOpenInbox={() => {
+              setShowCommandPalette(false);
+              setShowInbox(true);
+            }}
           />
         )}
 
@@ -958,6 +997,16 @@ export default function App() {
         <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
 
         <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
+
+        <RuntimeDashboard open={showRuntimes} onClose={() => setShowRuntimes(false)} />
+
+        <InboxPanel
+          open={showInbox}
+          onClose={() => setShowInbox(false)}
+          onOpenTask={handleOpenTaskById}
+          onOpenEngines={() => setShowEnginesPanel(true)}
+          onOpenRuntimes={() => setShowRuntimes(true)}
+        />
 
         <SkillsBrowser
           open={showSkills}

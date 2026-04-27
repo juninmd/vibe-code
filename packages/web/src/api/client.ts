@@ -7,10 +7,12 @@ import type {
   DiffSummary,
   EngineEffectiveness,
   EngineInfo,
+  InboxItem,
   LaunchTaskRequest,
   PromptTemplate,
   RemoteRepo,
   Repository,
+  RuntimeOverview,
   SettingsResponse,
   SkillEffectiveness,
   SkillsIndex,
@@ -186,6 +188,14 @@ export const api = {
 
   runs: {
     logs: (id: string) => request<AgentLog[]>(`/runs/${id}/logs`),
+  },
+
+  runtimes: {
+    list: () => request<RuntimeOverview[]>("/runtimes"),
+  },
+
+  inbox: {
+    list: () => request<InboxItem[]>("/inbox"),
   },
 
   engines: {

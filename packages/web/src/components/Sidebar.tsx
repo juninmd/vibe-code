@@ -49,6 +49,8 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onOpenStats?: () => void;
   onOpenSkills?: () => void;
+  onOpenRuntimes?: () => void;
+  onOpenInbox?: () => void;
   connected: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
@@ -64,6 +66,8 @@ export function Sidebar({
   onOpenSettings,
   onOpenStats,
   onOpenSkills,
+  onOpenRuntimes,
+  onOpenInbox,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -232,6 +236,52 @@ export function Sidebar({
               </svg>
             </button>
           )}
+          {onOpenInbox && (
+            <button
+              type="button"
+              onClick={onOpenInbox}
+              title="Inbox"
+              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 3h10l1 5v5H2V8l1-5Z" />
+                <path d="M2 8h4l1 2h2l1-2h4" />
+              </svg>
+            </button>
+          )}
+          {onOpenRuntimes && (
+            <button
+              type="button"
+              onClick={onOpenRuntimes}
+              title="Runtimes"
+              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
+                <path d="M5 13h6M8 11v2" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenSettings}
@@ -338,6 +388,54 @@ export function Sidebar({
                     strokeLinejoin="round"
                   >
                     <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
+                  </svg>
+                </button>
+              )}
+              {onOpenInbox && (
+                <button
+                  type="button"
+                  onClick={onOpenInbox}
+                  aria-label="Abrir inbox"
+                  title="Inbox"
+                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 3h10l1 5v5H2V8l1-5Z" />
+                    <path d="M2 8h4l1 2h2l1-2h4" />
+                  </svg>
+                </button>
+              )}
+              {onOpenRuntimes && (
+                <button
+                  type="button"
+                  onClick={onOpenRuntimes}
+                  aria-label="Abrir runtimes"
+                  title="Runtimes"
+                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
+                    <path d="M5 13h6M8 11v2" />
                   </svg>
                 </button>
               )}

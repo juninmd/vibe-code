@@ -24,6 +24,8 @@ interface CommandPaletteProps {
   onOpenSkills?: () => void;
   onOpenEngines?: () => void;
   onOpenStats?: () => void;
+  onOpenRuntimes?: () => void;
+  onOpenInbox?: () => void;
 }
 
 const STATUS_ICONS: Record<string, string> = {
@@ -92,6 +94,8 @@ export function CommandPalette({
   onOpenSkills,
   onOpenEngines,
   onOpenStats,
+  onOpenRuntimes,
+  onOpenInbox,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIdx, setActiveIdx] = useState(0);
@@ -184,6 +188,36 @@ export function CommandPalette({
             },
           ]
         : []),
+      ...(onOpenRuntimes
+        ? [
+            {
+              id: "open-runtimes",
+              label: "Runtimes",
+              description: "Ver compute local, engines e capacidade",
+              icon: "▣",
+              group: "Actions",
+              onSelect: () => {
+                onOpenRuntimes();
+                onClose();
+              },
+            },
+          ]
+        : []),
+      ...(onOpenInbox
+        ? [
+            {
+              id: "open-inbox",
+              label: "Inbox",
+              description: "Ver falhas, reviews e sinais operacionais",
+              icon: "▤",
+              group: "Actions",
+              onSelect: () => {
+                onOpenInbox();
+                onClose();
+              },
+            },
+          ]
+        : []),
     ];
 
     const taskItems: Action[] = tasks
@@ -256,6 +290,8 @@ export function CommandPalette({
     onOpenSkills,
     onOpenEngines,
     onOpenStats,
+    onOpenRuntimes,
+    onOpenInbox,
   ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset to 0 whenever query changes

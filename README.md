@@ -25,6 +25,75 @@
 
 ---
 
+## 🔁 Recursos extraídos do Multica
+
+Esta versão incorporou recursos do projeto `multica` de forma adaptada ao stack do Vibe-Code. A extração não copia a arquitetura Next.js/Go do Multica; ela traz os conceitos que encaixam no runtime Bun/Hono/React atual.
+
+| Recurso do Multica | Como entrou no Vibe-Code | Onde usar |
+|---|---|---|
+| **Runtimes gerenciados** | Novo endpoint `/api/runtimes` com visão do compute local, capacidade, engines disponíveis, workload e saúde operacional | Botão **Runtimes** na sidebar ou `Ctrl/Cmd+K` → `Runtimes` |
+| **Unified runtimes** | Os engines locais agora aparecem como parte de um runtime único, com slots ativos e limite configurado por `VIBE_CODE_MAX_AGENTS` | Painel **Runtimes** |
+| **Agentes como teammates** | O Vibe-Code já mantinha tarefas, execuções e engines; a extração organiza isso como capacidade operacional do runtime | Painéis **Engines**, **Runtimes** e board |
+| **Sinais de saúde** | Status `healthy`, `degraded` ou `saturated` calculado por disponibilidade de engines, falhas e uso de capacidade | `/api/runtimes` e painel **Runtimes** |
+| **Inbox operacional** | Novo endpoint `/api/inbox` com alertas derivados de falhas, reviews, execuções ativas, engines ausentes e runtime saturado | Botão **Inbox** na sidebar ou `Ctrl/Cmd+K` → `Inbox` |
+
+### Painel Runtimes
+
+O painel **Runtimes** mostra:
+
+- host local, plataforma, CPUs, uptime e diretório de dados;
+- capacidade atual: agentes ativos vs. `VIBE_CODE_MAX_AGENTS`;
+- quantidade de engines disponíveis vs. cadastrados;
+- workload acumulado: tarefas, execuções, falhas e última execução;
+- lista de engines online/ausentes e execuções ativas por engine.
+
+API:
+
+```bash
+GET /api/runtimes
+```
+
+Exemplo de resposta:
+
+```json
+{
+  "data": [
+    {
+      "id": "host-win32",
+      "name": "host",
+      "kind": "local",
+      "status": "healthy",
+      "capacity": {
+        "activeAgents": 1,
+        "maxAgents": 4,
+        "availableEngines": 3,
+        "totalEngines": 5
+      }
+    }
+  ]
+}
+```
+
+### Inbox operacional
+
+O **Inbox** é uma caixa de entrada operacional derivada do estado real do Vibe-Code. Ele não cria uma nova tabela: os itens são calculados a partir de `tasks`, `agent_runs`, engines disponíveis e capacidade do runtime.
+
+Ele mostra:
+
+- tarefas com falha que precisam de retry ou investigação;
+- tarefas em review com PR pronto;
+- tarefas em execução;
+- engines configurados mas indisponíveis no runtime local;
+- saturação quando todos os slots de agentes estão ocupados.
+
+API:
+
+```bash
+GET /api/inbox
+```
+
+---
+
 ## 🎯 Casos de Uso
 
 | Use Case | Descrição |

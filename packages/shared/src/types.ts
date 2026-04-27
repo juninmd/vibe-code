@@ -186,6 +186,51 @@ export interface EngineInfo {
   setupIssue?: string | null;
 }
 
+export interface RuntimeCapacity {
+  activeAgents: number;
+  maxAgents: number;
+  availableEngines: number;
+  totalEngines: number;
+}
+
+export interface RuntimeWorkload {
+  totalTasks: number;
+  runningTasks: number;
+  failedTasks: number;
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  lastRunAt: string | null;
+}
+
+export interface RuntimeOverview {
+  id: string;
+  name: string;
+  kind: "local";
+  status: "healthy" | "degraded" | "saturated";
+  lastSeenAt: string;
+  platform: string;
+  cpuCount: number;
+  uptimeSecs: number;
+  dataDir: string;
+  capacity: RuntimeCapacity;
+  engines: EngineInfo[];
+  workload: RuntimeWorkload;
+}
+
+export interface InboxItem {
+  id: string;
+  type: "task_failed" | "task_review" | "task_running" | "engine_unavailable" | "runtime_saturated";
+  severity: "info" | "warning" | "critical" | "success";
+  title: string;
+  description: string;
+  taskId: string | null;
+  repoId: string | null;
+  repoName: string | null;
+  createdAt: string;
+  actionLabel: string;
+}
+
 export type GitProvider = "github" | "gitlab" | "manual";
 
 export interface RemoteRepo {
