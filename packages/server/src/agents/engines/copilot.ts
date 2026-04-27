@@ -83,13 +83,58 @@ export class CopilotEngine implements AgentEngine {
 
     // Tool use
     if (obj.type === "tool_use" || obj.type === "tool_call") {
-      const name =
+      const name: string =
         typeof obj.name === "string"
           ? obj.name
           : typeof obj.function === "object" && obj.function !== null
-            ? (obj.function as Record<string, unknown>).name
+            ? String((obj.function as Record<string, unknown>).name ?? "tool")
             : "tool";
-      return [{ type: "log", stream: "system", content: `[tool] ${name}` }];
+      const toolId: string =
+        typeof obj.id === "string" ? obj.id : typeof obj.call_id === "string" ? obj.call_id : "";
+      const parameters = (obj.parameters ?? obj.input ?? obj.args) as
+        | Record<string, unknown>
+        | undefined;
+      return [
+        {
+          type: "tool_use",
+          toolUse: { toolId, toolName: name, parameters: parameters ?? undefined },
+        },
+        {
+          type: "log",
+          stream: "system",
+          content: `[tool] ${name}${toolId ? ` (${toolId})` : ""}`,
+        },
+      ];
+    }
+
+    // Tool result
+    if (obj.type === "tool_result" || obj.type === "tool_execution_complete") {
+      const toolId =
+        typeof obj.tool_call_id === "string"
+          ? obj.tool_call_id
+          : typeof obj.call_id === "string"
+            ? obj.call_id
+            : typeof obj.id === "string"
+              ? obj.id
+              : "";
+      const output =
+        typeof obj.output === "string"
+          ? obj.output
+          : typeof obj.result === "string"
+            ? obj.result
+            : JSON.stringify(obj.output ?? obj.result ?? "");
+      const status = obj.error ? "error" : "success";
+      return [
+        {
+          type: "tool_result",
+          toolResult: { toolId, output, status },
+        },
+        {
+          type: "log",
+          stream: "system",
+          content: `[tool result] ${status}${toolId ? ` (${toolId})` : ""}`,
+        },
+      ];
     }
 
     // Text / message content
@@ -182,6 +227,7 @@ export class CopilotEngine implements AgentEngine {
       prompt,
     ];
     if (options.model) args.push("--model", options.model);
+    if (options.resumeSessionId) args.push("--resume", options.resumeSessionId);
 
     const proc = Bun.spawn(args, {
       cwd: workdir,

@@ -16,6 +16,142 @@ export function parseAcpMessage(line: string): AgentEvent[] {
           else stream = "stdout";
           return [{ type: "log", stream, content: String(parsed.params.message) }];
         }
+
+        // Codex-style item notifications (raw v2 protocol)
+        const params = parsed.params ?? {};
+        const item = params.item ?? {};
+        const itemId = String(item.id ?? "");
+        const itemType = String(item.type ?? "");
+
+        // item/started with commandExecution = tool_use
+        if (parsed.method === "item/started" && itemType === "commandExecution") {
+          const command = String(item.command ?? "");
+          return [
+            {
+              type: "tool_use",
+              toolUse: { toolId: itemId, toolName: "exec_command", parameters: { command } },
+            },
+            {
+              type: "log",
+              stream: "system",
+              content: `[tool] exec_command${itemId ? ` (${itemId})` : ""}`,
+            },
+          ];
+        }
+
+        // item/completed with commandExecution = tool_result
+        if (parsed.method === "item/completed" && itemType === "commandExecution") {
+          const output = String(item.aggregatedOutput ?? item.output ?? "");
+          return [
+            {
+              type: "tool_result",
+              toolResult: { toolId: itemId, output, status: "success" },
+            },
+            {
+              type: "log",
+              stream: "system",
+              content: `[tool result] success${itemId ? ` (${itemId})` : ""}`,
+            },
+          ];
+        }
+
+        // item/started with fileChange = tool_use
+        if (parsed.method === "item/started" && itemType === "fileChange") {
+          return [
+            {
+              type: "tool_use",
+              toolUse: { toolId: itemId, toolName: "patch_apply", parameters: undefined },
+            },
+            {
+              type: "log",
+              stream: "system",
+              content: `[tool] patch_apply${itemId ? ` (${itemId})` : ""}`,
+            },
+          ];
+        }
+
+        // item/completed with fileChange = tool_result
+        if (parsed.method === "item/completed" && itemType === "fileChange") {
+          return [
+            {
+              type: "tool_result",
+              toolResult: { toolId: itemId, output: "", status: "success" },
+            },
+            {
+              type: "log",
+              stream: "system",
+              content: `[tool result] success${itemId ? ` (${itemId})` : ""}`,
+            },
+          ];
+        }
+
+        // Legacy codex/event notifications
+        if (parsed.method?.startsWith("codex/event") || parsed.method === "codex/event") {
+          const msg = params.msg ?? {};
+          const msgType = String(msg.type ?? "");
+          const callId = String(msg.call_id ?? "");
+
+          if (msgType === "exec_command_begin") {
+            return [
+              {
+                type: "tool_use",
+                toolUse: {
+                  toolId: callId,
+                  toolName: "exec_command",
+                  parameters: { command: msg.command },
+                },
+              },
+              {
+                type: "log",
+                stream: "system",
+                content: `[tool] exec_command${callId ? ` (${callId})` : ""}`,
+              },
+            ];
+          }
+
+          if (msgType === "exec_command_end") {
+            return [
+              {
+                type: "tool_result",
+                toolResult: { toolId: callId, output: String(msg.output ?? ""), status: "success" },
+              },
+              {
+                type: "log",
+                stream: "system",
+                content: `[tool result] success${callId ? ` (${callId})` : ""}`,
+              },
+            ];
+          }
+
+          if (msgType === "patch_apply_begin") {
+            return [
+              {
+                type: "tool_use",
+                toolUse: { toolId: callId, toolName: "patch_apply", parameters: undefined },
+              },
+              {
+                type: "log",
+                stream: "system",
+                content: `[tool] patch_apply${callId ? ` (${callId})` : ""}`,
+              },
+            ];
+          }
+
+          if (msgType === "patch_apply_end") {
+            return [
+              {
+                type: "tool_result",
+                toolResult: { toolId: callId, output: "", status: "success" },
+              },
+              {
+                type: "log",
+                stream: "system",
+                content: `[tool result] success${callId ? ` (${callId})` : ""}`,
+              },
+            ];
+          }
+        }
+
         return [{ type: "log", stream: "system", content: `[acp] call: ${parsed.method}` }];
       }
 
