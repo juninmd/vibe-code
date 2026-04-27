@@ -45,6 +45,7 @@ export class CodexEngine implements AgentEngine {
 
     const args = ["codex", "acp"];
     if (options.model) args.push("--model", options.model);
+    if (options.resumeSessionId) args.push("--session", options.resumeSessionId);
     args.push("--message", prompt);
 
     const env: NodeJS.ProcessEnv = { ...process.env };
