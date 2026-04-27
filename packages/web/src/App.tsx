@@ -238,6 +238,42 @@ export default function App() {
           refreshEnginesThrottled();
           break;
         }
+        case "agent_tool_use":
+          if (sel?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: appendLogsLimited(prev[msg.taskId] ?? [], [
+                  {
+                    id: Date.now(),
+                    runId: msg.runId,
+                    stream: "system",
+                    content: `[tool] ${msg.toolName}${msg.toolId ? ` (${msg.toolId})` : ""}${msg.parameters ? ` ${JSON.stringify(msg.parameters)}` : ""}`,
+                    timestamp: msg.timestamp,
+                  },
+                ]),
+              }));
+            });
+          }
+          break;
+        case "agent_tool_result":
+          if (sel?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: appendLogsLimited(prev[msg.taskId] ?? [], [
+                  {
+                    id: Date.now(),
+                    runId: msg.runId,
+                    stream: "system",
+                    content: `[tool result] ${msg.status}${msg.toolId ? ` (${msg.toolId})` : ""}: ${msg.output.length > 120 ? `${msg.output.slice(0, 120)}...` : msg.output}`,
+                    timestamp: msg.timestamp,
+                  },
+                ]),
+              }));
+            });
+          }
+          break;
       }
     },
     [addOrUpdateRepo, notify, refreshEnginesThrottled, updateRunLocal, updateTaskLocal]

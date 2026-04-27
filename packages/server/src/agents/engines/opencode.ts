@@ -156,8 +156,16 @@ export class OpenCodeEngine implements AgentEngine {
    * Returns the CLI command to spawn.
    * Override in tests to inject a fake subprocess.
    */
-  protected buildCommand(model: string, prompt: string, workdir: string): string[] {
-    return ["opencode", "run", "--format", "json", "--model", model, "--dir", workdir, prompt];
+  protected buildCommand(
+    model: string,
+    prompt: string,
+    workdir: string,
+    resumeSessionId?: string
+  ): string[] {
+    const args = ["opencode", "run", "--format", "json", "--model", model, "--dir", workdir];
+    if (resumeSessionId) args.push("--session", resumeSessionId);
+    args.push(prompt);
+    return args;
   }
 
   protected getStdinMode(): "pipe" | "ignore" {
@@ -275,7 +283,7 @@ export class OpenCodeEngine implements AgentEngine {
 
     // Use stdout: "pipe" so proc.exited resolves correctly and events stream in
     // real-time. (Using Bun.file() as stdout breaks proc.exited on Windows.)
-    const proc = Bun.spawn(this.buildCommand(model, prompt, workdir), {
+    const proc = Bun.spawn(this.buildCommand(model, prompt, workdir, options.resumeSessionId), {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
@@ -560,6 +568,7 @@ export class OpenCodeEngine implements AgentEngine {
 
         if (event.type === "tool_use" || event.type === "tool" || partType === "tool") {
           const toolName = String(part.tool ?? part.name ?? "unknown");
+          const callId = String(part.callId ?? part.id ?? "");
           const state = (part.state ?? {}) as Record<string, unknown>;
           const status = state.status ?? "calling";
           const input = (state.input ?? part.input ?? {}) as Record<string, unknown>;
@@ -567,6 +576,10 @@ export class OpenCodeEngine implements AgentEngine {
           const error = state.error ?? part.error;
 
           if (status === "calling" || !status) {
+            results.push({
+              type: "tool_use",
+              toolUse: { toolId: callId, toolName, parameters: input },
+            });
             const label = humanizeToolCall(toolName, input);
             results.push({ type: "status", content: label });
             results.push({ type: "log", stream: "stdout", content: label });
@@ -575,6 +588,14 @@ export class OpenCodeEngine implements AgentEngine {
             const exitCode = metadata.exitCode ?? metadata.exit;
             const label = humanizeToolResult(toolName, output);
 
+            results.push({
+              type: "tool_result",
+              toolResult: {
+                toolId: callId,
+                output: typeof output === "string" ? output : JSON.stringify(output ?? ""),
+                status: "success",
+              },
+            });
             if (label) results.push({ type: "log", stream: "stdout", content: label });
 
             // If it completed but with a non-zero exit code, it's effectively an error
@@ -587,6 +608,10 @@ export class OpenCodeEngine implements AgentEngine {
             }
           } else if (status === "failed" || error) {
             const msg = error ? String(error) : "Failed";
+            results.push({
+              type: "tool_result",
+              toolResult: { toolId: callId, output: String(error), status: "error" },
+            });
             results.push({
               type: "log",
               stream: "stderr",

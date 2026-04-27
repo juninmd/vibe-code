@@ -92,6 +92,7 @@ export class GeminiEngine implements AgentEngine {
 
     const args = ["gemini", "--yolo", "--output-format", "stream-json"];
     if (options.model) args.push("-m", options.model);
+    if (options.resumeSessionId) args.push("-r", options.resumeSessionId);
     args.push("-p", prompt);
 
     const proc = Bun.spawn(args, {
@@ -171,10 +172,65 @@ export class GeminiEngine implements AgentEngine {
               return [{ type: "log", stream: "stdout", content: text }];
             }
 
-            // Tool call notification
+            // Tool call notification — emit structured tool_use event
             if (obj.type === "tool_use" || obj.type === "tool_call") {
-              const name = typeof obj.name === "string" ? obj.name : "tool";
-              return [{ type: "log", stream: "system", content: `[tool] ${name}` }];
+              const toolId =
+                typeof obj.tool_id === "string"
+                  ? obj.tool_id
+                  : typeof obj.id === "string"
+                    ? obj.id
+                    : "";
+              const toolName =
+                typeof obj.name === "string"
+                  ? obj.name
+                  : typeof obj.tool_name === "string"
+                    ? obj.tool_name
+                    : "tool";
+              let parameters: Record<string, unknown> | undefined;
+              if (obj.parameters && typeof obj.parameters === "object") {
+                parameters = obj.parameters as Record<string, unknown>;
+              } else if (obj.args && typeof obj.args === "object") {
+                parameters = obj.args as Record<string, unknown>;
+              }
+              return [
+                {
+                  type: "tool_use",
+                  toolUse: { toolId, toolName, parameters },
+                },
+                {
+                  type: "log",
+                  stream: "system",
+                  content: `[tool] ${toolName}${toolId ? ` (${toolId})` : ""}`,
+                },
+              ];
+            }
+
+            // Tool result from a previous tool_use
+            if (obj.type === "tool_result" || obj.type === "tool_result_legacy") {
+              const toolId =
+                typeof obj.tool_id === "string"
+                  ? obj.tool_id
+                  : typeof obj.call_id === "string"
+                    ? obj.call_id
+                    : "";
+              const output =
+                typeof obj.output === "string"
+                  ? obj.output
+                  : typeof obj.result === "string"
+                    ? obj.result
+                    : JSON.stringify(obj.output ?? obj.result ?? "");
+              const status = obj.status === "error" ? "error" : "success";
+              return [
+                {
+                  type: "tool_result",
+                  toolResult: { toolId, output, status },
+                },
+                {
+                  type: "log",
+                  stream: "system",
+                  content: `[tool result] ${status}${toolId ? ` (${toolId})` : ""}`,
+                },
+              ];
             }
 
             // Cost/usage stats event from provider

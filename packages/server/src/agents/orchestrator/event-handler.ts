@@ -47,5 +47,28 @@ export async function handleAgentEvent(
     if (run) {
       hub.broadcastAll({ type: "run_updated", run: { ...run, costStats: event.costStats } });
     }
+  } else if (event.type === "tool_use" && event.toolUse) {
+    onActivity?.();
+    const ts = new Date().toISOString();
+    hub.broadcastToTask(taskId, {
+      type: "agent_tool_use",
+      runId,
+      taskId,
+      toolId: event.toolUse.toolId,
+      toolName: event.toolUse.toolName,
+      parameters: event.toolUse.parameters,
+      timestamp: ts,
+    });
+  } else if (event.type === "tool_result" && event.toolResult) {
+    const ts = new Date().toISOString();
+    hub.broadcastToTask(taskId, {
+      type: "agent_tool_result",
+      runId,
+      taskId,
+      toolId: event.toolResult.toolId,
+      output: event.toolResult.output,
+      status: event.toolResult.status ?? "success",
+      timestamp: ts,
+    });
   }
 }

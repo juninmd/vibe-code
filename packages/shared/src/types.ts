@@ -342,6 +342,24 @@ export type WsServerMessage =
   | { type: "autopilot_created"; autopilotId: string }
   | { type: "autopilot_updated"; autopilotId: string }
   | { type: "autopilot_deleted"; autopilotId: string }
+  | {
+      type: "agent_tool_use";
+      runId: string;
+      taskId: string;
+      toolId: string;
+      toolName: string;
+      parameters?: Record<string, unknown>;
+      timestamp: string;
+    }
+  | {
+      type: "agent_tool_result";
+      runId: string;
+      taskId: string;
+      toolId: string;
+      output: string;
+      status: "success" | "error";
+      timestamp: string;
+    }
   | { type: "error"; message: string };
 
 // ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
