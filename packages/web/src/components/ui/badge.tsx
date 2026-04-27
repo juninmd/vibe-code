@@ -1,12 +1,12 @@
 import type { HTMLAttributes } from "react";
 
 const variants = {
-  default: "bg-zinc-800 text-zinc-300",
-  success: "bg-emerald-900/50 text-emerald-400",
-  warning: "bg-amber-900/50 text-amber-400",
-  danger: "bg-red-900/50 text-red-400",
-  info: "bg-blue-900/50 text-blue-400",
-  purple: "bg-violet-900/50 text-violet-400",
+  default: "bg-surface-hover text-text-secondary border border-border-default",
+  success: "bg-success/15 text-success border border-success/30",
+  warning: "bg-warning/15 text-warning border border-warning/30",
+  danger: "bg-danger/15 text-danger border border-danger/30",
+  info: "bg-info/15 text-info border border-info/30",
+  purple: "bg-accent-muted text-accent-text border border-accent/30",
 };
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

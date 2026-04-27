@@ -17,10 +17,10 @@ interface TaskCardProps {
 }
 
 const PRIORITY_CONFIG = [
-  { label: "P3", color: "text-zinc-600", bg: "bg-zinc-700/60", dot: "bg-zinc-600" },
-  { label: "P2", color: "text-sky-500", bg: "bg-sky-900/40", dot: "bg-sky-500" },
-  { label: "P1", color: "text-amber-400", bg: "bg-amber-900/40", dot: "bg-amber-400" },
-  { label: "P0", color: "text-red-400", bg: "bg-red-900/40", dot: "bg-red-400" },
+  { label: "P3", color: "text-dimmed", bg: "bg-surface-hover", dot: "bg-border-strong" },
+  { label: "P2", color: "text-info", bg: "bg-info/15", dot: "bg-sky-500" },
+  { label: "P1", color: "text-warning", bg: "bg-warning/15", dot: "bg-amber-400" },
+  { label: "P0", color: "text-danger", bg: "bg-danger/15", dot: "bg-red-400" },
 ];
 
 function PriorityDot({ priority }: { priority: number }) {
@@ -28,7 +28,7 @@ function PriorityDot({ priority }: { priority: number }) {
   if (priority === 0) return null;
   return (
     <span
-      title={`Prioridade ${priority}`}
+      title={`Priority ${priority}`}
       className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
@@ -83,9 +83,9 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
       onClick={() => onClick(task)}
       className={`glass-card border rounded-2xl p-3 cursor-grab active:cursor-grabbing transition-all duration-250 group relative shadow-lg shadow-black/35 overflow-hidden ${
         isRunning
-          ? "border-cyan-400/45 shadow-cyan-500/20 running-glow"
+          ? "border-info/30 shadow-cyan-500/20 running-glow"
           : task.status === "failed"
-            ? "border-red-500/25 hover:border-red-400/45 hover:shadow-red-900/30"
+            ? "border-danger/30 hover:border-danger/30 hover:shadow-red-900/30"
             : "hover:border-sky-300/25 hover:shadow-blue-900/30 hover:translate-y-[-1px]"
       }`}
     >
@@ -93,7 +93,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
 
       {isRunning && (
         <>
-          <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-cyan-500/25">
+          <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-info/15">
             <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-cyan-300 to-transparent animate-[pulse_1.1s_ease-in-out_infinite]" />
           </div>
           <div className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-gradient-to-b from-cyan-300 via-blue-400 to-indigo-400 animate-pulse" />
@@ -174,7 +174,7 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               height="9"
               viewBox="0 0 16 16"
               fill="currentColor"
-              className="text-zinc-700"
+              className="text-dimmed"
             >
               <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 3.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 12.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 13.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM5 6.25V7.5A2.5 2.5 0 0 0 7.5 10H9v1.75A2.25 2.25 0 1 0 3 11.75V6.25A2.25 2.25 0 1 0 5 6.25z" />
             </svg>
@@ -227,22 +227,22 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               <circle cx="8" cy="8" r="5.5" />
               <path d="M8 5.5v3l2 1.3" />
             </svg>
-            agendada
+            scheduled
           </Badge>
         )}
         {task.parentTaskId && (
           <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-60">
-            ↳ derivada
+            ↳ derived
           </Badge>
         )}
         {task.status === "failed" && (
           <Badge variant="danger" className="text-[10px] py-0 px-1.5">
-            Falhou
+            Failed
           </Badge>
         )}
         {task.status === "failed" && task.latestRun?.errorMessage && (
           <span
-            className="text-[9px] text-red-400/70 font-mono truncate max-w-[140px]"
+            className="text-[9px] text-danger/70 font-mono truncate max-w-[140px]"
             title={task.latestRun.errorMessage}
           >
             {task.latestRun.errorMessage}
@@ -263,10 +263,10 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
               onClick={handleRetryPR}
               disabled={retrying}
             >
-              {retrying ? "…" : "Tentar PR"}
+              {retrying ? "…" : "Retry PR"}
             </Button>
             {retryError && (
-              <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-red-400 bg-zinc-900 border border-red-900/50 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
+              <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-danger bg-input border border-danger/30 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
                 {retryError}
               </span>
             )}
@@ -291,10 +291,10 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
         )}
 
         {isRunning && (
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-cyan-300 ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-cyan-950/30 border border-cyan-800/35 px-2 py-[2px] rounded-md">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-info ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-info/15 border border-info/30 px-2 py-[2px] rounded-md">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-            <span className="truncate">{task.latestRun?.currentStatus || "Executando..."}</span>
-            {elapsed && <span className="shrink-0 text-cyan-200/80 tabular-nums">{elapsed}</span>}
+            <span className="truncate">{task.latestRun?.currentStatus || "Running..."}</span>
+            {elapsed && <span className="shrink-0 text-info/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
         {!isRunning &&

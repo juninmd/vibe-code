@@ -23,52 +23,52 @@ const columnConfig: Record<
 > = {
   scheduled: {
     dot: "bg-amber-400",
-    countBg: "bg-amber-950/60 border-amber-800/40",
-    countText: "text-amber-300",
+    countBg: "bg-warning/15 border-warning/30",
+    countText: "text-warning",
     emptyIcon: "clock",
     emptyText: "Nenhuma tarefa agendada",
   },
   backlog: {
     dot: "bg-zinc-500",
-    countBg: "bg-zinc-800/60 border-zinc-700/40",
-    countText: "text-zinc-400",
+    countBg: "bg-surface-hover border-strong/40",
+    countText: "text-secondary",
     emptyIcon: "list",
-    emptyText: "Adicione tarefas aqui",
+    emptyText: "Add tasks here",
   },
   in_progress: {
     dot: "bg-blue-400",
-    countBg: "bg-blue-950/60 border-blue-800/40",
-    countText: "text-blue-300",
+    countBg: "bg-info/15 border-info/30",
+    countText: "text-info",
     emptyIcon: "play",
-    emptyText: "Nenhum agente rodando",
+    emptyText: "No agents running",
   },
   review: {
     dot: "bg-violet-400",
-    countBg: "bg-violet-950/60 border-violet-800/40",
-    countText: "text-violet-300",
+    countBg: "bg-accent-muted border-accent/30",
+    countText: "text-accent-text",
     emptyIcon: "eye",
-    emptyText: "Nada aguardando revisão",
+    emptyText: "Nothing awaiting review",
   },
   done: {
     dot: "bg-emerald-400",
-    countBg: "bg-emerald-950/60 border-emerald-800/40",
-    countText: "text-emerald-300",
+    countBg: "bg-success/15 border-success/30",
+    countText: "text-success",
     emptyIcon: "check",
-    emptyText: "Nenhuma tarefa concluída",
+    emptyText: "No tasks completed",
   },
   failed: {
     dot: "bg-red-400",
-    countBg: "bg-red-950/60 border-red-800/40",
-    countText: "text-red-300",
+    countBg: "bg-danger/15 border-danger/30",
+    countText: "text-danger",
     emptyIcon: "x",
-    emptyText: "Sem falhas",
+    emptyText: "No failures",
   },
   archived: {
-    dot: "bg-zinc-600",
-    countBg: "bg-zinc-800/60 border-zinc-700/40",
-    countText: "text-zinc-500",
+    dot: "bg-border-strong",
+    countBg: "bg-surface-hover border-strong/40",
+    countText: "text-primary0",
     emptyIcon: "archive",
-    emptyText: "Nenhum arquivo",
+    emptyText: "No archived files",
   },
 };
 
@@ -181,7 +181,7 @@ function ColumnComponent({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col rounded-2xl glass-card border transition-all duration-200 ${
+      className={`flex-1 min-h-0 flex flex-col rounded-2xl glass-card border transition-all duration-200 ${
         horizontal ? "w-full" : fillWidth ? "w-full" : "min-w-[272px] w-[272px] shrink-0"
       } ${isOver ? "ring-2 ring-violet-500/40 brightness-105" : ""}`}
     >
@@ -209,9 +209,9 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onToggleCollapse}
-                aria-label={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
-                title={collapsed ? "Expandir Agendadas" : "Recolher Agendadas"}
-                className="p-1.5 rounded-lg text-zinc-600 hover:text-amber-300 hover:bg-amber-950/30 transition-all cursor-pointer"
+                aria-label={collapsed ? "Expand Scheduled" : "Collapse Scheduled"}
+                title={collapsed ? "Expand Scheduled" : "Collapse Scheduled"}
+                className="p-1.5 rounded-lg text-dimmed hover:text-warning hover:bg-warning/15 transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -233,9 +233,9 @@ function ColumnComponent({
               <button
                 type="button"
                 onClick={onArchiveDone}
-                aria-label="Arquivar concluídas"
-                title="Arquivar concluídas"
-                className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-950/30 transition-all cursor-pointer"
+                aria-label="Archive completed"
+                title="Archive completed"
+                className="p-1.5 rounded-lg text-dimmed hover:text-success hover:bg-success/15 transition-all cursor-pointer"
               >
                 <svg
                   aria-hidden="true"
@@ -261,9 +261,9 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onRetryAllFailed}
-                    aria-label="Retry todas as falhas"
-                    title="Retry todas as falhas"
-                    className="p-1.5 rounded-lg text-zinc-600 hover:text-blue-400 hover:bg-blue-950/30 transition-all cursor-pointer"
+                    aria-label="Retry all failed"
+                    title="Retry all failed"
+                    className="p-1.5 rounded-lg text-dimmed hover:text-info hover:bg-info/15 transition-all cursor-pointer"
                   >
                     <svg
                       aria-hidden="true"
@@ -288,9 +288,9 @@ function ColumnComponent({
                   <button
                     type="button"
                     onClick={onClearFailed}
-                    aria-label="Limpar falhas"
-                    title="Limpar falhas"
-                    className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
+                    aria-label="Clear failures"
+                    title="Clear failures"
+                    className="p-1.5 rounded-lg text-dimmed hover:text-danger hover:bg-danger/15 transition-all cursor-pointer"
                   >
                     <svg
                       aria-hidden="true"
@@ -359,7 +359,7 @@ function ColumnComponent({
           className="px-4 py-2 text-xs border-t"
           style={{ color: "var(--text-muted)", borderColor: "var(--glass-border)" }}
         >
-          Coluna recolhida. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
+          Column collapsed. {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""} agendada
           {tasks.length !== 1 ? "s" : ""}.
         </div>
       )}

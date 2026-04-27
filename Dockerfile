@@ -1,18 +1,58 @@
-# Stage 1: Build the frontend
-FROM oven/bun:1.2-alpine AS web-builder
+# Multi-stage Dockerfile for Vibe-Code v2
+# Builds: @vibe-code/server + @vibe-code/web
+# Runtime: Alpine Linux with Bun
+
+# Stage 1: Dependencies & Build
+FROM oven/bun:1.3-alpine AS builder
 WORKDIR /app
+
+# Copy all source files
 COPY . .
+
+# Install dependencies with frozen lockfile for reproducibility
 RUN bun install --frozen-lockfile
+
+# Build TypeScript packages
+RUN bun run build
+
+# Build web frontend
 RUN bun run --filter @vibe-code/web build
 
-# Stage 2: Runtime image
-FROM oven/bun:1.2-alpine AS runner
+# Stage 2: Runtime
+FROM oven/bun:1.3-alpine
 WORKDIR /app
 
-# Production environment variables
+# Install runtime dependencies
+RUN apk add --no-cache curl postgresql-client
+
+# Environment
 ENV NODE_ENV=production
-ENV TZ=America/Sao_Paulo
-ENV DATA_DIR=/app/data
+ENV TZ=UTC
+ENV PORT=3000
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S bunuser -u 1001
+
+# Copy from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/bunfig.toml ./bunfig.toml
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/packages ./packages
+COPY --chown=bunuser:nodejs --from=builder /app/migrations ./migrations
+
+# Copy web dist
+RUN mkdir -p /app/packages/web/dist
+COPY --from=builder /app/packages/web/dist ./packages/web/dist
+
+# Switch to non-root user
+USER bunuser
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --retries=10 --start-period=30s \
+  CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Run server
+CMD ["bun", "run", "--filter", "@vibe-code/server", "dev"]
 ENV PORT=3000
 
 # Configure git identity via env vars (overridable at runtime)

@@ -13,9 +13,9 @@
  *   VIBE_CODE_EVALUATOR_MODEL=...      (default: anthropic/claude-haiku-3-5)
  */
 
-const EVALUATOR_ENABLED = process.env.VIBE_CODE_EVALUATOR_ENABLED === "true";
-const EVALUATOR_THRESHOLD = Number(process.env.VIBE_CODE_EVALUATOR_THRESHOLD) || 7;
-const EVALUATOR_MODEL = process.env.VIBE_CODE_EVALUATOR_MODEL || "anthropic/claude-haiku-3-5";
+const _EVALUATOR_ENABLED = process.env.VIBE_CODE_EVALUATOR_ENABLED === "true";
+const _EVALUATOR_THRESHOLD = Number(process.env.VIBE_CODE_EVALUATOR_THRESHOLD) || 7;
+const _EVALUATOR_MODEL = process.env.VIBE_CODE_EVALUATOR_MODEL || "anthropic/claude-haiku-3-5";
 const EVALUATOR_TIMEOUT_MS = 45_000;
 const MAX_DIFF_CHARS = 8_000;
 
@@ -39,7 +39,8 @@ export async function runPostRunEvaluator(
   litellmBaseUrl: string,
   litellmKey: string
 ): Promise<EvaluatorResult | null> {
-  if (!EVALUATOR_ENABLED) return null;
+  const isEnabled = process.env.VIBE_CODE_EVALUATOR_ENABLED === "true";
+  if (!isEnabled) return null;
 
   const diff = await getGitDiff(wtPath, baseBranch);
   if (!diff.trim()) return null;
@@ -84,6 +85,9 @@ async function callEvaluator(
   baseUrl: string,
   apiKey: string
 ): Promise<EvaluatorResult | null> {
+  const threshold = Number(process.env.VIBE_CODE_EVALUATOR_THRESHOLD) || 7;
+  const model = process.env.VIBE_CODE_EVALUATOR_MODEL || "anthropic/claude-haiku-3-5";
+
   const systemPrompt = [
     "You are a strict QA evaluator for an autonomous AI coding agent.",
     "Your job is to evaluate whether the code changes (diff) implement the required task spec.",
@@ -95,7 +99,7 @@ async function callEvaluator(
     "4. Test coverage: New behaviour is tested if applicable",
     "5. Code quality: No placeholder comments, TODO stubs, or unfinished blocks",
     "",
-    `Passing threshold: ${EVALUATOR_THRESHOLD}/10`,
+    `Passing threshold: ${threshold}/10`,
     "",
     "Respond ONLY with valid JSON in this exact shape:",
     '{ "score": <0-10>, "pass": <true|false>, "feedback": "<one-paragraph critique>" }',
@@ -116,7 +120,7 @@ async function callEvaluator(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: EVALUATOR_MODEL,
+      model: model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -141,7 +145,7 @@ async function callEvaluator(
     const score = typeof parsed.score === "number" ? Math.max(0, Math.min(10, parsed.score)) : 5;
     return {
       score,
-      pass: parsed.pass ?? score >= EVALUATOR_THRESHOLD,
+      pass: parsed.pass ?? score >= threshold,
       feedback: parsed.feedback ?? "(no feedback)",
     };
   } catch {

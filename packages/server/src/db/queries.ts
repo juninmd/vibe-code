@@ -696,6 +696,10 @@ export function createScheduleQueries(db: Database) {
         "UPDATE task_schedules SET last_run_at = datetime('now'), next_run_at = ?, updated_at = datetime('now') WHERE task_id = ?"
       ).run(nextRunAt, taskId);
     },
+    listAll: (): TaskSchedule[] => {
+      const rows = db.prepare<ScheduleRow, []>("SELECT * FROM task_schedules").all();
+      return rows.map(mapSchedule);
+    },
     listDue: (): TaskSchedule[] => {
       const rows = db
         .prepare<ScheduleRow, []>(

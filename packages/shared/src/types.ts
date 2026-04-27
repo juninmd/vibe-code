@@ -124,6 +124,11 @@ export interface TaskSchedule {
   updatedAt: string;
 }
 
+export interface TaskScheduleWithTask {
+  schedule: TaskSchedule;
+  task: TaskWithRun;
+}
+
 export interface UpsertScheduleRequest {
   cronExpression: string;
   enabled?: boolean;
@@ -281,6 +286,7 @@ export type WsClientMessage =
   | { type: "ping" };
 
 export type WsServerMessage =
+  | { type: "task_created"; task: Task }
   | { type: "task_updated"; task: Task }
   | { type: "repo_updated"; repo: Repository }
   | { type: "run_updated"; run: AgentRun }
@@ -298,6 +304,12 @@ export type WsServerMessage =
       logs: Array<{ runId: string; stream: LogStream; content: string; timestamp: string }>;
     }
   | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
+  | { type: "skill_created"; skillId: string }
+  | { type: "skill_updated"; skillId: string }
+  | { type: "skill_deleted"; skillId: string }
+  | { type: "autopilot_created"; autopilotId: string }
+  | { type: "autopilot_updated"; autopilotId: string }
+  | { type: "autopilot_deleted"; autopilotId: string }
   | { type: "error"; message: string };
 
 // ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
@@ -531,4 +543,101 @@ export interface EngineEffectiveness {
   avgDurationSecs: number;
   avgBlockers: number;
   prRate: number;
+}
+
+// ─── Vibe-Code v2: Workspaces (Multi-tenant) ─────────────────────────────────
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkspaceMemberRole = "owner" | "member" | "viewer";
+
+export interface WorkspaceMember {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceMemberRole;
+  joinedAt: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+  createdAt: string;
+}
+
+// ─── Vibe-Code v2: Skills (Reusable Templates) ────────────────────────────────
+
+export interface SkillParameter {
+  name: string;
+  type: "string" | "number" | "boolean" | "json";
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+}
+
+export interface SkillDefinition {
+  agents: Array<{
+    engine: string;
+    model?: string;
+    prompt: string;
+  }>;
+  sequence: "parallel" | "serial";
+  timeout?: number;
+}
+
+export interface Skill {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  definition: SkillDefinition;
+  inputs?: SkillParameter[];
+  outputs?: SkillParameter[];
+  version: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Vibe-Code v2: Autopilots (Workflows) ──────────────────────────────────────
+
+export type AutopilotTriggerType = "schedule" | "event" | "manual";
+
+export interface CronTrigger {
+  expression: string;
+  timezone?: string;
+}
+
+export interface EventTrigger {
+  type: "pr_comment" | "issue_label" | "task_created" | "task_updated";
+  matcher?: string; // regex or specific value
+}
+
+export interface AutopilotTriggerConfig {
+  type: AutopilotTriggerType;
+  cron?: CronTrigger;
+  event?: EventTrigger;
+}
+
+export interface Autopilot {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  skillId: string;
+  triggerType: AutopilotTriggerType;
+  triggerConfig?: AutopilotTriggerConfig;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
 }

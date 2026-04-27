@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -39,43 +36,6 @@ export class ClaudeCodeEngine implements AgentEngine {
     const all = await listLiteLLMModels(getLiteLLMBaseUrl());
     // Filter to models that go to Anthropic: prefixed with anthropic/ or named claude-*
     return all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
-  }
-
-  async prepareWorkdir(workdir: string, skills: SkillPayload): Promise<string[]> {
-    const sections: string[] = [];
-
-    if (skills.projectInstructions) {
-      sections.push(`## Project Instructions\n\n${skills.projectInstructions}`);
-    }
-
-    if (skills.rules.length > 0) {
-      sections.push("## Coding Standards\n");
-      for (const rule of skills.rules) {
-        sections.push(`### ${rule.name}\n${rule.content || rule.description}`);
-      }
-    }
-
-    if (skills.skills.length > 0) {
-      sections.push("## Skills\n");
-      for (const skill of skills.skills) {
-        sections.push(`### ${skill.name}\n${skill.content || skill.description}`);
-      }
-    }
-
-    if (skills.agents.length > 0) {
-      sections.push("## Agent Personas\n");
-      for (const agent of skills.agents) {
-        sections.push(`### ${agent.name}\n${agent.content || agent.description}`);
-      }
-    }
-
-    if (sections.length === 0) return [];
-
-    const claudeDir = join(workdir, ".claude");
-    await mkdir(claudeDir, { recursive: true });
-    const instructionsFile = join(claudeDir, "instructions.md");
-    await writeFile(instructionsFile, sections.join("\n\n"), "utf8");
-    return [instructionsFile];
   }
 
   async *execute(
