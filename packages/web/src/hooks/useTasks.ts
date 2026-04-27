@@ -120,12 +120,17 @@ export function useTasks(repoFilter?: string) {
   const launchTask = useCallback(
     async (id: string, engine?: string, model?: string) => {
       const payload = engine || model ? { engine, model } : undefined;
-      const run = await api.tasks.launch(id, payload);
-      const task = tasks.find((t) => t.id === id);
-      if (task) {
-        updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
+      try {
+        const run = await api.tasks.launch(id, payload);
+        const task = tasks.find((t) => t.id === id);
+        if (task) {
+          updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
+        }
+        return run;
+      } catch (err) {
+        console.error("Failed to launch task:", err);
+        throw err;
       }
-      return run;
     },
     [tasks, updateTaskLocal]
   );
@@ -148,19 +153,29 @@ export function useTasks(repoFilter?: string) {
 
   const retryTask = useCallback(
     async (id: string) => {
-      const run = await api.tasks.retry(id);
-      const task = tasks.find((t) => t.id === id);
-      if (task) {
-        updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
+      try {
+        const run = await api.tasks.retry(id);
+        const task = tasks.find((t) => t.id === id);
+        if (task) {
+          updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
+        }
+        return run;
+      } catch (err) {
+        console.error("Failed to retry task:", err);
+        throw err;
       }
-      return run;
     },
     [tasks, updateTaskLocal]
   );
 
   const retryPR = useCallback(async (id: string) => {
-    const result = await api.tasks.retryPR(id);
-    return result;
+    try {
+      const result = await api.tasks.retryPR(id);
+      return result;
+    } catch (err) {
+      console.error("Failed to retry PR:", err);
+      throw err;
+    }
   }, []);
 
   return {
