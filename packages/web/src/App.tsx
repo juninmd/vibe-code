@@ -725,6 +725,7 @@ export default function App() {
               type="button"
               onClick={() => setShowSchedulesPanel(true)}
               title="Manage Scheduled Tasks"
+              aria-label="Manage Scheduled Tasks"
               className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
             >
               <svg
@@ -736,6 +737,8 @@ export default function App() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                role="img"
+                aria-label="Schedule"
                 className="opacity-70 group-hover:opacity-100 transition-opacity text-primary0 group-hover:text-primary"
               >
                 <circle cx="12" cy="12" r="10"></circle>
@@ -901,16 +904,28 @@ export default function App() {
               onTaskMove={handleTaskMove}
               onRetryPR={retryPR}
               onArchiveDone={async () => {
-                await archiveDone();
-                toast("Completed tasks archived", "info");
+                try {
+                  await archiveDone();
+                  toast("Completed tasks archived", "info");
+                } catch {
+                  toast("Failed to archive completed tasks", "error");
+                }
               }}
               onClearFailed={async () => {
-                await clearFailed();
-                toast("Failed tasks removed", "info");
+                try {
+                  await clearFailed();
+                  toast("Failed tasks removed", "info");
+                } catch {
+                  toast("Failed to clear failed tasks", "error");
+                }
               }}
               onRetryAllFailed={async () => {
-                await retryAllFailed();
-                toast("Restarting failed tasks", "info");
+                try {
+                  await retryAllFailed();
+                  toast("Restarting failed tasks", "info");
+                } catch {
+                  toast("Failed to retry failed tasks", "error");
+                }
               }}
             />
           </main>

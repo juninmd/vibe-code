@@ -29,7 +29,11 @@ export function useRepos() {
     if (hasCloning && !pollRef.current) {
       const scheduleNext = () => {
         pollRef.current = setTimeout(async () => {
-          await refresh();
+          try {
+            await refresh();
+          } catch (err) {
+            console.error("Polling failed:", err);
+          }
           pollRef.current = null;
           pollDelayRef.current = Math.min(pollDelayRef.current * 2, 8_000);
           scheduleNext();

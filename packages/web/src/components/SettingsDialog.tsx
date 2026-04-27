@@ -112,8 +112,8 @@ function ProviderTab({
       const result = await api.settings.testConnection(provider);
       setTestResult(result);
       if (result.ok && result.username) setUsername(result.username);
-    } catch (err: any) {
-      setTestResult({ ok: false, error: err.message });
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setTesting(false);
     }

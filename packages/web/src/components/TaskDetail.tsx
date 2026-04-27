@@ -1,5 +1,5 @@
 import type { AgentLog, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { formatDateTime, formatDuration } from "../utils/date";
 import { AgentOutput } from "./AgentOutput";
@@ -468,12 +468,6 @@ export function TaskDetail({
   type ActiveTab = "info" | "terminal" | "diff" | "skills";
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
 
-  function parseMatchedSkill(s: string): { category: string; name: string } {
-    const idx = s.indexOf(":");
-    if (idx > 0) return { category: s.slice(0, idx), name: s.slice(idx + 1) };
-    return { category: "skill", name: s };
-  }
-
   const skillCategoryLabel: Record<string, string> = {
     rule: "Rule",
     skill: "Skill",
@@ -492,14 +486,20 @@ export function TaskDetail({
     workflow: { bg: "rgba(16,185,129,0.15)", border: "rgba(16,185,129,0.35)", text: "#34d399" },
   };
 
-  const skillsByCategory = matchedSkills.reduce(
-    (acc, raw) => {
-      const { category, name } = parseMatchedSkill(raw);
-      if (!acc[category]) acc[category] = [];
-      acc[category].push({ raw, name });
-      return acc;
-    },
-    {} as Record<string, { raw: string; name: string }[]>
+  const skillsByCategory = useMemo(
+    () =>
+      matchedSkills.reduce(
+        (acc, raw) => {
+          const idx = raw.indexOf(":");
+          const category = idx > 0 ? raw.slice(0, idx) : "skill";
+          const name = idx > 0 ? raw.slice(idx + 1) : raw;
+          if (!acc[category]) acc[category] = [];
+          acc[category].push({ raw, name });
+          return acc;
+        },
+        {} as Record<string, { raw: string; name: string }[]>
+      ),
+    [matchedSkills]
   );
 
   const categoryOrder = ["rule", "skill", "agent", "workflow"];

@@ -76,27 +76,45 @@ export function useTasks(repoFilter?: string) {
   );
 
   const removeTask = useCallback(async (id: string) => {
-    await api.tasks.remove(id);
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await api.tasks.remove(id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      console.error("Failed to remove task:", err);
+      throw err;
+    }
   }, []);
 
   const archiveDone = useCallback(async () => {
-    await api.tasks.archiveDone(repoFilter);
-    // Filter out done tasks instead of full refresh
-    setTasks((prev) => prev.filter((t) => t.status !== "done"));
+    try {
+      await api.tasks.archiveDone(repoFilter);
+      setTasks((prev) => prev.filter((t) => t.status !== "done"));
+    } catch (err) {
+      console.error("Failed to archive done tasks:", err);
+      throw err;
+    }
   }, [repoFilter]);
 
   const clearFailed = useCallback(async () => {
-    await api.tasks.clearFailed(repoFilter);
-    setTasks((prev) => prev.filter((t) => t.status !== "failed"));
+    try {
+      await api.tasks.clearFailed(repoFilter);
+      setTasks((prev) => prev.filter((t) => t.status !== "failed"));
+    } catch (err) {
+      console.error("Failed to clear failed tasks:", err);
+      throw err;
+    }
   }, [repoFilter]);
 
   const retryAllFailed = useCallback(async () => {
-    await api.tasks.retryFailed(repoFilter);
-    // Just mark them as backlog locally
-    setTasks((prev) =>
-      prev.map((t) => (t.status === "failed" ? { ...t, status: "backlog" as const } : t))
-    );
+    try {
+      await api.tasks.retryFailed(repoFilter);
+      setTasks((prev) =>
+        prev.map((t) => (t.status === "failed" ? { ...t, status: "backlog" as const } : t))
+      );
+    } catch (err) {
+      console.error("Failed to retry all failed:", err);
+      throw err;
+    }
   }, [repoFilter]);
 
   const launchTask = useCallback(

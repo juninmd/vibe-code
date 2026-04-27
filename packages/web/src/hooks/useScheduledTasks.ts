@@ -1,5 +1,6 @@
 import type { TaskScheduleWithTask } from "@vibe-code/shared";
 import { useCallback, useEffect, useState } from "react";
+import { api } from "../api/client";
 
 export function useScheduledTasks(refreshIntervalMs = 15_000) {
   const [tasks, setTasks] = useState<TaskScheduleWithTask[]>([]);
@@ -10,17 +11,10 @@ export function useScheduledTasks(refreshIntervalMs = 15_000) {
     setError(null);
     try {
       console.debug("📋 Fetching scheduled tasks");
-
-      const response = await fetch("/api/tasks/schedules");
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const data = await response.json();
-      const schedules: TaskScheduleWithTask[] = data.data || [];
-
+      const schedules = await api.schedules.listAll();
       console.info(
         `✅ Loaded ${schedules.length} scheduled tasks (polling in ${refreshIntervalMs}ms)`
       );
-
       setTasks(schedules);
       setError(null);
     } catch (err) {

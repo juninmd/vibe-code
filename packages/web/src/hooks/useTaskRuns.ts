@@ -1,31 +1,22 @@
 import type { AgentRun } from "@vibe-code/shared";
 import { useCallback, useState } from "react";
+import { api } from "../api/client";
 
-export function useTaskRuns(taskId: string | null, limit = 10) {
+export function useTaskRuns(taskId: string | null, _limit = 10) {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchRuns = useCallback(async () => {
     if (!taskId) return;
 
     setError(null);
     setLoading(true);
 
     try {
-      console.debug("📜 Fetching runs for task", {
-        taskId,
-        limit,
-      });
-
-      const response = await window.fetch(`/api/tasks/${taskId}/runs?limit=${limit}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-      const data = await response.json();
-      const runsList: AgentRun[] = Array.isArray(data) ? data : data.data || [];
-
+      console.debug("📜 Fetching runs for task", { taskId });
+      const runsList = await api.tasks.runs(taskId);
       console.info(`✅ Loaded ${runsList.length} runs for task ${taskId}`);
-
       setRuns(runsList);
       setError(null);
     } catch (err) {
@@ -35,7 +26,7 @@ export function useTaskRuns(taskId: string | null, limit = 10) {
     } finally {
       setLoading(false);
     }
-  }, [taskId, limit]);
+  }, [taskId]);
 
-  return { runs, loading, error, fetch };
+  return { runs, loading, error, fetch: fetchRuns };
 }
