@@ -19,6 +19,10 @@ export function useElapsedTime(startedAt: string | null | undefined, active: boo
       return;
     }
     const start = new Date(startedAt).getTime();
+    if (Number.isNaN(start)) {
+      setElapsed("");
+      return;
+    }
     const tick = () => setElapsed(formatElapsed(Date.now() - start));
     tick();
     const id = setInterval(tick, 1000);

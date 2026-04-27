@@ -50,6 +50,16 @@ export function IssueImporter({ open, onClose, repo, onImport }: IssueImporterPr
     }
   }, [open, fetchIssues]);
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
   const availableLabels = useMemo(() => {
     const labels = new Set<string>();
     for (const issue of allIssues) {
