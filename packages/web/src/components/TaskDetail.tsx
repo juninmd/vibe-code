@@ -597,6 +597,34 @@ export function TaskDetail({
                 >
                   ↓
                 </a>
+                <>
+                  <button
+                    type="button"
+                    title="Abrir no Editor"
+                    onClick={async () => {
+                      try {
+                        setLoadingAction("open-editor");
+                        await api.tasks.openEditor(task.id);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : String(err));
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                    className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors text-xs font-medium"
+                    disabled={loadingAction === "open-editor"}
+                  >
+                    {loadingAction === "open-editor" ? "..." : "<>"}
+                  </button>
+                  <a
+                    href={api.tasks.downloadUrl(task.id)}
+                    download
+                    title="Baixar código (ZIP)"
+                    className="text-zinc-500 hover:text-zinc-300 cursor-pointer shrink-0 p-1 rounded hover:bg-zinc-800 transition-colors text-sm"
+                  >
+                    ↓
+                  </a>
+                </>
               )}
               {onClone && (
                 <button
