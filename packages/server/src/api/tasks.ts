@@ -29,6 +29,7 @@ const createTaskSchema = z.object({
   tags: z.array(z.string()).optional(),
   agentId: z.string().optional(),
   workflowId: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -42,6 +43,8 @@ const updateTaskSchema = z.object({
   model: z.string().optional(),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
+  pendingApproval: z.boolean().optional(),
 });
 
 const launchTaskSchema = z.object({
@@ -290,6 +293,28 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "cancel_failed", message: msg }, 500);
+    }
+  });
+
+  router.post("/:id/approve", async (c) => {
+    const taskId = c.req.param("id");
+    const task = db.tasks.getById(taskId);
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    if (!task.pendingApproval) {
+      return c.json({ error: "invalid_state", message: "Task does not require approval" }, 400);
+    }
+
+    try {
+      db.tasks.update(taskId, { pendingApproval: false });
+      const updated = db.tasks.getById(taskId);
+      if (updated) {
+        orchestrator.hub.broadcastAll({ type: "task_updated", task: updated });
+      }
+      return c.json({ data: { ok: true } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "approve_failed", message: msg }, 500);
     }
   });
 

@@ -7,15 +7,42 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000;
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = MAX_RETRIES,
+  initialDelay = INITIAL_RETRY_DELAY
+): Promise<T> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        const delay = initialDelay * 2 ** attempt;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export function useTasks(repoFilter?: string) {
   const [tasks, setTasks] = useState<TaskWithRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.tasks.list(repoFilter);
+      setError(null);
+      const data = await withRetry(() => api.tasks.list(repoFilter));
       setTasks(data);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
       console.error("Failed to fetch tasks:", err);
     } finally {
       setLoading(false);
@@ -181,6 +208,7 @@ export function useTasks(repoFilter?: string) {
   return {
     tasks,
     loading,
+    error,
     refresh,
     createTask,
     cloneTask,

@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { WsServerMessage } from "@vibe-code/shared";
-import { useEffect } from "react";
 
 /**
  * Hook to handle WebSocket events and invalidate React Query cache

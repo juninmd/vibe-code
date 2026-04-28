@@ -24,7 +24,7 @@ export class Orchestrator {
     private db: Db,
     private git: GitService,
     private registry: EngineRegistry,
-    private hub: BroadcastHub,
+    public hub: BroadcastHub,
     maxConcurrent = 4
   ) {
     this.maxConcurrent = maxConcurrent;
@@ -46,6 +46,17 @@ export class Orchestrator {
     if (this.activeRuns.size >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
       throw new Error("Max concurrent agents reached.");
+    }
+
+    if (task.dependsOn.length > 0) {
+      const incompleteDeps = this.checkBlockedByDependencies(task.id, task.dependsOn);
+      if (incompleteDeps.length > 0) {
+        const depTitles = incompleteDeps
+          .map((id) => this.db.tasks.getById(id)?.title ?? id)
+          .map((t) => t.slice(0, 40))
+          .join(", ");
+        throw new Error(`Task is blocked by incomplete dependencies: ${depTitles}`);
+      }
     }
 
     // Reserve a slot immediately to prevent race conditions between concurrent launches
@@ -105,7 +116,8 @@ export class Orchestrator {
         (c) => this.sysLog(run.id, task.id, c),
         () => this.activeRuns.delete(task.id),
         model,
-        this.skillsLoader
+        this.skillsLoader,
+        this
       ).catch((err) => {
         this.activeRuns.delete(task.id);
         console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
@@ -186,6 +198,36 @@ export class Orchestrator {
       timestamp: new Date().toISOString(),
     });
     return true;
+  }
+
+  checkBlockedByDependencies(_taskId: string, dependsOn: string[]): string[] {
+    return dependsOn.filter((depId) => {
+      const dep = this.db.tasks.getById(depId);
+      if (!dep) return true;
+      if (dep.status === "done" || dep.status === "archived" || dep.status === "failed") {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  unblockDependents(completedTaskId: string): string[] {
+    const blocked: string[] = [];
+    const allTasks = this.db.tasks.list();
+    for (const task of allTasks) {
+      if (task.dependsOn.includes(completedTaskId)) {
+        const stillBlocked = this.checkBlockedByDependencies(task.id, task.dependsOn);
+        if (stillBlocked.length === 0 && task.status === "backlog") {
+          blocked.push(task.id);
+          this.hub.broadcastAll({
+            type: "task_unblocked",
+            taskId: task.id,
+            unblockedBy: completedTaskId,
+          });
+        }
+      }
+    }
+    return blocked;
   }
 
   private sysLog(runId: string, taskId: string, content: string): void {

@@ -189,6 +189,7 @@ export const api = {
     update: (id: string, data: UpdateTaskRequest) =>
       request<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE" }),
+    approve: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/approve`, { method: "POST" }),
     launch: (id: string, data?: LaunchTaskRequest) =>
       request<AgentRun>(`/tasks/${id}/launch`, {
         method: "POST",
