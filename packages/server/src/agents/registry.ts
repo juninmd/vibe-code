@@ -8,6 +8,8 @@ import { CopilotEngine } from "./engines/copilot";
 import { CursorAgentEngine } from "./engines/cursor-agent";
 import { GeminiEngine } from "./engines/gemini";
 import { HermesEngine } from "./engines/hermes";
+import { KimiEngine } from "./engines/kimi";
+import { KiroCliEngine } from "./engines/kiro-cli";
 import { OpenClawEngine } from "./engines/openclaw";
 import { OpenCodeEngine } from "./engines/opencode";
 import { PiEngine } from "./engines/pi";
@@ -27,6 +29,8 @@ export class EngineRegistry {
     this.register(new OpenClawEngine());
     this.register(new HermesEngine());
     this.register(new AmpCodeEngine());
+    this.register(new KimiEngine());
+    this.register(new KiroCliEngine());
   }
 
   register(engine: AgentEngine): void {

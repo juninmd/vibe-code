@@ -278,6 +278,28 @@ export const ENGINE_META: Record<string, EngineMeta> = {
     docsUrl: "https://ampcode.ai",
     description: "AmpCode AI agent",
   },
+  kimi: {
+    icon: KimiIcon as any,
+    label: "kimi",
+    color: "text-emerald-300",
+    bgColor: "bg-emerald-950/30",
+    borderColor: "border-emerald-800/40",
+    provider: "Kimi",
+    install: "",
+    docsUrl: "https://kimi.moonshot.cn",
+    description: "Kimi AI agent",
+  },
+  "kiro-cli": {
+    icon: KiroIcon as any,
+    label: "kiro-cli",
+    color: "text-indigo-300",
+    bgColor: "bg-indigo-950/30",
+    borderColor: "border-indigo-800/40",
+    provider: "Kiro",
+    install: "",
+    docsUrl: "https://kiro.ai",
+    description: "Kiro CLI agent",
+  },
 };
 
 const DEFAULT_META: EngineMeta = {
@@ -297,6 +319,36 @@ export function getEngineMeta(name: string): EngineMeta {
 }
 
 export function OpenClawIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M4 1L12 8L4 15L4 1Z" />
+    </svg>
+  );
+}
+
+export function KimiIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      width={size}
+      height={size}
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M8 1L14 8L8 15L2 8Z" />
+    </svg>
+  );
+}
+
+export function KiroIcon({ className = "", size = 16 }: IconProps) {
   return (
     <svg
       aria-hidden="true"
