@@ -15,8 +15,26 @@ interface ActiveRun {
   abort: AbortController;
 }
 
+interface PendingRetry {
+  attempt: number;
+  dueAt: number;
+  reason: string;
+  engineOverride?: string;
+  modelOverride?: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const AUTO_RETRY_MAX = Number(process.env.VIBE_CODE_AUTO_RETRY_MAX) || 2;
+const AUTO_RETRY_MAX_BACKOFF_MS =
+  Number(process.env.VIBE_CODE_AUTO_RETRY_MAX_BACKOFF_MS) || 300_000;
+
+function retryBackoffMs(attempt: number): number {
+  return Math.min(10_000 * 2 ** (attempt - 1), AUTO_RETRY_MAX_BACKOFF_MS);
+}
+
 export class Orchestrator {
   private activeRuns = new Map<string, ActiveRun>();
+  private retryQueue = new Map<string, PendingRetry>();
   private maxConcurrent: number;
   skillsLoader?: SkillsLoader;
 
@@ -42,6 +60,42 @@ export class Orchestrator {
     return result;
   }
 
+  getActiveRunDetails(): Array<{
+    taskId: string;
+    runId: string;
+    engineName: string;
+    phase: string | null;
+  }> {
+    return [...this.activeRuns.values()]
+      .filter((a) => a.runId !== "__pending__")
+      .map((active) => {
+        const run = this.db.runs.getById(active.runId);
+        let phase: string | null = null;
+        if (run?.stateSnapshot) {
+          try {
+            phase = (JSON.parse(run.stateSnapshot) as { phase?: string }).phase ?? null;
+          } catch {
+            /* ignore */
+          }
+        }
+        return { taskId: active.taskId, runId: active.runId, engineName: active.engineName, phase };
+      });
+  }
+
+  getRetryQueueSnapshot(): Array<{
+    taskId: string;
+    attempt: number;
+    dueInMs: number;
+    reason: string;
+  }> {
+    return [...this.retryQueue.entries()].map(([taskId, entry]) => ({
+      taskId,
+      attempt: entry.attempt,
+      dueInMs: Math.max(0, entry.dueAt - Date.now()),
+      reason: entry.reason,
+    }));
+  }
+
   async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
     if (this.activeRuns.size >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
@@ -58,6 +112,9 @@ export class Orchestrator {
         throw new Error(`Task is blocked by incomplete dependencies: ${depTitles}`);
       }
     }
+
+    // Cancel any pending retry for this task — it's being launched manually
+    this.cancelRetry(task.id);
 
     // Reserve a slot immediately to prevent race conditions between concurrent launches
     const placeholder: ActiveRun = {
@@ -114,7 +171,10 @@ export class Orchestrator {
         this.git,
         this.hub,
         (c) => this.sysLog(run.id, task.id, c),
-        () => this.activeRuns.delete(task.id),
+        () => {
+          this.activeRuns.delete(task.id);
+          this.maybeScheduleRetry(task.id, engineOverride, modelOverride);
+        },
         model,
         this.skillsLoader,
         this
@@ -132,6 +192,9 @@ export class Orchestrator {
   }
 
   async cancel(taskId: string): Promise<void> {
+    // Cancel any pending auto-retry first
+    this.cancelRetry(taskId);
+
     const active = this.activeRuns.get(taskId);
     if (!active) {
       const task = this.db.tasks.getById(taskId);
@@ -228,6 +291,70 @@ export class Orchestrator {
       }
     }
     return blocked;
+  }
+
+  private maybeScheduleRetry(
+    taskId: string,
+    engineOverride?: string,
+    modelOverride?: string
+  ): void {
+    if (AUTO_RETRY_MAX <= 0) return;
+
+    const task = this.db.tasks.getById(taskId);
+    if (!task || task.status !== "failed") return;
+
+    const existing = this.retryQueue.get(taskId);
+    const attempt = (existing?.attempt ?? 0) + 1;
+    if (attempt > AUTO_RETRY_MAX) return;
+
+    const delayMs = retryBackoffMs(attempt);
+    const dueAt = Date.now() + delayMs;
+
+    const timer = setTimeout(async () => {
+      this.retryQueue.delete(taskId);
+      const t = this.db.tasks.getById(taskId);
+      if (!t || t.status !== "failed") return;
+
+      logOrchestratorEvent(
+        `Auto-retrying task [${taskId.slice(0, 8)}] (attempt ${attempt}/${AUTO_RETRY_MAX})`
+      );
+      const updated = this.db.tasks.update(taskId, { status: "backlog" });
+      if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+
+      try {
+        await this.launch({ ...t, status: "backlog" }, engineOverride, modelOverride);
+      } catch (err) {
+        console.error(`[orchestrator] Auto-retry launch failed for task ${taskId}:`, err);
+      }
+    }, delayMs);
+
+    if (existing) clearTimeout(existing.timer);
+
+    const run = this.db.runs.getLatestByTask(taskId);
+    const reason = run?.errorMessage?.startsWith("Agent stalled") ? "stalled" : "failed";
+
+    this.retryQueue.set(taskId, {
+      attempt,
+      dueAt,
+      reason,
+      engineOverride,
+      modelOverride,
+      timer,
+    });
+
+    logOrchestratorEvent(
+      `Task [${taskId.slice(0, 8)}] scheduled for auto-retry ${attempt}/${AUTO_RETRY_MAX} ` +
+        `in ${Math.round(delayMs / 1000)}s (reason: ${reason})`
+    );
+  }
+
+  private cancelRetry(taskId: string): void {
+    const entry = this.retryQueue.get(taskId);
+    if (entry) {
+      clearTimeout(entry.timer);
+      this.retryQueue.delete(taskId);
+      logOrchestratorEvent(`Auto-retry cancelled for task [${taskId.slice(0, 8)}]`);
+    }
   }
 
   private sysLog(runId: string, taskId: string, content: string): void {

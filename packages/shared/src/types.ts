@@ -10,6 +10,16 @@ export type TaskStatus =
   | "archived";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type RunPhase =
+  | "setup"
+  | "worktree_ready"
+  | "agent_running"
+  | "validating"
+  | "evaluating"
+  | "reviewing"
+  | "pr_creating"
+  | "stalled"
+  | "timed_out";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
 
 export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
@@ -73,7 +83,7 @@ export interface AgentRun {
   taskId: string;
   engine: string;
   status: RunStatus;
-  currentStatus: string | null;
+  currentStatus: RunPhase | null;
   worktreePath: string | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -233,6 +243,20 @@ export interface RuntimeWorkload {
   lastRunAt: string | null;
 }
 
+export interface ActiveRunDetail {
+  taskId: string;
+  runId: string;
+  engineName: string;
+  phase: RunPhase | string | null;
+}
+
+export interface RetryQueueEntry {
+  taskId: string;
+  attempt: number;
+  dueInMs: number;
+  reason: string;
+}
+
 export interface RuntimeOverview {
   id: string;
   name: string;
@@ -246,6 +270,8 @@ export interface RuntimeOverview {
   capacity: RuntimeCapacity;
   engines: EngineInfo[];
   workload: RuntimeWorkload;
+  activeRunDetails: ActiveRunDetail[];
+  retryQueue: RetryQueueEntry[];
 }
 
 export interface InboxItem {
@@ -371,7 +397,7 @@ export type WsServerMessage =
       type: "phase_changed";
       runId: string;
       taskId: string;
-      phase: string;
+      phase: RunPhase;
       timestamp: string;
     }
   | {
