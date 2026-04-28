@@ -183,6 +183,54 @@ function RuntimeCard({ runtime }: { runtime: RuntimeOverview }) {
             </p>
           </div>
         </div>
+
+        {((runtime.activeRunDetails?.length ?? 0) > 0 || (runtime.retryQueue?.length ?? 0) > 0) && (
+          <div className="grid gap-2 md:grid-cols-2 mt-2 px-4 pb-4">
+            {(runtime.activeRunDetails?.length ?? 0) > 0 && (
+              <div className="rounded-lg border border-zinc-800/70 bg-zinc-900/40 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-600 mb-2">
+                  Runs ativos
+                </p>
+                <div className="space-y-1.5">
+                  {runtime.activeRunDetails.map((r) => (
+                    <div
+                      key={r.runId}
+                      className="flex items-center justify-between gap-2 text-xs text-zinc-400"
+                    >
+                      <span className="font-mono text-zinc-600">{r.taskId.slice(0, 8)}</span>
+                      <span className="truncate">{r.engineName}</span>
+                      {r.phase && (
+                        <span className="shrink-0 text-cyan-400 text-[10px]">{r.phase}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(runtime.retryQueue?.length ?? 0) > 0 && (
+              <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-amber-700 mb-2">
+                  Fila de retry
+                </p>
+                <div className="space-y-1.5">
+                  {runtime.retryQueue.map((r) => (
+                    <div
+                      key={r.taskId}
+                      className="flex items-center justify-between gap-2 text-xs text-zinc-400"
+                    >
+                      <span className="font-mono text-zinc-600">{r.taskId.slice(0, 8)}</span>
+                      <span className="text-amber-400 text-[10px]">tentativa #{r.attempt}</span>
+                      <span className="shrink-0 text-zinc-500 text-[10px]">
+                        em {Math.ceil(r.dueInMs / 1000)}s
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
