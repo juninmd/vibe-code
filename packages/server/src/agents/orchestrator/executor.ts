@@ -325,7 +325,8 @@ export async function executeAgent(
   sysLog: (content: string) => void,
   onFinish: () => void,
   model?: string,
-  skillsLoader?: SkillsLoader
+  skillsLoader?: SkillsLoader,
+  orchestrator?: import("../orchestrator").Orchestrator
 ): Promise<void> {
   const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
   const slugTitle = task.title
@@ -401,6 +402,13 @@ export async function executeAgent(
 
     db.runs.updateStatus(run.id, "running", { started_at: new Date().toISOString() });
     db.runs.updateStateSnapshot(run.id, "setup");
+    hub.broadcastToTask(task.id, {
+      type: "phase_changed",
+      runId: run.id,
+      taskId: task.id,
+      phase: "setup",
+      timestamp: new Date().toISOString(),
+    });
     sysLog("Setting up workspace...");
 
     if (reusableWorkspacePath) {
@@ -421,6 +429,13 @@ export async function executeAgent(
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
     db.runs.updateStateSnapshot(run.id, "worktree_ready");
+    hub.broadcastToTask(task.id, {
+      type: "phase_changed",
+      runId: run.id,
+      taskId: task.id,
+      phase: "worktree_ready",
+      timestamp: new Date().toISOString(),
+    });
 
     // Run setup scripts if available
     await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
@@ -572,6 +587,13 @@ export async function executeAgent(
     const promptWithContext = `${prompt}\n\n---\n**Session context is available in \`.vibe-code/context/PROGRESS.md\` (human-readable) and \`.vibe-code/context/TASK.json\` (structured). Read them at the start if you need previous session notes or task metadata.**${specNote}`;
 
     db.runs.updateStateSnapshot(run.id, "agent_running");
+    hub.broadcastToTask(task.id, {
+      type: "phase_changed",
+      runId: run.id,
+      taskId: task.id,
+      phase: "agent_running",
+      timestamp: new Date().toISOString(),
+    });
     for await (const event of engine.execute(promptWithContext, wtPath, {
       runId: run.id,
       signal: abort.signal,
@@ -605,6 +627,13 @@ export async function executeAgent(
       `Running final validator agent (lint/test/build), max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`
     );
     db.runs.updateStateSnapshot(run.id, "validating");
+    hub.broadcastToTask(task.id, {
+      type: "phase_changed",
+      runId: run.id,
+      taskId: task.id,
+      phase: "validating",
+      timestamp: new Date().toISOString(),
+    });
     let validatorPassed = false;
     let validatorExitCode: number | null = null;
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
@@ -658,6 +687,13 @@ export async function executeAgent(
     if (litellmBaseUrl && litellmKey) {
       try {
         db.runs.updateStateSnapshot(run.id, "evaluating");
+        hub.broadcastToTask(task.id, {
+          type: "phase_changed",
+          runId: run.id,
+          taskId: task.id,
+          phase: "evaluating",
+          timestamp: new Date().toISOString(),
+        });
         const grade = await runPostRunEvaluator(
           task.title,
           plannerSpec ?? task.description ?? "",
@@ -733,6 +769,13 @@ export async function executeAgent(
     if (REVIEW_ENABLED) {
       sysLog("Running review pipeline...");
       db.runs.updateStateSnapshot(run.id, "reviewing");
+      hub.broadcastToTask(task.id, {
+        type: "phase_changed",
+        runId: run.id,
+        taskId: task.id,
+        phase: "reviewing",
+        timestamp: new Date().toISOString(),
+      });
       const reviewResult = await runReviewPipeline(
         task,
         run,
@@ -880,12 +923,46 @@ export async function executeAgent(
 
     try {
       db.runs.updateStateSnapshot(run.id, "pr_creating");
+      hub.broadcastToTask(task.id, {
+        type: "phase_changed",
+        runId: run.id,
+        taskId: task.id,
+        phase: "pr_creating",
+        timestamp: new Date().toISOString(),
+      });
       sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
       const prBody = await buildPRBody(task, wtPath, repo.url, branch);
+
+      if (task.pendingApproval) {
+        sysLog("Task requires human approval before PR creation");
+        hub.broadcastAll({
+          type: "task_approval_pending",
+          taskId: task.id,
+          message: `Task "${task.title}" is awaiting human approval before PR creation.`,
+        });
+        db.tasks.update(task.id, { status: "review", pendingApproval: true });
+        const pendingTask = db.tasks.getById(task.id);
+        hub.broadcastAll({
+          type: "task_updated",
+          task: pendingTask ?? { ...task, status: "review", pendingApproval: true },
+        });
+
+        const completedRun = db.runs.updateStatus(run.id, "completed", {
+          finished_at: new Date().toISOString(),
+          exit_code: 0,
+        });
+        if (capturedCostStats) db.runs.updateCostStats(run.id, capturedCostStats);
+        hub.flushLogs(task.id);
+        if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
+        logAgentFinish(task.id, "completed", "Awaiting human approval");
+        orchestrator?.unblockDependents(task.id);
+        return;
+      }
+
       prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
       prCreated = true;
@@ -907,6 +984,9 @@ export async function executeAgent(
     if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
+
+    // Unblock any tasks that were waiting for this task to complete
+    orchestrator?.unblockDependents(task.id);
   } catch (err: any) {
     const errMsg = err.message || String(err);
     const isCancelled = !timedOut && abort.signal.aborted;

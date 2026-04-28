@@ -13,6 +13,7 @@ import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
 import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { InboxPanel } from "./components/InboxPanel";
 import { IssueImporter } from "./components/IssueImporter";
@@ -22,6 +23,7 @@ import { ScheduledTasksPanel } from "./components/ScheduledTasksPanel";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
+import { SkeletonBoard } from "./components/Skeleton";
 import { SkillsBrowser } from "./components/SkillsBrowser";
 import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
@@ -68,7 +70,7 @@ export default function App() {
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showFilterBar, setShowFilterBar] = useState(false);
+  const [showFilterBar, _setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
   const [showRuntimes, setShowRuntimes] = useState(false);
@@ -88,11 +90,14 @@ export default function App() {
   const refreshEnginesThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedTaskRef = useRef(selectedTask);
   selectedTaskRef.current = selectedTask;
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
     useRepos();
   const {
     tasks,
+    loading: tasksLoading,
+    error: tasksError,
     createTask,
     cloneTask,
     updateTask,
@@ -412,6 +417,38 @@ export default function App() {
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
 
+  const handleDeleteTask = useCallback(
+    async (taskId: string) => {
+      const taskToDelete = tasks.find((t) => t.id === taskId);
+      try {
+        await removeTask(taskId);
+        if (selectedTask?.id === taskId) handleCloseDetail();
+        toast(
+          "Task deletada",
+          "info",
+          taskToDelete
+            ? {
+                label: "Desfazer",
+                onClick: async () => {
+                  const _restored = await createTask({
+                    title: taskToDelete.title,
+                    description: taskToDelete.description,
+                    repoId: taskToDelete.repoId,
+                    engine: taskToDelete.engine ?? undefined,
+                    tags: taskToDelete.tags,
+                  });
+                  toast("Task restaurada", "success");
+                },
+              }
+            : undefined
+        );
+      } catch {
+        toast("Falha ao deletar task", "error");
+      }
+    },
+    [tasks, selectedTask, removeTask, handleCloseDetail, createTask, toast]
+  );
+
   const handleOpenTaskById = useCallback(
     async (taskId: string) => {
       try {
@@ -568,6 +605,26 @@ export default function App() {
         return;
       }
 
+      // Cmd/Ctrl+S — export board
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        exportBoard();
+        return;
+      }
+
+      // Delete — delete selected task
+      if (e.key === "Delete" && selectedTask) {
+        const active = document.activeElement;
+        const isTypingInDetail =
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active as HTMLElement | null)?.isContentEditable === true;
+        if (isTypingInDetail) return;
+        e.preventDefault();
+        handleDeleteTask(selectedTask.id);
+        return;
+      }
+
       // Escape — close open panels/dialogs (in cascading order)
       if (e.key === "Escape") {
         if (showCommandPalette) {
@@ -655,10 +712,18 @@ export default function App() {
         e.preventDefault();
         setShowShortcuts((v) => !v);
       }
-      // F — toggle filter bar
-      if (e.key === "f" || e.key === "F") {
+      // D — duplicate selected task
+      if ((e.key === "d" || e.key === "D") && selectedTask && !isTyping) {
         e.preventDefault();
-        setShowFilterBar((v) => !v);
+        cloneTask(selectedTask.id);
+        toast(`Task duplicada`, "info");
+        return;
+      }
+      // Ctrl+Shift+C — clear search
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
+        e.preventDefault();
+        setSearch("");
+        return;
       }
     };
 
@@ -678,6 +743,10 @@ export default function App() {
     selectedTask,
     search,
     handleCloseDetail,
+    cloneTask,
+toast,
+    exportBoard,
+    handleDeleteTask,
   ]);
 
   return (
@@ -857,14 +926,22 @@ export default function App() {
                 ref={searchRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+                  searchTimeoutRef.current = setTimeout(() => {
+                    setSearch(e.target.value);
+                  }, 200);
+                }}
                 placeholder="Search tasks..."
                 className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
               />
               {search && (
                 <button
                   type="button"
-                  onClick={() => setSearch("")}
+                  onClick={() => {
+                    setSearch("");
+                    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-primary0 hover:text-secondary cursor-pointer"
                 >
                   ✕
@@ -934,36 +1011,76 @@ export default function App() {
 
           {/* Board */}
           <main className="flex-1 overflow-hidden p-4">
-            <Board
-              tasks={filteredTasks}
-              onTaskClick={handleTaskClick}
-              onTaskMove={handleTaskMove}
-              onRetryPR={retryPR}
-              onArchiveDone={async () => {
-                try {
-                  await archiveDone();
-                  toast("Completed tasks archived", "info");
-                } catch {
-                  toast("Failed to archive completed tasks", "error");
-                }
-              }}
-              onClearFailed={async () => {
-                try {
-                  await clearFailed();
-                  toast("Failed tasks removed", "info");
-                } catch {
-                  toast("Failed to clear failed tasks", "error");
-                }
-              }}
-              onRetryAllFailed={async () => {
-                try {
-                  await retryAllFailed();
-                  toast("Restarting failed tasks", "info");
-                } catch {
-                  toast("Failed to retry failed tasks", "error");
-                }
-              }}
-            />
+            {tasksLoading ? (
+              <SkeletonBoard />
+            ) : tasksError ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="w-14 h-14 rounded-full bg-danger/15 border border-danger/30 flex items-center justify-center">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="text-danger"
+                      aria-label="Error icon"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <h3 className="text-sm font-semibold text-primary">Falha ao carregar tasks</h3>
+                    <p className="text-xs text-secondary max-w-xs">{tasksError}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={refresh}
+                  className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : (
+              <ErrorBoundary>
+                <Board
+                  tasks={filteredTasks}
+                  onTaskClick={handleTaskClick}
+                  onTaskMove={handleTaskMove}
+                  onRetryPR={retryPR}
+                  onArchiveDone={async () => {
+                    try {
+                      await archiveDone();
+                      toast("Completed tasks archived", "info");
+                    } catch {
+                      toast("Failed to archive completed tasks", "error");
+                    }
+                  }}
+                  onClearFailed={async () => {
+                    try {
+                      await clearFailed();
+                      toast("Failed tasks removed", "info");
+                    } catch {
+                      toast("Failed to clear failed tasks", "error");
+                    }
+                  }}
+                  onRetryAllFailed={async () => {
+                    try {
+                      await retryAllFailed();
+                      toast("Restarting failed tasks", "info");
+                    } catch {
+                      toast("Failed to retry failed tasks", "error");
+                    }
+                  }}
+                />
+              </ErrorBoundary>
+            )}
           </main>
         </div>
 

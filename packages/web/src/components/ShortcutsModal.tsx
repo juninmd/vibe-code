@@ -4,12 +4,13 @@ interface ShortcutsModalProps {
 
 const SHORTCUTS = [
   { keys: ["N"], description: "Nova tarefa" },
+  { keys: ["D"], description: "Duplicar task selecionada" },
+  { keys: ["Del"], description: "Deletar task selecionada" },
   { keys: ["Ctrl", "O"], description: "Adicionar repositório" },
   { keys: ["Ctrl", "K"], description: "Command palette" },
+  { keys: ["Ctrl", "S"], description: "Exportar board" },
+  { keys: ["Ctrl", "Shift", "C"], description: "Limpar busca" },
   { keys: ["?"], description: "Mostrar atalhos" },
-  { keys: ["F"], description: "Abrir/fechar filtros" },
-  { keys: ["E"], description: "Painel de engines" },
-  { keys: ["/"], description: "Focar busca" },
   { keys: ["Esc"], description: "Fechar painel/diálogo" },
 ];
 

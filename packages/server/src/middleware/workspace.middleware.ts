@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+
 
 /**
  * Workspace ID enforcement middleware

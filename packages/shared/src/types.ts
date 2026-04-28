@@ -60,6 +60,10 @@ export interface Task {
   notes: string;
   /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
   plannerSpec?: string | null;
+  /** IDs of tasks that must complete before this task can start. */
+  dependsOn: string[];
+  /** When true, task requires human approval before PR is created. */
+  pendingApproval: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -171,6 +175,7 @@ export interface CreateTaskRequest {
   tags?: string[];
   agentId?: string;
   workflowId?: string;
+  dependsOn?: string[];
 }
 
 export interface UpdateTaskRequest {
@@ -182,6 +187,8 @@ export interface UpdateTaskRequest {
   model?: string;
   tags?: string[];
   notes?: string;
+  dependsOn?: string[];
+  pendingApproval?: boolean;
 }
 
 export interface LaunchTaskRequest {
@@ -359,6 +366,28 @@ export type WsServerMessage =
       output: string;
       status: "success" | "error";
       timestamp: string;
+    }
+  | {
+      type: "phase_changed";
+      runId: string;
+      taskId: string;
+      phase: string;
+      timestamp: string;
+    }
+  | {
+      type: "task_blocked";
+      taskId: string;
+      blockedBy: string[];
+    }
+  | {
+      type: "task_unblocked";
+      taskId: string;
+      unblockedBy: string;
+    }
+  | {
+      type: "task_approval_pending";
+      taskId: string;
+      message: string;
     }
   | { type: "error"; message: string };
 

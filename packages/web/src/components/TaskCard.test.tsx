@@ -39,6 +39,8 @@ const baseTask: TaskWithRun = {
   matchedSkills: [],
   tags: [],
   notes: "",
+  dependsOn: [],
+  pendingApproval: false,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   latestRun: undefined,

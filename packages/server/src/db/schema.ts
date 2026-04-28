@@ -129,9 +129,13 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("matched_skills")) {
     db.exec("ALTER TABLE tasks ADD COLUMN matched_skills TEXT DEFAULT '[]'");
   }
-  // M-harness: planner-generated spec expansion stored per task
-  if (!taskColNames.includes("planner_spec")) {
-    db.exec("ALTER TABLE tasks ADD COLUMN planner_spec TEXT");
+  // Migration: tasks.depends_on column for task dependency graph
+  if (!taskColNames.includes("depends_on")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN depends_on TEXT DEFAULT '[]'");
+  }
+  // Migration: tasks.pending_approval column for human-in-the-loop gates
+  if (!taskColNames.includes("pending_approval")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN pending_approval INTEGER NOT NULL DEFAULT 0");
   }
 
   // Migration: add provider column to repositories

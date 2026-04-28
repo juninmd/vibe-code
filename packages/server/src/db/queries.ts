@@ -53,6 +53,8 @@ interface TaskRow {
   tags: string | null;
   notes: string | null;
   planner_spec: string | null;
+  depends_on: string | null;
+  pending_approval: number;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +123,8 @@ function mapTask(row: TaskRow): Task {
     tags: JSON.parse(row.tags || "[]") as string[],
     notes: row.notes ?? "",
     plannerSpec: row.planner_spec ?? null,
+    dependsOn: JSON.parse(row.depends_on || "[]") as string[],
+    pendingApproval: Boolean(row.pending_approval),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -245,26 +249,10 @@ export function createTaskQueries(db: Database) {
       const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
       const tagsJson = JSON.stringify(req.tags ?? []);
+      const dependsOnJson = JSON.stringify(req.dependsOn ?? []);
       const row = db
-        .prepare<
-          TaskRow,
-          [
-            string,
-            string,
-            string,
-            string | null,
-            string | null,
-            string | null,
-            number,
-            number,
-            string,
-            string | null,
-            string,
-            string | null,
-            string | null,
-          ]
-        >(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+        .prepare(
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -279,10 +267,12 @@ export function createTaskQueries(db: Database) {
           req.parentTaskId ?? null,
           tagsJson,
           req.agentId ?? null,
-          req.workflowId ?? null
-        );
+          req.workflowId ?? null,
+          dependsOnJson,
+          "0"
+        ) as TaskRow | null;
       if (!row) throw new Error("Failed to create task");
-      return mapTask(row);
+      return mapTask(row as TaskRow);
     },
     update: (id: string, req: UpdateTaskRequest): Task | null => {
       const sets: string[] = [];
@@ -318,6 +308,14 @@ export function createTaskQueries(db: Database) {
       if (req.notes !== undefined) {
         sets.push("notes = ?");
         values.push(req.notes);
+      }
+      if (req.dependsOn !== undefined) {
+        sets.push("depends_on = ?");
+        values.push(JSON.stringify(req.dependsOn));
+      }
+      if (req.pendingApproval !== undefined) {
+        sets.push("pending_approval = ?");
+        values.push(req.pendingApproval ? "1" : "0");
       }
       if (sets.length === 0) {
         const currentRow = stmts.getById.get(id);

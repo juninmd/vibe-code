@@ -1,12 +1,21 @@
 import { useToast } from "../../hooks/useToast";
 
 export function Toaster() {
-  const { toasts, dismiss } = useToast();
+  const { toasts, dismiss, dismissAll } = useToast();
 
   if (toasts.length === 0) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      {toasts.length > 1 && (
+        <button
+          type="button"
+          onClick={dismissAll}
+          className="self-end mb-1 text-xs text-dimmed hover:text-secondary transition-colors cursor-pointer pointer-events-auto"
+        >
+          Dismiss all
+        </button>
+      )}
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -42,6 +51,7 @@ export function Toaster() {
             type="button"
             onClick={() => dismiss(t.id)}
             className="shrink-0 text-current opacity-50 hover:opacity-100 cursor-pointer transition-opacity"
+            aria-label="Dismiss notification"
           >
             ✕
           </button>
