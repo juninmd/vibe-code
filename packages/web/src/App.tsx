@@ -256,8 +256,8 @@ export default function App() {
                   {
                     id: Date.now(),
                     runId: msg.runId,
-                    stream: "system",
-                    content: `[tool] ${msg.toolName}${msg.toolId ? ` (${msg.toolId})` : ""}${msg.parameters ? ` ${JSON.stringify(msg.parameters)}` : ""}`,
+                    stream: "stdout",
+                    content: `${msg.toolName}`,
                     timestamp: msg.timestamp,
                   },
                 ]),
@@ -274,8 +274,8 @@ export default function App() {
                   {
                     id: Date.now(),
                     runId: msg.runId,
-                    stream: "system",
-                    content: `[tool result] ${msg.status}${msg.toolId ? ` (${msg.toolId})` : ""}: ${msg.output.length > 120 ? `${msg.output.slice(0, 120)}...` : msg.output}`,
+                    stream: "stdout",
+                    content: `${msg.status} ${msg.output.length > 80 ? `${msg.output.slice(0, 80)}…` : msg.output}`,
                     timestamp: msg.timestamp,
                   },
                 ]),

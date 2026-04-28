@@ -5,6 +5,71 @@ import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
+function str(v: unknown): string {
+  return v != null ? String(v) : "";
+}
+
+function humanizeToolCall(tool: string, input: Record<string, unknown>): string {
+  const t = tool.toLowerCase();
+  const path = str(input.path ?? input.file_path ?? input.file ?? input.filename);
+  const cmd = str(input.command ?? input.cmd);
+  const query = str(input.query ?? input.pattern ?? input.glob ?? input.search);
+  const url = str(input.url);
+
+  if (t.includes("read") || t === "view_file" || t === "cat") return `Reading ${path || "file"}`;
+  if (t.includes("write") || t.includes("create_file") || t === "touch")
+    return `Writing ${path || "file"}`;
+  if (t.includes("edit") || t.includes("str_replace") || t.includes("patch"))
+    return `Editing ${path || "file"}`;
+  if (t.includes("delete") || t.includes("remove_file")) return `Deleting ${path || "file"}`;
+  if (t.includes("move") || t.includes("rename")) return `Moving ${path || "file"}`;
+  if (t === "bash" || t.includes("run_command") || t.includes("execute") || t.includes("shell"))
+    return `Running: ${cmd || "(command)"}`;
+  if (t.includes("list") || t.includes("ls") || t.includes("directory"))
+    return `Listing ${path || "directory"}`;
+  if (t.includes("grep") || t.includes("search") || t.includes("find") || t.includes("glob"))
+    return `Searching ${query ? `"${query}"` : ""}${path ? ` in ${path}` : ""}`;
+  if (t.includes("web") || t.includes("browser") || t.includes("fetch"))
+    return `Fetching ${url || "URL"}`;
+  if (t.includes("git")) return `Git: ${cmd || t}`;
+
+  const readable = tool.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const detail = path || cmd || query || url;
+  return `${readable}${detail ? `: ${detail}` : ""}`;
+}
+
+function humanizeToolResult(tool: string, output: unknown): string | null {
+  if (output == null) return null;
+  const t = tool.toLowerCase();
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  const lines = text.split("\n").filter((l) => l.trim()).length;
+  const preview = text.slice(0, 120).replace(/\n/g, " ").trim();
+
+  if (t === "bash" || t.includes("run_command") || t.includes("execute")) {
+    if (!text.trim()) return "Done (no output)";
+    return `${preview}${text.length > 120 ? ` … (${lines} lines)` : ""}`;
+  }
+  if (t.includes("read") || t === "view_file") {
+    return `${lines} line${lines !== 1 ? "s" : ""} read`;
+  }
+  if (t.includes("search") || t.includes("grep") || t.includes("glob")) {
+    return `${lines} match${lines !== 1 ? "es" : ""}`;
+  }
+  if (
+    t.includes("write") ||
+    t.includes("edit") ||
+    t.includes("create") ||
+    t.includes("str_replace")
+  ) {
+    return "Saved";
+  }
+  if (t.includes("web") || t.includes("fetch")) {
+    return `${lines} line${lines !== 1 ? "s" : ""} fetched`;
+  }
+  if (text.length <= 80) return preview;
+  return null;
+}
+
 export class GeminiEngine implements AgentEngine {
   name = "gemini";
   displayName = "Gemini CLI";
@@ -203,8 +268,8 @@ export class GeminiEngine implements AgentEngine {
                 },
                 {
                   type: "log",
-                  stream: "system",
-                  content: `[tool] ${toolName}${toolId ? ` (${toolId})` : ""}`,
+                  stream: "stdout",
+                  content: humanizeToolCall(toolName, parameters ?? {}),
                 },
               ];
             }
@@ -217,6 +282,12 @@ export class GeminiEngine implements AgentEngine {
                   : typeof obj.call_id === "string"
                     ? obj.call_id
                     : "";
+              const toolName =
+                typeof obj.tool_name === "string"
+                  ? obj.tool_name
+                  : typeof obj.name === "string"
+                    ? obj.name
+                    : "tool";
               const output =
                 typeof obj.output === "string"
                   ? obj.output
@@ -224,17 +295,17 @@ export class GeminiEngine implements AgentEngine {
                     ? obj.result
                     : JSON.stringify(obj.output ?? obj.result ?? "");
               const status = obj.status === "error" ? "error" : "success";
-              return [
+              const label = humanizeToolResult(toolName, output);
+              const baseEvents: AgentEvent[] = [
                 {
                   type: "tool_result",
                   toolResult: { toolId, output, status },
                 },
-                {
-                  type: "log",
-                  stream: "system",
-                  content: `[tool result] ${status}${toolId ? ` (${toolId})` : ""}`,
-                },
               ];
+              if (label) {
+                baseEvents.push({ type: "log", stream: "stdout", content: label });
+              }
+              return baseEvents;
             }
 
             // Cost/usage stats event from provider

@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import type { AgentLog, LogStream } from "@vibe-code/shared";
 import AnsiToHtml from "ansi-to-html";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,10 +20,290 @@ function convertAnsi(text: string): string {
   }
 }
 
-/** Strip all ANSI escape codes, returning plain text for search highlighting */
 function stripAnsi(text: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape strip
   return text.replace(/\u001b\[[\d;]*[A-Za-z]/g, "").replace(/\r/g, "");
+}
+
+/* ── Step grouping ─────────────────────────────────────── */
+
+interface StepLog {
+  log: AgentLog;
+  matchNumber: number;
+}
+
+interface StepGroup {
+  id: number;
+  toolName: string;
+  toolIcon: string;
+  accentColor: string;
+  logs: StepLog[];
+  thinkingContent: string | null;
+  isComplete: boolean;
+}
+
+function detectToolIcon(name: string): string {
+  const t = name.toLowerCase();
+  if (t.includes("read") || t.includes("view_file") || t.includes("cat")) return "📖";
+  if (t.includes("write") || t.includes("create") || t.includes("touch")) return "✏️";
+  if (t.includes("edit") || t.includes("str_replace") || t.includes("patch")) return "✏️";
+  if (t.includes("delete") || t.includes("remove")) return "🗑️";
+  if (t.includes("move") || t.includes("rename")) return "🏷️";
+  if (
+    t.includes("bash") ||
+    t.includes("run_command") ||
+    t.includes("execute") ||
+    t.includes("shell")
+  )
+    return "💻";
+  if (t.includes("list") || t.includes("ls") || t.includes("directory")) return "📂";
+  if (t.includes("grep") || t.includes("search") || t.includes("find") || t.includes("glob"))
+    return "🔍";
+  if (t.includes("web") || t.includes("browser") || t.includes("fetch")) return "🌐";
+  if (t.includes("git")) return "🔀";
+  return "⚙️";
+}
+
+function detectToolColor(name: string): string {
+  const t = name.toLowerCase();
+  if (t.includes("read") || t.includes("view_file") || t.includes("cat")) return "#a78bfa";
+  if (t.includes("write") || t.includes("create") || t.includes("touch")) return "#34d399";
+  if (t.includes("edit") || t.includes("str_replace") || t.includes("patch")) return "#a78bfa";
+  if (t.includes("delete") || t.includes("remove")) return "#f87171";
+  if (t.includes("move") || t.includes("rename")) return "#fbbf24";
+  if (
+    t.includes("bash") ||
+    t.includes("run_command") ||
+    t.includes("execute") ||
+    t.includes("shell")
+  )
+    return "#22d3ee";
+  if (t.includes("list") || t.includes("ls") || t.includes("directory")) return "#60a5fa";
+  if (t.includes("grep") || t.includes("search") || t.includes("find") || t.includes("glob"))
+    return "#f97316";
+  if (t.includes("web") || t.includes("browser") || t.includes("fetch")) return "#e879f9";
+  if (t.includes("git")) return "#f87171";
+  return "#71717a";
+}
+
+function buildStepGroups(logs: AgentLog[]): StepGroup[] {
+  const groups: StepGroup[] = [];
+  let currentGroup: StepGroup | null = null;
+  let stepId = 0;
+
+  for (const log of logs) {
+    // tool_use starts a new step — detect humanized tool names from stdout or system
+    if (
+      log.content.match(
+        /^(Reading|Writing|Editing|Deleting|Moving|Running:|Listing|Searching|Fetching|Git:|⚙️)/
+      )
+    ) {
+      if (currentGroup) {
+        currentGroup.isComplete = true;
+        groups.push(currentGroup);
+      }
+      stepId++;
+      const toolFullName = log.content.split(" ")[0].trim();
+      currentGroup = {
+        id: stepId,
+        toolName: log.content,
+        toolIcon: detectToolIcon(toolFullName || log.content),
+        accentColor: detectToolColor(toolFullName || log.content),
+        logs: [],
+        thinkingContent: null,
+        isComplete: false,
+      };
+    }
+
+    // capture thinking
+    if (
+      (log.stream === "stdout" || log.stream === "system") &&
+      (log.content.startsWith("Thinking") ||
+        log.content.startsWith("[Thinking]") ||
+        (/^[A-Z]/.test(log.content) && log.content.length < 200 && !log.content.includes("\n")))
+    ) {
+      if (currentGroup && !currentGroup.thinkingContent) {
+        currentGroup.thinkingContent = log.content;
+      }
+    }
+
+    if (currentGroup) {
+      currentGroup.logs.push({ log, matchNumber: -1 });
+    } else if (log.stream !== "system") {
+      // orphan log — create implicit group 0
+      if (groups.length === 0) {
+        stepId++;
+        groups.push({
+          id: stepId,
+          toolName: "Output",
+          toolIcon: "📄",
+          accentColor: "#71717a",
+          logs: [],
+          thinkingContent: null,
+          isComplete: true,
+        });
+      }
+      groups[groups.length - 1].logs.push({ log, matchNumber: -1 });
+    }
+  }
+
+  if (currentGroup) {
+    currentGroup.isComplete = true;
+    groups.push(currentGroup);
+  }
+
+  return groups;
+}
+
+/* ── Accordion step renderer ─────────────────────────────── */
+
+interface StepAccordionProps {
+  group: StepGroup;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isLast: boolean;
+  isRunning: boolean;
+  showTimestamps: boolean;
+  streamFilter: StreamFilter;
+}
+
+function StepAccordion({
+  group,
+  isExpanded,
+  onToggle,
+  isLast,
+  isRunning,
+  showTimestamps,
+  streamFilter,
+}: StepAccordionProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const filteredLogs = useMemo(() => {
+    if (streamFilter === "all") return group.logs;
+    return group.logs.filter((sl) => sl.log.stream === streamFilter);
+  }, [group.logs, streamFilter]);
+
+  return (
+    <div
+      ref={ref}
+      className="relative border-b border-[var(--border-subtle)] last:border-b-0 group/step"
+      data-step-id={group.id}
+    >
+      {/* Accent bar */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-0.5 opacity-80"
+        style={{ background: group.accentColor }}
+      />
+
+      {/* Header row */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer select-none hover:bg-[var(--bg-surface-hover)] ${
+          isExpanded ? "bg-[var(--bg-surface)]" : ""
+        }`}
+      >
+        {/* Running indicator */}
+        {isLast && isRunning && (
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+        )}
+
+        {/* Step number */}
+        <span
+          className="text-[10px] font-mono font-semibold shrink-0 w-5 h-5 rounded flex items-center justify-center"
+          style={{
+            background: `${group.accentColor}22`,
+            color: group.accentColor,
+          }}
+        >
+          {group.id}
+        </span>
+
+        {/* Tool icon */}
+        <span className="text-sm shrink-0">{group.toolIcon}</span>
+
+        {/* Tool name — first line of content */}
+        <span className="flex-1 text-xs font-mono text-[var(--text-primary)] truncate">
+          {group.toolName}
+        </span>
+
+        {/* Thinking badge */}
+        {group.thinkingContent && (
+          <span className="text-[9px] font-mono text-[var(--text-dimmed)] italic border border-[var(--border-subtle)] px-1 py-0.5 rounded shrink-0 truncate max-w-[120px] hidden sm:inline">
+            💭
+          </span>
+        )}
+
+        {/* Chevron */}
+        <span
+          className={`text-[10px] text-[var(--text-dimmed)] shrink-0 transition-transform duration-200 ${
+            isExpanded ? "rotate-90" : ""
+          }`}
+        >
+          ▶
+        </span>
+      </button>
+
+      {/* Expanded body */}
+      <div
+        className={`overflow-hidden transition-all duration-200 ease-in-out ${
+          isExpanded ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        {/* Thinking block */}
+        {group.thinkingContent && isExpanded && (
+          <div className="px-4 py-2 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] text-[var(--text-dimmed)] mt-0.5 shrink-0">💭</span>
+              <p className="text-[11px] font-mono text-[var(--text-dimmed)] italic leading-relaxed">
+                {group.thinkingContent}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Log lines */}
+        <div className="font-mono text-xs">
+          {filteredLogs.map((sl, idx2) => {
+            const log = sl.log;
+            if (log.stream === "system" && /^\[tool\]|\[tool result\]/.test(log.content))
+              return null;
+
+            const color =
+              log.stream === "stderr"
+                ? "#f87171"
+                : log.stream === "system"
+                  ? "#71717a"
+                  : log.stream === "stdin"
+                    ? "#34d399"
+                    : "";
+
+            const html = convertAnsi(log.content);
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: ansi-to-html with escapeXML:true
+            const inner = <span dangerouslySetInnerHTML={{ __html: html }} />;
+
+            return (
+              <div
+                key={log.id ?? `log-${idx2}`}
+                className={`px-4 py-px leading-relaxed pl-8 ${
+                  log.stream === "stdout" ? "text-[var(--text-secondary)]" : ""
+                }`}
+                style={{ color: color || undefined }}
+              >
+                {showTimestamps && (
+                  <span className="text-[var(--text-dimmed)] select-none mr-1 text-[10px]">
+                    {formatTime(log.timestamp)}
+                  </span>
+                )}
+                {log.stream === "stdin" && <span className="text-success mr-1">$ </span>}
+                {inner}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface AgentOutputProps {
@@ -36,48 +315,6 @@ interface AgentOutputProps {
   fullHeight?: boolean;
   /** Latest status from the agent (from run.currentStatus) */
   currentStatus?: string | null;
-}
-
-function getStreamColor(stream: string, content: string): string {
-  if (stream === "review") {
-    if (content.startsWith("BLOCKER:")) return "#f87171";
-    if (content.startsWith("WARNING:")) return "#facc15";
-    if (content.startsWith("INFO:")) return "#60a5fa";
-    if (content.startsWith("LGTM")) return "#34d399";
-    if (content.startsWith("[REVIEW:")) return "#c4b5fd";
-    return "#a1a1aa";
-  }
-  switch (stream) {
-    case "stderr":
-      return "#f87171";
-    case "system":
-      return "#71717a";
-    case "stdin":
-      return "#34d399";
-    default:
-      return "";
-  }
-}
-
-const PERSONA_BADGE: Record<string, string> = {
-  frontend: "bg-info/15 text-info border border-info/30",
-  backend: "bg-success/15 text-success border border-success/30",
-  security: "bg-danger/15 text-danger border border-danger/30",
-  quality: "bg-yellow-900/50 text-yellow-300 border border-yellow-700/50",
-};
-
-function ReviewBadge({ content }: { content: string }) {
-  const match = content.match(/^\[REVIEW:(\w+)\]/);
-  if (!match) return null;
-  const persona = match[1];
-  const cls = PERSONA_BADGE[persona] ?? "bg-surface text-secondary";
-  return (
-    <span
-      className={`inline-block text-[9px] font-mono px-1.5 py-0.5 rounded mr-1.5 leading-none ${cls}`}
-    >
-      {persona}
-    </span>
-  );
 }
 
 /** Detects if the last few log lines contain an unanswered question from the agent */
@@ -160,11 +397,11 @@ export function AgentOutput({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [input, setInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [useRegex, setUseRegex] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [matchIdx, setMatchIdx] = useState(0);
   const [pinnedBottom, setPinnedBottom] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const [showTimestamps, setShowTimestamps] = useState(false);
 
@@ -176,13 +413,21 @@ export function AgentOutput({
   // Load historic logs when run changes (with abort to prevent stale responses)
   useEffect(() => {
     setHistoricLogs([]);
+    setExpandedSteps(new Set());
     if (!runId) return;
     const abortCtrl = new AbortController();
     setLoadingLogs(true);
     api.runs
       .logs(runId)
       .then((logs) => {
-        if (!abortCtrl.signal.aborted) setHistoricLogs(logs);
+        if (!abortCtrl.signal.aborted) {
+          setHistoricLogs(logs);
+          // auto-expand last step
+          const groups = buildStepGroups(logs);
+          if (groups.length > 0) {
+            setExpandedSteps(new Set([groups[groups.length - 1].id]));
+          }
+        }
       })
       .catch((err) => {
         if (!abortCtrl.signal.aborted) console.error(err);
@@ -199,6 +444,19 @@ export function AgentOutput({
     const last = historicLogs[historicLogs.length - 1];
     return [...historicLogs, ...liveLogs.filter((l) => l.timestamp > last.timestamp)];
   }, [historicLogs, liveLogs]);
+
+  // Auto-expand last step when new tool activity appears while running
+  useEffect(() => {
+    if (!isRunning) return;
+    const groups = buildStepGroups(allLogs);
+    if (groups.length > 0) {
+      const last = groups[groups.length - 1];
+      setExpandedSteps((prev) => {
+        if (prev.has(last.id)) return prev;
+        return new Set([...prev, last.id]);
+      });
+    }
+  }, [allLogs, isRunning]);
 
   // Derived stats (only recomputed when allLogs changes)
   const tokenStats = useMemo(() => deriveTokenStats(allLogs), [allLogs]);
@@ -218,37 +476,6 @@ export function AgentOutput({
     }
     return counts;
   }, [allLogs]);
-
-  // Auto-scroll when pinned — rowVirtualizer declared below, after renderedLogs
-  // (effects run after render so forward reference is safe at runtime, but TS
-  //  needs the virtualizer declared before the useMemo it depends on)
-  // See declaration right after renderedLogs useMemo.
-
-  // Auto-focus input only when a new question appears and user is not selecting/copying logs.
-  const lastQuestionRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!awaitingQuestion || !isRunning) {
-      lastQuestionRef.current = awaitingQuestion;
-      return;
-    }
-
-    const isNewQuestion = awaitingQuestion !== lastQuestionRef.current;
-    lastQuestionRef.current = awaitingQuestion;
-    if (!isNewQuestion) return;
-
-    const selection = window.getSelection?.()?.toString() ?? "";
-    const active = document.activeElement;
-    const editingElsewhere =
-      active instanceof HTMLInputElement ||
-      active instanceof HTMLTextAreaElement ||
-      (active as HTMLElement | null)?.isContentEditable === true;
-    if (selection.trim() || editingElsewhere) return;
-
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [awaitingQuestion, isRunning]);
-
-  // Scroll to highlighted match — moved below rowVirtualizer declaration
-  // (see effect after renderedLogs + rowVirtualizer)
 
   // Ctrl+F to open search — scoped to the container element so it doesn't
   // override the browser's global find-in-page when this component is not focused.
@@ -327,53 +554,19 @@ export function AgentOutput({
     inputRef.current?.focus();
   };
 
-  // Apply stream filter then search highlight
-  const { renderedLogs, totalMatches } = useMemo(() => {
-    const filtered =
-      streamFilter === "all" ? allLogs : allLogs.filter((l) => l.stream === streamFilter);
+  const stepGroups = useMemo(() => buildStepGroups(allLogs), [allLogs]);
 
-    if (!showSearch || !searchQuery.trim()) {
-      return { renderedLogs: filtered.map((l) => ({ log: l, matchNumber: -1 })), totalMatches: 0 };
-    }
-    let re: RegExp | null = null;
-    if (useRegex) {
-      try {
-        re = new RegExp(searchQuery, "i");
-      } catch {
-        /* invalid regex */
+  const toggleStep = useCallback((id: number) => {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
       }
-    }
-    const q = searchQuery.toLowerCase();
-    let counter = 0;
-    const renderedLogs = filtered.map((l) => {
-      const hit = re ? re.test(l.content) : l.content.toLowerCase().includes(q);
-      return { log: l, matchNumber: hit ? counter++ : -1 };
+      return next;
     });
-    return { renderedLogs, totalMatches: counter };
-  }, [allLogs, showSearch, searchQuery, streamFilter, useRegex]);
-
-  // Virtual list — dynamic measurement for variable-height rows (pre-wrap, badges, etc.)
-  const rowVirtualizer = useVirtualizer({
-    count: renderedLogs.length + (loadingLogs ? 1 : 0),
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 22,
-    overscan: 20,
-    measureElement: (el) => el?.getBoundingClientRect().height ?? 22,
-  });
-
-  // Auto-scroll when pinned
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally triggers on log append
-  useEffect(() => {
-    if (!pinnedBottom || renderedLogs.length === 0) return;
-    rowVirtualizer.scrollToIndex(renderedLogs.length - 1, { align: "end" });
-  }, [renderedLogs.length, pinnedBottom]);
-
-  // Scroll to highlighted match
-  useEffect(() => {
-    if (!showSearch || !searchQuery || totalMatches === 0) return;
-    const idx = renderedLogs.findIndex((r) => r.matchNumber === matchIdx);
-    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: "auto" });
-  }, [matchIdx, showSearch, searchQuery, totalMatches, renderedLogs, rowVirtualizer]);
+  }, []);
 
   const containerClass = isFullscreen
     ? "flex flex-col rounded-xl border border-strong shadow-2xl overflow-hidden bg-app h-full"
@@ -490,7 +683,10 @@ export function AgentOutput({
             type="button"
             onClick={() => {
               setPinnedBottom(true);
-              rowVirtualizer.scrollToIndex(renderedLogs.length - 1, { align: "end" });
+              if (stepGroups.length > 0) {
+                const last = stepGroups[stepGroups.length - 1];
+                setExpandedSteps((prev) => new Set([...prev, last.id]));
+              }
             }}
             className="p-1 rounded text-xs text-info hover:text-info cursor-pointer animate-pulse"
             title="Rolar para o fim"
@@ -532,18 +728,6 @@ export function AgentOutput({
         {showSearch && (
           <>
             <div className="w-px h-4 bg-surface-hover shrink-0" />
-            <button
-              type="button"
-              onClick={() => setUseRegex((v) => !v)}
-              title="Alternar regex"
-              className={`px-1.5 py-0.5 text-[9px] rounded border cursor-pointer font-mono shrink-0 ${
-                useRegex
-                  ? "border-violet-600 text-accent-text bg-accent-muted"
-                  : "border-strong text-primary0"
-              }`}
-            >
-              .*
-            </button>
             <input
               ref={searchRef}
               type="text"
@@ -553,36 +737,26 @@ export function AgentOutput({
                 setMatchIdx(0);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1));
                 if (e.key === "Escape") {
                   setShowSearch(false);
                   setSearchQuery("");
                 }
               }}
-              placeholder={useRegex ? "Regex..." : "Buscar nos logs..."}
+              placeholder={searchQuery ? "Buscar..." : "Buscar nos logs..."}
               className="flex-1 bg-transparent text-xs font-mono text-secondary placeholder:text-dimmed focus:outline-none min-w-0"
             />
-            {totalMatches > 0 && (
-              <span className="text-[10px] text-primary0 shrink-0">
-                {matchIdx + 1}/{totalMatches}
-              </span>
-            )}
-            {searchQuery && totalMatches === 0 && (
-              <span className="text-[10px] text-danger shrink-0">no results</span>
-            )}
+            {searchQuery && <span className="text-[10px] text-primary0 shrink-0">buscar</span>}
             <button
               type="button"
               onClick={() => setMatchIdx((i) => Math.max(i - 1, 0))}
-              disabled={totalMatches === 0}
-              className="text-primary0 hover:text-secondary disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              className="text-primary0 hover:text-secondary cursor-pointer text-xs shrink-0"
             >
               ↑
             </button>
             <button
               type="button"
-              onClick={() => setMatchIdx((i) => (i + 1) % Math.max(totalMatches, 1))}
-              disabled={totalMatches === 0}
-              className="text-primary0 hover:text-secondary disabled:opacity-30 cursor-pointer text-xs shrink-0"
+              onClick={() => setMatchIdx((i) => i + 1)}
+              className="text-primary0 hover:text-secondary cursor-pointer text-xs shrink-0"
             >
               ↓
             </button>
@@ -590,113 +764,34 @@ export function AgentOutput({
         )}
       </div>
 
-      {/* Log output */}
+      {/* Step accordion output */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`bg-app font-mono text-xs overflow-y-auto cursor-text ${
+        className={`bg-app overflow-y-auto cursor-text ${
           isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
         }`}
       >
-        <div style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}>
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            if (virtualRow.index >= renderedLogs.length) {
-              // Loading row
-              return (
-                <div
-                  key="loading"
-                  data-index={virtualRow.index}
-                  ref={rowVirtualizer.measureElement}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                  className="px-3 py-0.5 text-dimmed animate-pulse text-[11px]"
-                >
-                  Carregando logs...
-                </div>
-              );
-            }
-            const { log, matchNumber } = renderedLogs[virtualRow.index];
-            const isActive = matchNumber === matchIdx && showSearch && !!searchQuery;
-            const isReviewHeader = log.stream === "review" && log.content.startsWith("[REVIEW:");
-            const isQuestion = log.stream === "stdout" && log.content.includes("[Question]");
-            const color = getStreamColor(log.stream, log.content);
-
-            // Highlight search matches in plain text (ANSI stripped), or render ANSI
-            let inner: React.ReactNode;
-            if (showSearch && searchQuery && matchNumber >= 0) {
-              // Strip ANSI codes first so escape sequences don't appear literally in search results
-              const plainText = stripAnsi(log.content);
-              const q = searchQuery.toLowerCase();
-              const idx = plainText.toLowerCase().indexOf(q);
-              if (idx >= 0) {
-                inner = (
-                  <>
-                    {plainText.slice(0, idx)}
-                    <mark
-                      className={`rounded px-0.5 ${
-                        isActive ? "bg-yellow-400 text-black" : "bg-yellow-900 text-yellow-200"
-                      }`}
-                    >
-                      {plainText.slice(idx, idx + q.length)}
-                    </mark>
-                    {plainText.slice(idx + q.length)}
-                  </>
-                );
-              } else {
-                inner = plainText;
-              }
-            } else {
-              // ANSI rendering — content is XML-escaped by ansi-to-html (escapeXML: true)
-              const html = convertAnsi(log.content);
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized via ansi-to-html with escapeXML:true
-              inner = <span dangerouslySetInnerHTML={{ __html: html }} />;
-            }
-
-            return (
-              <div
-                key={log.id ?? `live-${virtualRow.index}`}
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  transform: `translateY(${virtualRow.start}px)`,
-                  color: color || undefined,
-                  // pre-wrap preserves spaces/tabs and original indentation;
-                  // break-all prevents long unbroken lines from causing layout overflow
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-                className={`px-3 py-px leading-relaxed ${
-                  isActive ? "bg-yellow-900/20" : ""
-                } ${isQuestion ? "bg-warning/15 border-l-2 border-amber-600 pl-2" : ""}`}
-              >
-                {showTimestamps && (
-                  <span className="text-dimmed select-none mr-1">{formatTime(log.timestamp)}</span>
-                )}
-                {log.stream === "stdin" && <span className="text-success">$ </span>}
-                {isReviewHeader && <ReviewBadge content={log.content} />}
-                {isQuestion && <span className="text-warning mr-1">?</span>}
-                {inner}
-              </div>
-            );
-          })}
-        </div>
+        {stepGroups.map((group, idx) => (
+          <StepAccordion
+            key={group.id}
+            group={group}
+            isExpanded={expandedSteps.has(group.id)}
+            onToggle={() => toggleStep(group.id)}
+            isLast={idx === stepGroups.length - 1}
+            isRunning={isRunning}
+            showTimestamps={showTimestamps}
+            streamFilter={streamFilter}
+          />
+        ))}
 
         {!loadingLogs && allLogs.length === 0 && (
           <div className="text-dimmed p-3">Aguardando saída...</div>
         )}
       </div>
 
-      {/* Running status footer — outside scroll container to avoid overlap */}
-      {isRunning && !awaitingQuestion && renderedLogs.length > 0 && (
+      {/* Running status footer */}
+      {isRunning && !awaitingQuestion && stepGroups.length > 0 && (
         <div className="flex items-center gap-1.5 text-info px-3 py-1 border-t border-default bg-input/80 shrink-0">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
           <span className="text-[11px]">Agente rodando...</span>
