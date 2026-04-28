@@ -339,6 +339,7 @@ export async function executeAgent(
   const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 2 * 60 * 60 * 1000;
   const INACTIVITY_MS = Number(process.env.VIBE_CODE_INACTIVITY_MS) || 10 * 60 * 1000;
   let timedOut = false;
+  let stalledDueToInactivity = false;
   let lastActivity = Date.now();
 
   const effectiveModel = model ?? "opencode/minimax-m2.5-free";
@@ -350,6 +351,7 @@ export async function executeAgent(
       `Task ${task.id.slice(0, 8)} timed out after ${TIMEOUT_MS / 60000}m`,
       "warn"
     );
+    db.runs.updateStateSnapshot(run.id, "timed_out");
     abort.abort();
   }, TIMEOUT_MS);
 
@@ -357,10 +359,12 @@ export async function executeAgent(
     const inactiveSecs = Math.round((Date.now() - lastActivity) / 1000);
     if (Date.now() - lastActivity > INACTIVITY_MS) {
       timedOut = true;
+      stalledDueToInactivity = true;
       logOrchestratorEvent(
-        `Task ${task.id.slice(0, 8)} inactive for ${inactiveSecs}s — aborting`,
+        `Task ${task.id.slice(0, 8)} stalled — no activity for ${inactiveSecs}s`,
         "warn"
       );
+      db.runs.updateStateSnapshot(run.id, "stalled");
       abort.abort();
     }
   }, 30_000);
@@ -617,7 +621,10 @@ export async function executeAgent(
       });
     }
 
-    if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+    if (abort.signal.aborted)
+      throw new Error(
+        stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
+      );
 
     if (agentExitCode !== null && agentExitCode !== 0) {
       throw new Error(`Agent exited with code ${agentExitCode}`);
@@ -660,7 +667,10 @@ export async function executeAgent(
         });
       }
 
-      if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+      if (abort.signal.aborted)
+        throw new Error(
+          stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
+        );
 
       if (validatorExitCode === null || validatorExitCode === 0) {
         validatorPassed = true;
@@ -743,7 +753,14 @@ export async function executeAgent(
                 lastActivity = Date.now();
               });
             }
-            if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+            if (abort.signal.aborted)
+              throw new Error(
+                stalledDueToInactivity
+                  ? "Agent stalled"
+                  : timedOut
+                    ? "Agent timed out"
+                    : "Cancelled"
+              );
 
             if (await git.hasChanges(wtPath)) {
               await git.commitAll(wtPath, `fix: address evaluator feedback for ${task.title}`);
@@ -861,7 +878,10 @@ export async function executeAgent(
           });
         }
 
-        if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+        if (abort.signal.aborted)
+          throw new Error(
+            stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
+          );
 
         if (autofixExitCode !== null && autofixExitCode !== 0) {
           throw new Error(`Review auto-apply exited with code ${autofixExitCode}`);
@@ -898,7 +918,10 @@ export async function executeAgent(
           });
         }
 
-        if (abort.signal.aborted) throw new Error(timedOut ? "Agent timed out" : "Cancelled");
+        if (abort.signal.aborted)
+          throw new Error(
+            stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
+          );
         if (docsExitCode !== null && docsExitCode !== 0) {
           sysLog(
             `Docs step exited with code ${docsExitCode} — screenshot may be unavailable; continuing with available docs.`

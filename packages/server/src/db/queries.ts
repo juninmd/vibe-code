@@ -11,6 +11,7 @@ import type {
   Repository,
   ReviewFinding,
   RunMetrics,
+  RunPhase,
   SkillEffectiveness,
   Task,
   TaskSchedule,
@@ -136,7 +137,7 @@ function mapRun(row: RunRow): AgentRun {
     taskId: row.task_id,
     engine: row.engine,
     status: row.status as AgentRun["status"],
-    currentStatus: row.current_status,
+    currentStatus: (row.current_status as AgentRun["currentStatus"]) ?? null,
     worktreePath: row.worktree_path,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
@@ -473,9 +474,13 @@ export function createRunQueries(db: Database) {
         id
       );
     },
-    updateStateSnapshot: (id: string, phase: string): void => {
+    updateStateSnapshot: (id: string, phase: RunPhase): void => {
       const snapshot = JSON.stringify({ phase, ts: new Date().toISOString() });
-      db.prepare("UPDATE agent_runs SET state_snapshot = ? WHERE id = ?").run(snapshot, id);
+      db.prepare("UPDATE agent_runs SET state_snapshot = ?, current_status = ? WHERE id = ?").run(
+        snapshot,
+        phase,
+        id
+      );
     },
     updateCostStats: (id: string, costStats: object): void => {
       db.prepare("UPDATE agent_runs SET cost_stats = ? WHERE id = ?").run(

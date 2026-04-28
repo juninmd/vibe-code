@@ -86,6 +86,8 @@ export function createRuntimesRouter(
             failedRuns,
             lastRunAt: lastRun?.createdAt ?? null,
           },
+          activeRunDetails: orchestrator.getActiveRunDetails(),
+          retryQueue: orchestrator.getRetryQueueSnapshot(),
         },
       ],
     });
