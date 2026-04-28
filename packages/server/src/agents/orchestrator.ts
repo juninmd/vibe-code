@@ -32,10 +32,25 @@ function retryBackoffMs(attempt: number): number {
   return Math.min(10_000 * 2 ** (attempt - 1), AUTO_RETRY_MAX_BACKOFF_MS);
 }
 
+// Parse VIBE_CODE_MAX_AGENTS_BY_STATUS="in_progress:6,review:2"
+function parseMaxAgentsByStatus(): Map<string, number> {
+  const map = new Map<string, number>();
+  const raw = process.env.VIBE_CODE_MAX_AGENTS_BY_STATUS ?? "";
+  for (const entry of raw.split(",")) {
+    const [status, limit] = entry.split(":");
+    if (status?.trim() && limit?.trim()) {
+      const n = Number(limit.trim());
+      if (n > 0) map.set(status.trim().toLowerCase(), n);
+    }
+  }
+  return map;
+}
+
 export class Orchestrator {
   private activeRuns = new Map<string, ActiveRun>();
   private retryQueue = new Map<string, PendingRetry>();
   private maxConcurrent: number;
+  private maxAgentsByStatus: Map<string, number>;
   skillsLoader?: SkillsLoader;
 
   constructor(
@@ -46,6 +61,7 @@ export class Orchestrator {
     maxConcurrent = 4
   ) {
     this.maxConcurrent = maxConcurrent;
+    this.maxAgentsByStatus = parseMaxAgentsByStatus();
   }
 
   get activeCount(): number {
@@ -100,6 +116,20 @@ export class Orchestrator {
     if (this.activeRuns.size >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
       throw new Error("Max concurrent agents reached.");
+    }
+
+    // Per-status concurrency gate (VIBE_CODE_MAX_AGENTS_BY_STATUS)
+    const statusLimit = this.maxAgentsByStatus.get(task.status.toLowerCase());
+    if (statusLimit !== undefined) {
+      const countForStatus = [...this.activeRuns.values()].filter((r) => {
+        const t = this.db.tasks.getById(r.taskId);
+        return t?.status === task.status;
+      }).length;
+      if (countForStatus >= statusLimit) {
+        throw new Error(
+          `Max concurrent agents for status "${task.status}" reached (${statusLimit})`
+        );
+      }
     }
 
     if (task.dependsOn.length > 0) {

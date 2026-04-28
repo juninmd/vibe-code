@@ -7,6 +7,7 @@ import {
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_STATUS_LABELS } from "@vibe-code/shared";
 import { memo } from "react";
+import type { RetryState } from "../hooks/useRetryQueue";
 import { TaskCard } from "./TaskCard";
 
 // ─── Column visual config ──────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ interface ColumnProps {
   onToggleCollapse?: () => void;
   /** When true, the column stretches to fill available width instead of using fixed 272px */
   fillWidth?: boolean;
+  retryQueueMap?: Map<string, RetryState>;
 }
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
@@ -173,6 +175,7 @@ function ColumnComponent({
   collapsed = false,
   onToggleCollapse,
   fillWidth = false,
+  retryQueueMap,
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
@@ -334,7 +337,12 @@ function ColumnComponent({
             <div className={horizontal ? "flex gap-2" : "space-y-2"}>
               {tasks.map((task) => (
                 <div key={task.id} className={horizontal ? "w-[320px] shrink-0" : undefined}>
-                  <TaskCard task={task} onClick={onTaskClick} onRetryPR={onRetryPR} />
+                  <TaskCard
+                    task={task}
+                    onClick={onTaskClick}
+                    onRetryPR={onRetryPR}
+                    retryEntry={retryQueueMap?.get(task.id)}
+                  />
                 </div>
               ))}
             </div>
@@ -378,6 +386,7 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.onRetryAllFailed === next.onRetryAllFailed &&
     prev.collapsible === next.collapsible &&
     prev.collapsed === next.collapsed &&
-    prev.onToggleCollapse === next.onToggleCollapse
+    prev.onToggleCollapse === next.onToggleCollapse &&
+    prev.retryQueueMap === next.retryQueueMap
   );
 });

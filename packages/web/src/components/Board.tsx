@@ -10,6 +10,7 @@ import {
 } from "@dnd-kit/core";
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_COLUMNS } from "@vibe-code/shared";
+import type { RetryState } from "../hooks/useRetryQueue";
 
 const BOARD_COLUMNS: TaskStatus[] = [...TASK_COLUMNS, "failed"];
 
@@ -25,6 +26,7 @@ interface BoardProps {
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
+  retryQueueMap?: Map<string, RetryState>;
 }
 
 export function Board({
@@ -35,6 +37,7 @@ export function Board({
   onArchiveDone,
   onClearFailed,
   onRetryAllFailed,
+  retryQueueMap,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
   const noopTaskClick = useCallback(() => {}, []);
@@ -123,6 +126,7 @@ export function Board({
                 onArchiveDone={onArchiveDone}
                 onClearFailed={onClearFailed}
                 onRetryAllFailed={onRetryAllFailed}
+                retryQueueMap={retryQueueMap}
                 fillWidth
               />
             </div>

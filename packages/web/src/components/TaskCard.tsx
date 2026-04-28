@@ -1,9 +1,11 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithRun } from "@vibe-code/shared";
-import { memo, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
+import type { RetryState } from "../hooks/useRetryQueue";
 import { formatDuration } from "../utils/date";
+import { getPhaseLabel } from "../utils/runPhase";
 import { TaskTagsDisplay } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -14,6 +16,45 @@ interface TaskCardProps {
   task: TaskWithRun;
   onClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
+  retryEntry?: RetryState;
+}
+
+function RetryCountdown({ dueAt, attempt }: { dueAt: number; attempt: number }) {
+  const [remaining, setRemaining] = useState(() =>
+    Math.max(0, Math.ceil((dueAt - Date.now()) / 1000))
+  );
+  const rafRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    rafRef.current = setInterval(() => {
+      const secs = Math.max(0, Math.ceil((dueAt - Date.now()) / 1000));
+      setRemaining(secs);
+      if (secs === 0 && rafRef.current) clearInterval(rafRef.current);
+    }, 1_000);
+    return () => {
+      if (rafRef.current) clearInterval(rafRef.current);
+    };
+  }, [dueAt]);
+
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-md bg-warning/15 border border-warning/30 text-warning">
+      <svg
+        aria-hidden="true"
+        width="9"
+        height="9"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="8" cy="8" r="5.5" />
+        <path d="M8 5.5v3l2 1.3" />
+      </svg>
+      retry #{attempt} in {remaining}s
+    </span>
+  );
 }
 
 const PRIORITY_CONFIG = [
@@ -37,7 +78,7 @@ function PriorityDot({ priority }: { priority: number }) {
   );
 }
 
-function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
+function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -290,10 +331,14 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
           </a>
         )}
 
+        {retryEntry && task.status === "failed" && (
+          <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
+        )}
+
         {isRunning && (
           <span className="flex items-center gap-1.5 text-[10px] font-semibold text-info ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-info/15 border border-info/30 px-2 py-[2px] rounded-md">
             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-            <span className="truncate">{task.latestRun?.currentStatus || "Running..."}</span>
+            <span className="truncate">{getPhaseLabel(task.latestRun?.currentStatus)}</span>
             {elapsed && <span className="shrink-0 text-info/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
@@ -318,6 +363,9 @@ function TaskCardComponent({ task, onClick, onRetryPR }: TaskCardProps) {
 
 export const TaskCard = memo(TaskCardComponent, (prev, next) => {
   return (
-    prev.task === next.task && prev.onClick === next.onClick && prev.onRetryPR === next.onRetryPR
+    prev.task === next.task &&
+    prev.onClick === next.onClick &&
+    prev.onRetryPR === next.onRetryPR &&
+    prev.retryEntry === next.retryEntry
   );
 });

@@ -34,6 +34,7 @@ import { WorkspaceSelector } from "./components/WorkspaceSelector";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
 import { useRepos } from "./hooks/useRepos";
+import { useRetryQueue } from "./hooks/useRetryQueue";
 import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -116,6 +117,9 @@ export default function App() {
   } = useTasks(selectedRepoId ?? undefined);
   const deferredTasks = useDeferredValue(tasks);
   const deferredSearch = useDeferredValue(search);
+
+  const hasFailedTasks = tasks.some((t) => t.status === "failed");
+  const retryQueueMap = useRetryQueue(hasFailedTasks);
 
   const {
     engines,
@@ -744,7 +748,7 @@ export default function App() {
     search,
     handleCloseDetail,
     cloneTask,
-toast,
+    toast,
     exportBoard,
     handleDeleteTask,
   ]);
@@ -1078,6 +1082,7 @@ toast,
                       toast("Failed to retry failed tasks", "error");
                     }
                   }}
+                  retryQueueMap={retryQueueMap}
                 />
               </ErrorBoundary>
             )}
