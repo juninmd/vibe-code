@@ -247,3 +247,236 @@ describe("AgentLog queries", () => {
     expect(streams).toContain("stdin");
   });
 });
+
+describe("Settings queries", () => {
+  let db: Db;
+
+  beforeEach(() => {
+    db = makeDb();
+  });
+
+  it("get returns default empty string if key not found", () => {
+    expect(db.settings.get("unknown_key")).toBeNull();
+  });
+
+  it("set sets a value and get retrieves it", () => {
+    db.settings.set("my_key", "my_value");
+    expect(db.settings.get("my_key")).toBe("my_value");
+  });
+
+  it("set overrides existing value", () => {
+    db.settings.set("my_key", "my_value");
+    db.settings.set("my_key", "new_value");
+    expect(db.settings.get("my_key")).toBe("new_value");
+  });
+});
+
+describe("Prompt templates queries", () => {
+  let db: Db;
+
+  beforeEach(() => {
+    db = makeDb();
+  });
+
+  it("listAll returns predefined templates", () => {
+    const list = db.prompts.list();
+    expect(list.length).toBeGreaterThan(0);
+    expect(list[0].id).toBeDefined();
+  });
+
+  it("getById returns a template", () => {
+    const list = db.prompts.list();
+    const tpl = db.prompts.getById(list[0].id);
+    expect(tpl).toBeDefined();
+    expect(tpl?.id).toBe(list[0].id);
+  });
+
+  it("create creates a custom template", () => {
+    const tpl = db.prompts.create({ title: "Custom", description: "Desc", content: "Content", category: "code" });
+    expect(tpl.title).toBe("Custom");
+    expect(tpl.isBuiltin).toBe(false);
+  });
+
+  it("update updates a custom template", () => {
+    const tpl = db.prompts.create({ title: "Custom", description: "Desc", content: "Content", category: "code" });
+    const updated = db.prompts.update(tpl.id, { title: "Updated" });
+    expect(updated?.title).toBe("Updated");
+  });
+
+  it("delete removes a custom template", () => {
+    const tpl = db.prompts.create({ title: "Custom", description: "Desc", content: "Content", category: "code" });
+    expect(db.prompts.remove(tpl.id)).toBe(true);
+    expect(db.prompts.getById(tpl.id)).toBeNull();
+  });
+
+  it("cannot update or delete a builtin template", () => {
+    const list = db.prompts.list();
+    const builtinId = list[0].id;
+    const deleted = db.prompts.remove(builtinId);
+    expect(deleted).toBe(false);
+  });
+});
+
+describe("Task schedules queries", () => {
+  let db: Db;
+  let taskId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    const repoId = seedRepo(db).id;
+    taskId = db.tasks.create({ title: "Task", repoId }).id;
+  });
+
+  it("upsert creates a new schedule", () => {
+    const sched = db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
+    expect(sched.taskId).toBe(taskId);
+    expect(sched.enabled).toBe(true);
+  });
+
+  it("upsert updates an existing schedule", () => {
+    db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
+    const sched = db.schedules.upsert(taskId, "1 * * * *", null, "2024-01-01T00:00:00Z");
+    expect(sched.cronExpression).toBe("1 * * * *");
+  });
+
+  it("setEnabled enables and disables", () => {
+    db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
+    const sched = db.schedules.setEnabled(taskId, false);
+    expect(sched?.enabled).toBe(false);
+  });
+
+  it("listDue returns schedules due", () => {
+    db.schedules.upsert(taskId, "0 * * * *", null, "2020-01-01T00:00:00Z");
+    const due = db.schedules.listDue();
+    expect(due.length).toBe(1);
+    expect(due[0].taskId).toBe(taskId);
+  });
+
+  it("updateAfterRun updates nextRunAt", () => {
+    db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
+    db.schedules.updateAfterRun(taskId, "2025-01-01T00:00:00Z");
+    const list = db.schedules.listAll();
+    expect(list[0].nextRunAt).toBe("2025-01-01T00:00:00Z");
+  });
+
+  it("remove deletes a schedule", () => {
+    db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
+    db.schedules.remove(taskId);
+    expect(db.schedules.listAll().length).toBe(0);
+  });
+
+  it("disableExpired disables expired schedules", () => {
+    db.schedules.upsert(taskId, "0 * * * *", "2020-01-01T00:00:00Z", "2020-01-01T00:00:00Z");
+    db.schedules.disableExpired();
+    const list = db.schedules.listAll();
+    expect(list[0].enabled).toBe(false);
+  });
+});
+
+describe("Findings queries", () => {
+  let db: Db;
+  let repoId: string;
+  let taskId: string;
+  let runId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    repoId = seedRepo(db).id;
+    taskId = db.tasks.create({ title: "Task", repoId }).id;
+    runId = db.runs.create(taskId, "claude-code").id;
+  });
+
+  it("create creates a finding", () => {
+    const finding = db.findings.create({ runId, taskId, repoId, persona: "Security", severity: "high", content: "found issue" });
+    expect(finding.content).toBe("found issue");
+    expect(finding.resolved).toBe(false);
+  });
+
+  it("listByRepo lists findings", () => {
+    db.findings.create({ runId, taskId, repoId, persona: "Security", severity: "high", content: "found issue" });
+    const list = db.findings.listByRepo(repoId);
+    expect(list.length).toBe(1);
+    expect(list[0].content).toBe("found issue");
+  });
+
+  it("resolve resolves a finding", () => {
+    const finding = db.findings.create({ runId, taskId, repoId, persona: "Security", severity: "high", content: "found issue" });
+    db.findings.resolve(finding.id);
+    const list = db.findings.listByRepo(repoId);
+    expect(list[0].resolved).toBe(true);
+  });
+
+  it("getRecentByRepo returns unresolved findings from last 30 days", () => {
+    db.findings.create({ runId, taskId, repoId, persona: "Security", severity: "high", content: "found issue" });
+    const recent = db.findings.getRecentByRepo(repoId);
+    expect(recent.length).toBe(1);
+  });
+});
+
+describe("Metrics queries", () => {
+  let db: Db;
+  let repoId: string;
+  let taskId: string;
+  let runId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    repoId = seedRepo(db).id;
+    taskId = db.tasks.create({ title: "Task", repoId }).id;
+    runId = db.runs.create(taskId, "claude-code").id;
+  });
+
+  it("create creates a metric", () => {
+    const metric = db.metrics.create({
+      runId, taskId, repoId, engine: "claude-code",
+      matchedSkills: ["React"], matchedRules: [],
+      validatorAttempts: 1, reviewBlockers: 0, reviewWarnings: 0,
+      finalStatus: "completed", prCreated: true
+    });
+    expect(metric.engine).toBe("claude-code");
+    expect(metric.matchedSkills).toEqual(["React"]);
+    expect(metric.prCreated).toBe(true);
+  });
+
+  it("skillEffectiveness returns stats", () => {
+    db.metrics.create({
+      runId, taskId, repoId, engine: "claude-code",
+      matchedSkills: ["React", "Typescript"], matchedRules: [],
+      validatorAttempts: 1, reviewBlockers: 1, reviewWarnings: 0,
+      finalStatus: "completed", prCreated: true
+    });
+    db.metrics.create({
+      runId, taskId, repoId, engine: "claude-code",
+      matchedSkills: ["React"], matchedRules: [],
+      validatorAttempts: 1, reviewBlockers: 0, reviewWarnings: 1,
+      finalStatus: "failed", prCreated: false
+    });
+    const stats = db.metrics.skillEffectiveness();
+    expect(stats.length).toBe(2);
+    const reactStats = stats.find(s => s.name === "React");
+    expect(reactStats?.totalRuns).toBe(2);
+    expect(reactStats?.successRate).toBe(50.0);
+    const tsStats = stats.find(s => s.name === "Typescript");
+    expect(tsStats?.totalRuns).toBe(1);
+    expect(tsStats?.successRate).toBe(100.0);
+  });
+
+  it("engineEffectiveness returns stats", () => {
+    db.metrics.create({
+      runId, taskId, repoId, engine: "claude-code",
+      matchedSkills: [], matchedRules: [], durationMs: 1000,
+      validatorAttempts: 1, reviewBlockers: 1, reviewWarnings: 0,
+      finalStatus: "completed", prCreated: true
+    });
+    db.metrics.create({
+      runId, taskId, repoId, engine: "opencode",
+      matchedSkills: [], matchedRules: [], durationMs: 2000,
+      validatorAttempts: 1, reviewBlockers: 0, reviewWarnings: 0,
+      finalStatus: "completed", prCreated: true
+    });
+    const stats = db.metrics.engineEffectiveness();
+    expect(stats.length).toBe(2);
+    const opencodeStats = stats.find(s => s.engine === "opencode");
+    expect(opencodeStats?.avgDurationSecs).toBe(2);
+  });
+});
