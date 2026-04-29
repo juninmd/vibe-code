@@ -71,6 +71,7 @@ interface RunRow {
   finished_at: string | null;
   exit_code: number | null;
   error_message: string | null;
+  session_id: string | null;
   litellm_token_id: string | null;
   matched_skills: string | null;
   state_snapshot: string | null;
@@ -143,6 +144,7 @@ function mapRun(row: RunRow): AgentRun {
     finishedAt: row.finished_at,
     exitCode: row.exit_code,
     errorMessage: row.error_message,
+    sessionId: row.session_id,
     litellmTokenId: row.litellm_token_id,
     matchedSkills: row.matched_skills,
     stateSnapshot: row.state_snapshot,
@@ -467,6 +469,9 @@ export function createRunQueries(db: Database) {
     },
     updateLitellmTokenId: (id: string, tokenId: string | null): void => {
       db.prepare("UPDATE agent_runs SET litellm_token_id = ? WHERE id = ?").run(tokenId, id);
+    },
+    updateSessionId: (id: string, sessionId: string | null): void => {
+      db.prepare("UPDATE agent_runs SET session_id = ? WHERE id = ?").run(sessionId, id);
     },
     updateMatchedSkills: (id: string, skills: string[]): void => {
       db.prepare("UPDATE agent_runs SET matched_skills = ? WHERE id = ?").run(

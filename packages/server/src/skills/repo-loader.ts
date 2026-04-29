@@ -128,7 +128,7 @@ export class RepoSkillsLoader {
     const { exec } = await import("node:child_process");
     return new Promise((resolve, reject) => {
       const cmd = ["git", `--git-dir=${gitDir}`, ...args].join(" ");
-      exec(cmd, (err: Error | null, stdout: string, stderr: string) => {
+      exec(cmd, (err: Error | null, stdout: string, _stderr: string) => {
         if (err) reject(err);
         else resolve(stdout);
       });

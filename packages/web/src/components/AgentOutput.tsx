@@ -20,7 +20,7 @@ function convertAnsi(text: string): string {
   }
 }
 
-function stripAnsi(text: string): string {
+function _stripAnsi(text: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape strip
   return text.replace(/\u001b\[[\d;]*[A-Za-z]/g, "").replace(/\r/g, "");
 }
@@ -398,7 +398,7 @@ export function AgentOutput({
   const [input, setInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [matchIdx, setMatchIdx] = useState(0);
+  const [_matchIdx, setMatchIdx] = useState(0);
   const [pinnedBottom, setPinnedBottom] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());

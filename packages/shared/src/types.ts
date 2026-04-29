@@ -89,6 +89,7 @@ export interface AgentRun {
   finishedAt: string | null;
   exitCode: number | null;
   errorMessage: string | null;
+  sessionId?: string | null;
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
   stateSnapshot?: string | null;

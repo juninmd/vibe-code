@@ -1,5 +1,3 @@
-
-
 /**
  * Workspace ID enforcement middleware
  * Ensures all requests include and validate workspace context

@@ -1,7 +1,7 @@
 import type { SkillPayload } from "@vibe-code/shared";
 
 export interface AgentEvent {
-  type: "log" | "status" | "error" | "complete" | "cost" | "tool_use" | "tool_result";
+  type: "log" | "status" | "error" | "complete" | "cost" | "session" | "tool_use" | "tool_result";
   stream?: "stdout" | "stderr" | "system";
   content?: string;
   exitCode?: number;
@@ -34,6 +34,7 @@ export interface AgentEvent {
       }
     >;
   };
+  sessionId?: string;
 }
 
 export interface EngineOptions {

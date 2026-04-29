@@ -114,8 +114,8 @@ export class MigrationManager {
 }
 
 export async function loadMigrationsFromFiles(
-  baseDir: string,
-  dbType: "sqlite" | "postgres"
+  _baseDir: string,
+  _dbType: "sqlite" | "postgres"
 ): Promise<Migration[]> {
   // This would load from the migrations/ directory
   // For now, returning empty array (will be implemented with file system access)
