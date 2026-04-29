@@ -1,4 +1,6 @@
-import { unlink } from "node:fs/promises";
+import { access, unlink } from "node:fs/promises";
+import { homedir } from "node:os";
+import { delimiter, dirname, join } from "node:path";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -74,13 +76,18 @@ export class GeminiEngine implements AgentEngine {
   name = "gemini";
   displayName = "Gemini CLI";
   private processes = new Map<string, Subprocess>();
+  private geminiCommand: string | null | undefined;
 
   private buildGeminiChildEnv(
     litellmKey?: string,
     litellmBaseUrl?: string,
-    nativeGeminiKey?: string
+    nativeGeminiKey?: string,
+    geminiBinDir?: string
   ): NodeJS.ProcessEnv {
     const env = { ...process.env };
+    if (geminiBinDir) {
+      env.PATH = env.PATH ? `${geminiBinDir}${delimiter}${env.PATH}` : geminiBinDir;
+    }
     // Avoid Gemini IDE client binding when running in detached task worktrees.
     const keysToDelete = [
       "GEMINI_CLI_IDE_SERVER_PORT",
@@ -107,11 +114,48 @@ export class GeminiEngine implements AgentEngine {
     return env;
   }
 
+  private async resolveGeminiCommand(): Promise<string | null> {
+    if (this.geminiCommand !== undefined) return this.geminiCommand;
+
+    if (process.platform !== "win32") {
+      this.geminiCommand = "gemini";
+      return this.geminiCommand;
+    }
+
+    const appData = process.env.APPDATA ?? join(homedir(), "AppData", "Roaming");
+    const npmGlobalBin = join(appData, "npm");
+    const candidates = [
+      join(npmGlobalBin, "gemini.cmd"),
+      join(npmGlobalBin, "gemini.exe"),
+      join(npmGlobalBin, "gemini"),
+      "gemini.cmd",
+      "gemini.exe",
+      "gemini",
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        if (candidate.includes("\\") || candidate.includes("/")) {
+          await access(candidate);
+        }
+        this.geminiCommand = candidate;
+        return candidate;
+      } catch {
+        // Try next candidate.
+      }
+    }
+
+    this.geminiCommand = null;
+    return null;
+  }
+
   private async hasCli(): Promise<boolean> {
     try {
-      const proc = Bun.spawn(["gemini", "--version"], { stdout: "pipe", stderr: "pipe" });
+      const command = await this.resolveGeminiCommand();
+      if (!command) return false;
+      const proc = Bun.spawn([command, "--version"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
-      return proc.exitCode === 0;
+      return true;
     } catch {
       return false;
     }
@@ -123,7 +167,9 @@ export class GeminiEngine implements AgentEngine {
 
   async getVersion(): Promise<string | null> {
     try {
-      const proc = Bun.spawn(["gemini", "--version"], { stdout: "pipe", stderr: "pipe" });
+      const command = await this.resolveGeminiCommand();
+      if (!command) return null;
+      const proc = Bun.spawn([command, "--version"], { stdout: "pipe", stderr: "pipe" });
       await proc.exited;
       if (proc.exitCode !== 0) return null;
       const text = await new Response(proc.stdout).text();
@@ -149,32 +195,50 @@ export class GeminiEngine implements AgentEngine {
     workdir: string,
     options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
+    const command = await this.resolveGeminiCommand();
+    if (!command || !(await this.hasCli())) {
+      throw new Error(
+        "Gemini CLI not installed or not on PATH. Install it with `npm install -g @google/gemini-cli` and restart the server."
+      );
+    }
+
+    const promptFile = `/tmp/vibe-gemini-prompt-${options.runId ?? Date.now()}.txt`;
+    await Bun.write(promptFile, prompt);
+
+    const args = [command, "--yolo", "--output-format", "stream-json"];
+    if (options.model) args.push("-m", options.model);
+    if (options.resumeSessionId) args.push("-r", options.resumeSessionId);
+    args.push("-p", `@${promptFile}`);
+
+    let proc: Subprocess;
+    try {
+      proc = Bun.spawn(args, {
+        cwd: workdir,
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "pipe",
+        env: this.buildGeminiChildEnv(
+          options.litellmKey,
+          options.litellmBaseUrl,
+          options.nativeApiKeys?.gemini,
+          command.includes("\\") || command.includes("/") ? dirname(command) : undefined
+        ),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        msg.includes("uv_spawn") || msg.includes("ENOENT")
+          ? "Gemini CLI not installed or not on PATH. Install it with `npm install -g @google/gemini-cli` and restart the server."
+          : msg
+      );
+    }
+
     yield { type: "log", stream: "system", content: `[gemini] Starting in ${workdir}` };
     yield {
       type: "log",
       stream: "system",
       content: `[gemini] Run context: model=${options.model ?? "default"}, runId=${options.runId ?? "n/a"}`,
     };
-
-    const promptFile = `/tmp/vibe-gemini-prompt-${options.runId ?? Date.now()}.txt`;
-    await Bun.write(promptFile, prompt);
-
-    const args = ["gemini", "--yolo", "--output-format", "stream-json"];
-    if (options.model) args.push("-m", options.model);
-    if (options.resumeSessionId) args.push("-r", options.resumeSessionId);
-    args.push("-p", `@${promptFile}`);
-
-    const proc = Bun.spawn(args, {
-      cwd: workdir,
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "pipe",
-      env: this.buildGeminiChildEnv(
-        options.litellmKey,
-        options.litellmBaseUrl,
-        options.nativeApiKeys?.gemini
-      ),
-    });
 
     yield {
       type: "log",
@@ -202,13 +266,17 @@ export class GeminiEngine implements AgentEngine {
 
           if (parsed && typeof parsed === "object") {
             const obj = parsed as Record<string, unknown>;
+            const sessionEvent =
+              typeof obj.session_id === "string"
+                ? [{ type: "session" as const, sessionId: obj.session_id }]
+                : [];
 
             // Final result: { session_id, result }
             if (obj.session_id && obj.result) {
               const result = obj.result as Record<string, unknown>;
               const text = typeof result.text === "string" ? result.text : null;
-              if (text) return [{ type: "log", stream: "stdout", content: text }];
-              return [];
+              if (text) return [...sessionEvent, { type: "log", stream: "stdout", content: text }];
+              return sessionEvent;
             }
 
             // Error: { session_id, error }
@@ -216,6 +284,7 @@ export class GeminiEngine implements AgentEngine {
               const err = obj.error as Record<string, unknown>;
               const msg = typeof err.message === "string" ? err.message : JSON.stringify(err);
               const events: AgentEvent[] = [
+                ...sessionEvent,
                 { type: "log", stream: "stderr", content: `[gemini] ${msg}` },
               ];
               if (msg.includes("GEMINI_API_KEY")) {
@@ -262,6 +331,7 @@ export class GeminiEngine implements AgentEngine {
                 parameters = obj.args as Record<string, unknown>;
               }
               return [
+                ...sessionEvent,
                 {
                   type: "tool_use",
                   toolUse: { toolId, toolName, parameters },
@@ -297,6 +367,7 @@ export class GeminiEngine implements AgentEngine {
               const status = obj.status === "error" ? "error" : "success";
               const label = humanizeToolResult(toolName, output);
               const baseEvents: AgentEvent[] = [
+                ...sessionEvent,
                 {
                   type: "tool_result",
                   toolResult: { toolId, output, status },
@@ -326,16 +397,19 @@ export class GeminiEngine implements AgentEngine {
                 | undefined = rawModels ? {} : undefined;
               if (rawModels) {
                 for (const [key, val] of Object.entries(rawModels)) {
-                  models![key] = {
-                    total_tokens: typeof val.total_tokens === "number" ? val.total_tokens : 0,
-                    input_tokens: typeof val.input_tokens === "number" ? val.input_tokens : 0,
-                    output_tokens: typeof val.output_tokens === "number" ? val.output_tokens : 0,
-                    cached: typeof val.cached === "number" ? val.cached : undefined,
-                    input: typeof val.input === "number" ? val.input : undefined,
-                  };
+                  if (models) {
+                    models[key] = {
+                      total_tokens: typeof val.total_tokens === "number" ? val.total_tokens : 0,
+                      input_tokens: typeof val.input_tokens === "number" ? val.input_tokens : 0,
+                      output_tokens: typeof val.output_tokens === "number" ? val.output_tokens : 0,
+                      cached: typeof val.cached === "number" ? val.cached : undefined,
+                      input: typeof val.input === "number" ? val.input : undefined,
+                    };
+                  }
                 }
               }
               return [
+                ...sessionEvent,
                 {
                   type: "cost",
                   costStats: {
@@ -355,7 +429,7 @@ export class GeminiEngine implements AgentEngine {
             }
 
             // Unknown JSON event — emit as system log
-            return [{ type: "log", stream: "system", content: line }];
+            return [...sessionEvent, { type: "log", stream: "system", content: line }];
           }
 
           const events: AgentEvent[] = [{ type: "log", stream: "stdout", content: line }];

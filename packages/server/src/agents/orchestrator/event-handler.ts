@@ -47,6 +47,12 @@ export async function handleAgentEvent(
     if (run) {
       hub.broadcastAll({ type: "run_updated", run: { ...run, costStats: event.costStats } });
     }
+  } else if (event.type === "session" && event.sessionId) {
+    db.runs.updateSessionId(runId, event.sessionId);
+    const run = db.runs.getById(runId);
+    if (run) {
+      hub.broadcastAll({ type: "run_updated", run });
+    }
   } else if (event.type === "tool_use" && event.toolUse) {
     onActivity?.();
     const ts = new Date().toISOString();

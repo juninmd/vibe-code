@@ -26,6 +26,7 @@ export const SkeletonCard = memo(function SkeletonCard({ lines = 3 }: SkeletonCa
         <Skeleton className="w-16 h-5 rounded-full" />
       </div>
       {Array.from({ length: lines }).map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton items are static
         <Skeleton key={i} className="h-2 w-full rounded" />
       ))}
       <div className="flex items-center gap-2 pt-1">
@@ -52,6 +53,7 @@ export const SkeletonColumn = memo(function SkeletonColumn({ taskCount = 3 }: Sk
       </div>
       <div className="flex-1 overflow-hidden px-2.5 py-2.5 space-y-2 min-h-[80px]">
         {Array.from({ length: taskCount }).map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static list
           <SkeletonCard key={i} lines={2} />
         ))}
       </div>
@@ -72,6 +74,7 @@ export const SkeletonBoard = memo(function SkeletonBoard({
     <div className="flex flex-col gap-4 pb-4 h-full">
       <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
         {Array.from({ length: columnCount }).map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static list
           <SkeletonColumn key={i} taskCount={tasksPerColumn} />
         ))}
       </div>

@@ -37,7 +37,7 @@ export class PostgreSQLDatabaseAdapter implements DatabaseAdapter {
   async query(
     sql: string,
     params: unknown[] = [],
-    options?: QueryOptions
+    _options?: QueryOptions
   ): Promise<DatabaseResult> {
     const client = await this.pool.connect();
 
@@ -100,7 +100,7 @@ export class PostgreSQLDatabaseAdapter implements DatabaseAdapter {
       await client.query(`BEGIN ISOLATION LEVEL ${isolationLevel}`);
 
       const txAdapter: TransactionAdapter = {
-        query: async (sql: string, params: unknown[], opts?: QueryOptions) => {
+        query: async (sql: string, params: unknown[], _opts?: QueryOptions) => {
           const result: QueryResult<Record<string, unknown>> = await client.query(sql, params);
           return {
             rows: result.rows ?? [],

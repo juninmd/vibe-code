@@ -78,6 +78,7 @@ export default function App() {
   const [showInbox, setShowInbox] = useState(false);
   const [showIssueImporter, setShowIssueImporter] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
+  const [selectedTaskLoadedSkills, setSelectedTaskLoadedSkills] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filters>({
     engine: null,
     priority: null,
@@ -472,6 +473,27 @@ export default function App() {
     setInitialSkillName(skillName);
     setShowSkills(true);
   }, []);
+
+  useEffect(() => {
+    if (!showSkills || !selectedTask?.latestRun) {
+      setSelectedTaskLoadedSkills([]);
+      return;
+    }
+
+    let cancelled = false;
+    api.tasks
+      .matchedSkills(selectedTask.id)
+      .then((skills) => {
+        if (!cancelled) setSelectedTaskLoadedSkills(skills);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedTaskLoadedSkills([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showSkills, selectedTask?.id, selectedTask?.latestRun?.id, selectedTask?.latestRun]);
 
   const handleTaskMove = useCallback(
     async (taskId: string, newStatus: TaskStatus, newOrder: number) => {
@@ -1319,7 +1341,7 @@ export default function App() {
             setInitialSkillName(null);
           }}
           initialSkillName={initialSkillName ?? undefined}
-          matchedSkills={selectedTask?.matchedSkills}
+          matchedSkills={selectedTaskLoadedSkills}
         />
 
         <Toaster />

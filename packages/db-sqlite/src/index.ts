@@ -3,7 +3,6 @@ import type {
   DatabaseConfig,
   DatabaseLogger,
   DatabaseResult,
-  MigrationRunner,
   QueryOptions,
   TransactionAdapter,
   TransactionOptions,
@@ -92,7 +91,7 @@ export class SQLiteDatabaseAdapter implements DatabaseAdapter {
 
   async transaction<T>(
     callback: (tx: TransactionAdapter) => Promise<T>,
-    options?: TransactionOptions
+    _options?: TransactionOptions
   ): Promise<T> {
     if (this.inTransaction) {
       throw new TransactionError("Nested transactions not supported in SQLite");

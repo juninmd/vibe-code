@@ -380,6 +380,8 @@ export async function executeAgent(
   let prCreated = false;
   let runStartTime = Date.now();
   let capturedCostStats: object | null = null;
+  let resumeSessionId: string | undefined;
+  let activeSessionId: string | undefined;
   try {
     let reusableWorkspacePath: string | null = null;
 
@@ -392,6 +394,9 @@ export async function executeAgent(
         const previousRun = db.runs
           .listByTask(task.id)
           .find((r) => r.id !== run.id && r.status === "failed" && !!r.worktreePath);
+
+        resumeSessionId = previousRun?.sessionId ?? undefined;
+        activeSessionId = resumeSessionId;
 
         if (previousRun?.worktreePath) {
           try {
@@ -496,6 +501,9 @@ export async function executeAgent(
           ? "Resume mode: continuing from preserved workspace + branch state."
           : "Resume mode: continuing from latest committed state on the same branch."
       );
+      if (resumeSessionId) {
+        sysLog(`Resume mode: resuming ${engine.name} session ${resumeSessionId}`);
+      }
     } else {
       sysLog(`Branch: ${branch}`);
     }
@@ -520,14 +528,19 @@ export async function executeAgent(
     const prompt = contextResult.prompt;
     skillPayload = contextResult.skills;
 
-    // M7.2: Record matched skills on the run (all 4 categories with prefix)
-    const matchedSkillNames = [
+    // M7.2: Record loaded skills only after the CLI has actually started emitting events.
+    const loadedSkillNames = [
       ...skillPayload.rules.map((r) => `rule:${r.name}`),
       ...skillPayload.skills.map((s) => `skill:${s.name}`),
       ...skillPayload.agents.map((a) => `agent:${a.name}`),
       ...(skillPayload.workflow ? [`workflow:${skillPayload.workflow.name}`] : []),
     ];
-    db.runs.updateMatchedSkills(run.id, matchedSkillNames);
+    let cliSkillsRecorded = false;
+    const recordCliLoadedSkills = () => {
+      if (cliSkillsRecorded) return;
+      cliSkillsRecorded = true;
+      db.runs.updateMatchedSkills(run.id, loadedSkillNames);
+    };
 
     // M3.6: Prepare engine-native context files (GEMINI.md, .claude/instructions.md, etc.)
     if (engine.prepareWorkdir) {
@@ -606,8 +619,13 @@ export async function executeAgent(
       litellmBaseUrl,
       nativeApiKeys,
       skills: skillPayload,
+      resumeSessionId: activeSessionId,
     })) {
       if (abort.signal.aborted) break;
+      recordCliLoadedSkills();
+      if (event.type === "session" && event.sessionId) {
+        activeSessionId = event.sessionId;
+      }
       if (event.type === "complete") {
         agentExitCode = event.exitCode ?? 0;
         continue;
@@ -656,8 +674,12 @@ export async function executeAgent(
         litellmKey,
         litellmBaseUrl,
         nativeApiKeys,
+        resumeSessionId: activeSessionId,
       })) {
         if (abort.signal.aborted) break;
+        if (event.type === "session" && event.sessionId) {
+          activeSessionId = event.sessionId;
+        }
         if (event.type === "complete") {
           validatorExitCode = event.exitCode ?? 0;
           continue;
@@ -746,8 +768,12 @@ export async function executeAgent(
               litellmKey,
               litellmBaseUrl,
               nativeApiKeys,
+              resumeSessionId: activeSessionId,
             })) {
               if (abort.signal.aborted) break;
+              if (event.type === "session" && event.sessionId) {
+                activeSessionId = event.sessionId;
+              }
               if (event.type === "complete") continue;
               await handleAgentEvent(event, run.id, task.id, db, hub, () => {
                 lastActivity = Date.now();
@@ -867,8 +893,12 @@ export async function executeAgent(
           litellmKey,
           litellmBaseUrl,
           nativeApiKeys,
+          resumeSessionId: activeSessionId,
         })) {
           if (abort.signal.aborted) break;
+          if (event.type === "session" && event.sessionId) {
+            activeSessionId = event.sessionId;
+          }
           if (event.type === "complete") {
             autofixExitCode = event.exitCode ?? 0;
             continue;
@@ -907,8 +937,12 @@ export async function executeAgent(
           litellmKey,
           litellmBaseUrl,
           nativeApiKeys,
+          resumeSessionId: activeSessionId,
         })) {
           if (abort.signal.aborted) break;
+          if (event.type === "session" && event.sessionId) {
+            activeSessionId = event.sessionId;
+          }
           if (event.type === "complete") {
             docsExitCode = event.exitCode ?? 0;
             continue;
