@@ -271,7 +271,9 @@ describe("Git integration operations", () => {
     expect(diff[0].status).toBe("added");
     expect(diff[0].additions).toBe(1);
 
-    const content = await git.diffFileContent("main", "new-branch", "new-file.txt", { cwd: wtPath });
+    const content = await git.diffFileContent("main", "new-branch", "new-file.txt", {
+      cwd: wtPath,
+    });
     expect(content).toContain("+new file");
   });
 
@@ -292,9 +294,9 @@ describe("Git integration operations", () => {
     await git.commitAll(wtPath, "modifications");
 
     const diff = await git.diffSummary("new-branch", "branch2", { cwd: wtPath });
-    expect(diff.find(d => d.path === "del.txt")?.status).toBe("deleted");
-    expect(diff.find(d => d.path === "renamed.txt")?.status).toBe("renamed");
-    expect(diff.find(d => d.path === "readme.txt")?.status).toBe("modified");
+    expect(diff.find((d) => d.path === "del.txt")?.status).toBe("deleted");
+    expect(diff.find((d) => d.path === "renamed.txt")?.status).toBe("renamed");
+    expect(diff.find((d) => d.path === "readme.txt")?.status).toBe("modified");
   });
 
   it("removeWorktree() removes worktree", async () => {
