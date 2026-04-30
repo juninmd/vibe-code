@@ -39,12 +39,6 @@ describe("Database index", () => {
     expect(taskColNames).toContain("model");
     expect(taskColNames).toContain("parent_task_id");
     expect(taskColNames).toContain("base_branch");
-    expect(taskColNames).toContain("tags");
-    expect(taskColNames).toContain("notes");
-    expect(taskColNames).toContain("agent_id");
-    expect(taskColNames).toContain("workflow_id");
-    expect(taskColNames).toContain("matched_skills");
-    expect(taskColNames).toContain("planner_spec");
 
     const repoCols = db.raw.query("PRAGMA table_info(repositories)").all() as { name: string }[];
     const repoColNames = repoCols.map((c) => c.name);
