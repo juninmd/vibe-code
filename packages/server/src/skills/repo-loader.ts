@@ -160,6 +160,12 @@ export class RepoSkillsLoader {
           category: "skill",
           filePath: skillFile,
           scope: "workspace",
+          version: meta.version,
+          dependencies: meta.dependencies
+            ? meta.dependencies.split(",").map((d) => d.trim())
+            : undefined,
+          tags: meta.tags ? meta.tags.split(",").map((t) => t.trim()) : undefined,
+          author: meta.author,
         });
       } catch {
         // Skip unreadable
@@ -187,6 +193,9 @@ export class RepoSkillsLoader {
           category: "rule",
           filePath,
           scope: "workspace",
+          dependencies: meta.dependencies
+            ? meta.dependencies.split(",").map((d) => d.trim())
+            : undefined,
         });
       } catch {
         // Skip unreadable
@@ -213,6 +222,7 @@ export class RepoSkillsLoader {
           category: "agent",
           filePath,
           scope: "workspace",
+          skills: meta.skills ? meta.skills.split(",").map((s) => s.trim()) : undefined,
         });
       } catch {
         // Skip unreadable

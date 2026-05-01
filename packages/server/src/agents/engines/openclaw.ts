@@ -46,7 +46,7 @@ export class OpenClawEngine implements AgentEngine {
     const args = ["openclaw", "acp", "--message", prompt];
     if (options.model) args.push("--model", options.model);
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;

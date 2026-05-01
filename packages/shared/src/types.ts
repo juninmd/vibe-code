@@ -74,6 +74,8 @@ export interface Task {
   dependsOn: string[];
   /** When true, task requires human approval before PR is created. */
   pendingApproval: boolean;
+  /** Budget hard-stop limit in dollars. */
+  maxCost?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -187,6 +189,7 @@ export interface CreateTaskRequest {
   agentId?: string;
   workflowId?: string;
   dependsOn?: string[];
+  maxCost?: number;
 }
 
 export interface UpdateTaskRequest {
@@ -200,6 +203,7 @@ export interface UpdateTaskRequest {
   notes?: string;
   dependsOn?: string[];
   pendingApproval?: boolean;
+  maxCost?: number;
 }
 
 export interface LaunchTaskRequest {
@@ -416,6 +420,17 @@ export type WsServerMessage =
       taskId: string;
       message: string;
     }
+  | {
+      type: "approval_requested";
+      taskId: string;
+      message: string;
+      command?: string;
+    }
+  | {
+      type: "approval_rejected";
+      taskId: string;
+      reason: string;
+    }
   | { type: "error"; message: string };
 
 // ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
@@ -545,6 +560,10 @@ export interface SkillEntry {
   category: "skill";
   filePath: string;
   scope?: "global" | "workspace";
+  version?: string;
+  dependencies?: string[];
+  tags?: string[];
+  author?: string;
 }
 
 export interface RuleEntry {
@@ -554,6 +573,7 @@ export interface RuleEntry {
   category: "rule";
   filePath: string;
   scope?: "global" | "workspace";
+  dependencies?: string[];
 }
 
 export interface AgentEntry {
@@ -562,6 +582,7 @@ export interface AgentEntry {
   category: "agent";
   filePath: string;
   scope?: "global" | "workspace";
+  skills?: string[];
 }
 
 export interface WorkflowEntry {

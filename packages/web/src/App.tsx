@@ -11,6 +11,7 @@ import {
 import { api } from "./api/client";
 import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
+import { ChangelogModal } from "./components/ChangelogModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { EnginesPanel } from "./components/EnginesPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -74,6 +75,7 @@ export default function App() {
   const [showFilterBar, _setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [showRuntimes, setShowRuntimes] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
   const [showIssueImporter, setShowIssueImporter] = useState(false);
@@ -661,6 +663,10 @@ export default function App() {
           setShowShortcuts(false);
           return;
         }
+        if (showChangelog) {
+          setShowChangelog(false);
+          return;
+        }
         if (showEnginesPanel) {
           setShowEnginesPanel(false);
           return;
@@ -773,6 +779,7 @@ export default function App() {
     toast,
     exportBoard,
     handleDeleteTask,
+    showChangelog,
   ]);
 
   return (
@@ -995,6 +1002,29 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setShowChangelog(true)}
+              title="Ver Changelog de Versões"
+              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mr-1 opacity-70"
+              >
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+              Changelog
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowShortcuts(true)}
               title="Atalhos (?) "
               className="hidden sm:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
@@ -1115,20 +1145,21 @@ export default function App() {
         {selectedTask && (
           <TaskDetail
             task={selectedTask}
+            engines={engines}
             liveLogs={liveLogs[selectedTask.id] ?? []}
             onClose={handleCloseDetail}
-            onLaunch={async (id, engine) => {
+            onLaunch={async (id, engine, model) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-              await launchTask(id, engine);
+              await launchTask(id, engine, model);
               toast("Agent started", "success");
             }}
             onCancel={async (id) => {
               await cancelTask(id);
               toast("Agent canceled", "info");
             }}
-            onRetry={async (id) => {
+            onRetry={async (id, engine, model) => {
               setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-              await retryTask(id);
+              await retryTask(id, engine, model);
               toast("Agent restarted", "success");
             }}
             onRetryPR={async (id) => {
@@ -1209,6 +1240,9 @@ export default function App() {
 
         {/* Shortcuts Modal */}
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+
+        {/* Changelog Modal */}
+        {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
 
         {/* Command Palette */}
         {showCommandPalette && (

@@ -320,6 +320,10 @@ export function createTaskQueries(db: Database) {
         sets.push("pending_approval = ?");
         values.push(req.pendingApproval ? "1" : "0");
       }
+      if (req.maxCost !== undefined) {
+        sets.push("max_cost = ?");
+        values.push(req.maxCost ?? null);
+      }
       if (sets.length === 0) {
         const currentRow = stmts.getById.get(id);
         return currentRow ? mapTask(currentRow) : null;

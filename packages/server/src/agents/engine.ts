@@ -55,6 +55,8 @@ export interface EngineOptions {
   };
   /** Structured skill/rule/agent context matched for this task run. */
   skills?: SkillPayload;
+  /** Environment variables to be merged with process.env and passed to the agent process. */
+  env?: Record<string, string>;
 }
 
 export interface AgentEngine {

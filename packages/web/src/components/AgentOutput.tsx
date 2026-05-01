@@ -315,6 +315,14 @@ interface AgentOutputProps {
   fullHeight?: boolean;
   /** Latest status from the agent (from run.currentStatus) */
   currentStatus?: string | null;
+  /** Cost statistics from the latest run */
+  costStats?: {
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cached?: number;
+    input?: number;
+  } | null;
 }
 
 /** Detects if the last few log lines contain an unanswered question from the agent */
@@ -392,6 +400,7 @@ export function AgentOutput({
   onSendInput,
   fullHeight = false,
   currentStatus,
+  costStats,
 }: AgentOutputProps) {
   const [historicLogs, setHistoricLogs] = useState<AgentLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -581,6 +590,9 @@ export function AgentOutput({
   const hasToolActivity =
     toolStats.reads + toolStats.writes + toolStats.searches + toolStats.commands > 0;
 
+  const displayTokens = costStats?.total_tokens ?? tokenStats.totalTokens;
+  const cost = costStats?.input !== undefined ? costStats.input / 1_000_000 : 0;
+
   return (
     <section
       ref={containerRef}
@@ -596,12 +608,29 @@ export function AgentOutput({
         </span>
 
         {/* Token counter */}
-        {tokenStats.totalTokens > 0 && (
+        {displayTokens > 0 && (
           <span
             className="text-[10px] text-accent-text/70 font-mono shrink-0"
-            title={`${tokenStats.totalTokens.toLocaleString()} tokens em ${tokenStats.steps} step${tokenStats.steps !== 1 ? "s" : ""}`}
+            title={`${displayTokens.toLocaleString()} tokens em ${tokenStats.steps} step${tokenStats.steps !== 1 ? "s" : ""}`}
           >
-            · {fmtTokens(tokenStats.totalTokens)} tokens
+            · {fmtTokens(displayTokens)} tokens
+          </span>
+        )}
+
+        {/* Cost stats */}
+        {(cost > 0 ||
+          (costStats && (costStats.input_tokens > 0 || costStats.output_tokens > 0))) && (
+          <span
+            className="text-[10px] text-warning-muted font-mono shrink-0 font-bold"
+            title={
+              costStats
+                ? `In: ${costStats.input_tokens.toLocaleString()}, Out: ${costStats.output_tokens.toLocaleString()}`
+                : ""
+            }
+          >
+            · {cost > 0 && `$${cost.toFixed(4)}`}
+            {costStats &&
+              ` (${fmtTokens(costStats.input_tokens)}in/${fmtTokens(costStats.output_tokens)}out)`}
           </span>
         )}
 

@@ -288,6 +288,38 @@ export function NewTaskDialog({
 
           {/* ── Configuration ──────────────────────────────── */}
           <div className="space-y-4 pt-2 border-t" style={{ borderColor: "var(--border-subtle)" }}>
+            {/* Engine Selection — Prominent and Required */}
+            <div className="min-w-0">
+              <div
+                className="block text-xs font-medium mb-1.5"
+                style={{ color: "var(--text-muted)" }}
+              >
+                AI Engine *
+                {enginesLoading && (
+                  <span className="ml-1" style={{ color: "var(--text-dimmed)" }}>
+                    (loading...)
+                  </span>
+                )}
+                {enginesError && (
+                  <span className="ml-1" style={{ color: "var(--danger)" }} title={enginesError}>
+                    ⚠
+                  </span>
+                )}
+              </div>
+              <Select value={engine} onChange={(e) => setEngine(e.target.value)} required>
+                <option value="" disabled>
+                  Select an engine...
+                </option>
+                <option value="auto">Auto (First Available)</option>
+                {engines.map((eng) => (
+                  <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                    {eng.displayName}
+                    {!eng.available ? " (unavailable)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
             {/* Repository — always visible */}
             <div className="min-w-0">
               <div
@@ -358,38 +390,6 @@ export function NewTaskDialog({
                 className="space-y-4 pl-3 border-l-2 animate-in slide-in-from-left-2"
                 style={{ borderColor: "var(--border-default)" }}
               >
-                <div className="min-w-0">
-                  <div
-                    className="block text-xs font-medium mb-1.5"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    AI Engine
-                    {enginesLoading && (
-                      <span className="ml-1" style={{ color: "var(--text-dimmed)" }}>
-                        (loading...)
-                      </span>
-                    )}
-                    {enginesError && (
-                      <span
-                        className="ml-1"
-                        style={{ color: "var(--danger)" }}
-                        title={enginesError}
-                      >
-                        ⚠
-                      </span>
-                    )}
-                  </div>
-                  <Select value={engine} onChange={(e) => setEngine(e.target.value)}>
-                    <option value="">Auto-select</option>
-                    {engines.map((eng) => (
-                      <option key={eng.name} value={eng.name} disabled={!eng.available}>
-                        {eng.displayName}
-                        {!eng.available ? " (unavailable)" : ""}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
                 {repoId && (
                   <div>
                     <div
@@ -619,7 +619,7 @@ export function NewTaskDialog({
               <Button
                 type="submit"
                 variant="primary"
-                disabled={!title.trim() || !repoId || submitting}
+                disabled={!title.trim() || !repoId || !engine || submitting}
               >
                 {submitting ? "Criando..." : isScheduled ? "Create Schedule" : "Create Task"}
               </Button>

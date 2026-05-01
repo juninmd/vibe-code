@@ -54,7 +54,7 @@ export class AiderEngine implements AgentEngine {
 
     // When LiteLLM is enabled, route through the proxy and strip native keys.
     // Otherwise, prefer DB-stored native keys; fall back to host env vars.
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;

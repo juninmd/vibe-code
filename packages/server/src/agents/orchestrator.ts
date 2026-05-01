@@ -98,6 +98,32 @@ export class Orchestrator {
       });
   }
 
+  async sweepBacklog(): Promise<void> {
+    if (this.activeRuns.size >= this.maxConcurrent) return;
+
+    // Get all tasks in backlog ordered by priority
+    const backlog = this.db.tasks
+      .list(undefined, "backlog")
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+    for (const task of backlog) {
+      if (this.activeRuns.size >= this.maxConcurrent) break;
+      if (this.activeRuns.has(task.id)) continue;
+
+      // Check if blocked by dependencies
+      if (task.dependsOn.length > 0) {
+        if (this.checkBlockedByDependencies(task.id, task.dependsOn).length > 0) continue;
+      }
+
+      try {
+        await this.launch(task);
+        logOrchestratorEvent(`Heartbeat: Auto-launched task "${task.title.slice(0, 40)}"`);
+      } catch {
+        // Fail silently during sweep - maybe engine not available or concurrency hit
+      }
+    }
+  }
+
   getRetryQueueSnapshot(): Array<{
     taskId: string;
     attempt: number;
@@ -157,9 +183,10 @@ export class Orchestrator {
 
     try {
       const engineName = engineOverride ?? task.engine;
-      const engine = engineName
-        ? this.registry.get(engineName)
-        : await this.registry.getFirstAvailable();
+      const engine =
+        engineName && engineName !== "auto"
+          ? this.registry.get(engineName)
+          : await this.registry.getFirstAvailable();
       if (!engine) {
         if (!engineName) throw new Error("No AI engines available");
         throw new Error(`Engine "${engineName}" not found or unavailable`);

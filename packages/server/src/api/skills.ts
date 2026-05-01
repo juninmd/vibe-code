@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import type { SkillsLoader } from "../skills/loader";
+import type { SkillRegistryService } from "../skills/registry";
 
-export function createSkillsRouter(skillsLoader: SkillsLoader) {
+export function createSkillsRouter(
+  skillsLoader: SkillsLoader,
+  skillRegistry: SkillRegistryService
+) {
   const app = new Hono();
 
   // GET /api/skills — full index of all categories
@@ -67,6 +71,41 @@ export function createSkillsRouter(skillsLoader: SkillsLoader) {
   app.get("/manifests", async (c) => {
     const manifests = await skillsLoader.loadManifests();
     return c.json({ data: manifests });
+  });
+
+  // GET /api/skills/registry — list installed registry skills
+  app.get("/registry", async (c) => {
+    const list = await skillRegistry.listInstalled();
+    return c.json({ data: list });
+  });
+
+  // POST /api/skills/registry/install — install from GitHub
+  app.post("/registry/install", async (c) => {
+    const { repoPath } = await c.req.json();
+    if (!repoPath) {
+      return c.json({ error: "Missing repoPath" }, 400);
+    }
+    try {
+      const result = await skillRegistry.installFromGitHub(repoPath);
+      skillsLoader.invalidate(); // Force reload
+      return c.json({ data: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  // DELETE /api/skills/registry/:name — uninstall
+  app.delete("/registry/:name", async (c) => {
+    const name = c.req.param("name");
+    try {
+      await skillRegistry.uninstall(name);
+      skillsLoader.invalidate();
+      return c.json({ data: { success: true } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 500);
+    }
   });
 
   return app;

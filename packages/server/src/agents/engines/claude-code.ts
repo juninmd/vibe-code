@@ -34,8 +34,22 @@ export class ClaudeCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    const all = await listLiteLLMModels(getLiteLLMBaseUrl());
-    return all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
+    const staticModels = [
+      "claude-3-7-sonnet-20250219",
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-sonnet-20240620",
+      "claude-3-5-haiku-20241022",
+      "claude-3-opus-20240229",
+      "claude-3-sonnet-20240229",
+      "claude-3-haiku-20240307",
+    ];
+    try {
+      const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+      const litellm = all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
+      return Array.from(new Set([...staticModels, ...litellm])).sort();
+    } catch {
+      return staticModels;
+    }
   }
 
   async *execute(
@@ -52,7 +66,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     if (options.model) args.push("--model", options.model);
     args.push("-p", `@${promptFile}`);
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
     if (options.litellmKey) {
       env.ANTHROPIC_BASE_URL = options.litellmBaseUrl;
       env.ANTHROPIC_API_KEY = options.litellmKey;

@@ -140,6 +140,10 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("pending_approval")) {
     db.exec("ALTER TABLE tasks ADD COLUMN pending_approval INTEGER NOT NULL DEFAULT 0");
   }
+  // Migration: tasks.max_cost column for budget hard-stops
+  if (!taskColNames.includes("max_cost")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN max_cost REAL");
+  }
 
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];

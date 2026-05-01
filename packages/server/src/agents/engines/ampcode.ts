@@ -51,7 +51,7 @@ export class AmpCodeEngine implements AgentEngine {
     if (options.model) args.push("--model", options.model);
     args.push("--message", `@${promptFile}`);
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;

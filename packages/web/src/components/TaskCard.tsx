@@ -347,14 +347,38 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
           task.latestRun?.finishedAt &&
           (() => {
             const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
-            return dur ? (
-              <span
-                className="text-[10px] ml-auto tabular-nums"
-                style={{ color: "var(--text-dimmed)" }}
-              >
-                ⏱ {dur}
-              </span>
-            ) : null;
+            const stats = task.latestRun.costStats;
+            const cost = stats?.input !== undefined ? stats.input / 1_000_000 : 0;
+            const hasTokens = stats && (stats.input_tokens > 0 || stats.output_tokens > 0);
+
+            return (
+              <div className="ml-auto flex flex-col items-end gap-0.5">
+                {dur && (
+                  <span
+                    className="text-[10px] tabular-nums"
+                    style={{ color: "var(--text-dimmed)" }}
+                  >
+                    ⏱ {dur}
+                  </span>
+                )}
+                {(cost > 0 || hasTokens) && (
+                  <span
+                    className="text-[9px] font-mono whitespace-nowrap"
+                    style={{ color: "var(--text-dimmed)" }}
+                  >
+                    {cost > 0 && (
+                      <span className="text-warning-muted font-bold mr-1">${cost.toFixed(3)}</span>
+                    )}
+                    {hasTokens && (
+                      <span>
+                        {Math.round(stats.input_tokens / 100) / 10}k/
+                        {Math.round(stats.output_tokens / 100) / 10}k
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            );
           })()}
       </div>
     </div>

@@ -518,12 +518,25 @@ export async function executeAgent(
         severity: f.severity,
         content: f.content,
       }));
+
+    const parentTaskLoader = async (parentId: string) => {
+      const p = db.tasks.getById(parentId);
+      if (!p) return null;
+      return {
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        parentId: p.parentTaskId,
+      };
+    };
+
     const contextResult = await buildContextAsync(
       task,
       wtPath,
       skillsLoader,
       task.repoId,
-      findingsLoader
+      findingsLoader,
+      parentTaskLoader
     );
     const prompt = contextResult.prompt;
     skillPayload = contextResult.skills;
@@ -603,6 +616,20 @@ export async function executeAgent(
       : "";
     const promptWithContext = `${prompt}\n\n---\n**Session context is available in \`.vibe-code/context/PROGRESS.md\` (human-readable) and \`.vibe-code/context/TASK.json\` (structured). Read them at the start if you need previous session notes or task metadata.**${specNote}`;
 
+    const scriptsDir = join(process.cwd(), "packages", "server", "scripts");
+    const agentEnv: Record<string, string> = {
+      VIBE_CODE_WORKSPACE_NAME: repo.name,
+      VIBE_CODE_ROOT_PATH: wtPath,
+      VIBE_CODE_API_URL: `http://localhost:${process.env.PORT || 3000}`,
+      VIBE_CODE_TASK_ID: task.id,
+      VIBE_CODE_REPO_ID: task.repoId,
+      VIBE_CODE_PARENT_TASK_ID: task.id,
+      PATH: `${scriptsDir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
+    };
+    if (task.maxCost !== undefined && task.maxCost !== null) {
+      agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
+    }
+
     db.runs.updateStateSnapshot(run.id, "agent_running");
     hub.broadcastToTask(task.id, {
       type: "phase_changed",
@@ -620,6 +647,7 @@ export async function executeAgent(
       nativeApiKeys,
       skills: skillPayload,
       resumeSessionId: activeSessionId,
+      env: agentEnv,
     })) {
       if (abort.signal.aborted) break;
       recordCliLoadedSkills();
@@ -632,6 +660,16 @@ export async function executeAgent(
       }
       if (event.type === "cost" && event.costStats) {
         capturedCostStats = event.costStats;
+        if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
+          const costInDollars =
+            event.costStats.input !== undefined ? event.costStats.input / 1_000_000 : 0;
+          if (costInDollars > task.maxCost) {
+            sysLog(
+              `[BUDGET EXCEEDED] Run cost ($${costInDollars.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
+            );
+            abort.abort();
+          }
+        }
         continue;
       }
       await handleAgentEvent(event, run.id, task.id, db, hub, () => {

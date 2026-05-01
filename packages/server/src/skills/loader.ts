@@ -72,6 +72,12 @@ async function loadSkills(basePath: string): Promise<SkillEntry[]> {
         category: "skill",
         filePath: skillFile,
         scope: "global",
+        version: meta.version,
+        dependencies: meta.dependencies
+          ? meta.dependencies.split(",").map((d) => d.trim())
+          : undefined,
+        tags: meta.tags ? meta.tags.split(",").map((t) => t.trim()) : undefined,
+        author: meta.author,
       });
     } catch {
       // Skill dir without SKILL.md — skip
@@ -99,6 +105,9 @@ async function loadRules(basePath: string): Promise<RuleEntry[]> {
         category: "rule",
         filePath,
         scope: "global",
+        dependencies: meta.dependencies
+          ? meta.dependencies.split(",").map((d) => d.trim())
+          : undefined,
       });
     } catch {
       // Unreadable rule file — skip
@@ -125,6 +134,7 @@ async function loadAgents(basePath: string): Promise<AgentEntry[]> {
         category: "agent",
         filePath,
         scope: "global",
+        skills: meta.skills ? meta.skills.split(",").map((s) => s.trim()) : undefined,
       });
     } catch {
       // Unreadable agent file — skip
@@ -160,6 +170,47 @@ async function loadWorkflows(basePath: string): Promise<WorkflowEntry[]> {
   return entries;
 }
 
+const VIRTUAL_MASTER_SKILL: SkillEntry = {
+  name: "vibe-code-orchestrator",
+  description:
+    "Meta-skill enabling you to create sub-tasks, delegate work, and orchestrate other Vibe-Code agents.",
+  category: "skill",
+  filePath: "virtual://vibe-code-orchestrator",
+  scope: "global",
+  version: "1.0.0",
+  tags: ["orchestration", "api", "meta"],
+};
+
+const VIRTUAL_MASTER_SKILL_CONTENT = `
+# Vibe-Code Meta-Orchestrator Skill
+
+You are operating within the Vibe-Code orchestration platform. You have the ability to break down your current task and delegate work to other specialized agents by creating sub-tasks.
+
+## Environment Variables Provided
+- \`VIBE_CODE_API_URL\`: The base URL for the REST API (e.g. \`http://localhost:3000\`)
+- \`VIBE_CODE_TASK_ID\`: Your current Task ID
+- \`VIBE_CODE_REPO_ID\`: The current Repository ID
+
+## How to Create a Sub-Task
+You can create a sub-task using \`curl\` or any HTTP client available in your environment.
+
+\`\`\`bash
+curl -X POST $VIBE_CODE_API_URL/api/tasks \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Sub-task title",
+    "description": "Detailed prompt for the sub-agent",
+    "repoId": "'$VIBE_CODE_REPO_ID'",
+    "parentTaskId": "'$VIBE_CODE_TASK_ID'",
+    "maxCost": 2.00
+  }'
+\`\`\`
+
+## Important Rules
+1. If you create sub-tasks that you depend on, you can simply write the sub-tasks, emit a log that you are waiting, and exit.
+2. Set \`maxCost\` on your sub-tasks to prevent runaway agents.
+`;
+
 export class SkillsLoader {
   private cache: SkillsIndex | null = null;
   private basePath: string;
@@ -176,14 +227,19 @@ export class SkillsLoader {
   async load(): Promise<SkillsIndex> {
     if (this.cache) return this.cache;
 
-    const [skills, rules, agents, workflows] = await Promise.all([
+    const registryPath = join(this.basePath, "registry");
+    const [skills, rules, agents, workflows, registrySkills] = await Promise.all([
       loadSkills(this.basePath),
       loadRules(this.basePath),
       loadAgents(this.basePath),
       loadWorkflows(this.basePath),
+      loadSkills(registryPath).catch(() => []), // Registry skills use the same structure
     ]);
 
-    this.cache = { skills, rules, agents, workflows };
+    // Merge global skills and registry skills, plus the virtual meta-orchestrator skill
+    const allSkills = [...skills, ...registrySkills, VIRTUAL_MASTER_SKILL];
+
+    this.cache = { skills: allSkills, rules, agents, workflows };
     return this.cache;
   }
 
@@ -217,6 +273,10 @@ export class SkillsLoader {
   }
 
   async getFileContent(filePath: string): Promise<string> {
+    if (filePath === "virtual://vibe-code-orchestrator") {
+      return VIRTUAL_MASTER_SKILL_CONTENT;
+    }
+
     // Security: only serve files under the configured base path
     const resolved = resolvePath(filePath);
     if (!resolved.startsWith(this.basePath)) {

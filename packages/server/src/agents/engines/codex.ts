@@ -52,7 +52,7 @@ export class CodexEngine implements AgentEngine {
     if (options.resumeSessionId) args.push("--session", options.resumeSessionId);
     args.push("--message", `@${promptFile}`);
 
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;
