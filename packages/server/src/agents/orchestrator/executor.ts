@@ -210,6 +210,31 @@ function buildAssetBlobUrl(repoUrl: string, branch: string, assetPath: string): 
   return `${base}/-/blob/${encodedBranch}/${encodedAssetPath}`;
 }
 
+function recordTaskArtifact(
+  db: Db,
+  task: Task,
+  run: AgentRun,
+  artifact: {
+    kind: "pull_request" | "branch" | "docs" | "worktree" | "archive" | "other";
+    title: string;
+    uri: string;
+    metadata?: Record<string, unknown>;
+  }
+): void {
+  try {
+    db.artifacts.upsert({
+      taskId: task.id,
+      runId: run.id,
+      kind: artifact.kind,
+      title: artifact.title,
+      uri: artifact.uri,
+      metadata: artifact.metadata ?? null,
+    });
+  } catch {
+    // Operational metadata should never fail an agent run.
+  }
+}
+
 function rewriteDocsAssetLinks(body: string, repoUrl: string, branch: string): string {
   return body.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (full, alt, target) => {
     const assetPath = extractDocsAssetPath(target);
@@ -410,7 +435,11 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { started_at: new Date().toISOString() });
-    db.runs.updateStateSnapshot(run.id, "setup");
+    db.runs.updateStateSnapshot(run.id, "setup", {
+      branch,
+      sessionId: activeSessionId ?? null,
+      resumeFromRunId: resumeSessionId ? "previous-failed-run" : null,
+    });
     hub.broadcastToTask(task.id, {
       type: "phase_changed",
       runId: run.id,
@@ -424,6 +453,12 @@ export async function executeAgent(
       wtPath = reusableWorkspacePath;
       await git.fetchRepo(barePath);
       sysLog(`Workspace reused at ${wtPath}`);
+      recordTaskArtifact(db, task, run, {
+        kind: "worktree",
+        title: "Reused workspace",
+        uri: wtPath,
+        metadata: { branch, reused: true },
+      });
     } else {
       wtPath = await git.createWorktree(
         barePath,
@@ -434,10 +469,20 @@ export async function executeAgent(
         !resumeExistingBranch
       );
       sysLog(`Workspace ready at ${wtPath}`);
+      recordTaskArtifact(db, task, run, {
+        kind: "worktree",
+        title: "Execution workspace",
+        uri: wtPath,
+        metadata: { branch, reused: false },
+      });
     }
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
-    db.runs.updateStateSnapshot(run.id, "worktree_ready");
+    db.runs.updateStateSnapshot(run.id, "worktree_ready", {
+      branch,
+      worktreePath: wtPath,
+      sessionId: activeSessionId ?? null,
+    });
     hub.broadcastToTask(task.id, {
       type: "phase_changed",
       runId: run.id,
@@ -630,7 +675,11 @@ export async function executeAgent(
       agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
     }
 
-    db.runs.updateStateSnapshot(run.id, "agent_running");
+    db.runs.updateStateSnapshot(run.id, "agent_running", {
+      branch,
+      worktreePath: wtPath,
+      sessionId: activeSessionId ?? null,
+    });
     hub.broadcastToTask(task.id, {
       type: "phase_changed",
       runId: run.id,
@@ -653,6 +702,11 @@ export async function executeAgent(
       recordCliLoadedSkills();
       if (event.type === "session" && event.sessionId) {
         activeSessionId = event.sessionId;
+        db.runs.updateStateSnapshot(run.id, "agent_running", {
+          branch,
+          worktreePath: wtPath,
+          sessionId: activeSessionId,
+        });
       }
       if (event.type === "complete") {
         agentExitCode = event.exitCode ?? 0;
@@ -678,9 +732,7 @@ export async function executeAgent(
     }
 
     if (abort.signal.aborted)
-      throw new Error(
-        stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
-      );
+      throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
 
     if (agentExitCode !== null && agentExitCode !== 0) {
       throw new Error(`Agent exited with code ${agentExitCode}`);
@@ -689,7 +741,12 @@ export async function executeAgent(
     sysLog(
       `Running final validator agent (lint/test/build), max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`
     );
-    db.runs.updateStateSnapshot(run.id, "validating");
+    db.runs.updateStateSnapshot(run.id, "validating", {
+      branch,
+      worktreePath: wtPath,
+      sessionId: activeSessionId ?? null,
+      validatorAttempts,
+    });
     hub.broadcastToTask(task.id, {
       type: "phase_changed",
       runId: run.id,
@@ -701,6 +758,12 @@ export async function executeAgent(
     let validatorExitCode: number | null = null;
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
       validatorAttempts = attempt;
+      db.runs.updateStateSnapshot(run.id, "validating", {
+        branch,
+        worktreePath: wtPath,
+        sessionId: activeSessionId ?? null,
+        validatorAttempts,
+      });
       validatorExitCode = null;
       const validatorPrompt = buildFinalValidatorPrompt(task);
       sysLog(`Final validator attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
@@ -728,9 +791,7 @@ export async function executeAgent(
       }
 
       if (abort.signal.aborted)
-        throw new Error(
-          stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
-        );
+        throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
 
       if (validatorExitCode === null || validatorExitCode === 0) {
         validatorPassed = true;
@@ -756,7 +817,12 @@ export async function executeAgent(
     // M6: Post-run evaluator — grade completeness against the task spec
     if (litellmBaseUrl && litellmKey) {
       try {
-        db.runs.updateStateSnapshot(run.id, "evaluating");
+        db.runs.updateStateSnapshot(run.id, "evaluating", {
+          branch,
+          worktreePath: wtPath,
+          sessionId: activeSessionId ?? null,
+          validatorAttempts,
+        });
         hub.broadcastToTask(task.id, {
           type: "phase_changed",
           runId: run.id,
@@ -849,7 +915,12 @@ export async function executeAgent(
 
     if (REVIEW_ENABLED) {
       sysLog("Running review pipeline...");
-      db.runs.updateStateSnapshot(run.id, "reviewing");
+      db.runs.updateStateSnapshot(run.id, "reviewing", {
+        branch,
+        worktreePath: wtPath,
+        sessionId: activeSessionId ?? null,
+        validatorAttempts,
+      });
       hub.broadcastToTask(task.id, {
         type: "phase_changed",
         runId: run.id,
@@ -947,9 +1018,7 @@ export async function executeAgent(
         }
 
         if (abort.signal.aborted)
-          throw new Error(
-            stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
-          );
+          throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
 
         if (autofixExitCode !== null && autofixExitCode !== 0) {
           throw new Error(`Review auto-apply exited with code ${autofixExitCode}`);
@@ -991,9 +1060,7 @@ export async function executeAgent(
         }
 
         if (abort.signal.aborted)
-          throw new Error(
-            stalledDueToInactivity ? "Agent stalled" : timedOut ? "Agent timed out" : "Cancelled"
-          );
+          throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
         if (docsExitCode !== null && docsExitCode !== 0) {
           sysLog(
             `Docs step exited with code ${docsExitCode} — screenshot may be unavailable; continuing with available docs.`
@@ -1002,6 +1069,12 @@ export async function executeAgent(
 
         if (await git.hasChanges(wtPath)) {
           await git.commitAll(wtPath, `docs: add implementation notes for ${task.title}`);
+          recordTaskArtifact(db, task, run, {
+            kind: "docs",
+            title: "Implementation notes",
+            uri: buildAssetBlobUrl(repo.url, branch, docsRelativePath(task)),
+            metadata: { path: docsRelativePath(task) },
+          });
           sysLog("Docs step applied and committed ✓");
           await verifyWorktree(wtPath, sysLog);
         } else {
@@ -1017,7 +1090,12 @@ export async function executeAgent(
     let prUrl: string | null = null;
 
     try {
-      db.runs.updateStateSnapshot(run.id, "pr_creating");
+      db.runs.updateStateSnapshot(run.id, "pr_creating", {
+        branch,
+        worktreePath: wtPath,
+        sessionId: activeSessionId ?? null,
+        validatorAttempts,
+      });
       hub.broadcastToTask(task.id, {
         type: "phase_changed",
         runId: run.id,
@@ -1027,6 +1105,12 @@ export async function executeAgent(
       });
       sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
+      recordTaskArtifact(db, task, run, {
+        kind: "branch",
+        title: "Pushed branch",
+        uri: branch,
+        metadata: { baseBranch },
+      });
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
@@ -1060,6 +1144,12 @@ export async function executeAgent(
 
       prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
       db.tasks.updateField(task.id, "pr_url", prUrl);
+      recordTaskArtifact(db, task, run, {
+        kind: "pull_request",
+        title: "Pull request",
+        uri: prUrl,
+        metadata: { branch, baseBranch },
+      });
       prCreated = true;
       sysLog(`PR created: ${prUrl}`);
     } catch (err: any) {
@@ -1144,7 +1234,7 @@ export async function executeAgent(
     // Best-effort cleanup of the per-task LiteLLM virtual key.
     if (litellmTokenId) {
       const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
-      await deleteVirtualKey(litellmTokenId, baseUrl).catch(() => {});
+      await deleteVirtualKey(litellmTokenId, baseUrl);
     }
 
     if (wtPath && !keepWorkspaceForRetry) {

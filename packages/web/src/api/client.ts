@@ -1,6 +1,7 @@
 import type {
   AgentLog,
   AgentRun,
+  AuthStatus,
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
@@ -19,6 +20,7 @@ import type {
   SkillsIndex,
   StatsResponse,
   Task,
+  TaskArtifact,
   TaskPollResponse,
   TaskSchedule,
   TaskScheduleWithTask,
@@ -64,6 +66,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       ...options,
+      credentials: "same-origin",
       signal: options?.signal ?? controller.signal,
       headers,
     });
@@ -112,6 +115,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // ─── Repositories ────────────────────────────────────────────────────────────
 
 export const api = {
+  auth: {
+    me: () => request<AuthStatus>("/auth/me"),
+    logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+    loginUrl: () => `${BASE}/auth/github/start`,
+  },
+
   repos: {
     list: () => request<Repository[]>("/repos"),
     get: (id: string) => request<Repository>(`/repos/${id}`),
@@ -207,6 +216,7 @@ export const api = {
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
     clone: (id: string) => request<Task>(`/tasks/${id}/clone`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
+    artifacts: (id: string) => request<TaskArtifact[]>(`/tasks/${id}/artifacts`),
     diff: (id: string) => request<DiffSummary>(`/tasks/${id}/diff`),
     diffFile: (id: string, path: string) =>
       request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),

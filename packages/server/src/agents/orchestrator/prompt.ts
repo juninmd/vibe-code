@@ -282,6 +282,14 @@ function assemblePrompt(
     sections.push(`## Requirements\n${task.description.trim()}`);
   }
 
+  const alignmentLines = [
+    task.goal?.trim() ? `**Goal:** ${task.goal.trim()}` : "",
+    task.desiredOutcome?.trim() ? `**Desired outcome:** ${task.desiredOutcome.trim()}` : "",
+  ].filter(Boolean);
+  if (alignmentLines.length > 0) {
+    sections.push(`## Goal Alignment\n${alignmentLines.join("\n\n")}`);
+  }
+
   // ── Goal Ancestry (Paperclip-inspired) ─────────────────────────────────────
   if (ancestrySection) {
     sections.push(ancestrySection);

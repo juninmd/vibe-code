@@ -1,4 +1,10 @@
-import type { AgentLog, TaskStatus, TaskWithRun, WsServerMessage } from "@vibe-code/shared";
+import type {
+  AgentLog,
+  AuthStatus,
+  TaskStatus,
+  TaskWithRun,
+  WsServerMessage,
+} from "@vibe-code/shared";
 import {
   startTransition,
   useCallback,
@@ -19,6 +25,7 @@ import { FilterBar, type Filters } from "./components/FilterBar";
 import { InboxPanel } from "./components/InboxPanel";
 import { IssueImporter } from "./components/IssueImporter";
 import { NewTaskDialog } from "./components/NewTaskDialog";
+import { RepoQuickView } from "./components/RepoQuickView";
 import { RuntimeDashboard } from "./components/RuntimeDashboard";
 import { ScheduledTasksPanel } from "./components/ScheduledTasksPanel";
 import { SettingsDialog } from "./components/SettingsDialog";
@@ -28,6 +35,7 @@ import { SkeletonBoard } from "./components/Skeleton";
 import { SkillsBrowser } from "./components/SkillsBrowser";
 import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
+import { TemplatesPanel } from "./components/TemplatesPanel";
 import { Button } from "./components/ui/button";
 import { getEngineMeta } from "./components/ui/engine-icons";
 import { Toaster } from "./components/ui/Toaster";
@@ -58,7 +66,78 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
 }
 
+function LoginScreen({
+  status,
+  loading,
+  error,
+  onRetry,
+}: {
+  status: AuthStatus | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-app text-primary flex items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-lg border border-default bg-surface p-6 shadow-xl">
+        <h1 className="text-lg font-semibold">Vibe Code</h1>
+        <p className="mt-2 text-sm text-secondary">
+          Entre com GitHub para acessar o painel e autorizar operações em repositórios.
+        </p>
+        {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+        <div className="mt-5 flex gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            className="flex-1"
+            disabled={loading || status?.enabled === false}
+            onClick={() => {
+              window.location.href = api.auth.loginUrl();
+            }}
+          >
+            {loading ? "Verificando..." : "Entrar com GitHub"}
+          </Button>
+          {error && (
+            <Button type="button" variant="ghost" onClick={onRetry}>
+              Tentar
+            </Button>
+          )}
+        </div>
+        {status?.enabled === false && (
+          <p className="mt-3 text-xs text-warning">OAuth ainda não está configurado no servidor.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const loadAuth = useCallback(() => {
+    setAuthLoading(true);
+    setAuthError(null);
+    api.auth
+      .me()
+      .then(setAuth)
+      .catch((err) => setAuthError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  useEffect(() => {
+    loadAuth();
+  }, [loadAuth]);
+
+  if (authLoading || !auth?.authenticated) {
+    return <LoginScreen status={auth} loading={authLoading} error={authError} onRetry={loadAuth} />;
+  }
+
+  return <AuthenticatedApp auth={auth} onLogout={loadAuth} />;
+}
+
+function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () => void }) {
   const toastCtx = useToastState();
   const { toast } = toastCtx;
 
@@ -77,7 +156,9 @@ export default function App() {
   const [showSkills, setShowSkills] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showRuntimes, setShowRuntimes] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [showInbox, setShowInbox] = useState(false);
+  const [showQuickView, setShowQuickView] = useState(false);
   const [showIssueImporter, setShowIssueImporter] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [selectedTaskLoadedSkills, setSelectedTaskLoadedSkills] = useState<string[]>([]);
@@ -113,6 +194,8 @@ export default function App() {
     cancelTask,
     retryTask,
     retryPR,
+    approveTask,
+    rejectTask,
     updateTaskLocal,
     updateRunLocal,
     setTasksSnapshot,
@@ -370,23 +453,23 @@ export default function App() {
   // Show toast on disconnect / reconnect
   useEffect(() => {
     let canceled = false;
+    let mounted = true;
 
     if (!connected && wasConnected.current) {
       toast("Conexão perdida. Reconectando...", "error");
     }
     if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
       toast("Reconectado!", "success");
-      // Resync state after reconnect: clear live logs then fetch fresh
       (async () => {
         try {
           await refresh();
+          if (canceled || !mounted) return;
           if (selectedTask?.id) {
             const data = await api.tasks.poll(selectedRepoId ?? undefined, selectedTask.id, 0);
-            if (canceled) return;
+            if (canceled || !mounted) return;
             startTransition(() => {
               setTasksSnapshot(data.tasks);
               if (data.focusedTask) setSelectedTask(data.focusedTask);
-              // Replace (not append) to avoid duplicates after reconnect
               const newestId = data.focusedLogs[data.focusedLogs.length - 1]?.id ?? 0;
               focusedLogCursorRef.current = Math.max(focusedLogCursorRef.current, newestId);
               setLiveLogs((prev) => ({
@@ -406,6 +489,7 @@ export default function App() {
     wasConnected.current = connected;
     return () => {
       canceled = true;
+      mounted = false;
     };
   }, [connected, toast, refresh, selectedRepoId, selectedTask, setTasksSnapshot]);
 
@@ -675,6 +759,10 @@ export default function App() {
           setShowSchedulesPanel(false);
           return;
         }
+        if (showTemplates) {
+          setShowTemplates(false);
+          return;
+        }
         if (showNewTask) {
           setShowNewTask(false);
           return;
@@ -780,6 +868,7 @@ export default function App() {
     exportBoard,
     handleDeleteTask,
     showChangelog,
+    showTemplates,
   ]);
 
   return (
@@ -816,7 +905,9 @@ export default function App() {
           onOpenStats={() => setShowStats(true)}
           onOpenSkills={() => setShowSkills(true)}
           onOpenRuntimes={() => setShowRuntimes(true)}
+          onOpenTemplates={() => setShowTemplates(true)}
           onOpenInbox={() => setShowInbox(true)}
+          onOpenQuickView={() => setShowQuickView(true)}
           connected={connected}
         />
 
@@ -867,6 +958,7 @@ export default function App() {
               className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
             >
               <svg
+                aria-hidden="true"
                 width="14"
                 height="14"
                 viewBox="0 0 24 24"
@@ -1007,6 +1099,7 @@ export default function App() {
               className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
             >
               <svg
+                aria-hidden="true"
                 width="14"
                 height="14"
                 viewBox="0 0 24 24"
@@ -1030,6 +1123,25 @@ export default function App() {
               className="hidden sm:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
             >
               ?
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                await api.auth.logout();
+                onLogout();
+              }}
+              title={auth.user ? `Sair de @${auth.user.username}` : "Sair"}
+              className="hidden md:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors gap-2"
+            >
+              {auth.user?.avatarUrl && (
+                <img
+                  src={auth.user.avatarUrl}
+                  alt={auth.user.username}
+                  className="w-5 h-5 rounded-full"
+                />
+              )}
+              {auth.user ? `@${auth.user.username}` : "Sair"}
             </button>
 
             <Button
@@ -1166,6 +1278,14 @@ export default function App() {
               await retryPR(id);
               toast("Creating PR...", "info");
             }}
+            onApprove={async (id) => {
+              await approveTask(id);
+              toast("Solicitação aprovada", "success");
+            }}
+            onReject={async (id) => {
+              await rejectTask(id);
+              toast("Solicitação rejeitada", "info");
+            }}
             onDelete={async (id) => {
               const taskToDelete = tasks.find((t) => t.id === id);
               await removeTask(id);
@@ -1202,6 +1322,7 @@ export default function App() {
             }}
             onTaskRefresh={refresh}
             onSkillClick={handleSkillClick}
+            allTasks={tasks}
           />
         )}
 
@@ -1236,6 +1357,10 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {showTemplates && (
+          <TemplatesPanel open={showTemplates} onClose={() => setShowTemplates(false)} />
         )}
 
         {/* Shortcuts Modal */}
@@ -1348,6 +1473,19 @@ export default function App() {
         <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
 
         <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
+
+        <RepoQuickView
+          open={showQuickView}
+          onClose={() => setShowQuickView(false)}
+          repos={repos}
+          tasks={tasks}
+          onSelectRepo={(id) => {
+            setSelectedRepoId(id);
+          }}
+          onOpenRepo={(repo) => {
+            setSelectedRepoId(repo.id);
+          }}
+        />
 
         <RuntimeDashboard open={showRuntimes} onClose={() => setShowRuntimes(false)} />
 

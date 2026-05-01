@@ -126,7 +126,8 @@ function resolveDependencies<T extends { name: string; dependencies?: string[] }
   const queue = [...initialSelection];
 
   while (queue.length > 0) {
-    const entry = queue.shift()!;
+    const entry = queue.shift();
+    if (!entry) continue;
     if (result.has(entry.name)) continue;
     result.set(entry.name, entry);
 

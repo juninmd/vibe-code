@@ -41,4 +41,7 @@ export interface GitProviderAdapter {
     repoUrl: string,
     options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
   ): Promise<RepositoryIssue[]>;
+
+  /** List branches for a repository */
+  listBranches(token: string, repoUrl: string): Promise<string[]>;
 }

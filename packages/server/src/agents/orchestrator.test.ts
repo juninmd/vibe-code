@@ -4,23 +4,28 @@ import type { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
 import type { AgentEngine, AgentEvent } from "./engine";
 
-import { Orchestrator } from "./orchestrator";
 import type { EngineRegistry } from "./registry";
 
-mock.module("./orchestrator/executor", () => {
-  const original = require("./orchestrator/executor");
-  return {
-    ...original,
-    runWorkspaceScripts: async () => {},
-  };
-});
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+mock.module("./orchestrator/review", () => ({
+  REVIEW_ENABLED: false,
+  REVIEW_STRICT: false,
+  runReviewPipeline: async () => ({
+    blockers: [],
+    actionableFindings: [],
+    docsFindings: [],
+  }),
+}));
+
+const { Orchestrator } = await import("./orchestrator");
 
 type Db = ReturnType<typeof createDb>;
 
 function makeDb(): Db {
-  return createDb(":memory:");
+  const db = createDb(":memory:");
+  db.settings.set("litellm_enabled", "false");
+  return db;
 }
 
 function makeHub(): BroadcastHub {

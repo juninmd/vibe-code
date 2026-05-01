@@ -1,5 +1,5 @@
 import { readdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type {
   AgentEntry,
   RuleEntry,
@@ -138,7 +138,8 @@ export class RepoSkillsLoader {
   async getFileContent(filePath: string): Promise<string> {
     const resolved = resolve(filePath);
     const base = resolve(this.basePath);
-    if (!resolved.startsWith(base)) {
+    const relativePath = relative(base, resolved);
+    if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
       throw new Error("Access denied: path outside repo skills directory");
     }
     return readFile(resolved, "utf8");

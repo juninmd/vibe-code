@@ -206,6 +206,38 @@ export function useTasks(repoFilter?: string) {
     }
   }, []);
 
+  const approveTask = useCallback(
+    async (id: string) => {
+      try {
+        await api.tasks.approve(id);
+        const task = tasks.find((t) => t.id === id);
+        if (task) {
+          updateTaskLocal({ ...task, pendingApproval: false });
+        }
+      } catch (err) {
+        console.error("Failed to approve task:", err);
+        throw err;
+      }
+    },
+    [tasks, updateTaskLocal]
+  );
+
+  const rejectTask = useCallback(
+    async (id: string) => {
+      try {
+        await api.tasks.reject(id);
+        const task = tasks.find((t) => t.id === id);
+        if (task) {
+          updateTaskLocal({ ...task, pendingApproval: false, status: "failed" });
+        }
+      } catch (err) {
+        console.error("Failed to reject task:", err);
+        throw err;
+      }
+    },
+    [tasks, updateTaskLocal]
+  );
+
   return {
     tasks,
     loading,
@@ -222,6 +254,8 @@ export function useTasks(repoFilter?: string) {
     cancelTask,
     retryTask,
     retryPR,
+    approveTask,
+    rejectTask,
     updateTaskLocal,
     updateRunLocal,
     setTasksSnapshot,

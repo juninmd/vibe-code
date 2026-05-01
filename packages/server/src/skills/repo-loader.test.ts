@@ -3,31 +3,35 @@ import { RepoSkillsLoader } from "./repo-loader";
 
 // Simple mock for parsing frontmatter test
 mock.module("node:fs/promises", () => {
+  const normalizePath = (path: string) => path.replace(/\\/g, "/");
+
   return {
     readdir: mock(async (dir: string) => {
-      if (dir.endsWith("/.vibe-code/skills")) {
+      const normalized = normalizePath(dir);
+      if (normalized.endsWith("/.vibe-code/skills")) {
         return ["my-skill"];
       }
-      if (dir.endsWith("/.vibe-code/rules")) {
+      if (normalized.endsWith("/.vibe-code/rules")) {
         return ["my-rule.instructions.md", "ignore-me.txt"];
       }
-      if (dir.endsWith("/.vibe-code/agents")) {
+      if (normalized.endsWith("/.vibe-code/agents")) {
         return ["my-agent.agent.md"];
       }
-      if (dir.endsWith("/.vibe-code/workflows")) {
+      if (normalized.endsWith("/.vibe-code/workflows")) {
         return ["my-workflow.prompt.md"];
       }
       return [];
     }),
     readFile: mock(async (filePath: string) => {
-      if (filePath.endsWith("my-skill/SKILL.md")) {
+      const normalized = normalizePath(filePath);
+      if (normalized.endsWith("my-skill/SKILL.md")) {
         return `---
 name: "My Skill"
 description: 'A skill'
 ---
 Skill content`;
       }
-      if (filePath.endsWith("my-rule.instructions.md")) {
+      if (normalized.endsWith("my-rule.instructions.md")) {
         return `---
 name: My Rule
 description: A rule
@@ -35,21 +39,21 @@ applyTo: "*.ts"
 ---
 Rule content`;
       }
-      if (filePath.endsWith("my-agent.agent.md")) {
+      if (normalized.endsWith("my-agent.agent.md")) {
         return `---
 name: My Agent
 description: An agent
 ---
 Agent content`;
       }
-      if (filePath.endsWith("my-workflow.prompt.md")) {
+      if (normalized.endsWith("my-workflow.prompt.md")) {
         return `---
 name: My Workflow
 description: A workflow
 ---
 Workflow content`;
       }
-      if (filePath.endsWith("bad.md")) {
+      if (normalized.endsWith("bad.md")) {
         return `---
 broken frontmatter
 name: Bad

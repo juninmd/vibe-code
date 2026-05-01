@@ -155,22 +155,15 @@ export class OpenCodeEngine implements AgentEngine {
   /**
    * Returns the CLI command to spawn.
    * Override in tests to inject a fake subprocess.
+   * Prompt is sent via stdin to avoid Windows command-line length limits.
    */
-  protected buildCommand(
-    model: string,
-    prompt: string,
-    workdir: string,
-    resumeSessionId?: string
-  ): string[] {
+  protected buildCommand(model: string, workdir: string, resumeSessionId?: string): string[] {
     const args = ["opencode", "run", "--format", "json", "--model", model, "--dir", workdir];
     if (resumeSessionId) args.push("--session", resumeSessionId);
-    args.push(prompt);
     return args;
   }
 
   protected getStdinMode(): "pipe" | "ignore" {
-    // Always use pipe — we close stdin immediately on Windows to send EOF.
-    // This avoids deadlocks while still signaling "no more input" to OpenCode.
     return "pipe";
   }
 
@@ -197,8 +190,6 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Fetch models from LiteLLM — populated as they are used (store_model_in_db: true).
-    // OpenCode can route to any provider (anthropic, openai, google), so return all LiteLLM models.
     return listLiteLLMModels(getLiteLLMBaseUrl());
   }
 
@@ -215,7 +206,6 @@ export class OpenCodeEngine implements AgentEngine {
     };
 
     // Write opencode.json with permissions pre-configured for non-interactive mode.
-    // Allow all tool use and planning phases to prevent hanging.
     const configPath = join(workdir, "opencode.json");
     const config: Record<string, any> = {
       permission: {
@@ -226,9 +216,6 @@ export class OpenCodeEngine implements AgentEngine {
       },
     };
 
-    // When LiteLLM is enabled, configure providers routing through the proxy.
-    // When disabled, use native API keys from DB settings if available (explicit providers).
-    // Otherwise omit providers so opencode uses its own env-var-based auth.
     if (options.litellmKey) {
       config.providers = [
         {
@@ -256,39 +243,45 @@ export class OpenCodeEngine implements AgentEngine {
       options.nativeApiKeys?.gemini
     ) {
       config.providers = [];
-      if (options.nativeApiKeys.anthropic) {
+      if (options.nativeApiKeys.anthropic)
         config.providers.push({
           id: "anthropic",
           name: "Anthropic",
           apiKey: options.nativeApiKeys.anthropic,
         });
-      }
-      if (options.nativeApiKeys.openai) {
+      if (options.nativeApiKeys.openai)
         config.providers.push({
           id: "openai",
           name: "OpenAI",
           apiKey: options.nativeApiKeys.openai,
         });
-      }
-      if (options.nativeApiKeys.gemini) {
+      if (options.nativeApiKeys.gemini)
         config.providers.push({
           id: "google",
           name: "Google",
           apiKey: options.nativeApiKeys.gemini,
         });
-      }
     }
 
     await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
 
-    // Use stdout: "pipe" so proc.exited resolves correctly and events stream in
-    // real-time. (Using Bun.file() as stdout breaks proc.exited on Windows.)
-    const proc = Bun.spawn(this.buildCommand(model, prompt, workdir, options.resumeSessionId), {
+    const proc = Bun.spawn(this.buildCommand(model, workdir, options.resumeSessionId), {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
       stdin: this.getStdinMode(),
     });
+
+    if (this.getStdinMode() === "pipe" && proc.stdin) {
+      try {
+        const sink = proc.stdin as import("bun").FileSink;
+        sink.write(prompt);
+        sink.flush();
+        sink.end();
+      } catch {
+        // stdin may already be closed
+      }
+    }
 
     if (process.platform === "win32") {
       // Close stdin immediately on Windows to send EOF — prevents deadlocks
@@ -464,7 +457,7 @@ export class OpenCodeEngine implements AgentEngine {
 
     if (options.runId) this.processes.delete(options.runId);
 
-    // Cleanup config file — don't include it in git commits
+    // Cleanup temp files — don't include in git commits
     try {
       await rm(configPath);
     } catch {

@@ -62,12 +62,15 @@ export interface Task {
   baseBranch: string | null;
   branchName: string | null;
   prUrl: string | null;
+  issueUrl: string | null;
   parentTaskId: string | null;
   agentId: string | null;
   workflowId: string | null;
   matchedSkills: string[];
   tags: string[];
   notes: string;
+  goal: string | null;
+  desiredOutcome: string | null;
   /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
   plannerSpec?: string | null;
   /** IDs of tasks that must complete before this task can start. */
@@ -78,6 +81,17 @@ export interface Task {
   maxCost?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RunStateSnapshot {
+  phase?: RunPhase | string;
+  ts?: string;
+  branch?: string | null;
+  worktreePath?: string | null;
+  sessionId?: string | null;
+  resumeFromRunId?: string | null;
+  validatorAttempts?: number;
+  message?: string;
 }
 
 export interface AgentRun {
@@ -190,6 +204,9 @@ export interface CreateTaskRequest {
   workflowId?: string;
   dependsOn?: string[];
   maxCost?: number;
+  issueUrl?: string;
+  goal?: string;
+  desiredOutcome?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -201,6 +218,8 @@ export interface UpdateTaskRequest {
   model?: string;
   tags?: string[];
   notes?: string;
+  goal?: string | null;
+  desiredOutcome?: string | null;
   dependsOn?: string[];
   pendingApproval?: boolean;
   maxCost?: number;
@@ -322,6 +341,25 @@ export type GitHubRepo = RemoteRepo;
 export interface TaskWithRun extends Task {
   latestRun?: AgentRun;
   repo?: Repository;
+}
+
+export type TaskArtifactKind =
+  | "pull_request"
+  | "branch"
+  | "docs"
+  | "worktree"
+  | "archive"
+  | "other";
+
+export interface TaskArtifact {
+  id: string;
+  taskId: string;
+  runId: string | null;
+  kind: TaskArtifactKind;
+  title: string;
+  uri: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export interface TaskPollResponse {
@@ -491,6 +529,20 @@ export interface TestConnectionResult {
   ok: boolean;
   username?: string;
   error?: string;
+}
+
+export interface AuthUser {
+  githubId: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export interface AuthStatus {
+  enabled: boolean;
+  authenticated: boolean;
+  user: AuthUser | null;
+  loginUrl: string;
 }
 
 // ─── Statistics Types ────────────────────────────────────────────────────────

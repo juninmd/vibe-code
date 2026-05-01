@@ -1,4 +1,5 @@
 import {
+  createArtifactQueries,
   createFindingsQueries,
   createLogQueries,
   createMetricsQueries,
@@ -25,6 +26,7 @@ export function createDb(dbPath: string) {
     schedules: createScheduleQueries(db),
     findings: createFindingsQueries(db),
     metrics: createMetricsQueries(db),
+    artifacts: createArtifactQueries(db),
   };
 }
 

@@ -30,6 +30,8 @@ const createTaskSchema = z.object({
   agentId: z.string().optional(),
   workflowId: z.string().optional(),
   dependsOn: z.array(z.string()).optional(),
+  goal: z.string().optional(),
+  desiredOutcome: z.string().optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -43,6 +45,8 @@ const updateTaskSchema = z.object({
   model: z.string().optional(),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  goal: z.string().nullable().optional(),
+  desiredOutcome: z.string().nullable().optional(),
   dependsOn: z.array(z.string()).optional(),
   pendingApproval: z.boolean().optional(),
 });
@@ -206,6 +210,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
         description,
         repoId: parsed.data.repoId,
         tags: tags.length > 0 ? tags : undefined,
+        issueUrl: issue.url,
       });
       created.push({ id: task.id, title: task.title, number: issue.number });
     }
@@ -402,6 +407,12 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return c.json({ data: runs });
   });
 
+  router.get("/:id/artifacts", (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    return c.json({ data: db.artifacts.listByTask(task.id) });
+  });
+
   // ─── Schedule Endpoints ─────────────────────────────────────────────────────
 
   const upsertScheduleSchema = z.object({
@@ -459,7 +470,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
   router.post("/:id/schedule/toggle", async (c) => {
     const body = await c.req.json().catch(() => ({}));
-    const enabled = typeof (body as any).enabled === "boolean" ? (body as any).enabled : true;
+    const enabled = typeof body?.enabled === "boolean" ? body.enabled : true;
     const schedule = db.schedules.setEnabled(c.req.param("id"), enabled);
     if (!schedule) return c.json({ error: "not_found", message: "No schedule found" }, 404);
     return c.json({ data: schedule });
