@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
@@ -42,7 +43,7 @@ export class OpenClawEngine implements AgentEngine {
   ): AsyncGenerator<AgentEvent> {
     yield { type: "log", stream: "system", content: `[openclaw] Starting in ${workdir}` };
 
-    const args = ["openclaw", "agent", "--local", "--json", "--message", prompt];
+    const args = ["openclaw", "acp", "--message", prompt];
     if (options.model) args.push("--model", options.model);
 
     const env: NodeJS.ProcessEnv = { ...process.env };
@@ -68,36 +69,7 @@ export class OpenClawEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => {
-          try {
-            const parsed = JSON.parse(line);
-            const events: AgentEvent[] = [];
-            if (parsed.type === "text" && parsed.text) {
-              events.push({ type: "log", stream: "stdout", content: parsed.text });
-            } else if (parsed.type === "tool_use") {
-              events.push({
-                type: "log",
-                stream: "system",
-                content: `[tool] ${parsed.tool}: ${JSON.stringify(parsed.input || {}).slice(0, 200)}`,
-              });
-            } else if (parsed.type === "error") {
-              const msg = parsed.error?.message || parsed.message || "Unknown error";
-              events.push({ type: "log", stream: "stderr", content: `[error] ${msg}` });
-            } else if (parsed.type === "step_start") {
-              events.push({ type: "log", stream: "system", content: `[openclaw] Step started...` });
-            }
-            if (events.length > 0) return events;
-
-            if (parsed.text) return [{ type: "log", stream: "stdout", content: parsed.text }];
-            return [];
-          } catch {
-            return [{ type: "log", stream: "stdout", content: line }];
-          }
-        },
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );
