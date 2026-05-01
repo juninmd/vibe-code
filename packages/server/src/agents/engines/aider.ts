@@ -1,5 +1,6 @@
 import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
@@ -47,7 +48,7 @@ export class AiderEngine implements AgentEngine {
     const promptFile = `/tmp/vibe-aider-prompt-${options.runId ?? Date.now()}.txt`;
     await writeFile(promptFile, prompt, "utf8");
 
-    const args = ["aider", "--yes-always", "--no-auto-commits"];
+    const args = ["aider", "acp"];
     if (options.model) args.push("--model", options.model);
     args.push("--message", `@${promptFile}`);
 
@@ -76,13 +77,7 @@ export class AiderEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => {
-          return [{ type: "log", stream: "stdout", content: line }];
-        },
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );
