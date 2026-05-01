@@ -1,5 +1,6 @@
 import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
@@ -46,7 +47,7 @@ export class CursorAgentEngine implements AgentEngine {
     const promptFile = `/tmp/vibe-cursor-prompt-${options.runId ?? Date.now()}.txt`;
     await writeFile(promptFile, prompt, "utf8");
 
-    const args = ["cursor-agent"];
+    const args = ["cursor-agent", "acp"];
     if (options.model) args.push("--model", options.model);
     args.push("--message", `@${promptFile}`);
 
@@ -73,13 +74,7 @@ export class CursorAgentEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => {
-          return [{ type: "log", stream: "stdout", content: line }];
-        },
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );
