@@ -41,7 +41,7 @@ RUN git config --system core.quotepath false \
  && git config --system safe.directory '*'
 
 # Non-root runtime user
-RUN groupadd -g 1000 vibe && useradd -m -u 1000 -g vibe -s /bin/bash vibe
+RUN groupadd -g 10001 vibe && useradd -m -u 10001 -g vibe -s /bin/bash vibe
 
 WORKDIR /app
 COPY --from=builder --chown=vibe:vibe /app/node_modules ./node_modules
