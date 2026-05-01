@@ -14,7 +14,7 @@ export class GitService {
     for (const key of Object.keys(base)) {
       if (key === "GIT_CONFIG_COUNT") {
         const val = parseInt(base[key] || "0", 10);
-        if (!isNaN(val)) {
+        if (!Number.isNaN(val)) {
           existing = val;
         }
       }

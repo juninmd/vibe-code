@@ -74,7 +74,12 @@ describe("GitService.getRepoOwnerAndName", () => {
 
 async function initRepo(dir: string) {
   const g = (args: string[]) =>
-    Bun.spawn(["git", ...args], { cwd: dir, env: GitService.gitEnv() as any, stdout: "pipe", stderr: "pipe" }).exited;
+    Bun.spawn(["git", ...args], {
+      cwd: dir,
+      env: GitService.gitEnv() as any,
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited;
 
   await g(["init", "--initial-branch=main"]);
   await g(["config", "user.email", "test@test.com"]);
@@ -83,7 +88,12 @@ async function initRepo(dir: string) {
 
 async function addCommit(dir: string, message = "commit") {
   const g = (args: string[]) =>
-    Bun.spawn(["git", ...args], { cwd: dir, env: GitService.gitEnv() as any, stdout: "pipe", stderr: "pipe" }).exited;
+    Bun.spawn(["git", ...args], {
+      cwd: dir,
+      env: GitService.gitEnv() as any,
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited;
   // Create a file to ensure there's something to commit
   await writeFile(join(dir, `${Date.now()}.txt`), message);
   await g(["add", "-A"]);
@@ -120,11 +130,18 @@ describe("GitService.hasCommitsAhead", () => {
       stdout: "pipe",
       stderr: "pipe",
     }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "config", "user.email", "t@t.com"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "config", "user.name", "T"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "config", "user.email", "t@t.com"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "config", "user.name", "T"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
     await writeFile(join(seedDir, "readme.txt"), "initial");
-    await Bun.spawn(["git", "-C", seedDir, "add", "-A"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "commit", "-m", "initial"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "add", "-A"], { env: GitService.gitEnv() as any })
+      .exited;
+    await Bun.spawn(["git", "-C", seedDir, "commit", "-m", "initial"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
 
     baseBranch = await getCurrentBranch(seedDir);
 
@@ -140,8 +157,12 @@ describe("GitService.hasCommitsAhead", () => {
       ["git", "--git-dir", bareDir, "worktree", "add", "-b", "feature/test", workDir, baseBranch],
       { env: GitService.gitEnv() as any, stdout: "pipe", stderr: "pipe" }
     ).exited;
-    await Bun.spawn(["git", "-C", workDir, "config", "user.email", "t@t.com"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", workDir, "config", "user.name", "T"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "-C", workDir, "config", "user.email", "t@t.com"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
+    await Bun.spawn(["git", "-C", workDir, "config", "user.name", "T"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
 
     git = new GitService(tmpDir);
   });
@@ -218,13 +239,24 @@ describe("Git integration operations", () => {
 
     seedDir = join(tmpDir, "seed");
     // Create seed repo
-    await Bun.spawn(["git", "init", "--initial-branch=main", seedDir], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "config", "user.email", "t@t.com"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "config", "user.name", "T"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "init", "--initial-branch=main", seedDir], {
+      env: GitService.gitEnv() as any,
+    }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "config", "user.email", "t@t.com"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "config", "user.name", "T"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
     await writeFile(join(seedDir, "readme.txt"), "hello");
-    await Bun.spawn(["git", "-C", seedDir, "add", "-A"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "commit", "-m", "initial"], { env: GitService.gitEnv() as any }).exited;
-    await Bun.spawn(["git", "-C", seedDir, "branch", "feature"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "add", "-A"], { env: GitService.gitEnv() as any })
+      .exited;
+    await Bun.spawn(["git", "-C", seedDir, "commit", "-m", "initial"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
+    await Bun.spawn(["git", "-C", seedDir, "branch", "feature"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
   });
 
   afterAll(async () => {
@@ -304,7 +336,11 @@ describe("Git integration operations", () => {
   it("checkout() changes checked out branch", async () => {
     await git.checkout(wtPath, "main");
     const getCurrentBranch = async () => {
-      const proc = Bun.spawn(["git", "branch", "--show-current"], { cwd: wtPath, env: GitService.gitEnv() as any, stdout: "pipe" });
+      const proc = Bun.spawn(["git", "branch", "--show-current"], {
+        cwd: wtPath,
+        env: GitService.gitEnv() as any,
+        stdout: "pipe",
+      });
       return (await new Response(proc.stdout).text()).trim();
     };
     expect(await getCurrentBranch()).toBe("main");
@@ -332,7 +368,9 @@ describe("Git integration operations", () => {
 
     // new branch 2 off new-branch
     await git.checkout(wtPath, "new-branch");
-    await Bun.spawn(["git", "-C", wtPath, "checkout", "-b", "branch2"], { env: GitService.gitEnv() as any }).exited;
+    await Bun.spawn(["git", "-C", wtPath, "checkout", "-b", "branch2"], {
+      env: GitService.gitEnv() as any,
+    }).exited;
     const fs = await import("node:fs/promises");
     await fs.rm(join(wtPath, "del.txt"));
     await fs.rename(join(wtPath, "new-file.txt"), join(wtPath, "renamed.txt"));
