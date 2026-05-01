@@ -1,5 +1,6 @@
 import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
@@ -47,7 +48,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     const promptFile = `/tmp/vibe-claude-code-prompt-${options.runId ?? Date.now()}.txt`;
     await writeFile(promptFile, prompt, "utf8");
 
-    const args = ["claude", "--print", "--verbose", "--output-format", "stream-json"];
+    const args = ["claude", "acp"];
     if (options.model) args.push("--model", options.model);
     args.push("-p", `@${promptFile}`);
 
@@ -70,33 +71,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(
-        proc,
-        (line) => {
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.type === "assistant" && parsed.content) {
-              const events: AgentEvent[] = [];
-              for (const block of parsed.content) {
-                if (block.type === "text") {
-                  events.push({ type: "log", stream: "stdout", content: block.text });
-                } else if (block.type === "tool_use") {
-                  events.push({
-                    type: "log",
-                    stream: "system",
-                    content: `[tool] ${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`,
-                  });
-                }
-              }
-              return events;
-            }
-            return [];
-          } catch {
-            return [{ type: "log", stream: "stdout", content: line }];
-          }
-        },
-        options.signal
-      ),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );

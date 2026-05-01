@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
@@ -49,115 +50,6 @@ export class CopilotEngine implements AgentEngine {
       env.OPENAI_API_KEY = nativeOpenAiKey;
     }
     return env;
-  }
-
-  private parseLine(line: string): AgentEvent[] {
-    // Try to parse stream-json / JSONL output
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      // Not JSON — emit as raw log
-      return [{ type: "log", stream: "stdout", content: line }];
-    }
-
-    if (!parsed || typeof parsed !== "object") {
-      return [{ type: "log", stream: "stdout", content: line }];
-    }
-
-    const obj = parsed as Record<string, unknown>;
-
-    // Error event
-    if (obj.error || obj.type === "error") {
-      const errMsg =
-        typeof obj.error === "string"
-          ? obj.error
-          : typeof obj.message === "string"
-            ? obj.message
-            : JSON.stringify(obj.error ?? obj);
-      return [
-        { type: "log", stream: "stderr", content: `[copilot] ${errMsg}` },
-        { type: "error", content: errMsg },
-      ];
-    }
-
-    // Tool use
-    if (obj.type === "tool_use" || obj.type === "tool_call") {
-      const name: string =
-        typeof obj.name === "string"
-          ? obj.name
-          : typeof obj.function === "object" && obj.function !== null
-            ? String((obj.function as Record<string, unknown>).name ?? "tool")
-            : "tool";
-      const toolId: string =
-        typeof obj.id === "string" ? obj.id : typeof obj.call_id === "string" ? obj.call_id : "";
-      const parameters = (obj.parameters ?? obj.input ?? obj.args) as
-        | Record<string, unknown>
-        | undefined;
-      return [
-        {
-          type: "tool_use",
-          toolUse: { toolId, toolName: name, parameters: parameters ?? undefined },
-        },
-        {
-          type: "log",
-          stream: "system",
-          content: `[tool] ${name}${toolId ? ` (${toolId})` : ""}`,
-        },
-      ];
-    }
-
-    // Tool result
-    if (obj.type === "tool_result" || obj.type === "tool_execution_complete") {
-      const toolId =
-        typeof obj.tool_call_id === "string"
-          ? obj.tool_call_id
-          : typeof obj.call_id === "string"
-            ? obj.call_id
-            : typeof obj.id === "string"
-              ? obj.id
-              : "";
-      const output =
-        typeof obj.output === "string"
-          ? obj.output
-          : typeof obj.result === "string"
-            ? obj.result
-            : JSON.stringify(obj.output ?? obj.result ?? "");
-      const status = obj.error ? "error" : "success";
-      return [
-        {
-          type: "tool_result",
-          toolResult: { toolId, output, status },
-        },
-        {
-          type: "log",
-          stream: "system",
-          content: `[tool result] ${status}${toolId ? ` (${toolId})` : ""}`,
-        },
-      ];
-    }
-
-    // Text / message content
-    const text =
-      typeof obj.text === "string"
-        ? obj.text
-        : typeof obj.content === "string"
-          ? obj.content
-          : Array.isArray(obj.content)
-            ? obj.content
-                .filter((b: unknown) => typeof (b as Record<string, unknown>)?.text === "string")
-                .map((b: unknown) => (b as Record<string, string>).text)
-                .join("")
-            : typeof obj.message === "string"
-              ? obj.message
-              : null;
-
-    if (text) {
-      return [{ type: "log", stream: "stdout", content: text }];
-    }
-
-    // Generic debug log for unrecognised events
-    return [{ type: "log", stream: "system", content: line }];
   }
 
   async isAvailable(): Promise<boolean> {
@@ -218,11 +110,7 @@ export class CopilotEngine implements AgentEngine {
 
     const args = [
       bin,
-      "--allow-all",
-      "--output-format",
-      "json",
-      "--add-dir",
-      workdir,
+      "acp",
       "-p",
       prompt,
     ];
@@ -240,7 +128,7 @@ export class CopilotEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(proc, (line) => this.parseLine(line), options.signal),
+      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );
