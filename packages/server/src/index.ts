@@ -191,7 +191,7 @@ app.route("/api/templates", createTemplatesRouter(db, skillsLoader));
 // Changelog route
 app.get("/api/changelog", async (c) => {
   try {
-    const changelog = await Bun.file("../../CHANGELOG.md").text();
+    const changelog = await Bun.file(join(__dirname, "../../../CHANGELOG.md")).text();
     return c.json({ content: changelog });
   } catch (_err) {
     return c.json({ error: "Changelog not found" }, 404);

@@ -632,6 +632,21 @@ export function NewTaskDialog({
               </Select>
             )}
 
+            {isScheduled && isCustomCron && (
+              <input
+                type="text"
+                placeholder="Expressão cron, ex: 0 9 * * 1-5"
+                value={cronExpression}
+                onChange={(e) => setCronExpression(e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-lg border"
+                style={{
+                  background: "var(--bg-input)",
+                  borderColor: "var(--border-default)",
+                  color: "var(--text-primary)",
+                }}
+              />
+            )}
+
             <div className="flex-1" />
 
             {submitError && (
