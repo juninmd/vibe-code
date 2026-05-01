@@ -108,12 +108,7 @@ export class CopilotEngine implements AgentEngine {
       content: `[copilot] bin=${bin} model=${options.model ?? "default"}`,
     };
 
-    const args = [
-      bin,
-      "acp",
-      "-p",
-      prompt,
-    ];
+    const args = [bin, "acp", "-p", prompt];
     if (options.model) args.push("--model", options.model);
     if (options.resumeSessionId) args.push("--resume", options.resumeSessionId);
 
