@@ -296,6 +296,43 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }
   });
 
+  router.post("/:id/approve/request", async (c) => {
+    const taskId = c.req.param("id");
+    const { message, command } = await c.req.json();
+    const details = JSON.stringify({ message, command, requestedAt: new Date().toISOString() });
+
+    db.tasks.update(taskId, { pendingApproval: true, notes: details });
+    const task = db.tasks.getById(taskId);
+    if (task) {
+      orchestrator.hub.broadcastAll({ type: "task_updated", task });
+      orchestrator.hub.broadcastAll({ type: "approval_requested", taskId, message, command });
+    }
+    return c.json({ ok: true });
+  });
+
+  router.get("/:id/approve/status", (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found" }, 404);
+    if (task.pendingApproval) return c.json({ status: "pending" });
+    if (task.status === "failed" && task.notes?.includes("Rejected"))
+      return c.json({ status: "rejected" });
+    return c.json({ status: "approved" });
+  });
+
+  router.post("/:id/approve/reject", (c) => {
+    const taskId = c.req.param("id");
+    db.tasks.update(taskId, {
+      pendingApproval: false,
+      status: "failed",
+      notes: "Rejected by human.",
+    });
+    const task = db.tasks.getById(taskId);
+    if (task) {
+      orchestrator.hub.broadcastAll({ type: "task_updated", task });
+    }
+    return c.json({ ok: true });
+  });
+
   router.post("/:id/approve", async (c) => {
     const taskId = c.req.param("id");
     const task = db.tasks.getById(taskId);
@@ -326,8 +363,13 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ error: "invalid_state", message: "Can only retry failed tasks" }, 400);
     }
 
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = launchTaskSchema.safeParse(body);
+    const engineOverride = parsed.success ? parsed.data.engine : undefined;
+    const modelOverride = parsed.success ? parsed.data.model : undefined;
+
     try {
-      const run = await orchestrator.launch(task);
+      const run = await orchestrator.launch(task, engineOverride, modelOverride);
       return c.json({ data: run }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

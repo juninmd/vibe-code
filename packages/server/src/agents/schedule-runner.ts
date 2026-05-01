@@ -23,6 +23,7 @@ export class ScheduleRunner {
     // Disable schedules whose deadline has passed
     this.db.schedules.disableExpired();
 
+    // 1. Check for scheduled tasks
     const due = this.db.schedules.listDue();
     for (const schedule of due) {
       try {
@@ -39,5 +40,8 @@ export class ScheduleRunner {
         );
       }
     }
+
+    // 2. Continuous Autonomy / Heartbeat: Sweep backlog for work stealing
+    await this.orchestrator.sweepBacklog();
   }
 }

@@ -18,6 +18,7 @@ import { createSettingsRouter } from "./api/settings";
 import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
+import { createTemplatesRouter } from "./api/templates";
 import workspacesRouter from "./api/workspaces";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
@@ -26,6 +27,7 @@ import { ProviderRegistry } from "./git/providers/registry";
 // NOTE: workspaceMiddleware removed - API is now public (no authentication)
 // import { workspaceMiddleware } from "./middleware/workspace.middleware";
 import { SkillsLoader } from "./skills/loader";
+import { SkillRegistryService } from "./skills/registry";
 import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -74,7 +76,10 @@ const hub = new BroadcastHub();
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
 const orchestrator = new Orchestrator(db, git, registry, hub, MAX_AGENTS);
-const skillsLoader = new SkillsLoader(db.settings.get("skills_path") || "~/.agents");
+const skillsPath = db.settings.get("skills_path") || "~/.agents";
+const skillsLoader = new SkillsLoader(skillsPath);
+const skillRegistry = new SkillRegistryService(skillsPath);
+await skillRegistry.init();
 orchestrator.skillsLoader = skillsLoader;
 
 await git.init();
@@ -151,7 +156,18 @@ app.route("/api/inbox", createInboxRouter(db, registry, orchestrator));
 app.route("/api/settings", createSettingsRouter(db, providerRegistry, skillsLoader));
 app.route("/api/prompts", createPromptsRouter(db));
 app.route("/api/stats", createStatsRouter(db));
-app.route("/api/skills", createSkillsRouter(skillsLoader));
+app.route("/api/skills", createSkillsRouter(skillsLoader, skillRegistry));
+app.route("/api/templates", createTemplatesRouter(db, skillsLoader));
+
+// Changelog route
+app.get("/api/changelog", async (c) => {
+  try {
+    const changelog = await Bun.file("../../CHANGELOG.md").text();
+    return c.json({ content: changelog });
+  } catch (_err) {
+    return c.json({ error: "Changelog not found" }, 404);
+  }
+});
 
 // Health check
 app.get("/api/health", (c) => {

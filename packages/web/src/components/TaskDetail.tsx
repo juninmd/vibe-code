@@ -1,4 +1,4 @@
-import type { AgentLog, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
+import type { AgentLog, EngineInfo, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { formatDateTime, formatDuration } from "../utils/date";
@@ -8,21 +8,36 @@ import { TaskTagsEditor } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
+import { Select } from "./ui/select";
 
 interface TaskDetailProps {
   task: TaskWithRun;
+  engines?: EngineInfo[];
   liveLogs: AgentLog[];
   onClose: () => void;
-  onLaunch: (taskId: string, engine?: string) => Promise<void>;
+  onLaunch: (taskId: string, engine?: string, model?: string) => Promise<void>;
   onCancel: (taskId: string) => Promise<void>;
-  onRetry: (taskId: string) => Promise<void>;
+  onRetry: (taskId: string, engine?: string, model?: string) => Promise<void>;
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
+  onApprove?: (taskId: string) => Promise<void>;
+  onReject?: (taskId: string) => Promise<void>;
   onClone?: (taskId: string) => Promise<void>;
   onUpdateTask?: (taskId: string, data: { tags?: string[]; notes?: string }) => Promise<void>;
   onTaskRefresh?: () => void;
   onSkillClick?: (skillName: string) => void;
+  allTasks?: TaskWithRun[];
+}
+
+function groupModelsByProvider(models: string[]): { provider: string; models: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const m of models) {
+    const provider = m.includes("/") ? m.split("/")[0] : "other";
+    if (!groups.has(provider)) groups.set(provider, []);
+    groups.get(provider)?.push(m);
+  }
+  return Array.from(groups.entries()).map(([provider, models]) => ({ provider, models }));
 }
 
 const statusVariant: Record<
@@ -437,6 +452,7 @@ function ScheduleSection({ taskId, onTaskRefresh }: { taskId: string; onTaskRefr
 
 export function TaskDetail({
   task,
+  engines,
   liveLogs,
   onClose,
   onLaunch,
@@ -445,10 +461,13 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
+  onApprove,
+  onReject,
   onClone,
   onUpdateTask,
   onTaskRefresh,
   onSkillClick,
+  allTasks = [],
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -456,6 +475,68 @@ export function TaskDetail({
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
+  const [parentTask, setParentTask] = useState<TaskWithRun | null>(null);
+
+  // Parse approval request from notes if it exists
+  const approvalRequest = useMemo(() => {
+    if (!task.pendingApproval) return null;
+    try {
+      const data = JSON.parse(task.notes);
+      if (data.message) return data as { message: string; command?: string; requestedAt?: string };
+    } catch {
+      /* not a json approval request */
+    }
+    return null;
+  }, [task.pendingApproval, task.notes]);
+
+  const subTasks = useMemo(() => {
+    return allTasks.filter((t) => t.parentTaskId === task.id);
+  }, [allTasks, task.id]);
+
+  useEffect(() => {
+    if (task.parentTaskId) {
+      const parent = allTasks.find((t) => t.id === task.parentTaskId);
+      if (parent) {
+        setParentTask(parent);
+      } else {
+        api.tasks
+          .get(task.parentTaskId)
+          .then(setParentTask)
+          .catch(() => setParentTask(null));
+      }
+    } else {
+      setParentTask(null);
+    }
+  }, [task.parentTaskId, allTasks]);
+
+  // Engine & Model selection
+  const [selectedEngine, setSelectedEngine] = useState(task.engine ?? "");
+  const [selectedModel, setSelectedModel] = useState(task.model ?? "");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  useEffect(() => {
+    if (!selectedEngine) {
+      setAvailableModels([]);
+      setSelectedModel("");
+      return;
+    }
+    setLoadingModels(true);
+    // Don't clear selectedModel immediately to allow it to persist if it exists in the new engine
+    api.engines
+      .models(selectedEngine)
+      .then((list) => {
+        setAvailableModels(list);
+        if (!list.includes(selectedModel)) {
+          setSelectedModel("");
+        }
+      })
+      .catch(() => {
+        setAvailableModels([]);
+        setSelectedModel("");
+      })
+      .finally(() => setLoadingModels(false));
+  }, [selectedEngine, selectedModel]);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -992,74 +1073,137 @@ export function TaskDetail({
               )}
 
               {/* Actions */}
-              <div className="flex gap-2 flex-wrap items-center">
-                {(task.status === "backlog" || task.status === "failed") && (
-                  <Button
-                    variant="primary"
-                    disabled={!!loadingAction}
-                    onClick={async () => {
-                      setLoadingAction("launch");
-                      try {
-                        await onLaunch(task.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                  >
-                    {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agent"}
-                  </Button>
-                )}
-                {task.status === "failed" && (
-                  <Button
-                    variant="outline"
-                    disabled={!!loadingAction}
-                    onClick={async () => {
-                      setLoadingAction("retry");
-                      try {
-                        await onRetry(task.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                  >
-                    {loadingAction === "retry" ? "Reiniciando..." : "↺ Tentar novamente"}
-                  </Button>
-                )}
-                {task.status === "in_progress" && (
-                  <Button
-                    variant="danger"
-                    disabled={!!loadingAction}
-                    onClick={async () => {
-                      setLoadingAction("cancel");
-                      try {
-                        await onCancel(task.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                  >
-                    {loadingAction === "cancel" ? "Cancelando..." : "⏹ Cancelar"}
-                  </Button>
-                )}
-                {confirmDelete ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-secondary">Tem certeza?</span>
-                    <Button variant="danger" onClick={() => onDelete(task.id)}>
-                      Confirmar
-                    </Button>
-                    <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                      Não
-                    </Button>
+              <div className="space-y-4">
+                {(task.status === "backlog" || task.status === "failed") && engines && (
+                  <div className="bg-surface/30 border border-strong rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                        Configuração de Execução
+                      </h3>
+                      <span className="text-[10px] text-dimmed italic">
+                        Altere o modelo antes de iniciar
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] text-primary0 mb-1">Engine</div>
+                        <Select
+                          value={selectedEngine}
+                          onChange={(e) => setSelectedEngine(e.target.value)}
+                          className="h-8 py-1 text-xs"
+                          required
+                        >
+                          <option value="" disabled>
+                            Selecione uma engine...
+                          </option>
+                          <option value="auto">Auto (First Available)</option>
+                          {engines.map((eng) => (
+                            <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                              {eng.displayName}
+                              {!eng.available ? " (unavailable)" : ""}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] text-primary0 mb-1">Modelo</div>
+                        <Select
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          disabled={loadingModels || !selectedEngine}
+                          className="h-8 py-1 text-xs"
+                        >
+                          <option value="">
+                            {loadingModels ? "Carregando..." : "Padrão da engine"}
+                          </option>
+                          {groupModelsByProvider(availableModels).map(
+                            ({ provider, models: providerModels }) => (
+                              <optgroup key={provider} label={provider}>
+                                {providerModels.map((m) => (
+                                  <option key={m} value={m}>
+                                    {m.includes("/") ? m.split("/").slice(1).join("/") : m}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )
+                          )}
+                        </Select>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setConfirmDelete(true)}
-                    className="text-primary0 hover:text-danger"
-                  >
-                    Deletar
-                  </Button>
                 )}
+
+                <div className="flex gap-2 flex-wrap items-center">
+                  {(task.status === "backlog" || task.status === "failed") && (
+                    <Button
+                      variant="primary"
+                      disabled={!!loadingAction || !selectedEngine}
+                      onClick={async () => {
+                        setLoadingAction("launch");
+                        try {
+                          await onLaunch(task.id, selectedEngine, selectedModel);
+                        } finally {
+                          setLoadingAction(null);
+                        }
+                      }}
+                    >
+                      {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agent"}
+                    </Button>
+                  )}
+                  {task.status === "failed" && (
+                    <Button
+                      variant="outline"
+                      disabled={!!loadingAction || !selectedEngine}
+                      onClick={async () => {
+                        setLoadingAction("retry");
+                        try {
+                          await onRetry(task.id, selectedEngine, selectedModel);
+                        } finally {
+                          setLoadingAction(null);
+                        }
+                      }}
+                    >
+                      {loadingAction === "retry" ? "Reiniciando..." : "↺ Tentar novamente"}
+                    </Button>
+                  )}
+                  {task.status === "in_progress" && (
+                    <Button
+                      variant="danger"
+                      disabled={!!loadingAction}
+                      onClick={async () => {
+                        setLoadingAction("cancel");
+                        try {
+                          await onCancel(task.id);
+                        } finally {
+                          setLoadingAction(null);
+                        }
+                      }}
+                    >
+                      {loadingAction === "cancel" ? "Cancelando..." : "⏹ Cancelar"}
+                    </Button>
+                  )}
+                  {confirmDelete ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-secondary">Tem certeza?</span>
+                      <Button variant="danger" onClick={() => onDelete(task.id)}>
+                        Confirmar
+                      </Button>
+                      <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                        Não
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setConfirmDelete(true)}
+                      className="text-primary0 hover:text-danger"
+                    >
+                      Deletar
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Parent task link */}
@@ -1097,6 +1241,7 @@ export function TaskDetail({
               fullHeight
               onSendInput={(input) => onSendInput(task.id, input)}
               currentStatus={task.latestRun?.currentStatus}
+              costStats={task.latestRun?.costStats}
             />
           </div>
 

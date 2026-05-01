@@ -115,6 +115,33 @@ async function detectExtensions(workdir: string): Promise<Set<string>> {
   return exts;
 }
 
+/**
+ * Recursively resolve dependencies for a set of entries.
+ */
+function resolveDependencies<T extends { name: string; dependencies?: string[] }>(
+  allEntries: T[],
+  initialSelection: T[]
+): T[] {
+  const result = new Map<string, T>();
+  const queue = [...initialSelection];
+
+  while (queue.length > 0) {
+    const entry = queue.shift()!;
+    if (result.has(entry.name)) continue;
+    result.set(entry.name, entry);
+
+    if (entry.dependencies) {
+      for (const depName of entry.dependencies) {
+        const dep = allEntries.find((e) => e.name === depName);
+        if (dep && !result.has(dep.name)) {
+          queue.push(dep);
+        }
+      }
+    }
+  }
+
+  return Array.from(result.values());
+}
 export async function matchSkillsForTask(
   index: SkillsIndex,
   taskTitle: string,
@@ -124,10 +151,26 @@ export async function matchSkillsForTask(
   const taskText = `${taskTitle} ${taskDescription}`;
   const fileExts = await detectExtensions(workdir);
 
-  const rules = matchRules(index.rules, fileExts);
-  const skills = matchSkills(index.skills, taskText);
+  const initialRules = matchRules(index.rules, fileExts);
+  const initialSkills = matchSkills(index.skills, taskText);
   const workflow = matchWorkflow(index.workflows, taskText);
-  const agents = matchAgents(index.agents, taskText);
+  const initialAgents = matchAgents(index.agents, taskText);
+
+  // Resolve skills from agents
+  const agentSkills: SkillEntry[] = [];
+  for (const agent of initialAgents) {
+    if (agent.skills) {
+      for (const skillName of agent.skills) {
+        const skill = index.skills.find((s) => s.name === skillName);
+        if (skill) agentSkills.push(skill);
+      }
+    }
+  }
+
+  // Resolve dependencies
+  const rules = resolveDependencies(index.rules, initialRules);
+  const skills = resolveDependencies(index.skills, [...initialSkills, ...agentSkills]);
+  const agents = initialAgents;
 
   // Trim to budget
   let totalChars = 0;

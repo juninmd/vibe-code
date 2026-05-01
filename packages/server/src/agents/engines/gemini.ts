@@ -13,14 +13,17 @@ export class GeminiEngine implements AgentEngine {
   displayName = "Gemini CLI";
   private processes = new Map<string, Subprocess>();
   private geminiCommand: string | null | undefined;
+  private cachedModels: string[] | null = null;
+  private lastFetch = 0;
 
   private buildGeminiChildEnv(
     litellmKey?: string,
     litellmBaseUrl?: string,
     nativeGeminiKey?: string,
-    geminiBinDir?: string
+    geminiBinDir?: string,
+    extraEnv?: Record<string, string>
   ): NodeJS.ProcessEnv {
-    const env = { ...process.env };
+    const env = { ...process.env, ...extraEnv };
     if (geminiBinDir) {
       env.PATH = env.PATH ? `${geminiBinDir}${delimiter}${env.PATH}` : geminiBinDir;
     }
@@ -116,9 +119,58 @@ export class GeminiEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    // Return Google/Gemini models available in LiteLLM (auto-routed via GEMINI_API_KEY).
-    const all = await listLiteLLMModels(getLiteLLMBaseUrl());
-    return all.filter((m) => m.startsWith("gemini/") || m.startsWith("gemini-"));
+    if (this.cachedModels && Date.now() - this.lastFetch < 3600000) {
+      return this.cachedModels;
+    }
+
+    const command = await this.resolveGeminiCommand();
+    let models: string[] = [];
+
+    if (command) {
+      try {
+        // As requested by user: gemini displays models with /models command.
+        // We use a prompt that triggers this output in the CLI.
+        const proc = Bun.spawn([command, "-p", "/models", "--raw-output"], {
+          stdout: "pipe",
+          stderr: "pipe",
+          env: this.buildGeminiChildEnv(),
+        });
+        await proc.exited;
+        if (proc.exitCode === 0) {
+          const text = await new Response(proc.stdout).text();
+          // Extract model names (usually in backticks or starting with gemini-)
+          const matches = text.match(/`gemini-[^`]+`|gemini-[a-zA-Z0-9.-]+/g);
+          if (matches) {
+            models = matches.map((m) => m.replace(/`/g, ""));
+          }
+          // Also add common aliases
+          if (text.includes("auto")) models.push("auto");
+          if (text.includes("pro")) models.push("pro");
+          if (text.includes("flash")) models.push("flash");
+          if (text.includes("flash-lite")) models.push("flash-lite");
+        }
+      } catch (err) {
+        console.error("[gemini] Failed to list models from CLI:", err);
+      }
+    }
+
+    // Always include models available in LiteLLM (auto-routed via GEMINI_API_KEY).
+    try {
+      const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+      const litellm = all.filter((m) => m.startsWith("gemini/") || m.startsWith("gemini-"));
+      models = Array.from(new Set([...models, ...litellm]));
+    } catch {
+      // ignore LiteLLM errors
+    }
+
+    // Fallback if empty
+    if (models.length === 0) {
+      models = ["auto", "pro", "flash", "flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"];
+    }
+
+    this.cachedModels = models.sort();
+    this.lastFetch = Date.now();
+    return this.cachedModels;
   }
 
   async getSetupIssue(): Promise<string | null> {
@@ -157,7 +209,8 @@ export class GeminiEngine implements AgentEngine {
           options.litellmKey,
           options.litellmBaseUrl,
           options.nativeApiKeys?.gemini,
-          command.includes("\\") || command.includes("/") ? dirname(command) : undefined
+          command.includes("\\") || command.includes("/") ? dirname(command) : undefined,
+          options.env
         ),
       });
     } catch (err) {

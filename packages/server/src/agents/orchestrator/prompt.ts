@@ -10,6 +10,13 @@ export interface BuildContextResult {
   skills: SkillPayload;
 }
 
+export interface ParentTaskInfo {
+  id: string;
+  title: string;
+  description: string;
+  parentId?: string | null;
+}
+
 interface ProjectContext {
   mainLanguages: string[];
   frameworks: string[];
@@ -64,7 +71,8 @@ export async function buildContextAsync(
   workdir: string,
   skillsLoader?: SkillsLoader,
   repoId?: string,
-  dbFindingsLoader?: (repoId: string) => { persona: string; severity: string; content: string }[]
+  dbFindingsLoader?: (repoId: string) => { persona: string; severity: string; content: string }[],
+  parentTaskLoader?: (parentId: string) => Promise<ParentTaskInfo | null>
 ): Promise<BuildContextResult> {
   const ctx = await detectProjectContext(workdir);
 
@@ -187,7 +195,31 @@ export async function buildContextAsync(
     }
   }
 
-  const prompt = assemblePrompt(task, ctx, skillsSection, lessonsSection);
+  // M1: Goal Ancestry (Paperclip-inspired)
+  let ancestrySection = "";
+  if (task.parentTaskId && parentTaskLoader) {
+    try {
+      const ancestry: ParentTaskInfo[] = [];
+      let currentId: string | null = task.parentTaskId;
+      while (currentId && ancestry.length < 5) {
+        const p = await parentTaskLoader(currentId);
+        if (!p) break;
+        ancestry.push(p);
+        currentId = p.parentId ?? null;
+      }
+
+      if (ancestry.length > 0) {
+        const lines = ancestry.map(
+          (p) => `- **Parent Task**: ${p.title}\n  ${p.description.slice(0, 500)}`
+        );
+        ancestrySection = `## Goal Ancestry (The "Why")\n${lines.join("\n")}`;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const prompt = assemblePrompt(task, ctx, skillsSection, lessonsSection, ancestrySection);
   return { prompt, skills: skillPayload };
 }
 
@@ -229,7 +261,8 @@ function assemblePrompt(
   task: Task,
   ctx: ProjectContext,
   skillsSection = "",
-  lessonsSection = ""
+  lessonsSection = "",
+  ancestrySection = ""
 ): string {
   const sections: string[] = [];
 
@@ -247,6 +280,11 @@ function assemblePrompt(
 
   if (task.description?.trim()) {
     sections.push(`## Requirements\n${task.description.trim()}`);
+  }
+
+  // ── Goal Ancestry (Paperclip-inspired) ─────────────────────────────────────
+  if (ancestrySection) {
+    sections.push(ancestrySection);
   }
 
   // ── Project context (when detected) ───────────────────────────────────────
@@ -281,6 +319,17 @@ function assemblePrompt(
     "Do NOT ask clarifying questions — make reasonable decisions and proceed immediately.",
     "There is no user available to answer questions. You must complete the task autonomously.",
     "Do NOT enter Plan Mode and do NOT call `enter_plan_mode`.",
+    "",
+    "**Task Delegation (Active Delegation):**",
+    "If the task is too large or requires a different expertise, you can delegate sub-tasks to other agents.",
+    "Use the `vibe-task` CLI command to create new tasks in this repository.",
+    'Example: `vibe-task create --title "Refactor auth" --description "Move auth to a separate module"`',
+    "Tasks created this way will automatically be linked as sub-tasks of this one.",
+    "",
+    "**Governance Gates (Manual Approval):**",
+    "For sensitive actions like pushing to main, deleting production data, or spending tokens on large sub-tasks, you MUST request human approval.",
+    "Use the `vibe-approve` CLI command. It will pause your execution until a human approves it in the UI.",
+    'Example: `vibe-approve --message "I want to push changes to the main branch" --command "git push origin main"`',
     "",
     "**Before finishing:**",
     "- Discover and use the repository's own CLI/workflow for validation (read scripts, Makefile/Taskfile/justfile, README, and project docs).",

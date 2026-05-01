@@ -190,13 +190,19 @@ export const api = {
       request<Task>(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/tasks/${id}`, { method: "DELETE" }),
     approve: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/approve`, { method: "POST" }),
+    reject: (id: string) =>
+      request<{ ok: boolean }>(`/tasks/${id}/approve/reject`, { method: "POST" }),
     launch: (id: string, data?: LaunchTaskRequest) =>
       request<AgentRun>(`/tasks/${id}/launch`, {
         method: "POST",
         body: JSON.stringify(data ?? {}),
       }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
-    retry: (id: string) => request<AgentRun>(`/tasks/${id}/retry`, { method: "POST" }),
+    retry: (id: string, data?: LaunchTaskRequest) =>
+      request<AgentRun>(`/tasks/${id}/retry`, {
+        method: "POST",
+        body: JSON.stringify(data ?? {}),
+      }),
     retryPR: (id: string) =>
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
     clone: (id: string) => request<Task>(`/tasks/${id}/clone`, { method: "POST" }),
@@ -305,5 +311,33 @@ export const api = {
         { method: "POST" }
       ),
     manifests: () => request<Record<string, string>>("/skills/manifests"),
+    registry: {
+      list: () => request<string[]>("/skills/registry"),
+      install: (repoPath: string) =>
+        request<{ name: string; path: string }>("/skills/registry/install", {
+          method: "POST",
+          body: JSON.stringify({ repoPath }),
+        }),
+      uninstall: (name: string) =>
+        request<{ success: true }>(`/skills/registry/${name}`, { method: "DELETE" }),
+    },
+  },
+
+  changelog: {
+    get: () => request<{ content: string }>("/changelog"),
+  },
+
+  templates: {
+    list: () => request<string[]>("/templates"),
+    export: (name: string) =>
+      request<{ ok: boolean; name: string }>("/templates/export", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    import: (name: string, overwrite?: boolean) =>
+      request<{ ok: boolean; imported: string }>("/templates/import", {
+        method: "POST",
+        body: JSON.stringify({ name, overwrite }),
+      }),
   },
 };

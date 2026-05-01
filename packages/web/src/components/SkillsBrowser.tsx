@@ -10,7 +10,7 @@ import { api } from "../api/client";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 
-type Tab = "loaded" | "skills" | "rules" | "agents" | "workflows";
+type Tab = "loaded" | "skills" | "rules" | "agents" | "workflows" | "market";
 type AnyEntry = RuleEntry | SkillEntry | AgentEntry | WorkflowEntry;
 
 function CountBadge({ count }: { count: number }) {
@@ -291,14 +291,21 @@ export function SkillsBrowser({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewMode, setPreviewMode] = useState<"raw" | "rendered">("rendered");
   const [refreshing, setRefreshing] = useState(false);
+  const [installRepo, setInstallRepo] = useState("");
+  const [installing, setInstalling] = useState(false);
+  const [registryList, setRegistryList] = useState<string[]>([]);
   const autoSelectedRef = useRef<string | null>(null);
 
   const loadIndex = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.skills.index();
+      const [data, reg] = await Promise.all([
+        api.skills.index(),
+        api.skills.registry.list().catch(() => []),
+      ]);
       setIndex(data);
+      setRegistryList(reg);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -361,15 +368,40 @@ export function SkillsBrowser({
     }
   };
 
+  const handleInstall = async () => {
+    if (!installRepo) return;
+    setInstalling(true);
+    try {
+      await api.skills.registry.install(installRepo);
+      setInstallRepo("");
+      await loadIndex();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleUninstall = async (name: string) => {
+    if (!window.confirm(`Tem certeza que deseja desinstalar a skill "${name}"?`)) return;
+    try {
+      await api.skills.registry.uninstall(name);
+      await loadIndex();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const tabItems: Tab[] = hasLoaded
-    ? ["loaded", "rules", "skills", "agents", "workflows"]
-    : ["rules", "skills", "agents", "workflows"];
+    ? ["loaded", "rules", "skills", "agents", "workflows", "market"]
+    : ["rules", "skills", "agents", "workflows", "market"];
   const tabLabels: Record<Tab, string> = {
     loaded: "Loaded",
     rules: "Rules",
     skills: "Skills",
     agents: "Agents",
     workflows: "Workflows",
+    market: "Market",
   };
 
   // Build loaded entries from matchedSkills + index
@@ -403,6 +435,7 @@ export function SkillsBrowser({
     skills: index?.skills.length ?? 0,
     agents: index?.agents.length ?? 0,
     workflows: index?.workflows.length ?? 0,
+    market: registryList.length,
   };
 
   const lowerSearch = search.toLowerCase();
@@ -577,7 +610,73 @@ export function SkillsBrowser({
 
         {/* Right panel — preview */}
         <div className="flex-1 flex flex-col gap-2 min-w-0">
-          {!selected && (
+          {tab === "market" && !selected && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
+              <div className="w-full max-w-md space-y-4">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+                    Instalar do GitHub
+                  </h3>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                    Cole o caminho do repositório ou diretório da skill (ex:{" "}
+                    <code>paperclipai/paperclip/skills/git-workflow</code>)
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={installRepo}
+                    onChange={(e) => setInstallRepo(e.target.value)}
+                    placeholder="usuário/repo/caminho"
+                    className="flex-1 text-sm px-3 py-2 rounded-lg border outline-none"
+                    style={{
+                      background: "var(--bg-input)",
+                      borderColor: "var(--glass-border)",
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                  <Button onClick={handleInstall} disabled={installing || !installRepo}>
+                    {installing ? "Instalando..." : "Instalar"}
+                  </Button>
+                </div>
+                {registryList.length > 0 && (
+                  <div className="mt-8">
+                    <h4
+                      className="text-xs font-semibold mb-2"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Skills Instaladas
+                    </h4>
+                    <div className="space-y-1">
+                      {registryList.map((name) => (
+                        <div
+                          key={name}
+                          className="flex items-center justify-between p-2 rounded border"
+                          style={{
+                            background: "var(--bg-card)",
+                            borderColor: "var(--glass-border)",
+                          }}
+                        >
+                          <span className="text-xs" style={{ color: "var(--text-primary)" }}>
+                            {name}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => handleUninstall(name)}
+                            style={{ color: "var(--danger)" }}
+                          >
+                            Remover
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {tab !== "market" && !selected && (
             <div className="flex-1 flex items-center justify-center">
               <p className="text-sm" style={{ color: "var(--text-dimmed)" }}>
                 ← Selecione um item para visualizar
@@ -588,12 +687,38 @@ export function SkillsBrowser({
             <>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {selected.name}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {selected.name}
+                    </h3>
+                    {(selected as SkillEntry).version && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full"
+                        style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}
+                      >
+                        v{(selected as SkillEntry).version}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
                     {selected.description || "Sem descrição"}
                   </p>
+                  {(selected as SkillEntry).dependencies &&
+                    (selected as SkillEntry).dependencies?.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className="text-[9px] font-semibold uppercase text-muted">
+                          Dependencies:
+                        </span>
+                        {(selected as SkillEntry).dependencies?.map((dep) => (
+                          <span
+                            key={dep}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-accent/10 text-accent font-mono border border-accent/20"
+                          >
+                            {dep}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {/* Raw / Rendered toggle */}

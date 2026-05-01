@@ -179,9 +179,10 @@ export function useTasks(repoFilter?: string) {
   );
 
   const retryTask = useCallback(
-    async (id: string) => {
+    async (id: string, engine?: string, model?: string) => {
+      const payload = engine || model ? { engine, model } : undefined;
       try {
-        const run = await api.tasks.retry(id);
+        const run = await api.tasks.retry(id, payload);
         const task = tasks.find((t) => t.id === id);
         if (task) {
           updateTaskLocal({ ...task, status: "in_progress", latestRun: run });
