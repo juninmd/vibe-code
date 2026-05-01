@@ -8,6 +8,7 @@ import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
+import { EngineMeta, getEngineMeta } from "./ui/engine-icons";
 import { GitGenericIcon, GitHubIcon, GitLabIcon } from "./ui/git-icons";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
@@ -55,6 +56,108 @@ const CRON_PRESETS = [
   { label: "Every 15 Minutes", value: "*/15 * * * *" },
 ];
 
+function EngineCard({
+  engine,
+  selected,
+  onSelect,
+}: {
+  engine: EngineInfo;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const meta = getEngineMeta(engine.name);
+  const Icon = meta.icon;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="relative flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full"
+      style={{
+        background: selected ? "var(--accent-muted)" : "var(--bg-card)",
+        borderColor: selected ? "var(--accent)" : "var(--border-default)",
+        opacity: engine.available ? 1 : 0.5,
+      }}
+    >
+      {selected && (
+        <div
+          className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
+          style={{ background: "var(--accent)" }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path
+              d="M2 5L4 7L8 3"
+              stroke="var(--accent-text)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      )}
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center mb-2"
+        style={{ background: meta.bgColor }}
+      >
+        <Icon size={28} className={meta.color} />
+      </div>
+      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+        {engine.displayName}
+      </span>
+      <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+        {meta.provider}
+      </span>
+      {!engine.available && (
+        <span
+          className="absolute bottom-1 right-2 text-[9px] px-1.5 py-0.5 rounded"
+          style={{ background: "var(--danger)", color: "white" }}
+        >
+          unavailable
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ModelSelector({
+  models,
+  model,
+  onChange,
+  loading,
+}: {
+  models: string[];
+  model: string;
+  onChange: (v: string) => void;
+  loading: boolean;
+}) {
+  const grouped = groupModelsByProvider(models);
+
+  if (models.length === 0 && !loading) return null;
+
+  return (
+    <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
+      <div
+        className="text-[10px] uppercase font-bold tracking-wider mb-2"
+        style={{ color: "var(--text-dimmed)" }}
+      >
+        Select Model
+      </div>
+      <Select value={model} onChange={(e) => onChange(e.target.value)} disabled={loading}>
+        <option value="">{loading ? "Loading models..." : "Default (recommended)"}</option>
+        {grouped.map(({ provider, models: providerModels }) => (
+          <optgroup key={provider} label={provider}>
+            {providerModels.map((m) => (
+              <option key={m} value={m}>
+                {m.includes("/") ? m.split("/").slice(1).join("/") : m}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </Select>
+    </div>
+  );
+}
+
 export function NewTaskDialog({
   open,
   onClose,
@@ -81,21 +184,17 @@ export function NewTaskDialog({
   const [workflowId, setWorkflowId] = useState("");
   const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
 
-  // Scheduling state
   const [isScheduled, setIsScheduled] = useState(false);
   const [cronExpression, setCronExpression] = useState(CRON_PRESETS[0].value);
   const [isCustomCron, setIsCustomCron] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Guided mode (TaskSpec)
   const [guidedMode, setGuidedMode] = useState(false);
   const [taskSpec, setTaskSpec] = useState<TaskSpec>(EMPTY_TASK_SPEC);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
 
-  // Load agents/workflows from skills index
   useEffect(() => {
     if (!open) return;
     api.skills
@@ -104,7 +203,6 @@ export function NewTaskDialog({
       .catch(() => {});
   }, [open]);
 
-  // Set baseBranch and fetch branches when repoId changes
   useEffect(() => {
     if (!repoId) {
       setBaseBranch("");
@@ -121,7 +219,6 @@ export function NewTaskDialog({
       .finally(() => setLoadingBranches(false));
   }, [repoId, repos]);
 
-  // Fetch models when engine changes
   useEffect(() => {
     if (!engine) {
       setModels([]);
@@ -157,7 +254,6 @@ export function NewTaskDialog({
         autoLaunch: isScheduled ? false : autoLaunch,
         schedule: isScheduled ? { cronExpression } : undefined,
       });
-      // Only reset + close on success
       setTitle("");
       setDescription("");
       setTaskSpec(EMPTY_TASK_SPEC);
@@ -179,221 +275,96 @@ export function NewTaskDialog({
     }
   };
 
+  const selectedEngine = engines.find((e) => e.name === engine);
+
   return (
     <>
-      <Dialog open={open} onClose={onClose} title="New Task" size="2xl">
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 max-h-[75vh] overflow-y-auto pr-1 custom-scrollbar -mr-1"
-        >
-          {/* ── Basic Info ──────────────────────────────────── */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold"
-                style={{ background: "var(--accent-muted)", color: "var(--accent-text)" }}
-              >
-                1
-              </span>
-              <span
-                className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Basic Info
-              </span>
-            </div>
-
-            <div>
+      <Dialog open={open} onClose={onClose} title="New Task" size="5xl">
+        <form onSubmit={handleSubmit} className="custom-scrollbar -mr-1 pr-1">
+          <div className="grid grid-cols-5 gap-6">
+            <div className="col-span-2 space-y-4">
               <div
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--text-muted)" }}
+                className="flex items-center gap-2 p-3 rounded-lg"
+                style={{ background: "var(--bg-surface)" }}
               >
-                Title *
-              </div>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="What should the agent do?"
-                required
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                    Description
-                  </div>
-                  <div
-                    className="flex rounded-md overflow-hidden border"
-                    style={{ borderColor: "var(--border-default)" }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setGuidedMode(false)}
-                      className="text-[10px] px-2 py-0.5 cursor-pointer transition-colors"
-                      style={{
-                        background: !guidedMode ? "var(--accent-muted)" : "transparent",
-                        color: !guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
-                      }}
-                    >
-                      Simples
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGuidedMode(true)}
-                      className="text-[10px] px-2 py-0.5 cursor-pointer transition-colors"
-                      style={{
-                        background: guidedMode ? "var(--accent-muted)" : "transparent",
-                        color: guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
-                      }}
-                    >
-                      Guiado
-                    </button>
-                  </div>
+                <div
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
+                  style={{ background: "var(--accent)", color: "white" }}
+                >
+                  1
                 </div>
-                {!guidedMode && (
-                  <button
-                    type="button"
-                    onClick={() => setShowPicker(true)}
-                    className="text-[10px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
-                    style={{ color: "var(--accent-text)" }}
-                  >
-                    ⚡ Templates
-                  </button>
-                )}
+                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Task Details
+                </span>
               </div>
-              {guidedMode ? (
-                <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
-              ) : (
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Detailed instructions for the AI agent..."
-                  rows={4}
-                />
-              )}
-            </div>
 
-            <div>
-              <div
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Tags
-              </div>
-              <TaskTagsEditor tags={tags} onChange={setTags} />
-            </div>
-          </div>
-
-          {/* ── Configuration ──────────────────────────────── */}
-          <div className="space-y-4 pt-2 border-t" style={{ borderColor: "var(--border-subtle)" }}>
-            {/* Engine Selection — Prominent and Required */}
-            <div className="min-w-0">
-              <div
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                AI Engine *
-                {enginesLoading && (
-                  <span className="ml-1" style={{ color: "var(--text-dimmed)" }}>
-                    (loading...)
-                  </span>
-                )}
-                {enginesError && (
-                  <span className="ml-1" style={{ color: "var(--danger)" }} title={enginesError}>
-                    ⚠
-                  </span>
-                )}
-              </div>
-              <Select value={engine} onChange={(e) => setEngine(e.target.value)} required>
-                <option value="" disabled>
-                  Select an engine...
-                </option>
-                <option value="auto">Auto (First Available)</option>
-                {engines.map((eng) => (
-                  <option key={eng.name} value={eng.name} disabled={!eng.available}>
-                    {eng.displayName}
-                    {!eng.available ? " (unavailable)" : ""}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            {/* Repository — always visible */}
-            <div className="min-w-0">
-              <div
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Repository *
-              </div>
-              <div className="relative z-20">
-                <Combobox
-                  value={repoId}
-                  onChange={setRepoId}
-                  placeholder="Search..."
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Title *
+                </label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="What should the agent do?"
                   required
-                  options={repos
-                    .filter((r) => r.status === "ready" || r.status === "pending")
-                    .map((repo) => ({
-                      value: repo.id,
-                      label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
-                      sublabel: repo.status !== "ready" ? repo.status : undefined,
-                      disabled: repo.status !== "ready",
-                    }))}
                 />
               </div>
-              {repoId &&
-                (() => {
-                  const selectedRepo = repos.find((r) => r.id === repoId);
-                  if (!selectedRepo) return null;
-                  const ProviderIcon =
-                    selectedRepo.provider === "github"
-                      ? GitHubIcon
-                      : selectedRepo.provider === "gitlab"
-                        ? GitLabIcon
-                        : GitGenericIcon;
-                  return (
-                    <div className="flex items-center gap-1.5 mt-1.5 px-1">
-                      <ProviderIcon size={11} className="shrink-0 text-primary0" />
-                      <span className="text-[11px] text-primary0 truncate">{selectedRepo.url}</span>
-                    </div>
-                  );
-                })()}
-            </div>
 
-            {/* Advanced toggle */}
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="flex items-center gap-1.5 text-xs cursor-pointer transition-colors"
-              style={{ color: "var(--text-dimmed)" }}
-            >
-              <span
-                className="transition-transform"
-                style={{ transform: showAdvanced ? "rotate(90deg)" : "rotate(0deg)" }}
-              >
-                ▶
-              </span>
-              Opções avançadas
-              {(engine || model || baseBranch || tags.length > 0) && (
-                <span
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ background: "var(--accent)" }}
-                />
-              )}
-            </button>
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Repository *
+                </label>
+                <div className="relative z-20">
+                  <Combobox
+                    value={repoId}
+                    onChange={setRepoId}
+                    placeholder="Search repositories..."
+                    required
+                    options={repos
+                      .filter((r) => r.status === "ready" || r.status === "pending")
+                      .map((repo) => ({
+                        value: repo.id,
+                        label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
+                        sublabel: repo.status !== "ready" ? repo.status : undefined,
+                        disabled: repo.status !== "ready",
+                      }))}
+                  />
+                </div>
+                {repoId &&
+                  (() => {
+                    const selectedRepo = repos.find((r) => r.id === repoId);
+                    if (!selectedRepo) return null;
+                    const ProviderIcon =
+                      selectedRepo.provider === "github"
+                        ? GitHubIcon
+                        : selectedRepo.provider === "gitlab"
+                          ? GitLabIcon
+                          : GitGenericIcon;
+                    return (
+                      <div className="flex items-center gap-2 mt-2 px-2">
+                        <span style={{ color: "var(--text-muted)" }}>
+                          <ProviderIcon size={13} className="shrink-0" />
+                        </span>
+                        <span
+                          className="text-[11px] truncate"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          {selectedRepo.url}
+                        </span>
+                      </div>
+                    );
+                  })()}
 
-            {showAdvanced && (
-              <div
-                className="space-y-4 pl-3 border-l-2 animate-in slide-in-from-left-2"
-                style={{ borderColor: "var(--border-default)" }}
-              >
                 {repoId && (
-                  <div>
-                    <div
-                      className="block text-xs font-medium mb-1.5"
+                  <div className="mt-3">
+                    <label
+                      className="block text-xs font-medium mb-2"
                       style={{ color: "var(--text-muted)" }}
                     >
                       Base Branch
@@ -405,118 +376,228 @@ export function NewTaskDialog({
                           loading...
                         </span>
                       )}
-                    </div>
-                    <Input
+                    </label>
+                    <Select
                       value={baseBranch}
                       onChange={(e) => setBaseBranch(e.target.value)}
-                      placeholder="main"
-                    />
-                    {branches.length > 0 && (
-                      <div className="flex gap-1 flex-wrap mt-2">
-                        {branches.slice(0, 8).map((b) => (
-                          <button
-                            key={b}
-                            type="button"
-                            onClick={() => setBaseBranch(b)}
-                            className="text-[10px] px-2 py-0.5 rounded-md border cursor-pointer transition-colors"
-                            style={{
-                              background: baseBranch === b ? "var(--accent-muted)" : "transparent",
-                              borderColor:
-                                baseBranch === b ? "var(--accent)" : "var(--border-default)",
-                              color: baseBranch === b ? "var(--accent-text)" : "var(--text-muted)",
-                            }}
-                          >
+                      disabled={loadingBranches}
+                      className="[& option:first-child]:font-semibold"
+                    >
+                      {loadingBranches ? (
+                        <option value="">Loading branches...</option>
+                      ) : branches.length > 0 ? (
+                        branches.map((b, i) => (
+                          <option key={b} value={b}>
                             {b}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {engine && (models.length > 0 || loadingModels) && (
-                  <div>
-                    <div
-                      className="block text-xs font-medium mb-1.5"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      Model
-                    </div>
-                    <Select
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      disabled={loadingModels}
-                    >
-                      <option value="">{loadingModels ? "Loading models..." : "Default"}</option>
-                      {groupModelsByProvider(models).map(({ provider, models: providerModels }) => (
-                        <optgroup key={provider} label={provider}>
-                          {providerModels.map((m) => (
-                            <option key={m} value={m}>
-                              {m.includes("/") ? m.split("/").slice(1).join("/") : m}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
+                            {i === 0 ? " ★" : ""}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={baseBranch || "main"}>{baseBranch || "main"} ★</option>
+                      )}
                     </Select>
                   </div>
                 )}
-
-                {/* Agent / Workflow pickers */}
-                {skillsIndex &&
-                  (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) && (
-                    <>
-                      {skillsIndex.agents.length > 0 && (
-                        <div>
-                          <div
-                            className="block text-xs font-medium mb-1.5"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            Agent
-                          </div>
-                          <Select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-                            <option value="">None</option>
-                            {skillsIndex.agents.map((a) => (
-                              <option key={a.name} value={a.name}>
-                                {a.name}
-                                {a.description ? ` — ${a.description.slice(0, 60)}` : ""}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                      )}
-                      {skillsIndex.workflows.length > 0 && (
-                        <div>
-                          <div
-                            className="block text-xs font-medium mb-1.5"
-                            style={{ color: "var(--text-muted)" }}
-                          >
-                            Workflow
-                          </div>
-                          <Select
-                            value={workflowId}
-                            onChange={(e) => setWorkflowId(e.target.value)}
-                          >
-                            <option value="">None</option>
-                            {skillsIndex.workflows.map((w) => (
-                              <option key={w.name} value={w.name}>
-                                {w.name}
-                                {w.description ? ` — ${w.description.slice(0, 60)}` : ""}
-                              </option>
-                            ))}
-                          </Select>
-                        </div>
-                      )}
-                    </>
-                  )}
               </div>
-            )}
 
-            <div className="pt-2 space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                    Description
+                  </label>
+                  <div
+                    className="flex rounded-lg overflow-hidden border"
+                    style={{ borderColor: "var(--border-default)" }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setGuidedMode(false)}
+                      className="text-[10px] px-2.5 py-1 cursor-pointer transition-colors font-medium"
+                      style={{
+                        background: !guidedMode ? "var(--accent-muted)" : "transparent",
+                        color: !guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
+                      }}
+                    >
+                      Simple
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGuidedMode(true)}
+                      className="text-[10px] px-2.5 py-1 cursor-pointer transition-colors font-medium"
+                      style={{
+                        background: guidedMode ? "var(--accent-muted)" : "transparent",
+                        color: guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
+                      }}
+                    >
+                      Guided
+                    </button>
+                  </div>
+                </div>
+                {guidedMode ? (
+                  <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
+                ) : (
+                  <>
+                    <Textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Detailed instructions for the AI agent..."
+                      rows={8}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPicker(true)}
+                      className="text-[10px] font-medium flex items-center gap-1.5 mt-1.5 cursor-pointer transition-colors"
+                      style={{ color: "var(--accent-text)" }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path
+                          d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                      Use Template
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Tags
+                </label>
+                <TaskTagsEditor tags={tags} onChange={setTags} />
+              </div>
+            </div>
+
+            <div className="col-span-3 space-y-5">
+              <div
+                className="flex items-center gap-2 p-3 rounded-lg"
+                style={{ background: "var(--bg-surface)" }}
+              >
+                <div
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
+                  style={{ background: "var(--accent)", color: "white" }}
+                >
+                  2
+                </div>
+                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Configuration
+                </span>
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Agent
+                </label>
+                {skillsIndex &&
+                (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) ? (
+                  <Select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                    <option value="">None</option>
+                    {skillsIndex.agents.map((a) => (
+                      <option key={a.name} value={a.name}>
+                        {a.name}
+                        {a.description ? ` — ${a.description.slice(0, 50)}` : ""}
+                      </option>
+                    ))}
+                    {skillsIndex.workflows.map((w) => (
+                      <option key={w.name} value={w.name}>
+                        {w.name}
+                        {w.description ? ` — ${w.description.slice(0, 50)}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <div
+                    className="text-xs px-3 py-2 rounded-lg border"
+                    style={{
+                      background: "var(--bg-input)",
+                      borderColor: "var(--border-default)",
+                      color: "var(--text-dimmed)",
+                    }}
+                  >
+                    No agents or workflows available
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                    AI Engine *
+                  </label>
+                  {enginesLoading && (
+                    <span
+                      className="text-[10px] animate-pulse"
+                      style={{ color: "var(--text-dimmed)" }}
+                    >
+                      loading...
+                    </span>
+                  )}
+                  {enginesError && (
+                    <span
+                      className="text-[10px]"
+                      style={{ color: "var(--danger)" }}
+                      title={enginesError}
+                    >
+                      ⚠ Failed to load
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {engines
+                    .filter((e) => e.available)
+                    .map((eng) => (
+                      <EngineCard
+                        key={eng.name}
+                        engine={eng}
+                        selected={engine === eng.name}
+                        onSelect={() => setEngine(eng.name)}
+                      />
+                    ))}
+                </div>
+                <ModelSelector
+                  models={models}
+                  model={model}
+                  onChange={setModel}
+                  loading={loadingModels}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="mt-6 pt-4 border-t flex items-center gap-3"
+            style={{ borderColor: "var(--border-subtle)" }}
+          >
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                onChange={(e) => setIsScheduled(e.target.checked)}
+                className="rounded cursor-pointer"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "var(--bg-input)",
+                  accentColor: "var(--accent)",
+                }}
+              />
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                Schedule recurring task
+              </span>
+            </label>
+
+            {!isScheduled && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={isScheduled}
-                  onChange={(e) => setIsScheduled(e.target.checked)}
+                  checked={autoLaunch}
+                  onChange={(e) => setAutoLaunch(e.target.checked)}
                   className="rounded cursor-pointer"
                   style={{
                     borderColor: "var(--border-default)",
@@ -524,106 +605,55 @@ export function NewTaskDialog({
                     accentColor: "var(--accent)",
                   }}
                 />
-                <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                  Schedule Task (Recurring)
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  Launch immediately
                 </span>
               </label>
+            )}
 
-              {isScheduled ? (
-                <div
-                  className="pl-6 space-y-3 border-l-2 animate-in slide-in-from-left-2"
-                  style={{ borderColor: "var(--border-default)" }}
-                >
-                  <div>
-                    <label
-                      htmlFor="schedule-frequency"
-                      className="block text-[10px] uppercase font-bold tracking-wider mb-1.5"
-                      style={{ color: "var(--text-dimmed)" }}
-                    >
-                      Frequency
-                    </label>
-                    <Select
-                      id="schedule-frequency"
-                      value={isCustomCron ? "custom" : cronExpression}
-                      onChange={(e) => {
-                        if (e.target.value === "custom") {
-                          setIsCustomCron(true);
-                        } else {
-                          setIsCustomCron(false);
-                          setCronExpression(e.target.value);
-                        }
-                      }}
-                    >
-                      {CRON_PRESETS.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                      <option value="custom">Custom Cron Expression...</option>
-                    </Select>
-                  </div>
-
-                  {isCustomCron && (
-                    <div className="animate-in fade-in zoom-in-95 duration-200">
-                      <label
-                        htmlFor="custom-cron-expression"
-                        className="block text-[10px] uppercase font-bold tracking-wider mb-1.5"
-                        style={{ color: "var(--text-dimmed)" }}
-                      >
-                        Cron Expression
-                      </label>
-                      <Input
-                        id="custom-cron-expression"
-                        value={cronExpression}
-                        onChange={(e) => setCronExpression(e.target.value)}
-                        placeholder="e.g. 0 12 * * 1-5"
-                      />
-                      <p className="text-[10px] mt-1" style={{ color: "var(--text-dimmed)" }}>
-                        Format: min hour day month day-of-week
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <label className="flex items-center gap-2 cursor-pointer pl-0.5">
-                  <input
-                    type="checkbox"
-                    checked={autoLaunch}
-                    onChange={(e) => setAutoLaunch(e.target.checked)}
-                    className="rounded cursor-pointer"
-                    style={{
-                      borderColor: "var(--border-default)",
-                      background: "var(--bg-input)",
-                      accentColor: "var(--accent)",
-                    }}
-                  />
-                  <span className="text-sm" style={{ color: "var(--text-muted)" }}>
-                    Launch agent immediately
-                  </span>
-                </label>
-              )}
-            </div>
-
-            <div
-              className="flex gap-2 justify-end pt-4 border-t"
-              style={{ borderColor: "var(--border-subtle)" }}
-            >
-              {submitError && (
-                <p className="flex-1 text-xs text-danger self-center truncate" title={submitError}>
-                  ⚠ {submitError}
-                </p>
-              )}
-              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={!title.trim() || !repoId || !engine || submitting}
+            {isScheduled && (
+              <Select
+                value={isCustomCron ? "custom" : cronExpression}
+                onChange={(e) => {
+                  if (e.target.value === "custom") {
+                    setIsCustomCron(true);
+                  } else {
+                    setIsCustomCron(false);
+                    setCronExpression(e.target.value);
+                  }
+                }}
               >
-                {submitting ? "Criando..." : isScheduled ? "Create Schedule" : "Create Task"}
-              </Button>
-            </div>
+                {CRON_PRESETS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+                <option value="custom">Custom...</option>
+              </Select>
+            )}
+
+            <div className="flex-1" />
+
+            {submitError && (
+              <p
+                className="text-xs truncate"
+                style={{ color: "var(--danger)" }}
+                title={submitError}
+              >
+                ⚠ {submitError}
+              </p>
+            )}
+
+            <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!title.trim() || !repoId || !engine || submitting}
+            >
+              {submitting ? "Creating..." : isScheduled ? "Create Schedule" : "Create Task"}
+            </Button>
           </div>
         </form>
       </Dialog>

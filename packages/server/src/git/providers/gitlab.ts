@@ -228,4 +228,28 @@ export class GitLabProvider implements GitProviderAdapter {
       url: issue.web_url,
     }));
   }
+
+  async listBranches(token: string, repoUrl: string): Promise<string[]> {
+    const projectPath = getProjectPath(repoUrl);
+    const encodedPath = encodeURIComponent(projectPath);
+    const branches: string[] = [];
+    let page = 1;
+    const perPage = 100;
+
+    while (branches.length < 500) {
+      const res = await fetch(
+        this.api(`/projects/${encodedPath}/repository/branches?per_page=${perPage}&page=${page}`),
+        { headers: headers(token) }
+      );
+      if (!res.ok) throw new Error(`GitLab API error: ${res.status} ${res.statusText}`);
+      const data = (await res.json()) as { name: string }[];
+      if (data.length === 0) break;
+      for (const b of data) {
+        branches.push(b.name);
+      }
+      if (data.length < perPage) break;
+      page++;
+    }
+    return branches;
+  }
 }

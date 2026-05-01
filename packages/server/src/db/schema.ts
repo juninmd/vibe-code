@@ -31,6 +31,8 @@ export function initDatabase(dbPath: string): Database {
       column_order   REAL NOT NULL DEFAULT 0,
       branch_name    TEXT,
       pr_url         TEXT,
+      goal           TEXT,
+      desired_outcome TEXT,
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -62,6 +64,17 @@ export function initDatabase(dbPath: string): Database {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      id             TEXT PRIMARY KEY,
+      github_id      TEXT NOT NULL,
+      username       TEXT NOT NULL,
+      display_name   TEXT,
+      avatar_url     TEXT,
+      access_token   TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at     TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS prompt_templates (
       id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
       title       TEXT NOT NULL,
@@ -89,6 +102,7 @@ export function initDatabase(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_task_id ON agent_runs(task_id);
     CREATE INDEX IF NOT EXISTS idx_agent_logs_run_id ON agent_logs(run_id);
+    CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
   `);
 
   // Migrations: add columns that may be missing from older databases
@@ -144,6 +158,17 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("max_cost")) {
     db.exec("ALTER TABLE tasks ADD COLUMN max_cost REAL");
   }
+  // Migration: tasks.issue_url column for linked GitHub/GitLab issues
+  if (!taskColNames.includes("issue_url")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN issue_url TEXT");
+  }
+  // Paperclip-inspired: explicit goal alignment for tasks.
+  if (!taskColNames.includes("goal")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN goal TEXT");
+  }
+  if (!taskColNames.includes("desired_outcome")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN desired_outcome TEXT");
+  }
 
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];
@@ -169,21 +194,51 @@ export function initDatabase(dbPath: string): Database {
 
   // M4.1: review_findings table
   db.exec(`
-    CREATE TABLE IF NOT EXISTS review_findings (
-      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
-      run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
-      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-      persona     TEXT NOT NULL,
-      severity    TEXT NOT NULL,
-      content     TEXT NOT NULL,
-      file_path   TEXT,
-      resolved    INTEGER NOT NULL DEFAULT 0,
-      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_review_findings_repo ON review_findings(repo_id, resolved, created_at);
-    CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
-  `);
+      CREATE TABLE IF NOT EXISTS review_findings (
+        id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        run_id      TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+        task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        repo_id     TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+        persona     TEXT NOT NULL,
+        severity    TEXT NOT NULL,
+        content     TEXT NOT NULL,
+        file_path   TEXT,
+        resolved    INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_review_findings_repo ON review_findings(repo_id, resolved, created_at);
+      CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
+    `);
+
+  // Paperclip-inspired: Immutable Audit Log
+  db.exec(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        task_id     TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        action      TEXT NOT NULL,
+        actor       TEXT NOT NULL, -- 'agent', 'human', or 'system'
+        details     TEXT, -- JSON string
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_task ON audit_logs(task_id);
+    `);
+
+  // Paperclip-inspired: task work products / artifacts.
+  db.exec(`
+      CREATE TABLE IF NOT EXISTS task_artifacts (
+        id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        run_id      TEXT REFERENCES agent_runs(id) ON DELETE SET NULL,
+        kind        TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        uri         TEXT NOT NULL,
+        metadata    TEXT,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(task_id, kind, uri)
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_artifacts_task ON task_artifacts(task_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_task_artifacts_run ON task_artifacts(run_id);
+    `);
 
   // M5.1: run_metrics table
   db.exec(`

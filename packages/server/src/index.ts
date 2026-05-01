@@ -1,5 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { config } from "dotenv";
+
+const rootDir = join(__dirname, "..", "..");
+config({ path: join(rootDir, ".env") });
+
 import type { WsClientMessage } from "@vibe-code/shared";
 import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
@@ -20,6 +25,7 @@ import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
 import workspacesRouter from "./api/workspaces";
+import { authMiddleware, createAuthRouter } from "./auth";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
@@ -118,13 +124,20 @@ await git.init();
   if (cleaned > 0) {
     console.log(`  🗑️ Auto-cleanup: Removed ${cleaned} archived tasks older than 30 days`);
   }
-  // Schedule daily cleanup
-  setInterval(
+  const cleanupInterval = setInterval(
     () => {
-      db.tasks.cleanupArchived(30);
+      try {
+        db.tasks.cleanupArchived(30);
+      } catch (err) {
+        console.error("[cleanup] Failed to archive old tasks:", err);
+      }
     },
     24 * 60 * 60 * 1000
   );
+  process.on("SIGTERM", () => {
+    clearInterval(cleanupInterval);
+    process.exit(0);
+  });
 }
 
 const prPoller = new PrPoller(db, hub);
@@ -141,11 +154,27 @@ const { upgradeWebSocket, websocket } = createBunWebSocket();
 const app = new Hono();
 
 // Middleware
-app.use("/api/*", cors({ origin: "*" }));
-// NOTE: Workspace middleware disabled - API is now public (no authentication)
-// app.use("/api/*", workspaceMiddleware());
+const allowedCorsOrigins = new Set(
+  [
+    process.env.VIBE_CODE_PUBLIC_URL,
+    process.env.VIBE_CODE_ALLOWED_ORIGIN,
+    `http://localhost:${PORT}`,
+    "http://localhost:5173",
+  ].filter(Boolean) as string[]
+);
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin) =>
+      allowedCorsOrigins.has(origin) ? origin : allowedCorsOrigins.values().next().value,
+    credentials: true,
+  })
+);
+app.use("/api/*", authMiddleware(db));
+app.use("/ws", authMiddleware(db));
 
 // REST Routes
+app.route("/api/auth", createAuthRouter(db));
 app.route("/api/workspaces", workspacesRouter);
 app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));

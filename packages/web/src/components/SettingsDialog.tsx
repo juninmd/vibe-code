@@ -14,6 +14,88 @@ interface SettingsDialogProps {
 
 type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general";
 
+function GitHubOAuthTab() {
+  const [status, setStatus] = useState<SettingsResponse | null>(null);
+  const [auth, setAuth] = useState<{
+    username?: string;
+    enabled: boolean;
+    avatarUrl?: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    Promise.all([api.settings.get(), api.auth.me()])
+      .then(([settings, authStatus]) => {
+        setStatus(settings);
+        setAuth({
+          username: authStatus.user?.username ?? settings.github.username,
+          enabled: authStatus.enabled,
+          avatarUrl: authStatus.user?.avatarUrl,
+        });
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="space-y-4">
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+        style={{ background: "var(--bg-card)" }}
+      >
+        <span
+          className={`w-2 h-2 rounded-full ${status?.github.tokenSet ? "bg-emerald-400" : "bg-border-strong"}`}
+        />
+        {auth?.avatarUrl && (
+          <img src={auth.avatarUrl} alt={auth.username} className="w-6 h-6 rounded-full" />
+        )}
+        <div className="flex-1">
+          <span className="text-sm" style={{ color: "var(--text-primary)" }}>
+            {status?.github.tokenSet ? "Conectado via GitHub OAuth" : "Não conectado"}
+          </span>
+          {auth?.username && (
+            <span className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>
+              @{auth.username}
+            </span>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="primary"
+          size="sm"
+          disabled={auth?.enabled === false}
+          onClick={() => {
+            window.location.href = api.auth.loginUrl();
+          }}
+        >
+          Reconectar
+        </Button>
+      </div>
+
+      {error && (
+        <div className="text-xs px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger">
+          {error}
+        </div>
+      )}
+
+      {auth?.enabled === false ? (
+        <div className="text-xs px-3 py-2 rounded-lg border border-warning/30 bg-warning/15 text-warning">
+          Configure GITHUB_OAUTH_CLIENT_ID e GITHUB_OAUTH_CLIENT_SECRET no servidor.
+        </div>
+      ) : (
+        <p className="text-xs" style={{ color: "var(--text-dimmed)" }}>
+          O token do GitHub é obtido pelo servidor no fluxo OAuth e guardado fora do navegador. O
+          frontend usa apenas um cookie de sessão HttpOnly.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ProviderTab({
   provider,
   label,
@@ -616,13 +698,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         ))}
       </div>
 
-      {tab === "github" && (
-        <ProviderTab
-          provider="github"
-          label="GitHub"
-          tokenPlaceholder="token_github_xxxxxxxxxxxx"
-        />
-      )}
+      {tab === "github" && <GitHubOAuthTab />}
 
       {tab === "gitlab" && (
         <ProviderTab

@@ -1,4 +1,11 @@
-import type { AgentLog, EngineInfo, TaskSchedule, TaskWithRun } from "@vibe-code/shared";
+import type {
+  AgentLog,
+  EngineInfo,
+  TaskArtifact,
+  TaskSchedule,
+  TaskWithRun,
+  UpdateTaskRequest,
+} from "@vibe-code/shared";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { formatDateTime, formatDuration } from "../utils/date";
@@ -24,7 +31,7 @@ interface TaskDetailProps {
   onApprove?: (taskId: string) => Promise<void>;
   onReject?: (taskId: string) => Promise<void>;
   onClone?: (taskId: string) => Promise<void>;
-  onUpdateTask?: (taskId: string, data: { tags?: string[]; notes?: string }) => Promise<void>;
+  onUpdateTask?: (taskId: string, data: UpdateTaskRequest) => Promise<void>;
   onTaskRefresh?: () => void;
   onSkillClick?: (skillName: string) => void;
   allTasks?: TaskWithRun[];
@@ -473,8 +480,11 @@ export function TaskDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
+  const [goalValue, setGoalValue] = useState(task.goal ?? "");
+  const [outcomeValue, setOutcomeValue] = useState(task.desiredOutcome ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
+  const [artifacts, setArtifacts] = useState<TaskArtifact[]>([]);
   const [parentTask, setParentTask] = useState<TaskWithRun | null>(null);
 
   // Parse approval request from notes if it exists
@@ -546,7 +556,7 @@ export function TaskDetail({
     task.latestRun?.finishedAt ?? null
   );
 
-  type ActiveTab = "info" | "terminal" | "diff" | "skills";
+  type ActiveTab = "info" | "terminal" | "diff" | "artifacts" | "skills" | "cost";
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
 
   const skillCategoryLabel: Record<string, string> = {
@@ -589,7 +599,10 @@ export function TaskDetail({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when task.id changes
   useEffect(() => {
     setNotesValue(task.notes ?? "");
+    setGoalValue(task.goal ?? "");
+    setOutcomeValue(task.desiredOutcome ?? "");
     setMatchedSkills([]);
+    setArtifacts([]);
     setActiveTab(
       task.status === "in_progress" || task.latestRun?.status === "running" ? "terminal" : "info"
     );
@@ -608,10 +621,31 @@ export function TaskDetail({
     return () => abortCtrl.abort();
   }, [task.id, task.latestRun?.id, task.latestRun]);
 
+  useEffect(() => {
+    api.tasks
+      .artifacts(task.id)
+      .then(setArtifacts)
+      .catch(() => setArtifacts([]));
+  }, [task.id]);
+
   const handleNotesBlur = () => {
     if (!onUpdateTask) return;
     if (notesValue === (task.notes ?? "")) return;
     onUpdateTask(task.id, { notes: notesValue }).then(() => {
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    });
+  };
+
+  const handleAlignmentBlur = () => {
+    if (!onUpdateTask) return;
+    const goal = goalValue.trim();
+    const desiredOutcome = outcomeValue.trim();
+    if (goal === (task.goal ?? "") && desiredOutcome === (task.desiredOutcome ?? "")) return;
+    onUpdateTask(task.id, {
+      goal: goal || null,
+      desiredOutcome: desiredOutcome || null,
+    }).then(() => {
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 2000);
     });
@@ -761,6 +795,8 @@ export function TaskDetail({
                 { id: "info" as const, label: "Info" },
                 { id: "terminal" as const, label: "Terminal" },
                 { id: "diff" as const, label: "Diff" },
+                { id: "artifacts" as const, label: "Artifacts" },
+                { id: "cost" as const, label: "Custo" },
               ] satisfies { id: ActiveTab; label: string }[]
             ).map(({ id, label }) => (
               <button
@@ -782,6 +818,18 @@ export function TaskDetail({
                     className="w-1.5 h-1.5 rounded-full"
                     style={{ background: "var(--text-dimmed)" }}
                   />
+                )}
+                {id === "artifacts" && artifacts.length > 0 && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                    style={{
+                      background:
+                        activeTab === "artifacts" ? "var(--accent-muted)" : "var(--bg-input)",
+                      color: activeTab === "artifacts" ? "var(--accent-text)" : "var(--text-muted)",
+                    }}
+                  >
+                    {artifacts.length}
+                  </span>
                 )}
               </button>
             ))}
@@ -813,6 +861,117 @@ export function TaskDetail({
 
         {/* ── Tab Content ─────────────────────────────────── */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Approval Request / Governance Gate */}
+          {task.pendingApproval && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-warning">
+                <span className="text-lg">🛡️</span>
+                <h3 className="text-sm font-semibold">Governance Gate: Aprovação Necessária</h3>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-secondary leading-relaxed">
+                  {approvalRequest?.message || "O agente solicitou autorização para continuar."}
+                </p>
+                {approvalRequest?.command && (
+                  <div className="bg-black/40 rounded p-2 border border-strong">
+                    <code className="text-[11px] text-warning font-mono break-all">
+                      $ {approvalRequest.command}
+                    </code>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  className="bg-warning hover:bg-warning/80 text-black border-none h-8 text-xs px-4"
+                  disabled={!!loadingAction}
+                  onClick={async () => {
+                    setLoadingAction("approve");
+                    try {
+                      await onApprove?.(task.id);
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                >
+                  {loadingAction === "approve" ? "Aprovando..." : "✅ Aprovar"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-danger hover:bg-danger/10 h-8 text-xs px-4 border border-danger/20"
+                  disabled={!!loadingAction}
+                  onClick={async () => {
+                    setLoadingAction("reject");
+                    try {
+                      await onReject?.(task.id);
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                >
+                  {loadingAction === "reject" ? "Rejeitando..." : "❌ Rejeitar"}
+                </Button>
+              </div>
+              {approvalRequest?.requestedAt && (
+                <p className="text-[9px] text-dimmed italic">
+                  Solicitado em {formatDateTime(approvalRequest.requestedAt)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Goal Ancestry (Parent Task) */}
+          {parentTask && (
+            <div className="bg-surface/20 border border-strong rounded-lg p-3 space-y-2">
+              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                Parent Task (Ancestry)
+              </h3>
+              <div className="flex items-start gap-2">
+                <span className="text-info text-xs mt-0.5">↳</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-secondary truncate">{parentTask.title}</p>
+                  <p className="text-[11px] text-dimmed line-clamp-1">{parentTask.description}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-tasks (Delegation) */}
+          {subTasks.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                Sub-tasks (Delegated Work)
+              </h3>
+              <div className="grid gap-2">
+                {subTasks.map((st) => (
+                  <div
+                    key={st.id}
+                    className="flex items-center justify-between gap-3 bg-surface/10 border border-strong rounded-lg p-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={statusVariant[st.status] ?? "default"}
+                          className="text-[9px] px-1 py-0 h-auto"
+                        >
+                          {statusLabel[st.status] ?? st.status}
+                        </Badge>
+                        <span className="text-xs font-medium text-secondary truncate">
+                          {st.title}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-dimmed font-mono shrink-0">
+                      {st.id.slice(0, 8)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Info Tab ──────────────────────────────────── */}
           {activeTab === "info" && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -925,6 +1084,32 @@ export function TaskDetail({
                 </div>
               )}
 
+              {/* Goal Alignment */}
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Goal</h3>
+                  <textarea
+                    value={goalValue}
+                    onChange={(e) => setGoalValue(e.target.value)}
+                    onBlur={handleAlignmentBlur}
+                    placeholder="Por que esta tarefa existe?"
+                    rows={3}
+                    className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                  />
+                </div>
+                <div>
+                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Desired outcome</h3>
+                  <textarea
+                    value={outcomeValue}
+                    onChange={(e) => setOutcomeValue(e.target.value)}
+                    onBlur={handleAlignmentBlur}
+                    placeholder="Qual resultado concreto encerra o trabalho?"
+                    rows={3}
+                    className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                  />
+                </div>
+              </div>
+
               {/* Description */}
               {task.description && (
                 <div>
@@ -992,83 +1177,6 @@ export function TaskDetail({
                       </code>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Cost Stats */}
-              {task.latestRun?.costStats && (
-                <div className="bg-surface/20 rounded-lg px-3 py-2 space-y-1">
-                  <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                    Custo do Provider
-                  </h3>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                    {task.latestRun.costStats.total_tokens > 0 && (
-                      <div>
-                        <span className="text-dimmed">tokens </span>
-                        <span className="text-secondary font-medium tabular-nums">
-                          {task.latestRun.costStats.total_tokens.toLocaleString()}
-                        </span>
-                        {task.latestRun.costStats.input_tokens > 0 && (
-                          <span className="text-dimmed ml-1">
-                            (in: {task.latestRun.costStats.input_tokens.toLocaleString()}
-                            {task.latestRun.costStats.cached && task.latestRun.costStats.cached > 0
-                              ? ` +${task.latestRun.costStats.cached.toLocaleString()} cached`
-                              : ""}
-                            , out: {task.latestRun.costStats.output_tokens.toLocaleString()})
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {task.latestRun.costStats.input !== undefined && (
-                      <div>
-                        <span className="text-dimmed">custo input </span>
-                        <span className="text-warning font-medium tabular-nums">
-                          ${(task.latestRun.costStats.input / 1000000).toFixed(6)}
-                        </span>
-                      </div>
-                    )}
-                    {task.latestRun.costStats.duration_ms && (
-                      <div>
-                        <span className="text-dimmed">latência </span>
-                        <span className="text-secondary font-medium tabular-nums">
-                          {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
-                        </span>
-                      </div>
-                    )}
-                    {task.latestRun.costStats.tool_calls !== undefined && (
-                      <div>
-                        <span className="text-dimmed">tool calls </span>
-                        <span className="text-secondary font-medium tabular-nums">
-                          {task.latestRun.costStats.tool_calls}
-                        </span>
-                      </div>
-                    )}
-                    {task.latestRun.costStats.models &&
-                      Object.keys(task.latestRun.costStats.models).length > 0 && (
-                        <div className="w-full mt-1 space-y-0.5">
-                          {Object.entries(task.latestRun.costStats.models).map(([model, stats]) => (
-                            <div key={model} className="flex items-center gap-2 text-[11px]">
-                              <span className="text-dimmed">model:</span>
-                              <span className="text-secondary font-mono truncate max-w-[180px]">
-                                {model}
-                              </span>
-                              <span className="text-dimmed">tokens:</span>
-                              <span className="text-secondary tabular-nums">
-                                {stats.total_tokens.toLocaleString()}
-                              </span>
-                              {stats.input !== undefined && (
-                                <>
-                                  <span className="text-dimmed">$</span>
-                                  <span className="text-warning tabular-nums">
-                                    ${(stats.input / 1000000).toFixed(6)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                  </div>
                 </div>
               )}
 
@@ -1320,6 +1428,62 @@ export function TaskDetail({
           )}
 
           {/* ── Diff Tab ───────────────────────────────────── */}
+          {activeTab === "artifacts" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold text-primary">Work products</h2>
+                <p className="text-xs text-dimmed mt-1">
+                  Outputs persistidos desta tarefa: PRs, branches, worktrees e documentação.
+                </p>
+              </div>
+              {artifacts.length === 0 ? (
+                <div className="flex items-center justify-center h-32 border border-dashed border-strong rounded-lg">
+                  <p className="text-sm text-dimmed">Nenhum artifact registrado ainda.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {artifacts.map((artifact) => {
+                    const isLink = /^https?:\/\//.test(artifact.uri);
+                    return (
+                      <div
+                        key={artifact.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-default bg-input/40 p-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="text-[9px] px-1.5 py-0 h-auto">
+                              {artifact.kind}
+                            </Badge>
+                            <span className="text-xs font-medium text-secondary">
+                              {artifact.title}
+                            </span>
+                          </div>
+                          <code className="mt-1 block truncate text-[11px] text-dimmed">
+                            {artifact.uri}
+                          </code>
+                        </div>
+                        {isLink ? (
+                          <a
+                            href={artifact.uri}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 text-xs text-accent hover:underline"
+                          >
+                            Abrir
+                          </a>
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-dimmed">
+                            {formatDateTime(artifact.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === "diff" && (
             <div className="flex-1 min-h-0 flex flex-col p-4">
               {task.branchName ? (
@@ -1329,6 +1493,209 @@ export function TaskDetail({
                   <p className="text-sm text-dimmed">Sem alterações — branch não criada</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Cost Tab ───────────────────────────────────── */}
+          {activeTab === "cost" && task.latestRun?.costStats && (
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                    Custo do Provider
+                  </h2>
+                  {task.maxCost !== undefined && (
+                    <span
+                      className="text-[10px] px-2 py-1 rounded"
+                      style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}
+                    >
+                      Budget: ${task.maxCost.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div
+                    className="rounded-lg p-4 border"
+                    style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                  >
+                    <div
+                      className="text-[10px] uppercase tracking-wider mb-1"
+                      style={{ color: "var(--text-dimmed)" }}
+                    >
+                      Total Tokens
+                    </div>
+                    <div
+                      className="text-xl font-semibold tabular-nums"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {(task.latestRun.costStats.total_tokens || 0).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <div
+                    className="rounded-lg p-4 border"
+                    style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                  >
+                    <div
+                      className="text-[10px] uppercase tracking-wider mb-1"
+                      style={{ color: "var(--text-dimmed)" }}
+                    >
+                      Custo Total
+                    </div>
+                    <div
+                      className="text-xl font-semibold tabular-nums"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      ${((task.latestRun.costStats.input || 0) / 1000000).toFixed(6)}
+                    </div>
+                  </div>
+
+                  {task.latestRun.costStats.duration_ms && (
+                    <div
+                      className="rounded-lg p-4 border"
+                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                    >
+                      <div
+                        className="text-[10px] uppercase tracking-wider mb-1"
+                        style={{ color: "var(--text-dimmed)" }}
+                      >
+                        Latência
+                      </div>
+                      <div
+                        className="text-xl font-semibold tabular-nums"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
+                      </div>
+                    </div>
+                  )}
+
+                  {task.latestRun.costStats.tool_calls !== undefined && (
+                    <div
+                      className="rounded-lg p-4 border"
+                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                    >
+                      <div
+                        className="text-[10px] uppercase tracking-wider mb-1"
+                        style={{ color: "var(--text-dimmed)" }}
+                      >
+                        Tool Calls
+                      </div>
+                      <div
+                        className="text-xl font-semibold tabular-nums"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {task.latestRun.costStats.tool_calls}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className="rounded-lg p-4 border"
+                  style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                >
+                  <h3
+                    className="text-xs font-semibold mb-3"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Tokens
+                  </h3>
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <div>
+                      <span className="text-dimmed">Input: </span>
+                      <span
+                        className="font-medium tabular-nums"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        ↓{(task.latestRun.costStats.input_tokens || 0).toLocaleString()}
+                      </span>
+                    </div>
+                    {task.latestRun.costStats.cached && task.latestRun.costStats.cached > 0 && (
+                      <div>
+                        <span className="text-dimmed">Cached: </span>
+                        <span
+                          className="font-medium tabular-nums"
+                          style={{ color: "var(--text-primary)" }}
+                        >
+                          +{task.latestRun.costStats.cached.toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-dimmed">Output: </span>
+                      <span
+                        className="font-medium tabular-nums"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        ↑{(task.latestRun.costStats.output_tokens || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {task.latestRun.costStats.models &&
+                  Object.keys(task.latestRun.costStats.models).length > 0 && (
+                    <div
+                      className="rounded-lg p-4 border"
+                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                    >
+                      <h3
+                        className="text-xs font-semibold mb-3"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        Modelos
+                      </h3>
+                      <div className="space-y-3">
+                        {Object.entries(task.latestRun.costStats.models).map(([model, stats]) => (
+                          <div
+                            key={model}
+                            className="flex items-center justify-between p-3 rounded-lg"
+                            style={{ background: "var(--bg-input)" }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
+                                style={{ background: "var(--accent-muted)" }}
+                              >
+                                🤖
+                              </div>
+                              <span
+                                className="text-xs font-mono"
+                                style={{ color: "var(--text-primary)" }}
+                              >
+                                {model}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs">
+                              <div className="text-right">
+                                <div className="text-dimmed">tokens</div>
+                                <div
+                                  className="font-medium tabular-nums"
+                                  style={{ color: "var(--text-primary)" }}
+                                >
+                                  {stats.total_tokens.toLocaleString()}
+                                </div>
+                              </div>
+                              {stats.input !== undefined && (
+                                <div className="text-right">
+                                  <div className="text-dimmed">custo</div>
+                                  <div
+                                    className="font-medium tabular-nums"
+                                    style={{ color: "var(--accent)" }}
+                                  >
+                                    ${(stats.input / 1000000).toFixed(6)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+              </div>
             </div>
           )}
         </div>

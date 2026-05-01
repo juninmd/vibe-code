@@ -52,7 +52,9 @@ interface SidebarProps {
   onOpenStats?: () => void;
   onOpenSkills?: () => void;
   onOpenRuntimes?: () => void;
+  onOpenTemplates?: () => void;
   onOpenInbox?: () => void;
+  onOpenQuickView?: () => void;
   connected: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
@@ -69,7 +71,9 @@ export function Sidebar({
   onOpenStats,
   onOpenSkills,
   onOpenRuntimes,
+  onOpenTemplates,
   onOpenInbox,
+  onOpenQuickView,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -238,6 +242,31 @@ export function Sidebar({
               </svg>
             </button>
           )}
+          {onOpenQuickView && (
+            <button
+              type="button"
+              onClick={onOpenQuickView}
+              title="Repositórios em Cards"
+              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="3" width="5" height="5" rx="1" />
+                <rect x="9" y="3" width="5" height="5" rx="1" />
+                <rect x="2" y="10" width="5" height="3" rx="1" />
+                <rect x="9" y="10" width="5" height="3" rx="1" />
+              </svg>
+            </button>
+          )}
           {onOpenInbox && (
             <button
               type="button"
@@ -282,6 +311,16 @@ export function Sidebar({
                 <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
                 <path d="M5 13h6M8 11v2" />
               </svg>
+            </button>
+          )}
+          {onOpenTemplates && (
+            <button
+              type="button"
+              onClick={onOpenTemplates}
+              title="Templates"
+              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+            >
+              <span className="text-sm">📦</span>
             </button>
           )}
           <button
@@ -370,6 +409,32 @@ export function Sidebar({
                   </svg>
                 </button>
               )}
+              {onOpenQuickView && (
+                <button
+                  type="button"
+                  onClick={onOpenQuickView}
+                  aria-label="Visualização rápida"
+                  title="Repositórios em Cards"
+                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="2" y="3" width="5" height="5" rx="1" />
+                    <rect x="9" y="3" width="5" height="5" rx="1" />
+                    <rect x="2" y="10" width="5" height="3" rx="1" />
+                    <rect x="9" y="10" width="5" height="3" rx="1" />
+                  </svg>
+                </button>
+              )}
               {onOpenSkills && (
                 <button
                   type="button"
@@ -439,6 +504,17 @@ export function Sidebar({
                     <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
                     <path d="M5 13h6M8 11v2" />
                   </svg>
+                </button>
+              )}
+              {onOpenTemplates && (
+                <button
+                  type="button"
+                  onClick={onOpenTemplates}
+                  aria-label="Abrir templates"
+                  title="Templates"
+                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
+                >
+                  <span className="text-xs">📦</span>
                 </button>
               )}
               <button

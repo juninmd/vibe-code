@@ -198,6 +198,17 @@ export class GitService {
     }
   }
 
+  async listRemoteBranches(repo: { url: string; provider: string }): Promise<string[]> {
+    if (!this._providers) return [repo.url.split("/").pop() ?? "main"];
+    const resolved = this._providers.resolve(repo.url);
+    if (!resolved) return [repo.url.split("/").pop() ?? "main"];
+    try {
+      return await resolved.adapter.listBranches(resolved.token, repo.url);
+    } catch {
+      return [repo.url.split("/").pop() ?? "main"];
+    }
+  }
+
   async createRemoteRepo(
     provider: "github" | "gitlab",
     name: string,

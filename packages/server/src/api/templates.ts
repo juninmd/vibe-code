@@ -73,7 +73,7 @@ export function createTemplatesRouter(_db: Db, skillsLoader: SkillsLoader) {
   // POST /api/templates/import — Restore a template into ~/.agents
   app.post("/import", async (c) => {
     try {
-      const { name, overwrite } = await c.req.json();
+      const { name } = await c.req.json();
       if (!name) return c.json({ error: "Name is required" }, 400);
 
       const templatesDir = join(homedir(), ".vibe-code", "templates");

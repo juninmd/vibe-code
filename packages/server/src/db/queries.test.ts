@@ -85,6 +85,24 @@ describe("Database queries with repo and task", () => {
       expect(task.description).toBe("Add login page");
     });
 
+    it("creates and updates goal alignment fields", () => {
+      const task = db.tasks.create({
+        title: "Feature",
+        repoId,
+        goal: "Grow activation",
+        desiredOutcome: "Users can complete onboarding",
+      });
+      expect(task.goal).toBe("Grow activation");
+      expect(task.desiredOutcome).toBe("Users can complete onboarding");
+
+      const updated = db.tasks.update(task.id, {
+        goal: "Reduce churn",
+        desiredOutcome: null,
+      });
+      expect(updated?.goal).toBe("Reduce churn");
+      expect(updated?.desiredOutcome).toBeNull();
+    });
+
     it("creates task with engine preference", () => {
       const task = db.tasks.create({ title: "Task", repoId, engine: "claude-code" });
       expect(task.engine).toBe("claude-code");
@@ -223,6 +241,34 @@ describe("Database queries with repo and task", () => {
       expect(streams).toContain("stderr");
       expect(streams).toContain("system");
       expect(streams).toContain("stdin");
+    });
+  });
+
+  describe("Artifact queries", () => {
+    it("upserts and lists task artifacts", () => {
+      const artifact = db.artifacts.upsert({
+        taskId,
+        runId,
+        kind: "pull_request",
+        title: "Pull request",
+        uri: "https://github.com/owner/repo/pull/1",
+        metadata: { branch: "feature/test" },
+      });
+
+      expect(artifact.kind).toBe("pull_request");
+      expect(artifact.metadata).toEqual({ branch: "feature/test" });
+
+      db.artifacts.upsert({
+        taskId,
+        runId,
+        kind: "pull_request",
+        title: "Updated pull request",
+        uri: "https://github.com/owner/repo/pull/1",
+      });
+
+      const artifacts = db.artifacts.listByTask(taskId);
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0].title).toBe("Updated pull request");
     });
   });
 

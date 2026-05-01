@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+### Added
+- **Goal Alignment**: Tasks now store explicit goal and desired outcome fields and inject them into agent context.
+- **Persistent Run State**: Run snapshots now preserve branch, worktree, session, and validator progress details.
+- **Task Artifacts**: Tasks now expose persisted work products such as worktrees, branches, docs, and pull requests.
+- **GitHub OAuth Login**: Public deployments can require GitHub social login with HttpOnly sessions instead of exposing a GitHub token in the browser.
+
+### Fixed
+- Corrigido `OpenCodeEngine` para criar o diretório `.vibe-code/prompts` antes de gravar prompts temporários.
+- Corrigidas falhas de typecheck/lint no web em toasts, dependências de skills, badges, diff viewer e componentes de repositório.
+- Corrigida a validação de caminhos do `RepoSkillsLoader` e seus testes em Windows.
+- Ajustados testes do orchestrator para não dependerem de LiteLLM/revisores externos no ambiente local.
+
 ## [0.2.0] - 2026-05-01
 ### Added
 - **Skills Market**: New tab in Skills Browser to install/uninstall skills from GitHub repositories.
@@ -8,6 +21,9 @@
 - **Improved Task Detail**: Real-time phase tracking and enhanced log viewer.
 - **Budget Control**: Ability to set `maxCost` on tasks to limit AI spending.
 - **Advanced Skill Metadata**: Support for versioning, dependencies, and tags for skills.
+
+### Fixed
+- **Skills Preview**: Restored rendered Markdown preview for skill, rule, agent, and workflow files.
 
 ## [0.1.0] - 2026-05-01
 ### Added

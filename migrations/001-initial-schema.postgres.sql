@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   column_order REAL NOT NULL DEFAULT 0,
   branch_name TEXT,
   pr_url TEXT,
+  goal TEXT,
+  desired_outcome TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -83,6 +85,35 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
   FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+-- Task artifacts / work products
+CREATE TABLE IF NOT EXISTS task_artifacts (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  run_id TEXT,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  uri TEXT NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+  FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE SET NULL,
+  UNIQUE(task_id, kind, uri)
+);
+
+-- GitHub OAuth sessions
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id TEXT PRIMARY KEY,
+  github_id TEXT NOT NULL,
+  username TEXT NOT NULL,
+  display_name TEXT,
+  avatar_url TEXT,
+  access_token TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL
 );
 
 -- Agent logs
@@ -142,6 +173,7 @@ CREATE INDEX idx_agent_runs_workspace_id ON agent_runs(workspace_id);
 CREATE INDEX idx_agent_runs_task_id ON agent_runs(task_id);
 CREATE INDEX idx_agent_logs_workspace_id ON agent_logs(workspace_id);
 CREATE INDEX idx_agent_logs_run_id ON agent_logs(run_id);
+CREATE INDEX idx_auth_sessions_expires ON auth_sessions(expires_at);
 CREATE INDEX idx_skills_workspace_id ON skills(workspace_id);
 CREATE INDEX idx_autopilots_workspace_id ON autopilots(workspace_id);
 CREATE INDEX idx_autopilots_skill_id ON autopilots(skill_id);

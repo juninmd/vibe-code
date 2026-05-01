@@ -321,13 +321,9 @@ describe("OpenCodeEngine.parseLine", () => {
 });
 
 describe("OpenCodeEngine.buildCommand", () => {
-  it("passes the prompt as a positional message argument", () => {
+  it("passes correct base arguments without prompt (prompt sent via stdin)", () => {
     const engine = new CommandInspectingOpenCodeEngine();
-    const command = engine.getCommand(
-      "opencode/minimax-m2.5-free",
-      "Create a file named hello.txt",
-      "/tmp/workdir"
-    );
+    const command = engine.getCommand("opencode/minimax-m2.5-free", "/tmp/workdir");
 
     expect(command).toEqual([
       "opencode",
@@ -338,9 +334,17 @@ describe("OpenCodeEngine.buildCommand", () => {
       "opencode/minimax-m2.5-free",
       "--dir",
       "/tmp/workdir",
-      "Create a file named hello.txt",
     ]);
+    expect(command).not.toContain("--file");
     expect(command).not.toContain("--prompt");
+  });
+
+  it("includes --session when resumeSessionId is provided", () => {
+    const engine = new CommandInspectingOpenCodeEngine();
+    const command = engine.getCommand("opencode/minimax-m2.5-free", "/tmp/workdir", "session-123");
+
+    expect(command).toContain("--session");
+    expect(command).toContain("session-123");
   });
 
   it("uses pipe stdin mode on all platforms (stdin is closed immediately on Windows)", () => {

@@ -331,6 +331,28 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
           </a>
         )}
 
+        {task.issueUrl &&
+          (() => {
+            const { name, icon: IssueIcon, color } = getProviderFromUrl(task.issueUrl);
+            return (
+              <a
+                href={task.issueUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5"
+              >
+                <Badge
+                  variant="info"
+                  className={`text-[10px] py-0 px-1.5 hover:opacity-80 transition-opacity ${color}`}
+                >
+                  <IssueIcon size={9} className="mr-0.5" />
+                  {name}
+                </Badge>
+              </a>
+            );
+          })()}
+
         {retryEntry && task.status === "failed" && (
           <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
         )}
@@ -342,44 +364,43 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
             {elapsed && <span className="shrink-0 text-info/80 tabular-nums">{elapsed}</span>}
           </span>
         )}
-        {!isRunning &&
-          task.latestRun?.startedAt &&
-          task.latestRun?.finishedAt &&
-          (() => {
-            const dur = formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt);
-            const stats = task.latestRun.costStats;
-            const cost = stats?.input !== undefined ? stats.input / 1_000_000 : 0;
-            const hasTokens = stats && (stats.input_tokens > 0 || stats.output_tokens > 0);
 
-            return (
-              <div className="ml-auto flex flex-col items-end gap-0.5">
-                {dur && (
-                  <span
-                    className="text-[10px] tabular-nums"
-                    style={{ color: "var(--text-dimmed)" }}
-                  >
-                    ⏱ {dur}
-                  </span>
-                )}
-                {(cost > 0 || hasTokens) && (
-                  <span
-                    className="text-[9px] font-mono whitespace-nowrap"
-                    style={{ color: "var(--text-dimmed)" }}
-                  >
-                    {cost > 0 && (
-                      <span className="text-warning-muted font-bold mr-1">${cost.toFixed(3)}</span>
-                    )}
-                    {hasTokens && (
-                      <span>
-                        {Math.round(stats.input_tokens / 100) / 10}k/
-                        {Math.round(stats.output_tokens / 100) / 10}k
+        {task.latestRun?.costStats && (
+          <div className={`${isRunning ? "ml-2" : "ml-auto"} flex flex-col items-end gap-0.5`}>
+            {(() => {
+              const stats = task.latestRun?.costStats;
+              if (!stats) return null;
+              const cost = stats.input !== undefined ? stats.input / 1_000_000 : 0;
+              const hasTokens = stats.input_tokens > 0 || stats.output_tokens > 0;
+
+              return (
+                <span
+                  className="text-[9px] font-mono whitespace-nowrap flex items-center gap-1.5"
+                  style={{ color: "var(--text-dimmed)" }}
+                >
+                  {cost > 0 && (
+                    <span className="text-warning-muted font-bold">${cost.toFixed(3)}</span>
+                  )}
+                  {hasTokens && (
+                    <span className="flex items-center gap-1">
+                      <span title="Input Tokens">
+                        ↓{Math.round(stats.input_tokens / 100) / 10}k
                       </span>
-                    )}
-                  </span>
-                )}
-              </div>
-            );
-          })()}
+                      <span title="Output Tokens">
+                        ↑{Math.round(stats.output_tokens / 100) / 10}k
+                      </span>
+                    </span>
+                  )}
+                </span>
+              );
+            })()}
+            {!isRunning && task.latestRun?.startedAt && task.latestRun?.finishedAt && (
+              <span className="text-[10px] tabular-nums" style={{ color: "var(--text-dimmed)" }}>
+                ⏱ {formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

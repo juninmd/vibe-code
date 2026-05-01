@@ -158,9 +158,8 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   router.get("/:id/branches", async (c) => {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
-    if (!repo.localPath) return c.json({ data: [repo.defaultBranch] });
-    const branches = await git.listBranches(repo.localPath);
-    // Ensure default branch is always first
+
+    const branches = await git.listRemoteBranches(repo);
     const sorted = [repo.defaultBranch, ...branches.filter((b) => b !== repo.defaultBranch)];
     return c.json({ data: sorted });
   });

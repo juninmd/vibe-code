@@ -35,6 +35,7 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
         <div className="flex items-center justify-between p-5 border-b border-strong/50">
           <div className="flex items-center gap-2">
             <svg
+              aria-hidden="true"
               width="18"
               height="18"
               viewBox="0 0 24 24"

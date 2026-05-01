@@ -12,12 +12,24 @@ import type {
   ReviewFinding,
   RunMetrics,
   RunPhase,
+  RunStateSnapshot,
   SkillEffectiveness,
   Task,
+  TaskArtifact,
+  TaskArtifactKind,
   TaskSchedule,
   TaskStatus,
   UpdateTaskRequest,
 } from "@vibe-code/shared";
+
+interface RunResult {
+  changes: number;
+  lastInsertRowid: number | bigint;
+}
+
+function getChanges(info: RunResult): number {
+  return info.changes;
+}
 
 // ─── Row types (snake_case from SQLite) ──────────────────────────────────────
 
@@ -47,15 +59,19 @@ interface TaskRow {
   base_branch: string | null;
   branch_name: string | null;
   pr_url: string | null;
+  issue_url: string | null;
   parent_task_id: string | null;
   agent_id: string | null;
   workflow_id: string | null;
   matched_skills: string | null;
   tags: string | null;
   notes: string | null;
+  goal: string | null;
+  desired_outcome: string | null;
   planner_spec: string | null;
   depends_on: string | null;
   pending_approval: number;
+  max_cost: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -85,6 +101,17 @@ interface LogRow {
   stream: string;
   content: string;
   timestamp: string;
+}
+
+interface ArtifactRow {
+  id: string;
+  task_id: string;
+  run_id: string | null;
+  kind: string;
+  title: string;
+  uri: string;
+  metadata: string | null;
+  created_at: string;
 }
 
 // ─── Mappers ─────────────────────────────────────────────────────────────────
@@ -118,15 +145,19 @@ function mapTask(row: TaskRow): Task {
     baseBranch: row.base_branch,
     branchName: row.branch_name,
     prUrl: row.pr_url,
+    issueUrl: row.issue_url,
     parentTaskId: row.parent_task_id,
     agentId: row.agent_id,
     workflowId: row.workflow_id ?? null,
     matchedSkills: JSON.parse(row.matched_skills || "[]") as string[],
     tags: JSON.parse(row.tags || "[]") as string[],
     notes: row.notes ?? "",
+    goal: row.goal ?? null,
+    desiredOutcome: row.desired_outcome ?? null,
     plannerSpec: row.planner_spec ?? null,
     dependsOn: JSON.parse(row.depends_on || "[]") as string[],
     pendingApproval: Boolean(row.pending_approval),
+    maxCost: row.max_cost ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -160,6 +191,19 @@ function mapLog(row: LogRow): AgentLog {
     stream: row.stream as AgentLog["stream"],
     content: row.content,
     timestamp: row.timestamp,
+  };
+}
+
+function mapArtifact(row: ArtifactRow): TaskArtifact {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    runId: row.run_id,
+    kind: row.kind as TaskArtifactKind,
+    title: row.title,
+    uri: row.uri,
+    metadata: row.metadata ? JSON.parse(row.metadata) : null,
+    createdAt: row.created_at,
   };
 }
 
@@ -255,7 +299,7 @@ export function createTaskQueries(db: Database) {
       const dependsOnJson = JSON.stringify(req.dependsOn ?? []);
       const row = db
         .prepare(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
         )
         .get(
           req.title,
@@ -272,7 +316,10 @@ export function createTaskQueries(db: Database) {
           req.agentId ?? null,
           req.workflowId ?? null,
           dependsOnJson,
-          "0"
+          "0",
+          req.issueUrl ?? null,
+          req.goal ?? null,
+          req.desiredOutcome ?? null
         ) as TaskRow | null;
       if (!row) throw new Error("Failed to create task");
       return mapTask(row as TaskRow);
@@ -311,6 +358,14 @@ export function createTaskQueries(db: Database) {
       if (req.notes !== undefined) {
         sets.push("notes = ?");
         values.push(req.notes);
+      }
+      if (req.goal !== undefined) {
+        sets.push("goal = ?");
+        values.push(req.goal ?? null);
+      }
+      if (req.desiredOutcome !== undefined) {
+        sets.push("desired_outcome = ?");
+        values.push(req.desiredOutcome ?? null);
       }
       if (req.dependsOn !== undefined) {
         sets.push("depends_on = ?");
@@ -358,28 +413,28 @@ export function createTaskQueries(db: Database) {
       const sql = repoId
         ? "UPDATE tasks SET status = 'archived', updated_at = datetime('now') WHERE status = 'done' AND repo_id = ?"
         : "UPDATE tasks SET status = 'archived', updated_at = datetime('now') WHERE status = 'done'";
-      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
-      return (info as any).changes;
+      const info = db.prepare(sql).run(...(repoId ? [repoId] : []));
+      return getChanges(info);
     },
     clearFailed: (repoId?: string): number => {
       const sql = repoId
         ? "DELETE FROM tasks WHERE status = 'failed' AND repo_id = ?"
         : "DELETE FROM tasks WHERE status = 'failed'";
-      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
-      return (info as any).changes;
+      const info = db.prepare(sql).run(...(repoId ? [repoId] : []));
+      return getChanges(info);
     },
     retryFailed: (repoId?: string): number => {
       const sql = repoId
         ? "UPDATE tasks SET status = 'backlog', updated_at = datetime('now') WHERE status = 'failed' AND repo_id = ?"
         : "UPDATE tasks SET status = 'backlog', updated_at = datetime('now') WHERE status = 'failed'";
-      const info = db.prepare(repoId ? sql : sql).run(...(repoId ? [repoId] : []));
-      return (info as any).changes;
+      const info = db.prepare(sql).run(...(repoId ? [repoId] : []));
+      return getChanges(info);
     },
     cleanupArchived: (days = 30): number => {
       const sql =
         "DELETE FROM tasks WHERE status = 'archived' AND updated_at < datetime('now', '-' || ? || ' days')";
       const info = db.prepare(sql).run(days);
-      return (info as any).changes;
+      return getChanges(info);
     },
   };
 }
@@ -483,8 +538,24 @@ export function createRunQueries(db: Database) {
         id
       );
     },
-    updateStateSnapshot: (id: string, phase: RunPhase): void => {
-      const snapshot = JSON.stringify({ phase, ts: new Date().toISOString() });
+    updateStateSnapshot: (
+      id: string,
+      phase: RunPhase,
+      details: Omit<RunStateSnapshot, "phase" | "ts"> = {}
+    ): void => {
+      const previous = stmts.getById.get(id);
+      let previousDetails: Record<string, unknown> = {};
+      try {
+        previousDetails = previous?.state_snapshot ? JSON.parse(previous.state_snapshot) : {};
+      } catch {
+        previousDetails = {};
+      }
+      const snapshot = JSON.stringify({
+        ...previousDetails,
+        ...details,
+        phase,
+        ts: new Date().toISOString(),
+      });
       db.prepare("UPDATE agent_runs SET state_snapshot = ?, current_status = ? WHERE id = ?").run(
         snapshot,
         phase,
@@ -496,6 +567,50 @@ export function createRunQueries(db: Database) {
         JSON.stringify(costStats),
         id
       );
+    },
+  };
+}
+
+// ─── Task Artifact Queries ───────────────────────────────────────────────────
+
+export function createArtifactQueries(db: Database) {
+  return {
+    listByTask: (taskId: string): TaskArtifact[] => {
+      const rows = db
+        .prepare<ArtifactRow, [string]>(
+          "SELECT * FROM task_artifacts WHERE task_id = ? ORDER BY created_at DESC"
+        )
+        .all(taskId);
+      return rows.map(mapArtifact);
+    },
+    upsert: (params: {
+      taskId: string;
+      runId?: string | null;
+      kind: TaskArtifactKind;
+      title: string;
+      uri: string;
+      metadata?: Record<string, unknown> | null;
+    }): TaskArtifact => {
+      const row = db
+        .prepare<ArtifactRow, [string, string | null, string, string, string, string | null]>(
+          `INSERT INTO task_artifacts (task_id, run_id, kind, title, uri, metadata)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(task_id, kind, uri) DO UPDATE SET
+             run_id = excluded.run_id,
+             title = excluded.title,
+             metadata = excluded.metadata
+           RETURNING *`
+        )
+        .get(
+          params.taskId,
+          params.runId ?? null,
+          params.kind,
+          params.title,
+          params.uri,
+          params.metadata ? JSON.stringify(params.metadata) : null
+        );
+      if (!row) throw new Error("Failed to upsert task artifact");
+      return mapArtifact(row);
     },
   };
 }
@@ -637,7 +752,7 @@ export function createPromptTemplateQueries(db: Database) {
     },
     remove: (id: string): boolean => {
       const info = stmts.remove.run(id);
-      return (info as any).changes > 0;
+      return getChanges(info) > 0;
     },
   };
 }

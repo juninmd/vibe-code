@@ -214,4 +214,27 @@ export class GitHubProvider implements GitProviderAdapter {
         url: issue.html_url,
       }));
   }
+
+  async listBranches(token: string, repoUrl: string): Promise<string[]> {
+    const repoPath = getRepoOwnerAndName(repoUrl);
+    const branches: string[] = [];
+    let page = 1;
+    const perPage = 100;
+
+    while (branches.length < 500) {
+      const res = await fetch(
+        `${GH_API}/repos/${repoPath}/branches?per_page=${perPage}&page=${page}`,
+        { headers: headers(token) }
+      );
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      const data = (await res.json()) as { name: string }[];
+      if (data.length === 0) break;
+      for (const b of data) {
+        branches.push(b.name);
+      }
+      if (data.length < perPage) break;
+      page++;
+    }
+    return branches;
+  }
 }
