@@ -9,8 +9,8 @@ import { getProviderFromUrl } from "./ui/git-icons";
 const SIDEBAR_WIDTH_KEY = "vibe-code-sidebar-width";
 const SIDEBAR_COLLAPSED_KEY = "vibe-code-sidebar-collapsed";
 const MIN_WIDTH = 200;
-const MAX_WIDTH = 460;
-const DEFAULT_WIDTH = 280;
+const MAX_WIDTH = 560;
+const DEFAULT_WIDTH = 320;
 
 function readStoredWidth(): number {
   try {
@@ -349,7 +349,8 @@ export function Sidebar({
         <>
           {/* Brand header */}
           <div className="px-4 pt-4 pb-3 border-b border-white/[0.05]">
-            <div className="flex items-center gap-2 mb-0.5">
+            {/* Row 1: logo + collapse + connection */}
+            <div className="flex items-center gap-2 mb-2">
               <button
                 type="button"
                 onClick={toggleCollapse}
@@ -384,6 +385,9 @@ export function Sidebar({
                 className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-border-strong"}`}
                 title={connected ? "Conectado" : "Desconectado"}
               />
+            </div>
+            {/* Row 2: action buttons */}
+            <div className="flex items-center gap-0.5 flex-wrap">
               {onOpenStats && (
                 <button
                   type="button"

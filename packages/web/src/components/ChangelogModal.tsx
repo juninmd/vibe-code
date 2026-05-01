@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../api/client";
 
 interface ChangelogModalProps {
@@ -70,9 +72,11 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
               Falha ao carregar changelog: {error}
             </div>
           ) : (
-            <pre className="whitespace-pre-wrap font-sans">
-              {content || "Nenhum changelog encontrado."}
-            </pre>
+            <div className="prose prose-sm prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content || "Nenhum changelog encontrado."}
+              </ReactMarkdown>
+            </div>
           )}
         </div>
 
