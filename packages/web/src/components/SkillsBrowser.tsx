@@ -704,7 +704,7 @@ export function SkillsBrowser({
                     {selected.description || "Sem descrição"}
                   </p>
                   {(selected as SkillEntry).dependencies &&
-                    (selected as SkillEntry).dependencies?.length > 0 && (
+                    ((selected as SkillEntry).dependencies?.length ?? 0) > 0 && (
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         <span className="text-[9px] font-semibold uppercase text-muted">
                           Dependencies:

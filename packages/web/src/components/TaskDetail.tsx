@@ -475,10 +475,10 @@ export function TaskDetail({
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
-  const [parentTask, setParentTask] = useState<TaskWithRun | null>(null);
+  const [_parentTask, setParentTask] = useState<TaskWithRun | null>(null);
 
   // Parse approval request from notes if it exists
-  const approvalRequest = useMemo(() => {
+  const _approvalRequest = useMemo(() => {
     if (!task.pendingApproval) return null;
     try {
       const data = JSON.parse(task.notes);
@@ -489,7 +489,7 @@ export function TaskDetail({
     return null;
   }, [task.pendingApproval, task.notes]);
 
-  const subTasks = useMemo(() => {
+  const _subTasks = useMemo(() => {
     return allTasks.filter((t) => t.parentTaskId === task.id);
   }, [allTasks, task.id]);
 

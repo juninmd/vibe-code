@@ -7,6 +7,28 @@ export class GitService {
   private basePath: string;
   private _providers: ProviderRegistry | null = null;
 
+  static gitEnv(): Record<string, string | undefined> {
+    const base = process.env;
+    let existing = 0;
+
+    for (const key of Object.keys(base)) {
+      if (key === "GIT_CONFIG_COUNT") {
+        const val = parseInt(base[key] || "0", 10);
+        if (!Number.isNaN(val)) {
+          existing = val;
+        }
+      }
+    }
+
+    return {
+      ...base,
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_COUNT: (existing + 1).toString(),
+      [`GIT_CONFIG_KEY_${existing}`]: "safe.directory",
+      [`GIT_CONFIG_VALUE_${existing}`]: "*",
+    };
+  }
+
   set providers(registry: ProviderRegistry) {
     this._providers = registry;
   }
@@ -364,6 +386,7 @@ export class GitService {
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const proc = Bun.spawn(cmd, {
       cwd: options?.cwd,
+      env: GitService.gitEnv(),
       stdout: "pipe",
       stderr: "pipe",
     });
