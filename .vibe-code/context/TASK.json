@@ -1,0 +1,14 @@
+{
+  "id": "81dca1918a4c3729",
+  "title": "Adicione testes unitários",
+  "status": "backlog",
+  "branchName": null,
+  "baseBranch": "main",
+  "parentTaskId": "dcd587cc460ea77d",
+  "tags": [],
+  "goal": null,
+  "desiredOutcome": null,
+  "runId": "14e1935c8edc23a7",
+  "engine": "opencode",
+  "matchedSkills": []
+}
