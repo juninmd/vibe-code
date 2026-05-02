@@ -122,7 +122,11 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     .join("\n");
 }
 
-function buildValidationRepairPrompt(task: Task, verification: WorktreeVerificationResult): string {
+function buildValidationRepairPrompt(
+  task: Task,
+  verification: WorktreeVerificationResult,
+  memoryContext?: string
+): string {
   const failedResult = verification.results.find((result) => !result.passed);
   const failedOutput = [failedResult?.stdout, failedResult?.stderr]
     .filter(Boolean)
@@ -144,6 +148,7 @@ function buildValidationRepairPrompt(task: Task, verification: WorktreeVerificat
     verification.summary,
     failedResult ? `Failed command: ${failedResult.command}` : "",
     failedOutput ? `Failure output:\n${failedOutput}` : "",
+    memoryContext ? `\n\n## Previous Attempts Context\n${memoryContext}` : "",
     "",
     "Task context:",
     `Title: ${task.title}`,
@@ -815,6 +820,8 @@ export async function executeAgent(
     sysLog(`Running deterministic validation, max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
     setRunPhase("validating");
     let validatorPassed = false;
+    const repairHistory: string[] = [];
+
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
       validatorAttempts = attempt;
       setRunPhase(
@@ -836,13 +843,23 @@ export async function executeAgent(
       }
 
       if (attempt < FINAL_VALIDATOR_MAX_ATTEMPTS) {
+        const failedResult = latestVerification.results.find((r) => !r.passed);
+        const failedSummary = failedResult
+          ? `[${attempt}] ${failedResult.name}: exit ${failedResult.exitCode}`
+          : `[${attempt}] unknown failure`;
+        repairHistory.push(failedSummary);
+        const memoryContext =
+          repairHistory.length > 0
+            ? `Previous repair attempts (to avoid repeating same fix):\n${repairHistory.join("\n")}`
+            : undefined;
+
         sysLog("Deterministic validation failed. Launching targeted repair loop...");
         setRunPhase("fixing", {
           validationCommands: [...latestVerification.commands],
           validationSummary: latestVerification.summary,
         });
         let repairExitCode: number | null = null;
-        const repairPrompt = buildValidationRepairPrompt(task, latestVerification);
+        const repairPrompt = buildValidationRepairPrompt(task, latestVerification, memoryContext);
 
         for await (const event of engine.execute(repairPrompt, wtPath, {
           runId: run.id,

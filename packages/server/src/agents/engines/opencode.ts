@@ -1,5 +1,6 @@
-import { rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -153,18 +154,51 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   /**
-   * Returns the CLI command to spawn.
+   * Writes opencode.json with permissions pre-configured for non-interactive mode.
+   * This runs BEFORE the agent starts so the config is ready.
+   */
+  async prepareWorkdir(workdir: string, _skills: SkillPayload): Promise<string[]> {
+    const configPath = join(workdir, "opencode.json");
+    const config: Record<string, unknown> = {
+      permission: {
+        "*": "allow",
+        question: "allow",
+        plan_enter: "allow",
+        plan_exit: "allow",
+      },
+      tools: {
+        file_write: { "max-size-kb": 2048 },
+        bash: { "timeout-sec": 600, "allowed-commands": ["*"] },
+        web_fetch: { "timeout-sec": 30 },
+      },
+      model: {
+        fallback: ["anthropic/claude-sonnet-4-5", "opencode/minimax-m2.7"],
+        temperature: 0.7,
+      },
+    };
+
+    const createdFiles: string[] = [];
+    try {
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+      createdFiles.push(configPath);
+    } catch (err) {
+      console.warn("[opencode] Failed to write opencode.json:", err);
+    }
+    return createdFiles;
+  }
+
+  /**
+   * Returns the CLI command arguments to spawn.
    * Override in tests to inject a fake subprocess.
    * Prompt is sent via stdin to avoid Windows command-line length limits.
    */
-  protected buildCommand(model: string, workdir: string, resumeSessionId?: string): string[] {
-    const args = ["opencode", "run", "--format", "json", "--model", model, "--dir", workdir];
+  protected buildCommandArgs(model: string, workdir: string, resumeSessionId?: string): string[] {
+    const args = ["opencode", "run", "--format", "json"];
+    if (model) args.push("--model", model);
+    args.push("--dir", workdir);
     if (resumeSessionId) args.push("--session", resumeSessionId);
     return args;
-  }
-
-  protected getStdinMode(): "pipe" | "ignore" {
-    return "pipe";
   }
 
   async isAvailable(): Promise<boolean> {
@@ -205,14 +239,31 @@ export class OpenCodeEngine implements AgentEngine {
       content: `[opencode] Starting in ${workdir} (model: ${model})`,
     };
 
-    // Write opencode.json with permissions pre-configured for non-interactive mode.
+    // Build config for opencode.json — written in prepareWorkdir, but we also
+    // write it here for immediate use when running without prepareWorkdir.
     const configPath = join(workdir, "opencode.json");
-    const config: Record<string, any> = {
+    interface OpenCodeProvider {
+      id: string;
+      name: string;
+      apiKey: string;
+      apiUrl?: string;
+    }
+    interface OpenCodeConfig {
+      permission: Record<string, string>;
+      tools?: Record<string, unknown>;
+      providers?: OpenCodeProvider[];
+    }
+    const config: OpenCodeConfig = {
       permission: {
         "*": "allow",
         question: "allow",
         plan_enter: "allow",
         plan_exit: "allow",
+      },
+      tools: {
+        file_write: { "max-size-kb": 2048 },
+        bash: { "timeout-sec": 600, "allowed-commands": ["*"] },
+        web_fetch: { "timeout-sec": 30 },
       },
     };
 
@@ -263,16 +314,25 @@ export class OpenCodeEngine implements AgentEngine {
         });
     }
 
-    await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+    try {
+      await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+    } catch {
+      /* best-effort — prepareWorkdir may have already written it */
+    }
 
-    const proc = Bun.spawn(this.buildCommand(model, workdir, options.resumeSessionId), {
+    const args = this.buildCommandArgs(model, workdir, options.resumeSessionId);
+    yield { type: "log", stream: "system", content: `[opencode] running: ${args.join(" ")}` };
+
+    const proc = Bun.spawn(args, {
       cwd: workdir,
       stdout: "pipe",
       stderr: "pipe",
-      stdin: this.getStdinMode(),
+      stdin: "pipe",
+      env: { ...process.env, ...options.env },
     });
 
-    if (this.getStdinMode() === "pipe" && proc.stdin) {
+    // Send prompt via stdin, then close it to signal end of input
+    if (proc.stdin && typeof proc.stdin !== "number") {
       try {
         const sink = proc.stdin as import("bun").FileSink;
         sink.write(prompt);
@@ -495,7 +555,11 @@ export class OpenCodeEngine implements AgentEngine {
     const results: AgentEvent[] = [];
     const jsonObjects: string[] = [];
 
-    // Robust JSON object extraction: count braces and track quotes
+    // Skip empty lines
+    const trimmed = line.trim();
+    if (!trimmed) return results;
+
+    // Try to extract multiple JSON objects from the line using brace counting
     let braceCount = 0;
     let inString = false;
     let escaped = false;
@@ -534,51 +598,165 @@ export class OpenCodeEngine implements AgentEngine {
 
     // If nothing was found via brace counting, try treating as plain text
     if (jsonObjects.length === 0) {
-      const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+        // Skip known non-content lines
+        if (
+          trimmed.startsWith("INFO") ||
+          trimmed.startsWith("DEBUG") ||
+          trimmed.startsWith("TRACE") ||
+          trimmed.startsWith("WARN") ||
+          trimmed.startsWith("[") ||
+          trimmed.includes("model loaded") ||
+          trimmed.includes("initialized")
+        ) {
+          return results;
+        }
         results.push({ type: "log", stream: "stdout", content: trimmed });
       }
+      return results;
     }
 
     for (const jsonStr of jsonObjects) {
       try {
-        const event = JSON.parse(jsonStr) as {
-          type: string;
-          part?: Record<string, unknown>;
-          timestamp?: number;
-        };
-        const part = event.part ?? {};
-        const partType = String(part.type ?? event.type);
+        const raw = JSON.parse(jsonStr) as Record<string, unknown>;
 
-        if (event.type === "text" && (part.text || part.content)) {
-          results.push({
-            type: "log",
-            stream: "stdout",
-            content: String(part.text ?? part.content),
-          });
+        // Handle JSON-RPC 2.0 style messages
+        if (raw.jsonrpc === "2.0" && raw.method) {
+          const method = String(raw.method);
+          const params = (raw.params ?? {}) as Record<string, unknown>;
+
+          if (method === "session/started" || method === "session/resumed") {
+            const sessionId = String(params.sessionId ?? params.id ?? "");
+            if (sessionId) {
+              results.push({ type: "session", sessionId });
+              results.push({
+                type: "log",
+                stream: "system",
+                content: `[opencode] session: ${sessionId}`,
+              });
+            }
+            continue;
+          }
+
+          if (method === "tool/use") {
+            const toolName = String(params.tool ?? "unknown");
+            const callId = String(params.callId ?? params.id ?? "");
+            results.push({
+              type: "tool_use",
+              toolUse: {
+                toolId: callId,
+                toolName,
+                parameters: (params.input ?? {}) as Record<string, unknown>,
+              },
+            });
+            results.push({
+              type: "log",
+              stream: "stdout",
+              content: humanizeToolCall(toolName, (params.input ?? {}) as Record<string, unknown>),
+            });
+            continue;
+          }
+
+          if (method === "tool/result" || method === "tool/completed") {
+            const callId = String(params.callId ?? params.id ?? "");
+            const output = params.output ?? params.result ?? "";
+            const status = params.error ? "error" : "success";
+            results.push({
+              type: "tool_result",
+              toolResult: { toolId: callId, output: String(output), status },
+            });
+            continue;
+          }
+
+          if (method === "cost" || method === "usage") {
+            const costStats = params as Record<string, unknown>;
+            if (costStats.total_tokens || costStats.input_tokens || costStats.output_tokens) {
+              results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+            }
+            continue;
+          }
+
+          if (method === "error" || method === "tool/error") {
+            const msg = String(params.message ?? params.error ?? "Unknown error");
+            results.push({ type: "log", stream: "stderr", content: `[opencode] ${msg}` });
+            results.push({ type: "error", content: msg });
+            continue;
+          }
+
+          // Log other methods as system info
+          results.push({ type: "log", stream: "system", content: `[opencode] ${method}` });
           continue;
         }
 
-        if (event.type === "tool_use" || event.type === "tool" || partType === "tool") {
-          const toolName = String(part.tool ?? part.name ?? "unknown");
-          const callId = String(part.callId ?? part.id ?? "");
-          const state = (part.state ?? {}) as Record<string, unknown>;
-          const status = state.status ?? "calling";
-          const input = (state.input ?? part.input ?? {}) as Record<string, unknown>;
-          const output = state.output ?? part.output ?? part.content;
+        // Handle direct message format with type field
+        const eventType = String(raw.type ?? raw.event ?? "");
+        const part = (raw.part ?? raw.data ?? raw.message ?? raw) as Record<string, unknown>;
+
+        // session events
+        if (eventType === "session" || part.type === "session" || raw.sessionId) {
+          const sessionId = String(raw.sessionId ?? part.sessionId ?? part.id ?? "");
+          if (sessionId) {
+            results.push({ type: "session", sessionId });
+            results.push({
+              type: "log",
+              stream: "system",
+              content: `[opencode] session: ${sessionId}`,
+            });
+          }
+          continue;
+        }
+
+        // cost events
+        if (eventType === "cost" || part.type === "cost" || raw.total_tokens) {
+          const costStats = (raw.costStats ?? raw.usage ?? raw) as Record<string, unknown>;
+          if (costStats.total_tokens || costStats.input_tokens || costStats.output_tokens) {
+            results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+          }
+          continue;
+        }
+
+        // text content
+        if (
+          (eventType === "text" || eventType === "content" || part.type === "text") &&
+          (part.text || part.content || part.message)
+        ) {
+          const text = String(part.text ?? part.content ?? part.message ?? "");
+          if (text.trim()) {
+            results.push({ type: "log", stream: "stdout", content: text });
+          }
+          continue;
+        }
+
+        // tool_use events
+        if (
+          eventType === "tool_use" ||
+          eventType === "tool" ||
+          part.type === "tool_use" ||
+          part.type === "tool_call" ||
+          part.type === "function_call"
+        ) {
+          const toolName = String(part.tool ?? part.name ?? part.function ?? "unknown");
+          const callId = String(part.callId ?? part.id ?? part.call_id ?? "");
+          const state = (part.state ?? part.arguments ?? part.input ?? {}) as Record<
+            string,
+            unknown
+          >;
+          const status = String(part.status ?? state.status ?? "calling");
+          const input = state.input ?? state.arguments ?? state ?? part;
+          const output = state.output ?? part.output ?? part.result;
           const error = state.error ?? part.error;
 
-          if (status === "calling" || !status) {
+          if (status === "calling" || status === "pending" || !status || status === "active") {
             results.push({
               type: "tool_use",
-              toolUse: { toolId: callId, toolName, parameters: input },
+              toolUse: { toolId: callId, toolName, parameters: input as Record<string, unknown> },
             });
-            const label = humanizeToolCall(toolName, input);
+            const label = humanizeToolCall(toolName, input as Record<string, unknown>);
             results.push({ type: "status", content: label });
             results.push({ type: "log", stream: "stdout", content: label });
-          } else if (status === "completed") {
+          } else if (status === "completed" || status === "success" || status === "done") {
             const metadata = (state.metadata ?? part.metadata ?? {}) as Record<string, unknown>;
-            const exitCode = metadata.exitCode ?? metadata.exit;
+            const exitCode = metadata.exitCode ?? metadata.exit ?? metadata.code;
             const label = humanizeToolResult(toolName, output);
 
             results.push({
@@ -586,12 +764,11 @@ export class OpenCodeEngine implements AgentEngine {
               toolResult: {
                 toolId: callId,
                 output: typeof output === "string" ? output : JSON.stringify(output ?? ""),
-                status: "success",
+                status: error ? "error" : "success",
               },
             });
             if (label) results.push({ type: "log", stream: "stdout", content: label });
 
-            // If it completed but with a non-zero exit code, it's effectively an error
             if (exitCode != null && Number(exitCode) !== 0) {
               results.push({
                 type: "log",
@@ -599,11 +776,11 @@ export class OpenCodeEngine implements AgentEngine {
                 content: `  Command exited with code ${exitCode}`,
               });
             }
-          } else if (status === "failed" || error) {
-            const msg = error ? String(error) : "Failed";
+          } else if (status === "failed" || status === "error" || error) {
+            const msg = error ? String(error) : String(part.errorMessage ?? "Failed");
             results.push({
               type: "tool_result",
-              toolResult: { toolId: callId, output: String(error), status: "error" },
+              toolResult: { toolId: callId, output: msg, status: "error" },
             });
             results.push({
               type: "log",
@@ -614,49 +791,100 @@ export class OpenCodeEngine implements AgentEngine {
           continue;
         }
 
-        if ((event.type === "thinking" || partType === "thinking") && part.text) {
+        // thinking events
+        if (
+          (eventType === "thinking" || part.type === "thinking" || part.type === "thought") &&
+          (part.text || part.content || part.thought)
+        ) {
           results.push({ type: "status", content: "Thinking..." });
+          const thought = String(part.text ?? part.content ?? part.thought ?? "");
+          if (thought.trim() && thought.length < 500) {
+            results.push({ type: "log", stream: "stdout", content: `💭 ${thought}` });
+          }
           continue;
         }
 
-        if (event.type === "step_start" || partType === "step-start") {
+        // step events
+        if (
+          eventType === "step_start" ||
+          eventType === "step-start" ||
+          part.type === "step_start"
+        ) {
           results.push({ type: "status", content: "Working..." });
           continue;
         }
-        if (event.type === "step_finish" || partType === "step-finish") {
-          const tokens = part.tokens as Record<string, number> | undefined;
+        if (
+          eventType === "step_finish" ||
+          eventType === "step-finish" ||
+          part.type === "step_finish"
+        ) {
+          const tokens = (part.tokens ?? part.usage ?? raw) as Record<string, number>;
           if (tokens?.total) {
             results.push({
               type: "log",
               stream: "system",
-              content: `  tokens used: ${tokens.total.toLocaleString()}`,
+              content: `  tokens: ${tokens.total.toLocaleString()}`,
             });
           }
           continue;
         }
 
-        if (event.type === "error" || partType === "error") {
-          results.push({
-            type: "log",
-            stream: "stderr",
-            content: String(part.message ?? part.error ?? "Unknown error"),
-          });
+        // error events
+        if (eventType === "error" || part.type === "error" || raw.error) {
+          const msg = String(part.message ?? part.error ?? raw.error ?? "Unknown error");
+          results.push({ type: "log", stream: "stderr", content: msg });
+          results.push({ type: "error", content: msg });
           continue;
         }
 
-        if (event.type === "question" || partType === "question") {
-          const msg = String(part.text ?? part.content ?? "Waiting for input...");
+        // question / confirmation events
+        if (
+          eventType === "question" ||
+          part.type === "question" ||
+          eventType === "confirm" ||
+          part.type === "confirm" ||
+          part.type === "approval"
+        ) {
+          const msg = String(part.text ?? part.content ?? part.message ?? "Waiting for input...");
           results.push({ type: "status", content: "Awaiting input..." });
-          results.push({ type: "log", stream: "stdout", content: `\n[Question] ${msg}` });
+          results.push({ type: "log", stream: "stdout", content: `\n[?] ${msg}` });
           continue;
         }
 
-        if (event.type === "progress" || partType === "progress") {
-          const msg = String(part.message ?? "Working...");
+        // progress / status events
+        if (
+          eventType === "progress" ||
+          part.type === "progress" ||
+          eventType === "status" ||
+          part.type === "status"
+        ) {
+          const msg = String(part.message ?? part.text ?? part.content ?? "Working...");
           results.push({ type: "status", content: msg });
           results.push({ type: "log", stream: "system", content: `  ${msg}` });
+          continue;
+        }
+
+        // message / log events
+        if (eventType === "message" || eventType === "log" || part.type === "log") {
+          const msg = String(part.message ?? part.text ?? part.content ?? JSON.stringify(raw));
+          if (msg.trim()) {
+            const stream = String(part.level ?? part.severity ?? "").toLowerCase();
+            results.push({
+              type: "log",
+              stream: stream === "error" || stream === "warn" ? "stderr" : "stdout",
+              content: msg,
+            });
+          }
+          continue;
+        }
+
+        // unknown event — try to extract useful text
+        const content = part.content ?? part.text ?? part.message ?? raw.content;
+        if (typeof content === "string" && content.trim()) {
+          results.push({ type: "log", stream: "stdout", content: content });
         }
       } catch {
+        // Not valid JSON or couldn't parse — emit as raw text
         const trimmed = jsonStr.trim();
         if (trimmed && !trimmed.startsWith("{") && !trimmed.startsWith("[")) {
           results.push({ type: "log", stream: "stdout", content: trimmed });

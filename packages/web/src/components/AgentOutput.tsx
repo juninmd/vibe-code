@@ -40,6 +40,8 @@ interface StepGroup {
   logs: StepLog[];
   thinkingContent: string | null;
   isComplete: boolean;
+  startedAt: number | null;
+  finishedAt: number | null;
 }
 
 function detectToolIcon(name: string): string {
@@ -90,28 +92,56 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
   const groups: StepGroup[] = [];
   let currentGroup: StepGroup | null = null;
   let stepId = 0;
+  let prevTimestamp: number | null = null;
+
+  // Tool name normalizer — converts snake_case/camelCase to readable label
+  const normalizeToolName = (name: string): string => {
+    const t = name.toLowerCase().replace(/_/g, " ");
+    if (t.includes("list_directory") || t.includes("ls") || t.includes("directory_list"))
+      return "Listing directory";
+    if (t.includes("read_file") || t.includes("file_read") || t.includes("cat"))
+      return "Reading file";
+    if (t.includes("write_file") || t.includes("file_write") || t.includes("create_file"))
+      return "Writing file";
+    if (t.includes("glob") || t.includes("list_files")) return "Searching files";
+    if (t.includes("bash") || t.includes("run_command") || t.includes("shell"))
+      return "Running command";
+    if (t.includes("edit_file") || t.includes("str_replace")) return "Editing file";
+    if (t.includes("delete") || t.includes("remove")) return "Deleting file";
+    if (t.includes("git")) return "Git operation";
+    if (t.includes("update_topic") || t.includes("mcp_")) return "Planning step";
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
 
   for (const log of logs) {
-    // tool_use starts a new step — detect humanized tool names from stdout or system
-    if (
-      log.content.match(
-        /^(Reading|Writing|Editing|Deleting|Moving|Running:|Listing|Searching|Fetching|Git:|⚙️)/
-      )
-    ) {
+    // Pattern 1: OpenCode humanized tool labels ("Reading...", "Writing...", etc.)
+    const humanizedMatch = log.content.match(
+      /^(Reading|Writing|Editing|Deleting|Moving|Running:|Listing|Searching|Fetching|Git:|⚙️)/
+    );
+
+    // Pattern 2: Gemini-style "[tool] tool_name" system logs
+    const geminiToolMatch = log.content.match(/^\[tool\]\s*(.+)/);
+
+    if (humanizedMatch || geminiToolMatch) {
       if (currentGroup) {
         currentGroup.isComplete = true;
+        currentGroup.finishedAt = prevTimestamp;
         groups.push(currentGroup);
       }
       stepId++;
-      const toolFullName = log.content.split(" ")[0].trim();
+      const toolLabel = humanizedMatch
+        ? log.content.split(" ")[0].trim()
+        : normalizeToolName(geminiToolMatch?.[1] ?? log.content);
       currentGroup = {
         id: stepId,
         toolName: log.content,
-        toolIcon: detectToolIcon(toolFullName || log.content),
-        accentColor: detectToolColor(toolFullName || log.content),
+        toolIcon: detectToolIcon(toolLabel || log.content),
+        accentColor: detectToolColor(toolLabel || log.content),
         logs: [],
         thinkingContent: null,
         isComplete: false,
+        startedAt: new Date(log.timestamp).getTime(),
+        finishedAt: null,
       };
     }
 
@@ -120,6 +150,7 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
       (log.stream === "stdout" || log.stream === "system") &&
       (log.content.startsWith("Thinking") ||
         log.content.startsWith("[Thinking]") ||
+        log.content.startsWith("💭") ||
         (/^[A-Z]/.test(log.content) && log.content.length < 200 && !log.content.includes("\n")))
     ) {
       if (currentGroup && !currentGroup.thinkingContent) {
@@ -129,6 +160,7 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
 
     if (currentGroup) {
       currentGroup.logs.push({ log, matchNumber: -1 });
+      prevTimestamp = new Date(log.timestamp).getTime();
     } else if (log.stream !== "system") {
       // orphan log — create implicit group 0
       if (groups.length === 0) {
@@ -141,6 +173,8 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
           logs: [],
           thinkingContent: null,
           isComplete: true,
+          startedAt: logs[0] ? new Date(logs[0].timestamp).getTime() : null,
+          finishedAt: null,
         });
       }
       groups[groups.length - 1].logs.push({ log, matchNumber: -1 });
@@ -149,6 +183,7 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
 
   if (currentGroup) {
     currentGroup.isComplete = true;
+    currentGroup.finishedAt = prevTimestamp;
     groups.push(currentGroup);
   }
 
@@ -182,6 +217,16 @@ function StepAccordion({
     if (streamFilter === "all") return group.logs;
     return group.logs.filter((sl) => sl.log.stream === streamFilter);
   }, [group.logs, streamFilter]);
+
+  const duration = useMemo(() => {
+    if (!group.startedAt) return null;
+    const end = group.finishedAt ?? (group.isComplete ? Date.now() : null);
+    if (!end) return null;
+    const diff = end - group.startedAt;
+    if (diff < 1000) return `${diff}ms`;
+    if (diff < 60_000) return `${(diff / 1000).toFixed(1)}s`;
+    return `${Math.floor(diff / 60_000)}m ${Math.round((diff % 60_000) / 1000)}s`;
+  }, [group.startedAt, group.finishedAt, group.isComplete]);
 
   return (
     <div
@@ -234,6 +279,23 @@ function StepAccordion({
           </span>
         )}
 
+        {/* Duration badge */}
+        {duration && (
+          <span
+            className="text-[9px] font-mono text-[var(--text-dimmed)] border border-[var(--border-subtle)] px-1 py-0.5 rounded shrink-0 hidden sm:inline"
+            title={`Step duration: ${duration}`}
+          >
+            ⏱ {duration}
+          </span>
+        )}
+
+        {/* Log count badge */}
+        {group.logs.length > 0 && (
+          <span className="text-[9px] font-mono text-[var(--text-dimmed)] border border-[var(--border-subtle)] px-1 py-0.5 rounded shrink-0">
+            {group.logs.length}L
+          </span>
+        )}
+
         {/* Chevron */}
         <span
           className={`text-[10px] text-[var(--text-dimmed)] shrink-0 transition-transform duration-200 ${
@@ -263,7 +325,7 @@ function StepAccordion({
         )}
 
         {/* Log lines */}
-        <div className="font-mono text-xs">
+        <div className="font-mono text-xs space-y-0.5">
           {filteredLogs.map((sl, idx2) => {
             const log = sl.log;
             if (log.stream === "system" && /^\[tool\]|\[tool result\]/.test(log.content))
@@ -282,12 +344,23 @@ function StepAccordion({
             // biome-ignore lint/security/noDangerouslySetInnerHtml: ansi-to-html with escapeXML:true
             const inner = <span dangerouslySetInnerHTML={{ __html: html }} />;
 
+            const isToolOutput =
+              log.stream === "stdout" &&
+              (log.content.startsWith("    ") ||
+                log.content.match(/^(✓|✗|Exit|Success|Error|Read|Wrote|Deleted|Running)/));
+            const isParamLine =
+              log.stream === "stdout" && log.content.match(/^\s{4}[a-zA-Z_]+\s*=/);
+
             return (
               <div
                 key={log.id ?? `log-${idx2}`}
                 className={`px-4 py-px leading-relaxed pl-8 ${
-                  log.stream === "stdout" ? "text-[var(--text-secondary)]" : ""
-                }`}
+                  log.stream === "stdout"
+                    ? isToolOutput
+                      ? "text-[var(--text-dimmed)]"
+                      : "text-[var(--text-secondary)]"
+                    : ""
+                }${isParamLine ? " text-[var(--accent-text)]/60" : ""}`}
                 style={{ color: color || undefined }}
               >
                 {showTimestamps && (
@@ -327,14 +400,15 @@ interface AgentOutputProps {
 
 /** Detects if the last few log lines contain an unanswered question from the agent */
 function detectAwaitingInput(logs: AgentLog[]): string | null {
-  // Look at the last 5 log lines for a [Question] event
   const recent = logs.slice(-5);
   for (let i = recent.length - 1; i >= 0; i--) {
     const log = recent[i];
-    if (log.stream === "stdout" && log.content.includes("[Question]")) {
-      return log.content.replace("[Question]", "").trim();
+    if (
+      log.stream === "stdout" &&
+      (log.content.includes("[?]") || log.content.includes("[Question]"))
+    ) {
+      return log.content.replace(/\[Question\]|\[(\?)]/gi, (_, q) => q ?? "").trim();
     }
-    // If we see a stdin entry, the question was already answered
     if (log.stream === "stdin") return null;
   }
   return null;
@@ -346,7 +420,7 @@ function deriveTokenStats(logs: AgentLog[]): { totalTokens: number; steps: numbe
   let steps = 0;
   for (const log of logs) {
     if (log.stream === "system") {
-      const m = log.content.match(/tokens used:\s*([\d,]+)/);
+      const m = log.content.match(/tokens (?:used:)?\s*([\d,]+)/);
       if (m) {
         totalTokens += parseInt(m[1].replace(/,/g, ""), 10);
         steps++;
@@ -363,13 +437,27 @@ function deriveToolStats(logs: AgentLog[]) {
   let searches = 0;
   let commands = 0;
   for (const log of logs) {
-    if (log.stream !== "stdout") continue;
+    if (log.stream !== "stdout" && log.stream !== "system") continue;
     const c = log.content.trim();
-    if (c.startsWith("Reading")) reads++;
-    else if (c.startsWith("Writing") || c.startsWith("Editing") || c.startsWith("Deleting"))
+    if (c.startsWith("Reading") || c.includes("read_file") || c.includes("Reading file")) reads++;
+    else if (
+      c.startsWith("Writing") ||
+      c.startsWith("Editing") ||
+      c.startsWith("Deleting") ||
+      c.includes("write_file") ||
+      c.includes("edit_file") ||
+      c.includes("Writing file")
+    )
       writes++;
-    else if (c.startsWith("Searching")) searches++;
-    else if (c.startsWith("Running:") || c.startsWith("Git:")) commands++;
+    else if (
+      c.startsWith("Searching") ||
+      c.includes("glob") ||
+      c.includes("Searching files") ||
+      c.includes("list_directory")
+    )
+      searches++;
+    else if (c.startsWith("Running:") || c.startsWith("Git:") || c.includes("Running command"))
+      commands++;
   }
   return { reads, writes, searches, commands };
 }

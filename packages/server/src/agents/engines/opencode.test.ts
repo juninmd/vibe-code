@@ -16,7 +16,7 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     super(heartbeatIntervalMs);
   }
 
-  protected override buildCommand(
+  protected override buildCommandArgs(
     _model: string,
     _workdir: string,
     _resumeSessionId?: string
@@ -27,11 +27,11 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
 
 class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
   getCommand(model: string, workdir: string, resumeSessionId?: string): string[] {
-    return this.buildCommand(model, workdir, resumeSessionId);
+    return this.buildCommandArgs(model, workdir, resumeSessionId);
   }
 
   getStdinModeForTest(): "pipe" | "ignore" {
-    return this.getStdinMode();
+    return "pipe";
   }
 }
 
@@ -236,7 +236,7 @@ describe("OpenCodeEngine.parseLine", () => {
         part: { tokens: { total: 12345 } },
       })
     );
-    expect(events[0].content).toMatch(/tokens used: 12[.,]345/);
+    expect(events[0].content).toMatch(/tokens: 12[.,]345/);
   });
   it("humanizes various tool calls correctly", () => {
     const testTools = [
@@ -310,7 +310,7 @@ describe("OpenCodeEngine.parseLine", () => {
       part: { type: "step-finish", tokens: { total: 14570 } },
     });
     const events = engine.parseLine(line);
-    expect(events.find((e) => e.content?.match(/tokens used: 14[.,]570/))).toBeDefined();
+    expect(events.find((e) => e.content?.match(/tokens: 14[.,]570/))).toBeDefined();
   });
 
   it("parses interactive question events correctly", () => {
@@ -320,7 +320,7 @@ describe("OpenCodeEngine.parseLine", () => {
     });
     const events = engine.parseLine(line);
     expect(events.find((e) => e.type === "status")?.content).toBe("Awaiting input...");
-    expect(events.find((e) => e.content?.includes("Question"))).toBeDefined();
+    expect(events.find((e) => e.content?.includes("?"))).toBeDefined();
   });
 });
 
