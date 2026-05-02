@@ -1,6 +1,7 @@
 import type {
   AgentLog,
   EngineInfo,
+  ExternalApp,
   TaskArtifact,
   TaskSchedule,
   TaskWithRun,
@@ -11,6 +12,7 @@ import { api } from "../api/client";
 import { formatDateTime, formatDuration } from "../utils/date";
 import { AgentOutput } from "./AgentOutput";
 import { DiffViewer } from "./DiffViewer";
+import { ALL_APP_OPTIONS } from "./external-constants";
 import { TaskTagsEditor } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -477,6 +479,9 @@ export function TaskDetail({
   allTasks = [],
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [preferredApp, setPreferredApp] = useState<ExternalApp>(
+    () => (localStorage.getItem("vibe-code-preferred-app") as ExternalApp) || "vscode"
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
@@ -705,24 +710,41 @@ export function TaskDetail({
             <div className="flex items-center gap-1 shrink-0">
               {task.branchName && (
                 <>
-                  <button
-                    type="button"
-                    title="Abrir no Editor"
-                    onClick={async () => {
-                      try {
-                        setLoadingAction("open-editor");
-                        await api.tasks.openEditor(task.id);
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : String(err));
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs font-medium"
-                    disabled={loadingAction === "open-editor"}
-                  >
-                    {loadingAction === "open-editor" ? "..." : "<>"}
-                  </button>
+                  <div className="flex items-center gap-0">
+                    <button
+                      type="button"
+                      title="Open in Editor"
+                      onClick={async () => {
+                        try {
+                          setLoadingAction("open-editor");
+                          await api.tasks.openEditor(task.id, preferredApp);
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : String(err));
+                        } finally {
+                          setLoadingAction(null);
+                        }
+                      }}
+                      className="text-primary0 hover:text-secondary cursor-pointer shrink-0 px-2 py-1 rounded-l hover:bg-surface-hover transition-colors text-xs font-medium border-r border-border"
+                      disabled={loadingAction === "open-editor"}
+                    >
+                      {loadingAction === "open-editor" ? "..." : "Open"}
+                    </button>
+                    <select
+                      value={preferredApp}
+                      onChange={(e) => {
+                        setPreferredApp(e.target.value as ExternalApp);
+                        localStorage.setItem("vibe-code-preferred-app", e.target.value);
+                      }}
+                      className="flex h-8 w-24 items-center justify-between rounded-r border border-input bg-background px-2 py-1 text-xs shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="" disabled hidden></option>
+                      {ALL_APP_OPTIONS.map((opt) => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.displayLabel || opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <a
                     href={api.tasks.downloadUrl(task.id)}
                     download
@@ -769,7 +791,10 @@ export function TaskDetail({
             </Badge>
 
             {task.agentId && (
-              <Badge variant="default" className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+              <Badge
+                variant="default"
+                className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+              >
                 <svg
                   aria-hidden="true"
                   width="10"

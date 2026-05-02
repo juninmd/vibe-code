@@ -22,8 +22,8 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
 }
 
 class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
-  getCommand(model: string, prompt: string, workdir: string): string[] {
-    return this.buildCommand(model, prompt, workdir);
+  getCommand(model: string, prompt: string, workdir: string, resumeSessionId?: string): string[] {
+    return this.buildCommand(model, workdir, resumeSessionId);
   }
 
   getStdinModeForTest(): "pipe" | "ignore" {
@@ -323,7 +323,7 @@ describe("OpenCodeEngine.parseLine", () => {
 describe("OpenCodeEngine.buildCommand", () => {
   it("passes correct base arguments without prompt (prompt sent via stdin)", () => {
     const engine = new CommandInspectingOpenCodeEngine();
-    const command = engine.getCommand("opencode/minimax-m2.5-free", "/tmp/workdir");
+    const command = engine.getCommand("opencode/minimax-m2.5-free", "", "/tmp/workdir");
 
     expect(command).toEqual([
       "opencode",
@@ -341,7 +341,12 @@ describe("OpenCodeEngine.buildCommand", () => {
 
   it("includes --session when resumeSessionId is provided", () => {
     const engine = new CommandInspectingOpenCodeEngine();
-    const command = engine.getCommand("opencode/minimax-m2.5-free", "/tmp/workdir", "session-123");
+    const command = engine.getCommand(
+      "opencode/minimax-m2.5-free",
+      "",
+      "/tmp/workdir",
+      "session-123"
+    );
 
     expect(command).toContain("--session");
     expect(command).toContain("session-123");
