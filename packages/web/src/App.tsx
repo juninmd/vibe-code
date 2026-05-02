@@ -818,10 +818,30 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         e.preventDefault();
         searchRef.current?.focus();
       }
-      // O — add repo
-      if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
+      // Shift+O — add repo
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "o" || e.key === "O")) {
         e.preventDefault();
         setShowAddRepo(true);
+        return;
+      }
+      // O — open in editor
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        if (selectedTask) {
+          api.tasks.openEditor(selectedTask.id).catch((err) => {
+            alert(err instanceof Error ? err.message : String(err));
+          });
+        }
+        return;
+      }
+      // 1-9 — switch workspace (repo)
+      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "9") {
+        const index = parseInt(e.key, 10) - 1;
+        if (index >= 0 && index < repos.length) {
+          e.preventDefault();
+          setSelectedRepoId(repos[index].id);
+        }
+        return;
       }
       // E — engines panel
       if (e.key === "e" || e.key === "E") {

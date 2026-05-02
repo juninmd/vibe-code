@@ -565,7 +565,7 @@ export function Sidebar({
                   size="sm"
                   variant="ghost"
                   onClick={onAddRepo}
-                  title="Adicionar repositório (Ctrl+O)"
+                  title="Adicionar repositório (Ctrl+Shift+O)"
                 >
                   +
                 </Button>
