@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-type ValidationCommandSource = "workflow" | "package_json";
+type ValidationCommandSource = "workflow" | "package_json" | "detected";
 
 export interface ValidationCommand {
   readonly name: string;
@@ -17,6 +17,7 @@ export interface ValidationCommandResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly passed: boolean;
+  readonly reason: string;
 }
 
 export interface WorktreeVerificationResult {
@@ -37,12 +38,12 @@ export interface RunQualityScoreInput {
 const WORKFLOW_FILE = "WORKFLOW.md";
 const PACKAGE_JSON_FILE = "package.json";
 const WORKFLOW_QUALITY_GATE_HEADING = "## Current Quality Gate";
+const README_FILE = "README.md";
 
 function getShellCommand(command: string): string[] {
   if (process.platform === "win32") {
     return ["powershell.exe", "-NoProfile", "-Command", command];
   }
-
   return ["sh", "-lc", command];
 }
 
@@ -64,7 +65,7 @@ function parseWorkflowCommands(workflowText: string): ValidationCommand[] {
   return normalizeCommandLines(codeFenceMatch[1]).map((command, index) => ({
     name: `workflow_${index + 1}`,
     command,
-    source: "workflow",
+    source: "workflow" as const,
   }));
 }
 
@@ -86,11 +87,73 @@ function parsePackageJsonCommands(packageJsonText: string): ValidationCommand[] 
   return orderedNames.map((name) => ({
     name,
     command: detectPackageManagerScriptCommand(name, parsed.packageManager),
-    source: "package_json",
+    source: "package_json" as const,
   }));
 }
 
+/** Detect additional validation commands from common project files */
+async function detectAdditionalCommands(wtPath: string): Promise<ValidationCommand[]> {
+  const commands: ValidationCommand[] = [];
+
+  // Check for Makefile
+  try {
+    const makefile = await readFile(join(wtPath, "Makefile"), "utf8");
+    const lines = makefile.split("\n");
+    const targets = new Set<string>();
+    for (const line of lines) {
+      const match = line.match(/^([a-zA-Z0-9_-]+):/);
+      if (match && !match[1].startsWith(".")) {
+        targets.add(match[1]);
+      }
+    }
+    // Add common targets if present
+    for (const target of ["test", "lint", "check", "validate"]) {
+      if (targets.has(target)) {
+        commands.push({
+          name: `make:${target}`,
+          command: `make ${target}`,
+          source: "detected",
+        });
+      }
+    }
+  } catch {
+    /* no Makefile */
+  }
+
+  // Check README for build/run instructions
+  try {
+    const readme = await readFile(join(wtPath, README_FILE), "utf8");
+    // Look for "```bash" blocks with common commands
+    const bashBlocks = readme.match(/```bash\n([\s\S]*?)```/gi) || [];
+    for (const block of bashBlocks) {
+      const cmds = block
+        .replace(/```bash\n?/gi, "")
+        .trim()
+        .split("\n");
+      for (const cmd of cmds) {
+        const trimmed = cmd.trim();
+        if (
+          trimmed.startsWith("npm run ") ||
+          trimmed.startsWith("pnpm ") ||
+          trimmed.startsWith("bun ") ||
+          trimmed.startsWith("yarn ")
+        ) {
+          const name = `${trimmed.split(" ")[0]} ${trimmed.split(" ")[1]}`;
+          if (!commands.some((c) => c.command === trimmed)) {
+            commands.push({ name, command: trimmed, source: "detected" });
+          }
+        }
+      }
+    }
+  } catch {
+    /* no README */
+  }
+
+  return commands;
+}
+
 export async function discoverValidationCommands(wtPath: string): Promise<ValidationCommand[]> {
+  // Try WORKFLOW.md first
   try {
     const workflowText = await readFile(join(wtPath, WORKFLOW_FILE), "utf8");
     const workflowCommands = parseWorkflowCommands(workflowText);
@@ -99,6 +162,7 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
     // Compatibility mode: fall through to package.json.
   }
 
+  // Try package.json
   try {
     const packageJsonText = await readFile(join(wtPath, PACKAGE_JSON_FILE), "utf8");
     const packageJsonCommands = parsePackageJsonCommands(packageJsonText);
@@ -106,6 +170,10 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
   } catch {
     // Unsupported repository shape.
   }
+
+  // Try to detect additional commands
+  const additional = await detectAdditionalCommands(wtPath);
+  if (additional.length > 0) return additional;
 
   throw new Error(
     "Verification failed: unable to discover validation commands from WORKFLOW.md or package.json"
@@ -117,7 +185,7 @@ async function runValidationCommand(
   validationCommand: ValidationCommand,
   sysLog: (content: string) => void
 ): Promise<ValidationCommandResult> {
-  sysLog(`[verify] running ${validationCommand.command}`);
+  sysLog(`[verify] running: ${validationCommand.command}`);
   const proc = Bun.spawn(getShellCommand(validationCommand.command), {
     cwd: wtPath,
     stdout: "pipe",
@@ -142,12 +210,24 @@ async function runValidationCommand(
     }
   }
 
+  const passed = exitCode === 0;
+  const reason = passed
+    ? "passed"
+    : extractFailureReasonRaw(
+        validationCommand.name,
+        validationCommand.command,
+        exitCode,
+        stdout,
+        stderr
+      );
+
   return {
     ...validationCommand,
     exitCode,
     stdout,
     stderr,
-    passed: exitCode === 0,
+    passed,
+    reason,
   };
 }
 
@@ -157,6 +237,101 @@ function buildVerificationSummary(results: readonly ValidationCommandResult[]): 
     .join(", ");
 }
 
+/** Extract a human-readable failure reason from validation command raw output (before building full result) */
+function extractFailureReasonRaw(
+  _name: string,
+  command: string,
+  exitCode: number,
+  stdout: string,
+  stderr: string
+): string {
+  const combined = [stdout, stderr].filter(Boolean).join("\n");
+
+  if (exitCode === 0) return "passed";
+
+  const testMatch = combined.match(
+    /((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i
+  );
+  if (testMatch) {
+    const snippet = testMatch[0].slice(0, 500);
+    return `exit ${exitCode} — ${snippet.replace(/\n/g, " ").trim()}`;
+  }
+
+  const buildMatch = combined.match(/(error[^:]+:[^\n]+)/i) || combined.match(/(Error:[^\n]+)/i);
+  if (buildMatch) {
+    return `exit ${exitCode} — ${buildMatch[0].slice(0, 200)}`;
+  }
+
+  const lintMatch = combined.match(/(warning|error)[\s\S]*?at line \d+/i);
+  if (lintMatch) {
+    return `exit ${exitCode} — ${lintMatch[0].slice(0, 200)}`;
+  }
+
+  const lines = combined.split("\n").filter(Boolean);
+  const lastUseful = lines.filter((l) => !l.match(/^\s*(✓|✔|passed|done|building|compiling)/i));
+  if (lastUseful.length > 0) {
+    return `exit ${exitCode} — ${lastUseful[lastUseful.length - 1].slice(0, 200)}`;
+  }
+
+  return `exit ${exitCode} (command: ${command})`;
+}
+
+/** Extract a human-readable failure reason from a ValidationCommandResult */
+function extractFailureReason(result: ValidationCommandResult): string {
+  const { command, exitCode, stdout, stderr } = result;
+
+  if (exitCode === 0) return "passed";
+
+  const testMatch =
+    stderr.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i) ||
+    stdout.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i);
+  if (testMatch) {
+    const snippet = testMatch[0].slice(0, 500);
+    return `exit ${exitCode} — ${snippet.replace(/\n/g, " ").trim()}`;
+  }
+
+  const buildMatch =
+    stderr.match(/(error[^:]+:[^\n]+)/i) ||
+    stdout.match(/(error[^:]+:[^\n]+)/i) ||
+    stderr.match(/(Error:[^\n]+)/i) ||
+    stdout.match(/(Error:[^\n]+)/i);
+  if (buildMatch) {
+    return `exit ${exitCode} — ${buildMatch[0].slice(0, 200)}`;
+  }
+
+  const lintMatch =
+    stderr.match(/(warning|error)[\s\S]*?at line \d+/i) ||
+    stdout.match(/(warning|error)[\s\S]*?at line \d+/i);
+  if (lintMatch) {
+    return `exit ${exitCode} — ${lintMatch[0].slice(0, 200)}`;
+  }
+
+  const lines = [stdout, stderr].filter(Boolean).join("\n").split("\n").filter(Boolean);
+  const lastUseful = lines.filter((l) => !l.match(/^\s*(✓|✔|passed|done|building|compiling)/i));
+  if (lastUseful.length > 0) {
+    return `exit ${exitCode} — ${lastUseful[lastUseful.length - 1].slice(0, 200)}`;
+  }
+
+  return `exit ${exitCode} (command: ${command})`;
+}
+
+function _formatVerificationResult(result: ValidationCommandResult, verbose: boolean): string {
+  if (result.passed) {
+    return `  ✓ ${result.name}`;
+  }
+  const reason = extractFailureReason(result);
+  if (verbose) {
+    const lines = [result.stdout, result.stderr].filter(Boolean).join("\n").slice(-800);
+    return `  ✗ ${result.name}: ${reason}\n    output: ${lines}`;
+  }
+  return `  ✗ ${result.name}: ${reason}`;
+}
+
+/**
+ * Verify the worktree by running all discovered validation commands.
+ * Runs commands sequentially (one at a time) so output is easier to debug.
+ * Fails fast on first failure for efficiency.
+ */
 export async function verifyWorktree(
   wtPath: string,
   sysLog: (content: string) => void
@@ -193,4 +368,50 @@ export function computeRunQualityScore(input: RunQualityScoreInput): number {
   if (input.finalStatus !== "completed") score -= 25;
   if (input.prCreated) score += 5;
   return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * Run verification commands in parallel for faster validation.
+ * Returns results as they complete, including failures.
+ */
+export async function verifyWorktreeParallel(
+  wtPath: string,
+  sysLog: (content: string) => void,
+  maxConcurrency = 3
+): Promise<WorktreeVerificationResult> {
+  const commands = await discoverValidationCommands(wtPath);
+  const results: ValidationCommandResult[] = [];
+  let passed = true;
+
+  // Process in batches to avoid overwhelming the system
+  for (let i = 0; i < commands.length; i += maxConcurrency) {
+    const batch = commands.slice(i, i + maxConcurrency);
+    const batchResults = await Promise.all(
+      batch.map((cmd) => runValidationCommand(wtPath, cmd, sysLog))
+    );
+
+    for (const result of batchResults) {
+      results.push(result);
+      if (!result.passed) {
+        passed = false;
+      }
+    }
+
+    // Fail fast on first failure
+    if (!passed) {
+      return {
+        passed: false,
+        commands: commands.map((item) => item.command),
+        results,
+        summary: buildVerificationSummary(results),
+      };
+    }
+  }
+
+  return {
+    passed: true,
+    commands: commands.map((item) => item.command),
+    results,
+    summary: buildVerificationSummary(results),
+  };
 }

@@ -1,6 +1,7 @@
-import { access, unlink } from "node:fs/promises";
+import { access, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
@@ -176,6 +177,37 @@ export class GeminiEngine implements AgentEngine {
   async getSetupIssue(): Promise<string | null> {
     if (!(await this.hasCli())) return "Gemini CLI não instalado";
     return null;
+  }
+
+  /**
+   * Writes Gemini-specific context files for non-interactive execution.
+   */
+  async prepareWorkdir(workdir: string, _skills: SkillPayload): Promise<string[]> {
+    const createdFiles: string[] = [];
+
+    // Write .gemini/config.json for session persistence
+    const configDir = join(workdir, ".gemini");
+    const configPath = join(configDir, "config.json");
+    try {
+      const { mkdir } = await import("node:fs/promises");
+      await mkdir(configDir, { recursive: true });
+      const config = {
+        session: {
+          persist: true,
+          resume: true,
+        },
+        model: {
+          default: "gemini-2.5-pro",
+          temperature: 0.7,
+        },
+      };
+      await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
+      createdFiles.push(configPath);
+    } catch (err) {
+      console.warn("[gemini] Failed to write .gemini/config.json:", err);
+    }
+
+    return createdFiles;
   }
 
   async *execute(
