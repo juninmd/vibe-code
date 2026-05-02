@@ -1,8 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { AgentEvent } from "../engine";
+import { describe, expect, it } from "bun:test";
 import { OpenCodeEngine } from "./opencode";
 
 class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
