@@ -3,8 +3,10 @@ import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
+import { type ExternalApp, getAppCommand } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
+
 import { z } from "zod";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
@@ -609,13 +611,36 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ error: "invalid_state", message: "No path available to open" }, 400);
     }
 
-    const editorCommand = process.env.EDITOR || "code";
+    const body = await c.req.json().catch(() => ({}));
+    const app = (body.app || "vscode") as ExternalApp;
+
+    let candidates = getAppCommand(app, targetPath, process.platform);
+    if (!candidates) {
+      if (app === "finder") {
+        // MacOS specific
+        candidates = [{ command: "open", args: [targetPath] }];
+      } else {
+        candidates = [{ command: process.env.EDITOR || "code", args: [targetPath] }];
+      }
+    }
 
     try {
-      Bun.spawn([editorCommand, targetPath], {
-        detached: true,
-        stdio: ["ignore", "ignore", "ignore"],
-      }).unref();
+      let spawned = false;
+      let lastError = null;
+      for (const cmd of candidates) {
+        try {
+          Bun.spawn([cmd.command, ...cmd.args], {
+            detached: true,
+            stdio: ["ignore", "ignore", "ignore"],
+          }).unref();
+          spawned = true;
+          break;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      if (!spawned && lastError) throw lastError;
+
       return c.json({ data: { ok: true } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
