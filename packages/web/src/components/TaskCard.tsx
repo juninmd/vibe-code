@@ -1,6 +1,11 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { TASK_PRIORITY_META, type TaskWithRun } from "@vibe-code/shared";
+import {
+  TASK_COMPLEXITY_META,
+  TASK_PRIORITY_META,
+  TASK_TYPE_META,
+  type TaskWithRun,
+} from "@vibe-code/shared";
 import { memo, useEffect, useRef, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import type { RetryState } from "../hooks/useRetryQueue";
@@ -204,6 +209,33 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
         </div>
       )}
 
+      {(task.taskType || task.taskComplexity) && (
+        <div className="mb-2 ml-[21px] flex flex-wrap gap-1">
+          {task.taskType &&
+            (() => {
+              const m = TASK_TYPE_META[task.taskType];
+              return (
+                <span
+                  className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded border ${m.bgColor} ${m.textColor} ${m.borderColor}`}
+                >
+                  {m.icon} {m.label}
+                </span>
+              );
+            })()}
+          {task.taskComplexity &&
+            (() => {
+              const m = TASK_COMPLEXITY_META[task.taskComplexity];
+              return (
+                <span
+                  className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded border ${m.bgColor} ${m.textColor} ${m.borderColor}`}
+                >
+                  {m.icon} {m.label}
+                </span>
+              );
+            })()}
+        </div>
+      )}
+
       {task.labels && task.labels.length > 0 && (
         <div className="mb-2 ml-[21px] flex flex-wrap gap-1">
           {task.labels.map((label) => (
@@ -270,7 +302,10 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
         )}
 
         {task.agentId && (
-          <Badge variant="default" className="text-[10px] py-0 px-1.5 flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+          <Badge
+            variant="default"
+            className="text-[10px] py-0 px-1.5 flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+          >
             <svg
               aria-hidden="true"
               width="9"

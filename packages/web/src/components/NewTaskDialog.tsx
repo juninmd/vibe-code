@@ -2,10 +2,19 @@ import type {
   EngineInfo,
   Repository,
   SkillsIndex,
+  TaskComplexity,
   TaskPriority,
   TaskSpec,
+  TaskType,
 } from "@vibe-code/shared";
-import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
+import {
+  TASK_COMPLEXITY_LEVELS,
+  TASK_COMPLEXITY_META,
+  TASK_PRIORITY_LEVELS,
+  TASK_PRIORITY_META,
+  TASK_TYPE_META,
+  TASK_TYPES,
+} from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -46,6 +55,8 @@ interface NewTaskDialogProps {
     model?: string;
     baseBranch?: string;
     priority?: TaskPriority;
+    taskType?: TaskType;
+    taskComplexity?: TaskComplexity;
     tags?: string[];
     agentId?: string;
     workflowId?: string;
@@ -189,6 +200,8 @@ export function NewTaskDialog({
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("none");
+  const [taskType, setTaskType] = useState<TaskType | "">("");
+  const [taskComplexity, setTaskComplexity] = useState<TaskComplexity | "">("");
   const [agentId, setAgentId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
@@ -258,6 +271,8 @@ export function NewTaskDialog({
         model: model || undefined,
         baseBranch: baseBranch || undefined,
         priority: priority !== "none" ? priority : undefined,
+        taskType: taskType || undefined,
+        taskComplexity: taskComplexity || undefined,
         tags: tags.length > 0 ? tags : undefined,
         agentId: agentId || undefined,
         workflowId: workflowId || undefined,
@@ -275,6 +290,8 @@ export function NewTaskDialog({
       setBranches([]);
       setTags([]);
       setPriority("none");
+      setTaskType("");
+      setTaskComplexity("");
       setAgentId("");
       setWorkflowId("");
       setIsScheduled(false);
@@ -488,6 +505,56 @@ export function NewTaskDialog({
                         key={p}
                         type="button"
                         onClick={() => setPriority(p)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-all ${isActive ? `${meta.bgColor} ${meta.textColor} ${meta.borderColor}` : "bg-surface-hover border-strong text-secondary hover:border-strong"}`}
+                      >
+                        {meta.icon} {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Type
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TASK_TYPES.map((t) => {
+                    const meta = TASK_TYPE_META[t];
+                    const isActive = taskType === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTaskType(isActive ? "" : t)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-all ${isActive ? `${meta.bgColor} ${meta.textColor} ${meta.borderColor}` : "bg-surface-hover border-strong text-secondary hover:border-strong"}`}
+                      >
+                        {meta.icon} {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Complexity
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TASK_COMPLEXITY_LEVELS.map((c) => {
+                    const meta = TASK_COMPLEXITY_META[c];
+                    const isActive = taskComplexity === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setTaskComplexity(isActive ? "" : c)}
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-all ${isActive ? `${meta.bgColor} ${meta.textColor} ${meta.borderColor}` : "bg-surface-hover border-strong text-secondary hover:border-strong"}`}
                       >
                         {meta.icon} {meta.label}

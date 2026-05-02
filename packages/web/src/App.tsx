@@ -165,6 +165,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [filters, setFilters] = useState<Filters>({
     engine: null,
     priority: null,
+    taskType: null,
+    taskComplexity: null,
     hasPR: false,
     tags: [],
     labelIds: [],
@@ -607,6 +609,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     if (filters.priority !== null) {
       result = result.filter((t) => t.priority === filters.priority);
     }
+    if (filters.taskType !== null) {
+      result = result.filter((t) => t.taskType === filters.taskType);
+    }
+    if (filters.taskComplexity !== null) {
+      result = result.filter((t) => t.taskComplexity === filters.taskComplexity);
+    }
     if (filters.hasPR) {
       result = result.filter((t) => !!t.prUrl);
     }
@@ -890,6 +898,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     handleDeleteTask,
     showChangelog,
     showTemplates,
+    repos.length,
+    repos,
   ]);
 
   return (

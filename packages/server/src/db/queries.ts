@@ -19,9 +19,11 @@ import type {
   Task,
   TaskArtifact,
   TaskArtifactKind,
+  TaskComplexity,
   TaskPriority,
   TaskSchedule,
   TaskStatus,
+  TaskType,
   UpdateTaskRequest,
 } from "@vibe-code/shared";
 
@@ -95,6 +97,8 @@ interface TaskRow {
   depends_on: string | null;
   pending_approval: number;
   max_cost: number | null;
+  task_type: string | null;
+  task_complexity: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -182,6 +186,8 @@ function mapTask(row: TaskRow): Task {
     dependsOn: JSON.parse(row.depends_on || "[]") as string[],
     pendingApproval: Boolean(row.pending_approval),
     maxCost: row.max_cost ?? undefined,
+    taskType: (row.task_type as TaskType | null) ?? null,
+    taskComplexity: (row.task_complexity as TaskComplexity | null) ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -332,7 +338,7 @@ export function createTaskQueries(db: Database) {
 
         return db
           .prepare(
-            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome, issue_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome, issue_number, task_type, task_complexity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
             req.title,
@@ -353,7 +359,9 @@ export function createTaskQueries(db: Database) {
             req.issueUrl ?? null,
             req.goal ?? null,
             req.desiredOutcome ?? null,
-            issueNum
+            issueNum,
+            req.taskType ?? null,
+            req.taskComplexity ?? null
           ) as TaskRow | null;
       })();
 
@@ -418,6 +426,14 @@ export function createTaskQueries(db: Database) {
       if (req.priority !== undefined) {
         sets.push("priority = ?");
         values.push(priorityToInt(req.priority));
+      }
+      if (req.taskType !== undefined) {
+        sets.push("task_type = ?");
+        values.push(req.taskType ?? null);
+      }
+      if (req.taskComplexity !== undefined) {
+        sets.push("task_complexity = ?");
+        values.push(req.taskComplexity ?? null);
       }
       if (sets.length === 0) {
         const currentRow = stmts.getById.get(id);
@@ -1249,6 +1265,340 @@ export function createLabelQueries(db: Database) {
         )
         .all(repoId);
       return rows.map((r) => ({ ...mapLabel(r), taskCount: r.task_count }));
+    },
+  };
+}
+
+// ─── Review Rounds & Issues Queries (M4) ────────────────────────────────────
+
+interface ReviewRoundRow {
+  id: string;
+  task_id: string;
+  round_number: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReviewIssueRow {
+  id: string;
+  round_id: string;
+  task_id: string;
+  persona: string;
+  severity: string;
+  title: string;
+  content: string;
+  file_path: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewRound {
+  id: string;
+  taskId: string;
+  roundNumber: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewIssue {
+  id: string;
+  roundId: string;
+  taskId: string;
+  persona: string;
+  severity: string;
+  title: string;
+  content: string;
+  filePath: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapReviewRound(row: ReviewRoundRow): ReviewRound {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    roundNumber: row.round_number,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapReviewIssue(row: ReviewIssueRow): ReviewIssue {
+  return {
+    id: row.id,
+    roundId: row.round_id,
+    taskId: row.task_id,
+    persona: row.persona,
+    severity: row.severity,
+    title: row.title,
+    content: row.content,
+    filePath: row.file_path,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export interface CreateReviewRoundRequest {
+  taskId: string;
+  roundNumber: number;
+}
+
+export interface CreateReviewIssueRequest {
+  roundId: string;
+  taskId: string;
+  persona: string;
+  severity: string;
+  title: string;
+  content: string;
+  filePath?: string | null;
+}
+
+export interface UpdateReviewIssueRequest {
+  status?: string;
+  title?: string;
+  content?: string;
+  severity?: string;
+}
+
+export function createReviewRoundQueries(db: Database) {
+  return {
+    listByTaskId: (taskId: string): ReviewRound[] => {
+      const rows = db
+        .prepare<ReviewRoundRow, [string]>(
+          "SELECT * FROM review_rounds WHERE task_id = ? ORDER BY round_number DESC"
+        )
+        .all(taskId);
+      return rows.map(mapReviewRound);
+    },
+    getById: (id: string): ReviewRound | null => {
+      const row = db
+        .prepare<ReviewRoundRow, [string]>("SELECT * FROM review_rounds WHERE id = ?")
+        .get(id);
+      return row ? mapReviewRound(row) : null;
+    },
+    getLatestByTaskId: (taskId: string): ReviewRound | null => {
+      const row = db
+        .prepare<ReviewRoundRow, [string]>(
+          "SELECT * FROM review_rounds WHERE task_id = ? ORDER BY round_number DESC LIMIT 1"
+        )
+        .get(taskId);
+      return row ? mapReviewRound(row) : null;
+    },
+    create: (req: CreateReviewRoundRequest): ReviewRound => {
+      const row = db
+        .prepare<ReviewRoundRow, [string, number]>(
+          "INSERT INTO review_rounds (task_id, round_number) VALUES (?, ?) RETURNING *"
+        )
+        .get(req.taskId, req.roundNumber);
+      if (!row) throw new Error("Failed to create review round");
+      return mapReviewRound(row);
+    },
+    updateStatus: (id: string, status: string): ReviewRound | null => {
+      const row = db
+        .prepare<ReviewRoundRow, [string, string]>(
+          "UPDATE review_rounds SET status = ?, updated_at = datetime('now') WHERE id = ? RETURNING *"
+        )
+        .get(status, id);
+      return row ? mapReviewRound(row) : null;
+    },
+  };
+}
+
+export function createReviewIssueQueries(db: Database) {
+  return {
+    listByRoundId: (roundId: string): ReviewIssue[] => {
+      const rows = db
+        .prepare<ReviewIssueRow, [string]>(
+          "SELECT * FROM review_issues WHERE round_id = ? ORDER BY created_at DESC"
+        )
+        .all(roundId);
+      return rows.map(mapReviewIssue);
+    },
+    listByTaskId: (taskId: string, status?: string): ReviewIssue[] => {
+      let sql = "SELECT * FROM review_issues WHERE task_id = ?";
+      if (status) sql += " AND status = ?";
+      sql += " ORDER BY created_at DESC";
+      const rows = db
+        .prepare<ReviewIssueRow, [string] | [string, string]>(sql)
+        .all(...(status ? [taskId, status] : [taskId]));
+      return rows.map(mapReviewIssue);
+    },
+    getById: (id: string): ReviewIssue | null => {
+      const row = db
+        .prepare<ReviewIssueRow, [string]>("SELECT * FROM review_issues WHERE id = ?")
+        .get(id);
+      return row ? mapReviewIssue(row) : null;
+    },
+    create: (req: CreateReviewIssueRequest): ReviewIssue => {
+      const row = db
+        .prepare<
+          ReviewIssueRow,
+          [string, string, string, string, string, string, string | null, string]
+        >(
+          `INSERT INTO review_issues (round_id, task_id, persona, severity, title, content, file_path, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`
+        )
+        .get(
+          req.roundId,
+          req.taskId,
+          req.persona,
+          req.severity,
+          req.title,
+          req.content,
+          req.filePath ?? null,
+          "open"
+        );
+      if (!row) throw new Error("Failed to create review issue");
+      return mapReviewIssue(row);
+    },
+    update: (id: string, req: UpdateReviewIssueRequest): ReviewIssue | null => {
+      const updates: { col: string; val: unknown }[] = [];
+      if (req.status !== undefined) updates.push({ col: "status", val: req.status });
+      if (req.title !== undefined) updates.push({ col: "title", val: req.title });
+      if (req.content !== undefined) updates.push({ col: "content", val: req.content });
+      if (req.severity !== undefined) updates.push({ col: "severity", val: req.severity });
+
+      if (updates.length === 0) {
+        const row = db
+          .prepare<ReviewIssueRow, [string]>("SELECT * FROM review_issues WHERE id = ?")
+          .get(id);
+        return row ? mapReviewIssue(row) : null;
+      }
+
+      const setClauses = updates.map((u) => `${u.col} = ?`).join(", ");
+      const sql = `UPDATE review_issues SET ${setClauses}, updated_at = datetime('now') WHERE id = ? RETURNING *`;
+      const stmt = db.prepare(sql);
+      const vals = [...updates.map((u) => u.val), id];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = stmt.get(...(vals as any)) as ReviewIssueRow;
+      return row ? mapReviewIssue(row) : null;
+    },
+    remove: (id: string): void => {
+      db.prepare("DELETE FROM review_issues WHERE id = ?").run(id);
+    },
+    removeByRoundId: (roundId: string): void => {
+      db.prepare("DELETE FROM review_issues WHERE round_id = ?").run(roundId);
+    },
+  };
+}
+
+// ─── Workflow Memory Queries (M3) ────────────────────────────────────────
+
+interface WorkflowMemoryRow {
+  id: string;
+  task_id: string;
+  scope: "shared" | "task";
+  content: string;
+  needs_compaction: number;
+  compacted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowMemory {
+  id: string;
+  taskId: string;
+  scope: "shared" | "task";
+  content: string;
+  needsCompaction: boolean;
+  compactedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapWorkflowMemory(row: WorkflowMemoryRow): WorkflowMemory {
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    scope: row.scope,
+    content: row.content,
+    needsCompaction: row.needs_compaction === 1,
+    compactedAt: row.compacted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export interface CreateWorkflowMemoryRequest {
+  taskId: string;
+  scope: "shared" | "task";
+  content: string;
+  needsCompaction?: boolean;
+}
+
+export interface UpdateWorkflowMemoryRequest {
+  content?: string;
+  needsCompaction?: boolean;
+  compactedAt?: string | null;
+}
+
+export function createMemoryQueries(db: Database) {
+  return {
+    getByTaskIdAndScope: (taskId: string, scope: "shared" | "task"): WorkflowMemory | null => {
+      const row = db
+        .prepare<WorkflowMemoryRow, [string, string]>(
+          "SELECT * FROM workflow_memories WHERE task_id = ? AND scope = ?"
+        )
+        .get(taskId, scope);
+      return row ? mapWorkflowMemory(row) : null;
+    },
+    getById: (id: string): WorkflowMemory | null => {
+      const row = db
+        .prepare<WorkflowMemoryRow, [string]>("SELECT * FROM workflow_memories WHERE id = ?")
+        .get(id);
+      return row ? mapWorkflowMemory(row) : null;
+    },
+    create: (req: CreateWorkflowMemoryRequest): WorkflowMemory => {
+      const row = db
+        .prepare<WorkflowMemoryRow, [string, string, string, number]>(
+          `INSERT INTO workflow_memories (task_id, scope, content, needs_compaction)
+           VALUES (?, ?, ?, ?) RETURNING *`
+        )
+        .get(req.taskId, req.scope, req.content, req.needsCompaction ? 1 : 0);
+      if (!row) throw new Error("Failed to create workflow memory");
+      return mapWorkflowMemory(row);
+    },
+    update: (id: string, req: UpdateWorkflowMemoryRequest): WorkflowMemory => {
+      const updates: { col: string; val: unknown }[] = [];
+      if (req.content !== undefined) updates.push({ col: "content", val: req.content });
+      if (req.needsCompaction !== undefined)
+        updates.push({ col: "needs_compaction", val: req.needsCompaction ? 1 : 0 });
+      if (req.compactedAt !== undefined)
+        updates.push({ col: "compacted_at", val: req.compactedAt });
+
+      if (updates.length === 0) {
+        const row = db
+          .prepare<WorkflowMemoryRow, [string]>("SELECT * FROM workflow_memories WHERE id = ?")
+          .get(id);
+        if (!row) throw new Error("Workflow memory not found");
+        return mapWorkflowMemory(row);
+      }
+
+      const setClauses = updates.map((u) => `${u.col} = ?`).join(", ");
+      // Build SQL dynamically, execute without strong typing since we have variable columns
+      const sql = `UPDATE workflow_memories SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ? RETURNING *`;
+      const stmt = db.prepare(sql);
+      const vals = [...updates.map((u) => u.val), id];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = stmt.get(...(vals as any)) as WorkflowMemoryRow;
+      if (!row) throw new Error("Failed to update workflow memory");
+      return mapWorkflowMemory(row);
+    },
+    removeByTaskId: (taskId: string, scope?: "shared" | "task"): void => {
+      if (scope) {
+        db.prepare("DELETE FROM workflow_memories WHERE task_id = ? AND scope = ?").run(
+          taskId,
+          scope
+        );
+      } else {
+        db.prepare("DELETE FROM workflow_memories WHERE task_id = ?").run(taskId);
+      }
     },
   };
 }

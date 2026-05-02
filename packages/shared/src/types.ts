@@ -14,6 +14,142 @@ export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
 
 export const TASK_PRIORITY_LEVELS: TaskPriority[] = ["none", "low", "medium", "high", "urgent"];
 
+// ─── Task Type (Compozy-inspired) ─────────────────────────────────────────────
+export type TaskType =
+  | "frontend"
+  | "backend"
+  | "docs"
+  | "test"
+  | "infra"
+  | "refactor"
+  | "chore"
+  | "bugfix";
+
+export const TASK_TYPES: TaskType[] = [
+  "frontend",
+  "backend",
+  "docs",
+  "test",
+  "infra",
+  "refactor",
+  "chore",
+  "bugfix",
+];
+
+export const TASK_TYPE_META: Record<
+  TaskType,
+  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  frontend: {
+    label: "Frontend",
+    icon: "🎨",
+    textColor: "text-sky-400",
+    bgColor: "bg-sky-500/10",
+    borderColor: "border-sky-500/30",
+  },
+  backend: {
+    label: "Backend",
+    icon: "⚙️",
+    textColor: "text-violet-400",
+    bgColor: "bg-violet-500/10",
+    borderColor: "border-violet-500/30",
+  },
+  docs: {
+    label: "Docs",
+    icon: "📄",
+    textColor: "text-slate-400",
+    bgColor: "bg-slate-500/10",
+    borderColor: "border-slate-500/30",
+  },
+  test: {
+    label: "Test",
+    icon: "🧪",
+    textColor: "text-green-400",
+    bgColor: "bg-green-500/10",
+    borderColor: "border-green-500/30",
+  },
+  infra: {
+    label: "Infra",
+    icon: "🏗️",
+    textColor: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/30",
+  },
+  refactor: {
+    label: "Refactor",
+    icon: "♻️",
+    textColor: "text-teal-400",
+    bgColor: "bg-teal-500/10",
+    borderColor: "border-teal-500/30",
+  },
+  chore: {
+    label: "Chore",
+    icon: "🔧",
+    textColor: "text-zinc-400",
+    bgColor: "bg-zinc-500/10",
+    borderColor: "border-zinc-500/30",
+  },
+  bugfix: {
+    label: "Bugfix",
+    icon: "🐛",
+    textColor: "text-red-400",
+    bgColor: "bg-red-500/10",
+    borderColor: "border-red-500/30",
+  },
+};
+
+// ─── Task Complexity (Compozy-inspired) ───────────────────────────────────────
+export type TaskComplexity = "trivial" | "low" | "medium" | "high" | "critical";
+
+export const TASK_COMPLEXITY_LEVELS: TaskComplexity[] = [
+  "trivial",
+  "low",
+  "medium",
+  "high",
+  "critical",
+];
+
+export const TASK_COMPLEXITY_META: Record<
+  TaskComplexity,
+  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  trivial: {
+    label: "Trivial",
+    icon: "○",
+    textColor: "text-zinc-400",
+    bgColor: "bg-zinc-500/10",
+    borderColor: "border-zinc-500/30",
+  },
+  low: {
+    label: "Low",
+    icon: "◔",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  medium: {
+    label: "Medium",
+    icon: "◑",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  high: {
+    label: "High",
+    icon: "◕",
+    textColor: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/30",
+  },
+  critical: {
+    label: "Critical",
+    icon: "●",
+    textColor: "text-red-400",
+    bgColor: "bg-red-500/10",
+    borderColor: "border-red-500/30",
+  },
+};
+
 export const TASK_PRIORITY_META: Record<
   TaskPriority,
   { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
@@ -125,6 +261,10 @@ export interface Task {
   notes: string;
   goal: string | null;
   desiredOutcome: string | null;
+  /** Compozy-inspired task type for classification and filtering. */
+  taskType: TaskType | null;
+  /** Compozy-inspired complexity estimate for the task. */
+  taskComplexity: TaskComplexity | null;
   /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
   plannerSpec?: string | null;
   /** IDs of tasks that must complete before this task can start. */
@@ -261,6 +401,8 @@ export interface CreateTaskRequest {
   issueUrl?: string;
   goal?: string;
   desiredOutcome?: string;
+  taskType?: TaskType;
+  taskComplexity?: TaskComplexity;
 }
 
 export interface UpdateTaskRequest {
@@ -278,6 +420,8 @@ export interface UpdateTaskRequest {
   dependsOn?: string[];
   pendingApproval?: boolean;
   maxCost?: number;
+  taskType?: TaskType | null;
+  taskComplexity?: TaskComplexity | null;
 }
 
 export interface CreateLabelRequest {

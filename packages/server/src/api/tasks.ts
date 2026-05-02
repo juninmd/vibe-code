@@ -7,6 +7,7 @@ import { Cron } from "croner";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Orchestrator } from "../agents/orchestrator";
+import { buildPrompt } from "../agents/orchestrator/prompt";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 
@@ -32,6 +33,10 @@ const createTaskSchema = z.object({
   dependsOn: z.array(z.string()).optional(),
   goal: z.string().optional(),
   desiredOutcome: z.string().optional(),
+  taskType: z
+    .enum(["frontend", "backend", "docs", "test", "infra", "refactor", "chore", "bugfix"])
+    .optional(),
+  taskComplexity: z.enum(["trivial", "low", "medium", "high", "critical"]).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -50,6 +55,11 @@ const updateTaskSchema = z.object({
   dependsOn: z.array(z.string()).optional(),
   pendingApproval: z.boolean().optional(),
   priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
+  taskType: z
+    .enum(["frontend", "backend", "docs", "test", "infra", "refactor", "chore", "bugfix"])
+    .nullable()
+    .optional(),
+  taskComplexity: z.enum(["trivial", "low", "medium", "high", "critical"]).nullable().optional(),
 });
 
 const launchTaskSchema = z.object({
@@ -300,6 +310,69 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "cancel_failed", message: msg }, 500);
     }
+  });
+
+  // Compozy-inspired: Dry Run / Prompt Preview
+  router.post("/:id/preview-prompt", async (c) => {
+    const taskId = c.req.param("id");
+    const task = db.tasks.getById(taskId);
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    // M3.3: Optionally inject memory if available
+    const sharedMemory = db.memories.getByTaskIdAndScope(taskId, "shared");
+    const taskMemory = db.memories.getByTaskIdAndScope(taskId, "task");
+
+    const prompt = buildPrompt(task, sharedMemory?.content, taskMemory?.content);
+    return c.json({ data: { prompt } });
+  });
+
+  // M3.2: Workflow Memory — Two-Tier (shared/task scope)
+  router.get("/:id/memory", (c) => {
+    const taskId = c.req.param("id");
+    const scope = (c.req.query("scope") as "shared" | "task") || "task";
+
+    const task = db.tasks.getById(taskId);
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    const memory = db.memories.getByTaskIdAndScope(taskId, scope);
+    return c.json({
+      data: {
+        memory,
+        scope,
+        needsCompaction: memory
+          ? memory.needsCompaction || memory.content.split("\n").length > 150
+          : false,
+      },
+    });
+  });
+
+  router.put("/:id/memory", async (c) => {
+    const taskId = c.req.param("id");
+    const { scope, content, compactedAt } = (await c.req.json()) as {
+      scope: "shared" | "task";
+      content: string;
+      compactedAt?: string;
+    };
+
+    const task = db.tasks.getById(taskId);
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    if (!scope || !content) {
+      return c.json({ error: "bad_request", message: "Missing scope or content" }, 400);
+    }
+
+    // Upsert: if memory exists, update it; otherwise create
+    const existing = db.memories.getByTaskIdAndScope(taskId, scope);
+    const memory = existing
+      ? db.memories.update(existing.id, { content, compactedAt })
+      : db.memories.create({ taskId, scope, content });
+
+    return c.json({
+      data: {
+        memory,
+        needsCompaction: memory.needsCompaction || memory.content.split("\n").length > 150,
+      },
+    });
   });
 
   router.post("/:id/approve/request", async (c) => {
