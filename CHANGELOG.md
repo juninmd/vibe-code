@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 ### Added
+- **Semantic Task Priority**: Priority is now represented as named levels (`none`, `low`, `medium`, `high`, `urgent`) instead of integers. Shared `TASK_PRIORITY_META` provides label, icon, and color tokens for consistent UI rendering across the app.
+- **Per-Repo Issue Numbers**: Tasks are automatically assigned sequential issue numbers scoped to each repository (`#1`, `#2`, …), enabling GitHub-style task references in the kanban board and task cards.
+- **Labels System**: Full CRUD for colored labels per repository (`GET/POST/PATCH/DELETE /api/labels`). Labels can be assigned to tasks via `PUT /api/labels/tasks/:taskId`. Labels display as colored pill badges on task cards and can be used to filter tasks.
+- **Priority Picker in New Task Dialog**: 5-button priority selector in the task creation dialog using the shared priority metadata.
+- **`LabelBadge` component**: Reusable colored pill component for labels with optional remove button.
 - **Goal Alignment**: Tasks now store explicit goal and desired outcome fields and inject them into agent context.
 - **Persistent Run State**: Run snapshots now preserve branch, worktree, session, and validator progress details.
 - **Task Artifacts**: Tasks now expose persisted work products such as worktrees, branches, docs, and pull requests.
@@ -12,6 +17,7 @@
 - Corrigidas falhas de typecheck/lint no web em toasts, dependências de skills, badges, diff viewer e componentes de repositório.
 - Corrigida a validação de caminhos do `RepoSkillsLoader` e seus testes em Windows.
 - Ajustados testes do orchestrator para não dependerem de LiteLLM/revisores externos no ambiente local.
+- Aumentado timeout dos testes de migração de banco de dados para 15s (schema cresceu com tabelas de labels).
 
 ## [0.2.0] - 2026-05-01
 ### Added

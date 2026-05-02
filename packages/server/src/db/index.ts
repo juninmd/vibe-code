@@ -1,6 +1,7 @@
 import {
   createArtifactQueries,
   createFindingsQueries,
+  createLabelQueries,
   createLogQueries,
   createMetricsQueries,
   createPromptTemplateQueries,
@@ -27,6 +28,7 @@ export function createDb(dbPath: string) {
     findings: createFindingsQueries(db),
     metrics: createMetricsQueries(db),
     artifacts: createArtifactQueries(db),
+    labels: createLabelQueries(db),
   };
 }
 

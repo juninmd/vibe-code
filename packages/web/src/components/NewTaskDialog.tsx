@@ -1,4 +1,11 @@
-import type { EngineInfo, Repository, SkillsIndex, TaskSpec } from "@vibe-code/shared";
+import type {
+  EngineInfo,
+  Repository,
+  SkillsIndex,
+  TaskPriority,
+  TaskSpec,
+} from "@vibe-code/shared";
+import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -8,7 +15,7 @@ import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
-import { EngineMeta, getEngineMeta } from "./ui/engine-icons";
+import { getEngineMeta } from "./ui/engine-icons";
 import { GitGenericIcon, GitHubIcon, GitLabIcon } from "./ui/git-icons";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
@@ -38,6 +45,7 @@ interface NewTaskDialogProps {
     engine?: string;
     model?: string;
     baseBranch?: string;
+    priority?: TaskPriority;
     tags?: string[];
     agentId?: string;
     workflowId?: string;
@@ -180,6 +188,7 @@ export function NewTaskDialog({
   const [branches, setBranches] = useState<string[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [priority, setPriority] = useState<TaskPriority>("none");
   const [agentId, setAgentId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
@@ -248,6 +257,7 @@ export function NewTaskDialog({
         engine: engine || undefined,
         model: model || undefined,
         baseBranch: baseBranch || undefined,
+        priority: priority !== "none" ? priority : undefined,
         tags: tags.length > 0 ? tags : undefined,
         agentId: agentId || undefined,
         workflowId: workflowId || undefined,
@@ -264,6 +274,7 @@ export function NewTaskDialog({
       setBaseBranch("");
       setBranches([]);
       setTags([]);
+      setPriority("none");
       setAgentId("");
       setWorkflowId("");
       setIsScheduled(false);
@@ -275,7 +286,7 @@ export function NewTaskDialog({
     }
   };
 
-  const selectedEngine = engines.find((e) => e.name === engine);
+  const _selectedEngine = engines.find((e) => e.name === engine);
 
   return (
     <>
@@ -459,6 +470,31 @@ export function NewTaskDialog({
                     </button>
                   </>
                 )}
+              </div>
+
+              <div>
+                <label
+                  className="block text-xs font-medium mb-2"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Priority
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {TASK_PRIORITY_LEVELS.map((p) => {
+                    const meta = TASK_PRIORITY_META[p];
+                    const isActive = priority === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPriority(p)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-all ${isActive ? `${meta.bgColor} ${meta.textColor} ${meta.borderColor}` : "bg-surface-hover border-strong text-secondary hover:border-strong"}`}
+                      >
+                        {meta.icon} {meta.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>

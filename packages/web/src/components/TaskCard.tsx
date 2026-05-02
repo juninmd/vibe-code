@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskWithRun } from "@vibe-code/shared";
+import { TASK_PRIORITY_META, type TaskWithRun } from "@vibe-code/shared";
 import { memo, useEffect, useRef, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import type { RetryState } from "../hooks/useRetryQueue";
@@ -64,7 +64,21 @@ const PRIORITY_CONFIG = [
   { label: "P0", color: "text-danger", bg: "bg-danger/15", dot: "bg-red-400" },
 ];
 
-function PriorityDot({ priority }: { priority: number }) {
+function PriorityBadge({ priority }: { priority: import("@vibe-code/shared").TaskPriority }) {
+  if (priority === "none") return null;
+  const meta = TASK_PRIORITY_META[priority];
+  return (
+    <span
+      title={meta.label}
+      className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${meta.bgColor} ${meta.textColor} ${meta.borderColor}`}
+    >
+      {meta.icon} {meta.label}
+    </span>
+  );
+}
+
+/** @deprecated kept for legacy priority: number usage during transition */
+function _PriorityDot({ priority }: { priority: number }) {
   const cfg = PRIORITY_CONFIG[Math.min(priority, 3)] ?? PRIORITY_CONFIG[0];
   if (priority === 0) return null;
   return (
@@ -154,14 +168,24 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
           {task.title}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
-          <PriorityDot priority={task.priority} />
-          <span
-            title={task.id}
-            className="text-[9px] font-mono select-all leading-snug mt-px"
-            style={{ color: "var(--text-dimmed)" }}
-          >
-            {task.id.slice(0, 8)}
-          </span>
+          <PriorityBadge priority={task.priority} />
+          {task.issueNumber != null ? (
+            <span
+              title={task.id}
+              className="text-[9px] font-mono select-all leading-snug mt-px px-1 py-0.5 rounded bg-surface-hover border border-strong"
+              style={{ color: "var(--text-dimmed)" }}
+            >
+              #{task.issueNumber}
+            </span>
+          ) : (
+            <span
+              title={task.id}
+              className="text-[9px] font-mono select-all leading-snug mt-px"
+              style={{ color: "var(--text-dimmed)" }}
+            >
+              {task.id.slice(0, 8)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -177,6 +201,28 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
       {task.tags && task.tags.length > 0 && (
         <div className="mb-2 ml-[21px]">
           <TaskTagsDisplay tags={task.tags} small />
+        </div>
+      )}
+
+      {task.labels && task.labels.length > 0 && (
+        <div className="mb-2 ml-[21px] flex flex-wrap gap-1">
+          {task.labels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
+              style={{
+                backgroundColor: `${label.color}22`,
+                borderColor: `${label.color}55`,
+                color: label.color,
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: label.color }}
+              />
+              {label.name}
+            </span>
+          ))}
         </div>
       )}
 

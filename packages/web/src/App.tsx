@@ -167,6 +167,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     priority: null,
     hasPR: false,
     tags: [],
+    labelIds: [],
   });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [search, setSearch] = useState("");

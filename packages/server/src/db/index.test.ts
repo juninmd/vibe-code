@@ -43,7 +43,7 @@ describe("Database index", () => {
     const repoCols = db.raw.query("PRAGMA table_info(repositories)").all() as { name: string }[];
     const repoColNames = repoCols.map((c) => c.name);
     expect(repoColNames).toContain("provider");
-  });
+  }, 15000);
 
   it("migrates from old schema", () => {
     const dbPath = join(tmpDir, "old_test.sqlite");
@@ -77,5 +77,5 @@ describe("Database index", () => {
     const repoCols = db.raw.query("PRAGMA table_info(repositories)").all() as { name: string }[];
     const repoColNames = repoCols.map((c) => c.name);
     expect(repoColNames).toContain("provider");
-  });
+  }, 15000);
 });

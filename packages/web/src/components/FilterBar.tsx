@@ -1,8 +1,11 @@
+import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META, type TaskPriority } from "@vibe-code/shared";
+
 interface Filters {
   engine: string | null;
-  priority: number | null;
+  priority: TaskPriority | null;
   hasPR: boolean;
   tags: string[];
+  labelIds: string[];
 }
 
 interface FilterBarProps {
@@ -14,21 +17,16 @@ interface FilterBarProps {
   onSearchChange?: (s: string) => void;
 }
 
-const PRIORITIES = [
-  { label: "P0", value: 3 },
-  { label: "P1", value: 2 },
-  { label: "P2", value: 1 },
-  { label: "P3", value: 0 },
-];
-
 function Chip({
   active,
   onClick,
   children,
+  accentColor,
 }: {
   active?: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  accentColor?: string;
 }) {
   return (
     <button
@@ -39,6 +37,7 @@ function Chip({
           ? "bg-accent-muted border-violet-600 text-accent-text"
           : "bg-surface-hover border-strong text-secondary hover:text-primary hover:border-strong"
       }`}
+      style={active && accentColor ? { borderColor: accentColor, color: accentColor } : undefined}
     >
       {children}
     </button>
@@ -57,7 +56,8 @@ export function FilterBar({
     filters.engine !== null ||
     filters.priority !== null ||
     filters.hasPR ||
-    filters.tags.length > 0;
+    filters.tags.length > 0 ||
+    filters.labelIds.length > 0;
 
   const set = (partial: Partial<Filters>) => onFilterChange({ ...filters, ...partial });
 
@@ -84,15 +84,22 @@ export function FilterBar({
         </Chip>
       ))}
 
-      {PRIORITIES.map((p) => (
-        <Chip
-          key={p.label}
-          active={filters.priority === p.value}
-          onClick={() => set({ priority: filters.priority === p.value ? null : p.value })}
-        >
-          {p.label}
-        </Chip>
-      ))}
+      {TASK_PRIORITY_LEVELS.filter((p) => p !== "none").map((p) => {
+        const meta = TASK_PRIORITY_META[p];
+        return (
+          <Chip
+            key={p}
+            active={filters.priority === p}
+            accentColor={filters.priority === p ? undefined : undefined}
+            onClick={() => set({ priority: filters.priority === p ? null : p })}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${meta.bgColor.replace("bg-", "bg-").replace("/10", "")}`}
+            />
+            {meta.label}
+          </Chip>
+        );
+      })}
 
       <Chip active={filters.hasPR} onClick={() => set({ hasPR: !filters.hasPR })}>
         ↗ PR
@@ -117,7 +124,9 @@ export function FilterBar({
       {hasActiveFilter && (
         <button
           type="button"
-          onClick={() => onFilterChange({ engine: null, priority: null, hasPR: false, tags: [] })}
+          onClick={() =>
+            onFilterChange({ engine: null, priority: null, hasPR: false, tags: [], labelIds: [] })
+          }
           className="text-[11px] text-primary0 hover:text-secondary cursor-pointer transition-colors ml-1"
         >
           ✕ Limpar

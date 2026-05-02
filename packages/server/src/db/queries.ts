@@ -2,11 +2,13 @@ import type { Database } from "bun:sqlite";
 import type {
   AgentLog,
   AgentRun,
+  CreateLabelRequest,
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
   EngineEffectiveness,
   GitProvider,
+  Label,
   PromptTemplate,
   Repository,
   ReviewFinding,
@@ -17,6 +19,7 @@ import type {
   Task,
   TaskArtifact,
   TaskArtifactKind,
+  TaskPriority,
   TaskSchedule,
   TaskStatus,
   UpdateTaskRequest,
@@ -29,6 +32,25 @@ interface RunResult {
 
 function getChanges(info: RunResult): number {
   return info.changes;
+}
+
+// ─── Priority helpers (int ↔ semantic) ───────────────────────────────────────
+
+const INT_TO_PRIORITY: TaskPriority[] = ["none", "low", "medium", "high", "urgent"];
+const PRIORITY_TO_INT: Record<TaskPriority, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  urgent: 4,
+};
+
+function intToPriority(n: number | null | undefined): TaskPriority {
+  return INT_TO_PRIORITY[n ?? 0] ?? "none";
+}
+
+function priorityToInt(p: TaskPriority | undefined | null): number {
+  return PRIORITY_TO_INT[p ?? "none"] ?? 0;
 }
 
 // ─── Row types (snake_case from SQLite) ──────────────────────────────────────
@@ -48,6 +70,7 @@ interface RepoRow {
 
 interface TaskRow {
   id: string;
+  issue_number: number | null;
   title: string;
   description: string;
   repo_id: string;
@@ -134,13 +157,14 @@ function mapRepo(row: RepoRow): Repository {
 function mapTask(row: TaskRow): Task {
   return {
     id: row.id,
+    issueNumber: row.issue_number ?? undefined,
     title: row.title,
     description: row.description,
     repoId: row.repo_id,
     status: row.status as Task["status"],
     engine: row.engine,
     model: row.model,
-    priority: row.priority,
+    priority: intToPriority(row.priority),
     columnOrder: row.column_order,
     baseBranch: row.base_branch,
     branchName: row.branch_name,
@@ -297,30 +321,42 @@ export function createTaskQueries(db: Database) {
       const order = (maxOrderRow?.max_order ?? 0) + 1;
       const tagsJson = JSON.stringify(req.tags ?? []);
       const dependsOnJson = JSON.stringify(req.dependsOn ?? []);
-      const row = db
-        .prepare(
-          "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
-        )
-        .get(
-          req.title,
-          req.description ?? "",
-          req.repoId,
-          req.engine ?? null,
-          req.model ?? null,
-          req.baseBranch ?? null,
-          req.priority ?? 0,
-          order,
-          status,
-          req.parentTaskId ?? null,
-          tagsJson,
-          req.agentId ?? null,
-          req.workflowId ?? null,
-          dependsOnJson,
-          "0",
-          req.issueUrl ?? null,
-          req.goal ?? null,
-          req.desiredOutcome ?? null
-        ) as TaskRow | null;
+      const priorityInt = priorityToInt(req.priority);
+
+      // Auto-assign per-repo sequential issue number inside a transaction
+      const row = db.transaction(() => {
+        const nextIssueRow = db
+          .prepare("SELECT COALESCE(MAX(issue_number), 0) + 1 AS next FROM tasks WHERE repo_id = ?")
+          .get(req.repoId) as { next: number };
+        const issueNum = nextIssueRow.next;
+
+        return db
+          .prepare(
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome, issue_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+          )
+          .get(
+            req.title,
+            req.description ?? "",
+            req.repoId,
+            req.engine ?? null,
+            req.model ?? null,
+            req.baseBranch ?? null,
+            priorityInt,
+            order,
+            status,
+            req.parentTaskId ?? null,
+            tagsJson,
+            req.agentId ?? null,
+            req.workflowId ?? null,
+            dependsOnJson,
+            "0",
+            req.issueUrl ?? null,
+            req.goal ?? null,
+            req.desiredOutcome ?? null,
+            issueNum
+          ) as TaskRow | null;
+      })();
+
       if (!row) throw new Error("Failed to create task");
       return mapTask(row as TaskRow);
     },
@@ -378,6 +414,10 @@ export function createTaskQueries(db: Database) {
       if (req.maxCost !== undefined) {
         sets.push("max_cost = ?");
         values.push(req.maxCost ?? null);
+      }
+      if (req.priority !== undefined) {
+        sets.push("priority = ?");
+        values.push(priorityToInt(req.priority));
       }
       if (sets.length === 0) {
         const currentRow = stmts.getById.get(id);
@@ -1112,6 +1152,103 @@ export function createMetricsQueries(db: Database) {
         avgBlockers: r.avg_blockers,
         prRate: r.pr_rate,
       }));
+    },
+  };
+}
+
+// ─── Label Queries ────────────────────────────────────────────────────────────
+
+interface LabelRow {
+  id: string;
+  repo_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+function mapLabel(row: LabelRow): Label {
+  return {
+    id: row.id,
+    repoId: row.repo_id,
+    name: row.name,
+    color: row.color,
+    createdAt: row.created_at,
+  };
+}
+
+export function createLabelQueries(db: Database) {
+  return {
+    listByRepo: (repoId: string): Label[] => {
+      return db
+        .prepare<LabelRow, [string]>("SELECT * FROM labels WHERE repo_id = ? ORDER BY name ASC")
+        .all(repoId)
+        .map(mapLabel);
+    },
+    getById: (id: string): Label | null => {
+      const row = db.prepare<LabelRow, [string]>("SELECT * FROM labels WHERE id = ?").get(id);
+      return row ? mapLabel(row) : null;
+    },
+    create: (req: CreateLabelRequest): Label => {
+      const row = db
+        .prepare<LabelRow, [string, string, string]>(
+          "INSERT INTO labels (repo_id, name, color) VALUES (?, ?, ?) RETURNING *"
+        )
+        .get(req.repoId, req.name, req.color);
+      if (!row) throw new Error("Failed to create label");
+      return mapLabel(row);
+    },
+    update: (id: string, name: string, color: string): Label | null => {
+      const row = db
+        .prepare<LabelRow, [string, string, string]>(
+          "UPDATE labels SET name = ?, color = ? WHERE id = ? RETURNING *"
+        )
+        .get(name, color, id);
+      return row ? mapLabel(row) : null;
+    },
+    remove: (id: string): void => {
+      db.prepare("DELETE FROM labels WHERE id = ?").run(id);
+    },
+    // ── Task↔Label join ──────────────────────────────────────────────────────
+    getTaskLabels: (taskId: string): Label[] => {
+      return db
+        .prepare<LabelRow, [string]>(
+          "SELECT l.* FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ? ORDER BY l.name ASC"
+        )
+        .all(taskId)
+        .map(mapLabel);
+    },
+    setTaskLabels: (taskId: string, labelIds: string[]): void => {
+      db.transaction(() => {
+        db.prepare("DELETE FROM task_labels WHERE task_id = ?").run(taskId);
+        const ins = db.prepare(
+          "INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)"
+        );
+        for (const labelId of labelIds) {
+          ins.run(taskId, labelId);
+        }
+      })();
+    },
+    addTaskLabel: (taskId: string, labelId: string): void => {
+      db.prepare("INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)").run(
+        taskId,
+        labelId
+      );
+    },
+    removeTaskLabel: (taskId: string, labelId: string): void => {
+      db.prepare("DELETE FROM task_labels WHERE task_id = ? AND label_id = ?").run(taskId, labelId);
+    },
+    getByRepoWithCounts: (repoId: string): (Label & { taskCount: number })[] => {
+      const rows = db
+        .prepare<LabelRow & { task_count: number }, [string]>(
+          `SELECT l.*, COUNT(tl.task_id) AS task_count
+           FROM labels l
+           LEFT JOIN task_labels tl ON tl.label_id = l.id
+           WHERE l.repo_id = ?
+           GROUP BY l.id
+           ORDER BY l.name ASC`
+        )
+        .all(repoId);
+      return rows.map((r) => ({ ...mapLabel(r), taskCount: r.task_count }));
     },
   };
 }
