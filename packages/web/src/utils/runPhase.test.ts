@@ -12,6 +12,8 @@ describe("getPhaseLabel", () => {
     expect(getPhaseLabel("setup")).toBe(RUN_PHASE_LABELS.setup);
     expect(getPhaseLabel("worktree_ready")).toBe(RUN_PHASE_LABELS.worktree_ready);
     expect(getPhaseLabel("agent_running")).toBe(RUN_PHASE_LABELS.agent_running);
+    expect(getPhaseLabel("generating")).toBe(RUN_PHASE_LABELS.generating);
+    expect(getPhaseLabel("fixing")).toBe(RUN_PHASE_LABELS.fixing);
   });
 
   it("returns the original phase name if not in RUN_PHASE_LABELS", () => {

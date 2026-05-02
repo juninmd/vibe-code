@@ -12,6 +12,7 @@ interface ComboboxProps {
   onChange: (value: string) => void;
   placeholder?: string;
   required?: boolean;
+  inputId?: string;
 }
 
 export function Combobox({
@@ -20,6 +21,7 @@ export function Combobox({
   onChange,
   placeholder = "Search...",
   required,
+  inputId,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -71,6 +73,7 @@ export function Combobox({
         }`}
       >
         <input
+          id={inputId}
           ref={inputRef}
           type="text"
           value={open ? search : (selectedOption?.label ?? "")}

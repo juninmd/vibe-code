@@ -26,7 +26,14 @@ bun run typecheck
 
 ## Architecture
 
-**vibe-code** is a multi-agent AI task manager: it orchestrates AI coding agents (Claude Code, Aider, OpenCode) to work on tasks across multiple Git repositories, with a kanban web UI for tracking.
+**vibe-code** is evolving into an autonomous code production control plane. It orchestrates coding agents across multiple Git repositories, preserves isolated workspaces, and treats board views, runtime panels, and reviews as operator surfaces around a stronger workflow contract.
+
+Repository contract entrypoints:
+
+- `AGENTS.md` — short index loaded early by coding agents
+- `WORKFLOW.md` — compatibility workflow contract for future runtime-driven orchestration
+- `docs/repo-contract.md` — repo-level boundaries, quality gates, and rollout policy
+- `docs/glossary.md` — shared terms for objective, task, run, artifact, review, and memory
 
 ### Packages
 
@@ -49,7 +56,7 @@ bun run typecheck
 
 - **`api/client.ts`** — typed fetch wrapper over the REST API
 - **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useWebSocket` (with reconnect logic)
-- **`components/`** — `Board` (dnd-kit drag-drop kanban), `TaskDetail` (slide-over with live logs and stdin input), `Sidebar` (repo selector)
+- **`components/`** — `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
 
 ### Data flow
 

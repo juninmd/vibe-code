@@ -1,7 +1,8 @@
-import { readdir } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import type {
   AgentEntry,
   RuleEntry,
+  SkillEffectiveness,
   SkillEntry,
   SkillsIndex,
   WorkflowEntry,
@@ -12,9 +13,94 @@ export interface MatchedSkills {
   skills: SkillEntry[];
   workflow: WorkflowEntry | null;
   agents: AgentEntry[];
+  metadata: MatchSelectionMetadata;
+}
+
+export interface MatchContext {
+  recentFindings?: Array<{ persona: string; severity: string; content: string }>;
+  skillEffectiveness?: SkillEffectiveness[];
+  workflowHint?: string | null;
+  taskGoal?: string | null;
+  desiredOutcome?: string | null;
+}
+
+export interface RankedMatch {
+  name: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface MatchSelectionMetadata {
+  fileExtensions: string[];
+  rankedRules: RankedMatch[];
+  rankedSkills: RankedMatch[];
+  rankedAgents: RankedMatch[];
+  workflow: RankedMatch | null;
 }
 
 const MAX_INJECTION_CHARS = 8000;
+
+function tokenize(text: string): string[] {
+  return Array.from(
+    new Set(
+      text
+        .toLowerCase()
+        .split(/[^a-z0-9_+#.-]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 2)
+    )
+  );
+}
+
+function keywordOverlap(text: string, tokens: string[]): number {
+  const lower = text.toLowerCase();
+  return tokens.filter((token) => lower.includes(token)).length;
+}
+
+function metricBonus(
+  name: string,
+  metrics?: SkillEffectiveness[]
+): { score: number; reason?: string } {
+  const metric = metrics?.find((entry) => entry.name.toLowerCase() === name.toLowerCase());
+  if (!metric) return { score: 0 };
+  const score = metric.successRate / 20 - metric.avgBlockers * 2 - metric.avgWarnings;
+  if (score <= 0) return { score: 0 };
+  return { score, reason: `historical-success:${metric.successRate}` };
+}
+
+function rankEntries<T extends { name: string; description: string; tags?: string[] }>(
+  entries: T[],
+  taskTokens: string[],
+  findingTokens: string[],
+  metrics?: SkillEffectiveness[]
+): Array<{ entry: T; score: number; reasons: string[] }> {
+  return entries
+    .map((entry) => {
+      const tagText = entry.tags?.join(" ") ?? "";
+      const lexicalScore = keywordOverlap(
+        `${entry.name} ${entry.description} ${tagText}`,
+        taskTokens
+      );
+      const findingScore = findingTokens.length
+        ? keywordOverlap(`${entry.name} ${entry.description} ${tagText}`, findingTokens)
+        : 0;
+      const metric = metricBonus(entry.name, metrics);
+      const reasons = [
+        lexicalScore > 0 ? `task-overlap:${lexicalScore}` : "",
+        findingScore > 0 ? `review-signal:${findingScore}` : "",
+        metric.reason ?? "",
+      ].filter(Boolean);
+      return {
+        entry,
+        score: lexicalScore * 3 + findingScore * 2 + metric.score,
+        reasons,
+      };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name)
+    );
+}
 
 /**
  * Match rules by checking if any of the workdir file extensions match
@@ -40,21 +126,34 @@ function matchRules(rules: RuleEntry[], fileExtensions: Set<string>): RuleEntry[
   });
 }
 
-/**
- * Match skills by keyword overlap between skill description and task text.
- */
-function matchSkills(skills: SkillEntry[], taskText: string): SkillEntry[] {
-  const lowerText = taskText.toLowerCase();
-  const scored = skills
-    .map((skill) => {
-      const words = skill.description.toLowerCase().split(/\s+/);
-      const hits = words.filter((w) => w.length > 3 && lowerText.includes(w)).length;
-      return { skill, score: hits };
+function rankRules(
+  rules: RuleEntry[],
+  fileExtensions: Set<string>,
+  taskTokens: string[]
+): Array<{ entry: RuleEntry; score: number; reasons: string[] }> {
+  return rules
+    .map((rule) => {
+      let score = 0;
+      const reasons: string[] = [];
+      if (!rule.applyTo) {
+        score += 2;
+        reasons.push("global-rule");
+      }
+      if (matchRules([rule], fileExtensions).length > 0) {
+        score += 8;
+        reasons.push("surface-match");
+      }
+      const lexical = keywordOverlap(`${rule.name} ${rule.description}`, taskTokens);
+      if (lexical > 0) {
+        score += lexical * 2;
+        reasons.push(`task-overlap:${lexical}`);
+      }
+      return { entry: rule, score, reasons };
     })
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, 5).map((s) => s.skill);
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name)
+    );
 }
 
 /**
@@ -65,21 +164,38 @@ function matchWorkflow(workflows: WorkflowEntry[], taskText: string): WorkflowEn
   return workflows.find((w) => lowerText.includes(w.name.toLowerCase())) ?? null;
 }
 
-/**
- * Match agents by keyword overlap (same approach as skills).
- */
-function matchAgents(agents: AgentEntry[], taskText: string): AgentEntry[] {
-  const lowerText = taskText.toLowerCase();
-  const scored = agents
-    .map((agent) => {
-      const words = agent.description.toLowerCase().split(/\s+/);
-      const hits = words.filter((w) => w.length > 3 && lowerText.includes(w)).length;
-      return { agent, score: hits };
+function rankWorkflow(
+  workflows: WorkflowEntry[],
+  taskTokens: string[],
+  workflowHint?: string | null
+): { workflow: WorkflowEntry | null; ranked: RankedMatch | null } {
+  const ranked = workflows
+    .map((workflow) => {
+      const overlap = keywordOverlap(`${workflow.name} ${workflow.description}`, taskTokens);
+      let score = overlap >= 2 ? overlap * 3 : 0;
+      const reasons = score > 0 ? ["task-overlap"] : [];
+      if (workflowHint && workflow.name.toLowerCase().includes(workflowHint.toLowerCase())) {
+        score += 12;
+        reasons.push("explicit-workflow-hint");
+      }
+      return { workflow, score, reasons };
     })
-    .filter((s) => s.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  return scored.slice(0, 3).map((s) => s.agent);
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.workflow.name.localeCompare(right.workflow.name)
+    );
+  const top = ranked[0] ?? null;
+  return {
+    workflow: top?.workflow ?? null,
+    ranked: top
+      ? {
+          name: top.workflow.name,
+          score: top.score,
+          reasons: top.reasons,
+        }
+      : null,
+  };
 }
 
 /**
@@ -88,7 +204,7 @@ function matchAgents(agents: AgentEntry[], taskText: string): AgentEntry[] {
 async function detectExtensions(workdir: string): Promise<Set<string>> {
   const exts = new Set<string>();
   try {
-    const entries = await readdir(workdir, { withFileTypes: true });
+    const entries = await fs.readdir(workdir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isFile()) {
         const dotIdx = entry.name.lastIndexOf(".");
@@ -98,7 +214,7 @@ async function detectExtensions(workdir: string): Promise<Set<string>> {
     // Also check common subdirs
     for (const subdir of ["src", "lib", "app"]) {
       try {
-        const subEntries = await readdir(`${workdir}/${subdir}`, { withFileTypes: true });
+        const subEntries = await fs.readdir(`${workdir}/${subdir}`, { withFileTypes: true });
         for (const entry of subEntries) {
           if (entry.isFile()) {
             const dotIdx = entry.name.lastIndexOf(".");
@@ -147,15 +263,31 @@ export async function matchSkillsForTask(
   index: SkillsIndex,
   taskTitle: string,
   taskDescription: string,
-  workdir: string
+  workdir: string,
+  context: MatchContext = {}
 ): Promise<MatchedSkills> {
-  const taskText = `${taskTitle} ${taskDescription}`;
+  const taskText = [taskTitle, taskDescription, context.taskGoal, context.desiredOutcome]
+    .filter(Boolean)
+    .join(" ");
   const fileExts = await detectExtensions(workdir);
+  const taskTokens = tokenize(taskText);
+  const findingTokens = tokenize(
+    (context.recentFindings ?? []).map((finding) => finding.content).join(" ")
+  );
 
-  const initialRules = matchRules(index.rules, fileExts);
-  const initialSkills = matchSkills(index.skills, taskText);
-  const workflow = matchWorkflow(index.workflows, taskText);
-  const initialAgents = matchAgents(index.agents, taskText);
+  const rankedRules = rankRules(index.rules, fileExts, taskTokens);
+  const initialRules = rankedRules.map((entry) => entry.entry);
+  const rankedSkills = rankEntries(
+    index.skills,
+    taskTokens,
+    findingTokens,
+    context.skillEffectiveness
+  );
+  const initialSkills = rankedSkills.map((entry) => entry.entry);
+  const workflowResult = rankWorkflow(index.workflows, taskTokens, context.workflowHint);
+  const workflow = workflowResult.workflow ?? matchWorkflow(index.workflows, taskText);
+  const rankedAgents = rankEntries(index.agents, taskTokens, findingTokens);
+  const initialAgents = rankedAgents.map((entry) => entry.entry);
 
   // Resolve skills from agents
   const agentSkills: SkillEntry[] = [];
@@ -191,5 +323,29 @@ export async function matchSkillsForTask(
     trimmedSkills.push(skill);
   }
 
-  return { rules: trimmedRules, skills: trimmedSkills, workflow, agents };
+  return {
+    rules: trimmedRules,
+    skills: trimmedSkills,
+    workflow,
+    agents,
+    metadata: {
+      fileExtensions: Array.from(fileExts),
+      rankedRules: rankedRules.slice(0, 10).map((entry) => ({
+        name: entry.entry.name,
+        score: entry.score,
+        reasons: entry.reasons,
+      })),
+      rankedSkills: rankedSkills.slice(0, 10).map((entry) => ({
+        name: entry.entry.name,
+        score: entry.score,
+        reasons: entry.reasons,
+      })),
+      rankedAgents: rankedAgents.slice(0, 10).map((entry) => ({
+        name: entry.entry.name,
+        score: entry.score,
+        reasons: entry.reasons,
+      })),
+      workflow: workflowResult.ranked,
+    },
+  };
 }

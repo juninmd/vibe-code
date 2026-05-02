@@ -32,6 +32,14 @@ function retryBackoffMs(attempt: number): number {
   return Math.min(10_000 * 2 ** (attempt - 1), AUTO_RETRY_MAX_BACKOFF_MS);
 }
 
+function appendTaskNote(existing: string | undefined, note: string): string {
+  const trimmed = note.trim();
+  if (!trimmed) return existing ?? "";
+  return [existing?.trim(), `[${new Date().toISOString()}] ${trimmed}`]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 // Parse VIBE_CODE_MAX_AGENTS_BY_STATUS="in_progress:6,review:2"
 function parseMaxAgentsByStatus(): Map<string, number> {
   const map = new Map<string, number>();
@@ -257,6 +265,11 @@ export class Orchestrator {
   }
 
   async cancel(taskId: string): Promise<void> {
+    const childTasks = this.db.tasks.listChildren(taskId);
+    for (const childTask of childTasks) {
+      await this.cancelChildTask(childTask.id, taskId);
+    }
+
     // Cancel any pending auto-retry first
     this.cancelRetry(taskId);
 
@@ -332,7 +345,7 @@ export class Orchestrator {
     return dependsOn.filter((depId) => {
       const dep = this.db.tasks.getById(depId);
       if (!dep) return true;
-      if (dep.status === "done" || dep.status === "archived" || dep.status === "failed") {
+      if (dep.status === "review" || dep.status === "done" || dep.status === "archived") {
         return false;
       }
       return true;
@@ -420,6 +433,34 @@ export class Orchestrator {
       this.retryQueue.delete(taskId);
       logOrchestratorEvent(`Auto-retry cancelled for task [${taskId.slice(0, 8)}]`);
     }
+  }
+
+  private async cancelChildTask(taskId: string, parentTaskId: string): Promise<void> {
+    const child = this.db.tasks.getById(taskId);
+    if (!child) return;
+
+    for (const grandChild of this.db.tasks.listChildren(taskId)) {
+      await this.cancelChildTask(grandChild.id, taskId);
+    }
+
+    const note = appendTaskNote(
+      child.notes,
+      `Cancelled because parent task ${parentTaskId.slice(0, 8)} was cancelled.`
+    );
+
+    const active = this.activeRuns.get(taskId);
+    if (active) {
+      active.abort.abort();
+      const engine = this.registry.get(active.engineName);
+      if (engine) engine.abort(active.runId);
+      this.db.runs.updateStatus(active.runId, "cancelled", {
+        finished_at: new Date().toISOString(),
+      });
+      this.activeRuns.delete(taskId);
+    }
+
+    const updated = this.db.tasks.update(taskId, { status: "failed", notes: note });
+    if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
   }
 
   private sysLog(runId: string, taskId: string, content: string): void {

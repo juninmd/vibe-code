@@ -1,13 +1,16 @@
 import { Cron } from "croner";
 import type { Db } from "../db";
+import type { SkillRegistryService } from "../skills/registry";
 import type { Orchestrator } from "./orchestrator";
 
 export class ScheduleRunner {
   private cron: Cron | null = null;
+  private lastHygieneAt = 0;
 
   constructor(
     private db: Db,
-    private orchestrator: Orchestrator
+    private orchestrator: Orchestrator,
+    private skillRegistry?: SkillRegistryService
   ) {}
 
   start(): void {
@@ -43,5 +46,15 @@ export class ScheduleRunner {
 
     // 2. Continuous Autonomy / Heartbeat: Sweep backlog for work stealing
     await this.orchestrator.sweepBacklog();
+
+    const HYGIENE_INTERVAL_MS = 15 * 60 * 1000;
+    if (this.skillRegistry && Date.now() - this.lastHygieneAt >= HYGIENE_INTERVAL_MS) {
+      this.lastHygieneAt = Date.now();
+      const report = await this.skillRegistry.generateHygieneReport(this.db);
+      this.db.settings.set("system_hygiene_report", JSON.stringify(report));
+      console.log(
+        `  ↻ Hygiene report updated pending=${report.pendingRegistryReviews} memories=${report.memoriesNeedingCompaction} blocked=${report.blockedByFailedDependencies}`
+      );
+    }
   }
 }

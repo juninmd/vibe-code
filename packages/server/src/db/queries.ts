@@ -297,6 +297,9 @@ export function createTaskQueries(db: Database) {
     listByRepo: db.prepare<TaskRow, [string]>(
       "SELECT * FROM tasks WHERE repo_id = ? ORDER BY column_order ASC, created_at DESC"
     ),
+    listChildren: db.prepare<TaskRow, [string]>(
+      "SELECT * FROM tasks WHERE parent_task_id = ? ORDER BY created_at ASC, rowid ASC"
+    ),
     listByStatus: db.prepare<TaskRow, [string]>(
       "SELECT * FROM tasks WHERE status = ? ORDER BY column_order ASC"
     ),
@@ -317,6 +320,8 @@ export function createTaskQueries(db: Database) {
       if (status) return stmts.listByStatus.all(status).map(mapTask);
       return stmts.list.all().map(mapTask);
     },
+    listChildren: (parentTaskId: string): Task[] =>
+      stmts.listChildren.all(parentTaskId).map(mapTask),
     getById: (id: string): Task | null => {
       const row = stmts.getById.get(id);
       return row ? mapTask(row) : null;
@@ -338,7 +343,7 @@ export function createTaskQueries(db: Database) {
 
         return db
           .prepare(
-            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, issue_url, goal, desired_outcome, issue_number, task_type, task_complexity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, task_type, task_complexity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
             req.title,
@@ -356,6 +361,7 @@ export function createTaskQueries(db: Database) {
             req.workflowId ?? null,
             dependsOnJson,
             "0",
+            req.maxCost ?? null,
             req.issueUrl ?? null,
             req.goal ?? null,
             req.desiredOutcome ?? null,
@@ -1553,6 +1559,14 @@ export function createMemoryQueries(db: Database) {
         .prepare<WorkflowMemoryRow, [string]>("SELECT * FROM workflow_memories WHERE id = ?")
         .get(id);
       return row ? mapWorkflowMemory(row) : null;
+    },
+    listNeedingCompaction: (): WorkflowMemory[] => {
+      const rows = db
+        .prepare<WorkflowMemoryRow, []>(
+          "SELECT * FROM workflow_memories WHERE needs_compaction = 1 ORDER BY updated_at DESC"
+        )
+        .all();
+      return rows.map(mapWorkflowMemory);
     },
     create: (req: CreateWorkflowMemoryRequest): WorkflowMemory => {
       const row = db

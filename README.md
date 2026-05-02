@@ -1,6 +1,6 @@
 # 🚀 Vibe-Code
 
-> **Multi-Agent AI Task Manager** — Orquestra agentes de código IA (Claude Code, Aider, OpenCode) para trabalhar em tarefas em múltiplos repositórios Git, com uma interface kanban interativa.
+> **Autonomous Code Production Control Plane** — Orquestra agentes de código IA (Claude Code, Aider, OpenCode) para transformar objetivos em mudanças validadas, evidências operacionais e handoffs previsíveis entre múltiplos repositórios Git.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.3+-orange?style=flat-square&logo=bun)](https://bun.sh/)
@@ -13,15 +13,35 @@
 
 ## ✨ O que é Vibe-Code?
 
-**Vibe-Code** é uma plataforma de automação de desenvolvimento que orquestra agentes de IA para trabalhar em tarefas de código através de múltiplos repositórios. Use agentes como Claude Code, Aider ou OpenCode para:
+**Vibe-Code** está evoluindo de um task manager assistido para um control plane de produção autônoma de código. O board e os painéis operacionais continuam existindo, mas deixam de ser a identidade principal do produto: o foco passa a ser objetivo, execução, validação, review, artefatos e memória.
 
-- 🤖 **Automatização Inteligente** — Execute tarefas de code generation, refactoring, bug fixing
-- 📋 **Gestão de Tarefas** — Interface kanban intuitiva com drag-and-drop
+Hoje o runtime já consegue orquestrar execuções, reviews e PRs. A direção do repositório a partir desta fase é endurecer contratos, quality gates e contexto para que o sistema consiga assumir mais trabalho útil sem babysitting constante.
+
+Use agentes como Claude Code, Aider ou OpenCode para:
+
+- 🎯 **Objetivos Executáveis** — Transforme objetivos em tarefas, milestones, reviews e artifacts auditáveis
+- 🤖 **Automatização Inteligente** — Execute code generation, refactoring, bug fixing e docs com loops de review
 - 🔄 **Multi-Repo** — Trabalhe em vários repositórios simultaneamente
-- 📊 **Logs em Tempo Real** — Acompanhe a execução com streaming de eventos via WebSocket
+- 📊 **Control Plane Operacional** — Acompanhe runtime, filas, inbox, approvals e logs em tempo real
 - 🔐 **Isolamento Git** — Cada tarefa roda em seu próprio git worktree (sem contaminar branches)
-- ✅ **Pipeline de Qualidade** — Review automático, commit, push e PR
+- ✅ **Pipeline de Qualidade** — Review automático, commit, push, PR e evidências de validação
 - 🎛️ **Engines Plugáveis** — Adicione novos agentes IA facilmente
+
+---
+
+## 🧭 Contratos do Repositório
+
+O repositório agora tem uma camada explícita de contratos para humanos e agentes. A intenção é que comportamento operacional e critérios de qualidade fiquem versionados dentro do próprio repo, em vez de espalhados em prompts ad hoc.
+
+| Artefato | Papel |
+|---|---|
+| `AGENTS.md` | Índice curto para navegação e regras obrigatórias |
+| `WORKFLOW.md` | Contrato de workflow em modo compatível com a stack atual |
+| `docs/index.md` | Mapa da documentação operacional |
+| `docs/repo-contract.md` | Contrato do repositório: quality gates, boundaries e rollout |
+| `docs/glossary.md` | Vocabulário comum para objetivos, runs, artifacts e memória |
+
+Nesta release, `WORKFLOW.md` ainda convive com prompts e templates existentes. Ele serve como contrato-alvo para a migração do runtime, sem quebrar o pipeline atual.
 
 ---
 
@@ -104,6 +124,7 @@ GET /api/inbox
 | **Documentação** | Gerar ou atualizar docs, READMEs automaticamente |
 | **CI/CD Customizado** | Orquestrar workflows complexos com controle fino |
 | **Code Review Automático** | Pipeline de review com múltiplas personas (frontend, backend, security, quality, docs) |
+| **Operação Noturna** | Deixar objetivos, validações e handoffs rodando com supervisão mínima |
 
 ---
 
@@ -262,6 +283,7 @@ flowchart TD
 - **Bun** 1.3+ ([instalar](https://bun.sh/))
 - **Git** 2.20+
 - **Node.js** 18+ (se você não usa Bun nativamente)
+- **Git Bash ou WSL no Windows** para `bun run dev`, porque o script raiz usa `bash ./scripts/dev-safe.sh`
 - **Um ou mais engines IA instalados:**
   - [Claude Code](https://www.anthropic.com/claude-code) — `claude` CLI
   - [Aider](https://aider.chat/) — `aider` CLI
@@ -316,9 +338,10 @@ Press h to show help
 Abra seu navegador em **http://localhost:5173**
 
 Você verá:
-- 📋 **Kanban Board** — Colunas (Backlog → In Progress → Review → Done)
+- 📋 **Board View** — Uma visão operacional do pipeline (não a única superfície do produto)
 - 🔧 **Sidebar** — Seletor de repositórios
 - ⚙️ **Engine Status** (canto superior direito) — Mostra engines disponíveis
+- 📡 **Painéis Operacionais** — Runtimes, inbox, schedules, engines e evidências por tarefa
 
 ### 4️⃣ Configure seu Primeiro Repositório
 
@@ -864,7 +887,8 @@ git push origin feat/sua-feature
 - ✅ **Branches**: `feat/name`, `fix/bug-name`
 - ✅ **Tests**: Adicione testes para novas features
 - ✅ **Types**: Sempre use TypeScript (sem `any`)
-- ✅ **Lint**: `bun run lint:fix` antes de commit
+- ✅ **Validação mínima**: `bun run lint`, `bun run typecheck`, `bun run test`, `bun run build`
+- ✅ **Contrato do repo**: consulte `WORKFLOW.md` e `docs/repo-contract.md` antes de alterar o pipeline
 
 ---
 
@@ -872,8 +896,12 @@ git push origin feat/sua-feature
 
 | Recurso | Link |
 |---------|------|
+| **AGENTS.md** | Índice curto de navegação para humanos e agentes |
+| **WORKFLOW.md** | Contrato-alvo de workflow em compatibilidade |
+| **docs/index.md** | Mapa da documentação operacional |
+| **docs/repo-contract.md** | Quality gates, boundaries e rollout |
+| **docs/glossary.md** | Vocabulário comum do control plane |
 | **CLAUDE.md** | Dev guide para contribuidores |
-| **Stack WIP** | Vibe-Code é ativo e evolui |
 | **Community** | Discussões via GitHub Issues |
 | **Bugs** | Report via GitHub Issues |
 

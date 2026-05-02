@@ -8,6 +8,10 @@ const { values, positionals } = parseArgs({
     description: { type: "string", short: "d" },
     repoId: { type: "string" },
     parentTaskId: { type: "string" },
+    dependsOn: { type: "string" },
+    maxCost: { type: "string" },
+    agentId: { type: "string" },
+    workflowId: { type: "string" },
   },
   allowPositionals: true,
 });
@@ -23,6 +27,13 @@ const title = values.title;
 const description = values.description || "";
 const repoId = values.repoId || process.env.VIBE_CODE_REPO_ID;
 const parentTaskId = values.parentTaskId || process.env.VIBE_CODE_PARENT_TASK_ID;
+const dependsOn = values.dependsOn
+  ? values.dependsOn
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+  : undefined;
+const maxCost = values.maxCost ? Number(values.maxCost) : undefined;
 const apiUrl = process.env.VIBE_CODE_API_URL || "http://localhost:3000";
 
 if (!title || !repoId) {
@@ -39,8 +50,11 @@ try {
       description,
       repoId,
       parentTaskId,
-      status: "backlog",
       priority: "none",
+      dependsOn,
+      maxCost: Number.isFinite(maxCost) ? maxCost : undefined,
+      agentId: values.agentId,
+      workflowId: values.workflowId,
     }),
   });
 

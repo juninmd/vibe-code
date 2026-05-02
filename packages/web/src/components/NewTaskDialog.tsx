@@ -75,6 +75,14 @@ const CRON_PRESETS = [
   { label: "Every 15 Minutes", value: "*/15 * * * *" },
 ];
 
+const NEW_TASK_FIELD_IDS = {
+  title: "new-task-title",
+  repository: "new-task-repository",
+  baseBranch: "new-task-base-branch",
+  description: "new-task-description",
+  agent: "new-task-agent",
+} as const;
+
 function EngineCard({
   engine,
   selected,
@@ -103,7 +111,14 @@ function EngineCard({
           className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
           style={{ background: "var(--accent)" }}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <svg
+            aria-hidden="true"
+            focusable="false"
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+          >
             <path
               d="M2 5L4 7L8 3"
               stroke="var(--accent-text)"
@@ -328,12 +343,14 @@ export function NewTaskDialog({
 
               <div>
                 <label
+                  htmlFor={NEW_TASK_FIELD_IDS.title}
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Title *
                 </label>
                 <Input
+                  id={NEW_TASK_FIELD_IDS.title}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="What should the agent do?"
@@ -343,6 +360,7 @@ export function NewTaskDialog({
 
               <div>
                 <label
+                  htmlFor={NEW_TASK_FIELD_IDS.repository}
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
@@ -350,6 +368,7 @@ export function NewTaskDialog({
                 </label>
                 <div className="relative z-20">
                   <Combobox
+                    inputId={NEW_TASK_FIELD_IDS.repository}
                     value={repoId}
                     onChange={setRepoId}
                     placeholder="Search repositories..."
@@ -392,6 +411,7 @@ export function NewTaskDialog({
                 {repoId && (
                   <div className="mt-3">
                     <label
+                      htmlFor={NEW_TASK_FIELD_IDS.baseBranch}
                       className="block text-xs font-medium mb-2"
                       style={{ color: "var(--text-muted)" }}
                     >
@@ -406,6 +426,7 @@ export function NewTaskDialog({
                       )}
                     </label>
                     <Select
+                      id={NEW_TASK_FIELD_IDS.baseBranch}
                       value={baseBranch}
                       onChange={(e) => setBaseBranch(e.target.value)}
                       disabled={loadingBranches}
@@ -430,7 +451,11 @@ export function NewTaskDialog({
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  <label
+                    htmlFor={NEW_TASK_FIELD_IDS.description}
+                    className="text-xs font-medium"
+                    style={{ color: "var(--text-muted)" }}
+                  >
                     Description
                   </label>
                   <div
@@ -466,6 +491,7 @@ export function NewTaskDialog({
                 ) : (
                   <>
                     <Textarea
+                      id={NEW_TASK_FIELD_IDS.description}
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                       placeholder="Detailed instructions for the AI agent..."
@@ -477,7 +503,14 @@ export function NewTaskDialog({
                       className="text-[10px] font-medium flex items-center gap-1.5 mt-1.5 cursor-pointer transition-colors"
                       style={{ color: "var(--accent-text)" }}
                     >
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <svg
+                        aria-hidden="true"
+                        focusable="false"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                      >
                         <path
                           d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5Z"
                           fill="currentColor"
@@ -490,12 +523,12 @@ export function NewTaskDialog({
               </div>
 
               <div>
-                <label
+                <div
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Priority
-                </label>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {TASK_PRIORITY_LEVELS.map((p) => {
                     const meta = TASK_PRIORITY_META[p];
@@ -515,12 +548,12 @@ export function NewTaskDialog({
               </div>
 
               <div>
-                <label
+                <div
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Type
-                </label>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {TASK_TYPES.map((t) => {
                     const meta = TASK_TYPE_META[t];
@@ -540,12 +573,12 @@ export function NewTaskDialog({
               </div>
 
               <div>
-                <label
+                <div
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Complexity
-                </label>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {TASK_COMPLEXITY_LEVELS.map((c) => {
                     const meta = TASK_COMPLEXITY_META[c];
@@ -565,12 +598,12 @@ export function NewTaskDialog({
               </div>
 
               <div>
-                <label
+                <div
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Tags
-                </label>
+                </div>
                 <TaskTagsEditor tags={tags} onChange={setTags} />
               </div>
             </div>
@@ -593,6 +626,7 @@ export function NewTaskDialog({
 
               <div>
                 <label
+                  htmlFor={NEW_TASK_FIELD_IDS.agent}
                   className="block text-xs font-medium mb-2"
                   style={{ color: "var(--text-muted)" }}
                 >
@@ -631,9 +665,9 @@ export function NewTaskDialog({
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
+                  <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
                     AI Engine *
-                  </label>
+                  </div>
                   {enginesLoading && (
                     <span
                       className="text-[10px] animate-pulse"

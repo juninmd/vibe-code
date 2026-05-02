@@ -488,6 +488,8 @@ export function TaskDetail({
   const [parentTask, setParentTask] = useState<TaskWithRun | null>(null);
   const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
   const [promptCopied, setPromptCopied] = useState(false);
+  const sharedMemoryInputId = `task-${task.id}-shared-memory`;
+  const taskMemoryInputId = `task-${task.id}-local-memory`;
 
   // Parse approval request from notes if it exists
   const approvalRequest = useMemo(() => {
@@ -1765,10 +1767,14 @@ export function TaskDetail({
               <div className="space-y-4">
                 {/* Shared Memory */}
                 <div>
-                  <label className="text-xs font-semibold text-primary0 mb-1.5 block">
+                  <label
+                    htmlFor={sharedMemoryInputId}
+                    className="text-xs font-semibold text-primary0 mb-1.5 block"
+                  >
                     📚 Shared Memory (cross-task context)
                   </label>
                   <textarea
+                    id={sharedMemoryInputId}
                     value={sharedMemory}
                     onChange={(e) => setSharedMemory(e.target.value)}
                     onFocus={() => {
@@ -1805,10 +1811,14 @@ export function TaskDetail({
 
                 {/* Task-Local Memory */}
                 <div>
-                  <label className="text-xs font-semibold text-primary0 mb-1.5 block">
+                  <label
+                    htmlFor={taskMemoryInputId}
+                    className="text-xs font-semibold text-primary0 mb-1.5 block"
+                  >
                     📝 Task Memory (this task only)
                   </label>
                   <textarea
+                    id={taskMemoryInputId}
                     value={taskMemory}
                     onChange={(e) => setTaskMemory(e.target.value)}
                     onFocus={() => {
@@ -2017,16 +2027,23 @@ export function TaskDetail({
 
       {/* M2.2: Preview Prompt Modal */}
       {previewPrompt !== null && (
-        <div
-          className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4 rounded-xl"
-          onClick={() => setPreviewPrompt(null)}
-        >
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 rounded-xl">
+          <button
+            type="button"
+            aria-label="Fechar preview do prompt"
+            className="absolute inset-0 bg-black/60 rounded-xl"
+            onClick={() => setPreviewPrompt(null)}
+          />
           <div
-            className="bg-surface border border-surface-border rounded-lg max-w-4xl max-h-96 w-full flex flex-col shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="preview-prompt-title"
+            className="relative bg-surface border border-surface-border rounded-lg max-w-4xl max-h-96 w-full flex flex-col shadow-2xl"
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0">
-              <h3 className="text-sm font-semibold">Preview do Prompt do Agente</h3>
+              <h3 id="preview-prompt-title" className="text-sm font-semibold">
+                Preview do Prompt do Agente
+              </h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"

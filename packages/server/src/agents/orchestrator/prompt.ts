@@ -1,13 +1,23 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SkillPayload, SkillPayloadItem, Task } from "@vibe-code/shared";
+import type {
+  ContractBundle,
+  SkillEffectiveness,
+  SkillPayload,
+  SkillPayloadItem,
+  Task,
+} from "@vibe-code/shared";
 import type { SkillsLoader } from "../../skills/loader";
 import { matchSkillsForTask } from "../../skills/matcher";
 import { RepoSkillsLoader } from "../../skills/repo-loader";
+import { buildContractBundle } from "./contract-layers";
 
 export interface BuildContextResult {
   prompt: string;
   skills: SkillPayload;
+  contractBundle: ContractBundle;
+  selectionMetadata: Awaited<ReturnType<typeof matchSkillsForTask>>["metadata"] | null;
+  memoryEntries: number;
 }
 
 export interface ParentTaskInfo {
@@ -72,7 +82,11 @@ export async function buildContextAsync(
   skillsLoader?: SkillsLoader,
   repoId?: string,
   dbFindingsLoader?: (repoId: string) => { persona: string; severity: string; content: string }[],
-  parentTaskLoader?: (parentId: string) => Promise<ParentTaskInfo | null>
+  parentTaskLoader?: (parentId: string) => Promise<ParentTaskInfo | null>,
+  memoryLoader?: (
+    task: Task
+  ) => Promise<{ sharedMemory: string | null; taskMemory: string | null; entries: unknown[] }>,
+  dbMetricsLoader?: () => SkillEffectiveness[]
 ): Promise<BuildContextResult> {
   const ctx = await detectProjectContext(workdir);
 
@@ -85,7 +99,10 @@ export async function buildContextAsync(
   };
 
   let skillsSection = "";
+  let workflowSection = "";
   let skillPayload: SkillPayload = { ...emptyPayload };
+  let selectionMetadata: BuildContextResult["selectionMetadata"] = null;
+  const findings = repoId && dbFindingsLoader ? dbFindingsLoader(repoId) : [];
 
   if (skillsLoader) {
     try {
@@ -105,8 +122,16 @@ export async function buildContextAsync(
         mergedIndex,
         task.title,
         task.description ?? "",
-        workdir
+        workdir,
+        {
+          recentFindings: findings,
+          skillEffectiveness: dbMetricsLoader?.(),
+          workflowHint: task.workflowId ?? null,
+          taskGoal: task.goal ?? null,
+          desiredOutcome: task.desiredOutcome ?? null,
+        }
       );
+      selectionMetadata = matched.metadata;
 
       const parts: string[] = [];
 
@@ -135,8 +160,8 @@ export async function buildContextAsync(
       // Workflow
       let workflowPayload: SkillPayloadItem | null = null;
       if (matched.workflow) {
-        parts.push(`\n### Workflow: ${matched.workflow.name}\n${matched.workflow.description}`);
         const content = await safeLoadContent(skillsLoader, repoLoader, matched.workflow.filePath);
+        workflowSection = `### Workflow: ${matched.workflow.name}\n${matched.workflow.description}`;
         workflowPayload = {
           name: matched.workflow.name,
           description: matched.workflow.description,
@@ -173,22 +198,19 @@ export async function buildContextAsync(
 
   // M4: Inject lessons learned from previous review findings
   let lessonsSection = "";
-  if (repoId && dbFindingsLoader) {
+  if (findings.length > 0) {
     try {
-      const findings = dbFindingsLoader(repoId);
-      if (findings.length > 0) {
-        const MAX_LESSONS_CHARS = 2000;
-        let chars = 0;
-        const lines: string[] = [];
-        for (const f of findings) {
-          const line = `- [${f.persona}/${f.severity}] ${f.content}`;
-          if (chars + line.length > MAX_LESSONS_CHARS) break;
-          chars += line.length;
-          lines.push(line);
-        }
-        if (lines.length > 0) {
-          lessonsSection = `## Lessons Learned (from previous reviews)\n${lines.join("\n")}`;
-        }
+      const MAX_LESSONS_CHARS = 2000;
+      let chars = 0;
+      const lines: string[] = [];
+      for (const f of findings) {
+        const line = `- [${f.persona}/${f.severity}] ${f.content}`;
+        if (chars + line.length > MAX_LESSONS_CHARS) break;
+        chars += line.length;
+        lines.push(line);
+      }
+      if (lines.length > 0) {
+        lessonsSection = `## Lessons Learned (from previous reviews)\n${lines.join("\n")}`;
       }
     } catch {
       // Non-fatal
@@ -219,8 +241,34 @@ export async function buildContextAsync(
     }
   }
 
-  const prompt = assemblePrompt(task, ctx, skillsSection, lessonsSection, ancestrySection);
-  return { prompt, skills: skillPayload };
+  const memoryContext = memoryLoader ? await memoryLoader(task) : null;
+  const memorySections: string[] = [];
+  if (memoryContext?.sharedMemory) {
+    memorySections.push(`### Shared Context\n${memoryContext.sharedMemory}`);
+  }
+  if (memoryContext?.taskMemory) {
+    memorySections.push(`### Task-Specific Context\n${memoryContext.taskMemory}`);
+  }
+  const contractBundle = buildContractBundle({
+    globalRules: skillsSection,
+    repoContract: [
+      ctx.agentInstructions ? `## Project Instructions\n${ctx.agentInstructions}` : "",
+      lessonsSection,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    workflowContract: workflowSection,
+    taskContext: [ancestrySection, memorySections.join("\n\n")].filter(Boolean).join("\n\n"),
+  });
+
+  const prompt = assemblePrompt(task, ctx, contractBundle);
+  return {
+    prompt,
+    skills: skillPayload,
+    contractBundle,
+    selectionMetadata,
+    memoryEntries: memoryContext?.entries.length ?? 0,
+  };
 }
 
 export async function buildPromptAsync(
@@ -254,6 +302,14 @@ export function buildPrompt(
   taskMemory?: string | null
 ): string {
   // Sync fallback — used when workdir is not available
+  const contractBundle = buildContractBundle({
+    taskContext: [
+      sharedMemory ? `### Shared Context\n${sharedMemory}` : "",
+      taskMemory ? `### Task-Specific Context\n${taskMemory}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  });
   return assemblePrompt(
     task,
     {
@@ -261,23 +317,22 @@ export function buildPrompt(
       frameworks: [],
       agentInstructions: null,
     },
-    "",
-    "",
-    "",
-    sharedMemory,
-    taskMemory
+    contractBundle
   );
 }
 
-function assemblePrompt(
-  task: Task,
-  ctx: ProjectContext,
-  skillsSection = "",
-  lessonsSection = "",
-  ancestrySection = "",
-  sharedMemory?: string | null,
-  taskMemory?: string | null
+export function appendRuntimeContextHints(
+  prompt: string,
+  options: { hasPlannerSpec?: boolean } = {}
 ): string {
+  const specNote = options.hasPlannerSpec
+    ? "\n**Expanded spec is available in `.vibe-code/context/SPEC.md` — read it before starting.**"
+    : "";
+
+  return `${prompt}\n\n---\n**Session context is available in \`.vibe-code/context/PROGRESS.md\` (human-readable) and \`.vibe-code/context/TASK.json\` (structured). Read them at the start if you need previous session notes or task metadata.**${specNote}`;
+}
+
+function assemblePrompt(task: Task, ctx: ProjectContext, contractBundle: ContractBundle): string {
   const sections: string[] = [];
 
   // ── CRITICAL directive — must appear first to prevent interactive mode ──────
@@ -304,30 +359,6 @@ function assemblePrompt(
     sections.push(`## Goal Alignment\n${alignmentLines.join("\n\n")}`);
   }
 
-  // ── Goal Ancestry (Paperclip-inspired) ─────────────────────────────────────
-  if (ancestrySection) {
-    sections.push(ancestrySection);
-  }
-
-  // ── M3: Workflow Memory Injection ──────────────────────────────────────────
-  if (sharedMemory || taskMemory) {
-    const memorySections: string[] = [];
-    if (sharedMemory) {
-      memorySections.push(`### Shared Context (from other runs):\n${sharedMemory}`);
-    }
-    if (taskMemory) {
-      memorySections.push(`### Task-Specific Context:\n${taskMemory}`);
-    }
-    if (memorySections.length > 0) {
-      sections.push(`## Workflow Memory\n${memorySections.join("\n\n")}`);
-    }
-  }
-
-  // ── Project context (when detected) ───────────────────────────────────────
-  if (ctx.agentInstructions) {
-    sections.push(`## Project Instructions\n${ctx.agentInstructions}`);
-  }
-
   if (ctx.frameworks.length > 0 || ctx.mainLanguages.length > 0) {
     const stackLine = [ctx.mainLanguages.join(", "), ctx.frameworks.join(", ")]
       .filter(Boolean)
@@ -338,14 +369,8 @@ function assemblePrompt(
     );
   }
 
-  // ── Organizational standards (skills/rules from ~/.agents) ─────────────────
-  if (skillsSection) {
-    sections.push(skillsSection);
-  }
-
-  // ── Lessons learned from previous reviews ──────────────────────────────────
-  if (lessonsSection) {
-    sections.push(lessonsSection);
+  for (const layer of contractBundle.layers) {
+    sections.push(`## ${layer.title}\n${layer.content}`);
   }
 
   // ── Execution instructions ─────────────────────────────────────────────────

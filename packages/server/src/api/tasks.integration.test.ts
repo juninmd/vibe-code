@@ -160,6 +160,30 @@ describe("POST /api/tasks", () => {
     expect(body.data.id).toBeDefined();
   });
 
+  it("accepts delegated task fields", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const parent = db.tasks.create({ title: "Parent objective", repoId: repo.id, maxCost: 40 });
+
+    const res = await buildApp(db).request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Delegated child",
+        repoId: repo.id,
+        parentTaskId: parent.id,
+        dependsOn: [parent.id],
+        maxCost: 12,
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.parentTaskId).toBe(parent.id);
+    expect(body.data.dependsOn).toEqual([parent.id]);
+    expect(body.data.maxCost).toBe(12);
+  });
+
   it("returns 400 when title is missing", async () => {
     const db = makeDb();
     const repo = seedRepo(db);
@@ -205,6 +229,31 @@ describe("GET /api/tasks/:id", () => {
   it("returns 404 for unknown task", async () => {
     const res = await buildApp(makeDb()).request("/api/tasks/does-not-exist");
     expect(res.status).toBe(404);
+  });
+
+  it("builds and materializes a task plan", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Implement autonomous validation flow",
+      repoId: repo.id,
+      description:
+        "- Audit the current validation loop\n- Implement deterministic validation\n- Add regression tests and docs",
+      maxCost: 30,
+    });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ materialize: true }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.plan.nodes).toHaveLength(3);
+    expect(body.data.createdTasks).toHaveLength(3);
+    expect(body.data.createdTasks[2].dependsOn.length).toBeGreaterThan(0);
+    expect(db.tasks.listChildren(task.id)).toHaveLength(3);
   });
 });
 

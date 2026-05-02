@@ -228,18 +228,35 @@ export class SkillsLoader {
     if (this.cache) return this.cache;
 
     const registryPath = join(this.basePath, "registry");
-    const [skills, rules, agents, workflows, registrySkills] = await Promise.all([
+    const [
+      skills,
+      rules,
+      agents,
+      workflows,
+      registrySkills,
+      registryRules,
+      registryAgents,
+      registryWorkflows,
+    ] = await Promise.all([
       loadSkills(this.basePath),
       loadRules(this.basePath),
       loadAgents(this.basePath),
       loadWorkflows(this.basePath),
-      loadSkills(registryPath).catch(() => []), // Registry skills use the same structure
+      loadSkills(registryPath).catch(() => []),
+      loadRules(registryPath).catch(() => []),
+      loadAgents(registryPath).catch(() => []),
+      loadWorkflows(registryPath).catch(() => []),
     ]);
 
     // Merge global skills and registry skills, plus the virtual meta-orchestrator skill
     const allSkills = [...skills, ...registrySkills, VIRTUAL_MASTER_SKILL];
 
-    this.cache = { skills: allSkills, rules, agents, workflows };
+    this.cache = {
+      skills: allSkills,
+      rules: [...rules, ...registryRules],
+      agents: [...agents, ...registryAgents],
+      workflows: [...workflows, ...registryWorkflows],
+    };
     return this.cache;
   }
 
