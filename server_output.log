@@ -1,0 +1,39 @@
+@vibe-code/server dev: ◇ injected env (0) from ../.env // tip: ⌘ override existing { override: true }
+@vibe-code/server dev: [startup] WARNING: LITELLM_MASTER_KEY not set. LiteLLM proxy features may not work.
+@vibe-code/server dev: [startup] Checking LiteLLM proxy at http://localhost:4000 ...
+@vibe-code/server dev: [startup] WARNING: LiteLLM proxy at http://localhost:4000 is not reachable. Engines will use native API keys. Start the proxy or disable LiteLLM in settings.
+@vibe-code/server dev:   ↻ PR poller started (interval: 60s)
+@vibe-code/server dev:   ↻ Schedule runner started (checks every minute)
+@vibe-code/server dev:
+@vibe-code/server dev: ╔══════════════════════════════════════════════╗
+@vibe-code/server dev: ║          🚀 vibe-code server                 ║
+@vibe-code/server dev: ║                                              ║
+@vibe-code/server dev: ║  API:  http://localhost:3000               ║
+@vibe-code/server dev: ║  WS:   ws://localhost:3000/ws              ║
+@vibe-code/server dev: ║  Data: /home/jules/.vibe-code
+@vibe-code/server dev: ║  Max agents: 4                         ║
+@vibe-code/server dev: ╚══════════════════════════════════════════════╝
+@vibe-code/server dev:
+@vibe-code/server dev:   ✗ Claude Code (claude-code)
+@vibe-code/server dev:   ✗ Aider (aider)
+@vibe-code/server dev:   ✗ OpenCode (opencode)
+@vibe-code/server dev:   ✗ Gemini CLI (gemini)
+@vibe-code/server dev:   ✗ GitHub Copilot (copilot)
+@vibe-code/server dev:   ✗ Codex (codex)
+@vibe-code/server dev:   ✗ Pi (pi)
+@vibe-code/server dev:   ✗ Cursor Agent (cursor-agent)
+@vibe-code/server dev:   ✗ OpenClaw (openclaw)
+@vibe-code/server dev:   ✗ Hermes (hermes)
+@vibe-code/server dev:   ✗ Amp Code (ampcode)
+@vibe-code/server dev:   ✗ Kimi (kimi)
+@vibe-code/server dev:   ✗ Kiro CLI (kiro-cli)
+@vibe-code/server dev:
+@vibe-code/server dev: [API] Fetched workspaces {
+@vibe-code/server dev:   count: 1,
+@vibe-code/server dev: }
+@vibe-code/server dev: [API] Fetched workspaces {
+@vibe-code/server dev:   count: 1,
+@vibe-code/server dev: }
+@vibe-code/server dev: [API] Fetched workspaces {
+@vibe-code/server dev:   count: 1,
+@vibe-code/server dev: }

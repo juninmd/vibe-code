@@ -767,6 +767,27 @@ export function TaskDetail({
             <Badge variant={statusVariant[task.status] ?? "default"}>
               {statusLabel[task.status] ?? task.status}
             </Badge>
+
+            {task.agentId && (
+              <Badge variant="default" className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+                <svg
+                  aria-hidden="true"
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                  <path d="M2 14c0-2.2 2.7-4 6-4s6 1.8 6 4" />
+                </svg>
+                {task.agentId}
+              </Badge>
+            )}
+
             {task.engine && (
               <Badge variant="purple">
                 {task.engine}
