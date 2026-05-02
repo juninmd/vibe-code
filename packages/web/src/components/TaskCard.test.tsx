@@ -28,7 +28,7 @@ const baseTask: TaskWithRun = {
   status: "backlog",
   engine: "claude-code",
   model: null,
-  priority: 0,
+  priority: "none",
   columnOrder: 0,
   baseBranch: null,
   branchName: "feat/my-branch",

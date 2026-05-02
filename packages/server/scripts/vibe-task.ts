@@ -40,7 +40,7 @@ try {
       repoId,
       parentTaskId,
       status: "backlog",
-      priority: 0,
+      priority: "none",
     }),
   });
 

@@ -1,7 +1,6 @@
 import type { Repository } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RepoManifests } from "./RepoManifests";
-import { ThemeToggle } from "./ThemeToggle";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -543,7 +542,6 @@ export function Sidebar({
                   <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.93 3.93l.7.7M11.37 11.37l.7.7M3.93 12.07l.7-.7M11.37 4.63l.7-.7" />
                 </svg>
               </button>
-              <ThemeToggle />
             </div>
             <p className="text-[11px] text-dimmed">AI Agent Task Manager</p>
           </div>

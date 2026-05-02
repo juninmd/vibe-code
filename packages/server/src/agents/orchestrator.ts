@@ -101,10 +101,18 @@ export class Orchestrator {
   async sweepBacklog(): Promise<void> {
     if (this.activeRuns.size >= this.maxConcurrent) return;
 
+    const PRIORITY_ORDER: Record<string, number> = {
+      urgent: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+      none: 0,
+    };
+
     // Get all tasks in backlog ordered by priority
     const backlog = this.db.tasks
       .list(undefined, "backlog")
-      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+      .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
 
     for (const task of backlog) {
       if (this.activeRuns.size >= this.maxConcurrent) break;

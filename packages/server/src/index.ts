@@ -15,6 +15,7 @@ import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
+import { createLabelsRouter } from "./api/labels";
 import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createRunsRouter } from "./api/runs";
@@ -187,6 +188,7 @@ app.route("/api/prompts", createPromptsRouter(db));
 app.route("/api/stats", createStatsRouter(db));
 app.route("/api/skills", createSkillsRouter(skillsLoader, skillRegistry));
 app.route("/api/templates", createTemplatesRouter(db, skillsLoader));
+app.route("/api/labels", createLabelsRouter(db));
 
 // Changelog route
 app.get("/api/changelog", async (c) => {

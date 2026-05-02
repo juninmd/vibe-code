@@ -25,7 +25,7 @@ const createTaskSchema = z.object({
   engine: z.string().optional(),
   model: z.string().optional(),
   baseBranch: z.string().optional(),
-  priority: z.number().optional(),
+  priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
   tags: z.array(z.string()).optional(),
   agentId: z.string().optional(),
   workflowId: z.string().optional(),
@@ -49,6 +49,7 @@ const updateTaskSchema = z.object({
   desiredOutcome: z.string().nullable().optional(),
   dependsOn: z.array(z.string()).optional(),
   pendingApproval: z.boolean().optional(),
+  priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
 });
 
 const launchTaskSchema = z.object({

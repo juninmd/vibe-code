@@ -162,6 +162,10 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("issue_url")) {
     db.exec("ALTER TABLE tasks ADD COLUMN issue_url TEXT");
   }
+  // Migration: tasks.issue_number for per-repo sequential issue IDs (Multica-style)
+  if (!taskColNames.includes("issue_number")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN issue_number INTEGER");
+  }
   // Paperclip-inspired: explicit goal alignment for tasks.
   if (!taskColNames.includes("goal")) {
     db.exec("ALTER TABLE tasks ADD COLUMN goal TEXT");
@@ -191,6 +195,26 @@ export function initDatabase(dbPath: string): Database {
   if (!runColNames.includes("cost_stats")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN cost_stats TEXT");
   }
+
+  // Labels system (Multica-inspired): colored labels per repo + task_labels join
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS labels (
+      id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      repo_id    TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      color      TEXT NOT NULL DEFAULT '#6366f1',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(repo_id, name)
+    );
+    CREATE TABLE IF NOT EXISTS task_labels (
+      task_id  TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (task_id, label_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_labels_task  ON task_labels(task_id);
+    CREATE INDEX IF NOT EXISTS idx_task_labels_label ON task_labels(label_id);
+    CREATE INDEX IF NOT EXISTS idx_labels_repo       ON labels(repo_id);
+  `);
 
   // M4.1: review_findings table
   db.exec(`

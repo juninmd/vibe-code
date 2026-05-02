@@ -9,6 +9,51 @@ export type TaskStatus =
   | "failed"
   | "archived";
 export type RepoStatus = "pending" | "cloning" | "ready" | "error";
+
+export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
+
+export const TASK_PRIORITY_LEVELS: TaskPriority[] = ["none", "low", "medium", "high", "urgent"];
+
+export const TASK_PRIORITY_META: Record<
+  TaskPriority,
+  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  none: {
+    label: "No priority",
+    icon: "—",
+    textColor: "text-dimmed",
+    bgColor: "bg-surface-hover",
+    borderColor: "border-strong",
+  },
+  low: {
+    label: "Low",
+    icon: "↑",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  medium: {
+    label: "Medium",
+    icon: "↑↑",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  high: {
+    label: "High",
+    icon: "↑↑",
+    textColor: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/30",
+  },
+  urgent: {
+    label: "Urgent",
+    icon: "!!",
+    textColor: "text-purple-400",
+    bgColor: "bg-purple-500/10",
+    borderColor: "border-purple-500/30",
+  },
+};
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunPhase =
   | "setup"
@@ -49,15 +94,24 @@ export interface Repository {
   updatedAt: string;
 }
 
+export interface Label {
+  id: string;
+  repoId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
 export interface Task {
   id: string;
+  issueNumber?: number;
   title: string;
   description: string;
   repoId: string;
   status: TaskStatus;
   engine: string | null;
   model: string | null;
-  priority: number;
+  priority: TaskPriority;
   columnOrder: number;
   baseBranch: string | null;
   branchName: string | null;
@@ -198,7 +252,7 @@ export interface CreateTaskRequest {
   engine?: string;
   model?: string;
   baseBranch?: string;
-  priority?: number;
+  priority?: TaskPriority;
   tags?: string[];
   agentId?: string;
   workflowId?: string;
@@ -216,6 +270,7 @@ export interface UpdateTaskRequest {
   columnOrder?: number;
   engine?: string;
   model?: string;
+  priority?: TaskPriority;
   tags?: string[];
   notes?: string;
   goal?: string | null;
@@ -223,6 +278,16 @@ export interface UpdateTaskRequest {
   dependsOn?: string[];
   pendingApproval?: boolean;
   maxCost?: number;
+}
+
+export interface CreateLabelRequest {
+  name: string;
+  color: string;
+  repoId: string;
+}
+
+export interface UpdateTaskLabelsRequest {
+  labelIds: string[];
 }
 
 export interface LaunchTaskRequest {
@@ -341,6 +406,7 @@ export type GitHubRepo = RemoteRepo;
 export interface TaskWithRun extends Task {
   latestRun?: AgentRun;
   repo?: Repository;
+  labels?: Label[];
 }
 
 export type TaskArtifactKind =
