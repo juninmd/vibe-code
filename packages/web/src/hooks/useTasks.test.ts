@@ -27,6 +27,8 @@ const mockTask: TaskWithRun = {
   pendingApproval: false,
   goal: null,
   desiredOutcome: null,
+  taskType: null,
+  taskComplexity: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   latestRun: undefined,

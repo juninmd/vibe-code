@@ -234,6 +234,63 @@ export function initDatabase(dbPath: string): Database {
       CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
     `);
 
+  // Compozy-inspired: task_type and task_complexity columns
+  if (!taskColNames.includes("task_type")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT");
+  }
+  if (!taskColNames.includes("task_complexity")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN task_complexity TEXT");
+  }
+
+  // Compozy-inspired: workflow_memories table (two-tier cross-task memory)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workflow_memories (
+      id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      task_id      TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      scope        TEXT NOT NULL CHECK(scope IN ('shared','task')),
+      content      TEXT NOT NULL DEFAULT '',
+      needs_compaction INTEGER NOT NULL DEFAULT 0,
+      compacted_at TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_id, scope)
+    );
+    CREATE INDEX IF NOT EXISTS idx_workflow_memories_task ON workflow_memories(task_id);
+  `);
+
+  // Compozy-inspired: review_rounds table for numbered review cycles
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_rounds (
+      id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      task_id      TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      round_number INTEGER NOT NULL DEFAULT 1,
+      status       TEXT NOT NULL DEFAULT 'open',
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_id, round_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_rounds_task ON review_rounds(task_id);
+  `);
+
+  // Compozy-inspired: review_issues table with per-issue lifecycle
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS review_issues (
+      id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      round_id    TEXT NOT NULL REFERENCES review_rounds(id) ON DELETE CASCADE,
+      task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      persona     TEXT NOT NULL DEFAULT 'general',
+      severity    TEXT NOT NULL DEFAULT 'medium',
+      title       TEXT NOT NULL,
+      content     TEXT NOT NULL DEFAULT '',
+      file_path   TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_issues_round ON review_issues(round_id);
+    CREATE INDEX IF NOT EXISTS idx_review_issues_task  ON review_issues(task_id, status);
+  `);
+
   // Paperclip-inspired: Immutable Audit Log
   db.exec(`
       CREATE TABLE IF NOT EXISTS audit_logs (

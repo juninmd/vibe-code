@@ -707,7 +707,9 @@ export function AgentOutput({
           onClick={() => setSplitMode((prev) => (prev === "right" ? "none" : "right"))}
           title={splitMode === "right" ? "Remover split" : "Dividir à direita (Ctrl+D)"}
           className={`p-1 rounded text-xs cursor-pointer transition-colors ${
-            splitMode === "right" ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
+            splitMode === "right"
+              ? "text-accent-text bg-accent-muted"
+              : "text-dimmed hover:text-secondary"
           }`}
         >
           ◫
@@ -717,7 +719,9 @@ export function AgentOutput({
           onClick={() => setSplitMode((prev) => (prev === "down" ? "none" : "down"))}
           title={splitMode === "down" ? "Remover split" : "Dividir abaixo (Ctrl+Shift+D)"}
           className={`p-1 rounded text-xs cursor-pointer transition-colors ${
-            splitMode === "down" ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
+            splitMode === "down"
+              ? "text-accent-text bg-accent-muted"
+              : "text-dimmed hover:text-secondary"
           }`}
         >
           ⊟
@@ -911,12 +915,16 @@ export function AgentOutput({
       tabIndex={-1}
       aria-label="Saída do Agente"
     >
-      <div className={`flex w-full h-full flex-1 min-h-0 ${splitMode === "down" ? "flex-col" : ""}`}>
+      <div
+        className={`flex w-full h-full flex-1 min-h-0 ${splitMode === "down" ? "flex-col" : ""}`}
+      >
         <div className="flex-1 min-h-0 min-w-0 flex flex-col border-r border-default last:border-r-0">
           {renderContent()}
         </div>
         {splitMode !== "none" && (
-          <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${splitMode === "down" ? "border-t border-default" : "border-l border-default"}`}>
+          <div
+            className={`flex-1 min-h-0 min-w-0 flex flex-col ${splitMode === "down" ? "border-t border-default" : "border-l border-default"}`}
+          >
             {renderContent()}
           </div>
         )}

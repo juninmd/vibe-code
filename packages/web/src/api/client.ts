@@ -221,6 +221,17 @@ export const api = {
     diffFile: (id: string, path: string) =>
       request<{ patch: string }>(`/tasks/${id}/diff/file?path=${encodeURIComponent(path)}`),
     matchedSkills: (id: string) => request<string[]>(`/tasks/${id}/matched-skills`),
+    previewPrompt: (id: string) =>
+      request<{ prompt: string }>(`/tasks/${id}/preview-prompt`, { method: "POST" }),
+    getMemory: (id: string, scope: "shared" | "task" = "task") =>
+      request<{ memory: any; scope: string; needsCompaction: boolean }>(
+        `/tasks/${id}/memory?scope=${scope}`
+      ),
+    updateMemory: (id: string, scope: "shared" | "task", content: string, compactedAt?: string) =>
+      request<{ memory: any; needsCompaction: boolean }>(`/tasks/${id}/memory`, {
+        method: "PUT",
+        body: JSON.stringify({ scope, content, compactedAt }),
+      }),
     downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
     openEditor: (id: string) =>
       request<{ ok: boolean }>(`/tasks/${id}/open-editor`, { method: "POST" }),
@@ -243,6 +254,39 @@ export const api = {
           body: JSON.stringify({ repoId, issues, autoLabel }),
         }
       ),
+  },
+
+  reviews: {
+    listRounds: (taskId: string) => request<{ rounds: any[] }>(`/reviews/${taskId}/rounds`),
+    getRound: (taskId: string, roundId: string) =>
+      request<{ round: any; issues: any[] }>(`/reviews/${taskId}/rounds/${roundId}`),
+    createRound: (taskId: string, roundNumber: number) =>
+      request<{ round: any }>(`/reviews/${taskId}/rounds`, {
+        method: "POST",
+        body: JSON.stringify({ roundNumber }),
+      }),
+    listIssues: (taskId: string, status?: string) => {
+      const qs = status ? `?status=${status}` : "";
+      return request<{ issues: any[]; grouped: Record<string, any[]> }>(
+        `/reviews/${taskId}/issues${qs}`
+      );
+    },
+    getIssue: (taskId: string, issueId: string) =>
+      request<{ issue: any }>(`/reviews/${taskId}/issues/${issueId}`),
+    createIssue: (taskId: string, roundId: string, data: any) =>
+      request<{ issue: any }>(`/reviews/${taskId}/rounds/${roundId}/issues`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateIssue: (taskId: string, issueId: string, data: any) =>
+      request<{ issue: any }>(`/reviews/${taskId}/issues/${issueId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    deleteIssue: (taskId: string, issueId: string) =>
+      request<{ success: boolean }>(`/reviews/${taskId}/issues/${issueId}`, {
+        method: "DELETE",
+      }),
   },
 
   runs: {

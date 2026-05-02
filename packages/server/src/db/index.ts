@@ -3,9 +3,12 @@ import {
   createFindingsQueries,
   createLabelQueries,
   createLogQueries,
+  createMemoryQueries,
   createMetricsQueries,
   createPromptTemplateQueries,
   createRepoQueries,
+  createReviewIssueQueries,
+  createReviewRoundQueries,
   createRunQueries,
   createScheduleQueries,
   createSettingsQueries,
@@ -29,6 +32,9 @@ export function createDb(dbPath: string) {
     metrics: createMetricsQueries(db),
     artifacts: createArtifactQueries(db),
     labels: createLabelQueries(db),
+    memories: createMemoryQueries(db),
+    reviewRounds: createReviewRoundQueries(db),
+    reviewIssues: createReviewIssueQueries(db),
   };
 }
 

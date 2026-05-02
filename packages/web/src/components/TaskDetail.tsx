@@ -486,6 +486,8 @@ export function TaskDetail({
   const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
   const [artifacts, setArtifacts] = useState<TaskArtifact[]>([]);
   const [parentTask, setParentTask] = useState<TaskWithRun | null>(null);
+  const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
+  const [promptCopied, setPromptCopied] = useState(false);
 
   // Parse approval request from notes if it exists
   const approvalRequest = useMemo(() => {
@@ -556,8 +558,22 @@ export function TaskDetail({
     task.latestRun?.finishedAt ?? null
   );
 
-  type ActiveTab = "info" | "terminal" | "diff" | "artifacts" | "skills" | "cost";
+  type ActiveTab =
+    | "info"
+    | "terminal"
+    | "diff"
+    | "artifacts"
+    | "skills"
+    | "cost"
+    | "memory"
+    | "reviews";
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
+  const [sharedMemory, setSharedMemory] = useState<string>("");
+  const [taskMemory, setTaskMemory] = useState<string>("");
+  const [memorySaving, setMemorySaving] = useState(false);
+  const [reviewRounds, setReviewRounds] = useState<any[]>([]);
+  const [reviewIssues, setReviewIssues] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const skillCategoryLabel: Record<string, string> = {
     rule: "Rule",
@@ -754,6 +770,23 @@ export function TaskDetail({
               )}
               <button
                 type="button"
+                onClick={async () => {
+                  setLoadingAction("preview-prompt");
+                  try {
+                    const result = await api.tasks.previewPrompt(task.id);
+                    setPreviewPrompt(result.prompt);
+                  } finally {
+                    setLoadingAction(null);
+                  }
+                }}
+                disabled={loadingAction === "preview-prompt"}
+                title="Preview prompt do agente"
+                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs"
+              >
+                {loadingAction === "preview-prompt" ? "..." : "👁"}
+              </button>
+              <button
+                type="button"
                 onClick={onClose}
                 className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
               >
@@ -769,7 +802,10 @@ export function TaskDetail({
             </Badge>
 
             {task.agentId && (
-              <Badge variant="default" className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+              <Badge
+                variant="default"
+                className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+              >
                 <svg
                   aria-hidden="true"
                   width="10"
@@ -817,7 +853,10 @@ export function TaskDetail({
                 { id: "terminal" as const, label: "Terminal" },
                 { id: "diff" as const, label: "Diff" },
                 { id: "artifacts" as const, label: "Artifacts" },
+                { id: "skills" as const, label: "Skills" },
                 { id: "cost" as const, label: "Custo" },
+                { id: "memory" as const, label: "Memory" },
+                { id: "reviews" as const, label: "Reviews" },
               ] satisfies { id: ActiveTab; label: string }[]
             ).map(({ id, label }) => (
               <button
@@ -1719,8 +1758,302 @@ export function TaskDetail({
               </div>
             </div>
           )}
+
+          {/* ── M3.4: Memory Tab ──────────────────────────────────── */}
+          {activeTab === "memory" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="space-y-4">
+                {/* Shared Memory */}
+                <div>
+                  <label className="text-xs font-semibold text-primary0 mb-1.5 block">
+                    📚 Shared Memory (cross-task context)
+                  </label>
+                  <textarea
+                    value={sharedMemory}
+                    onChange={(e) => setSharedMemory(e.target.value)}
+                    onFocus={() => {
+                      if (!sharedMemory) {
+                        api.tasks.getMemory(task.id, "shared").then((res) => {
+                          setSharedMemory(res.memory?.content ?? "");
+                        });
+                      }
+                    }}
+                    className="w-full h-32 p-3 border rounded text-xs font-mono resize-none"
+                    style={{
+                      background: "var(--bg-input)",
+                      borderColor: "var(--surface-border)",
+                      color: "var(--text-primary)",
+                    }}
+                    placeholder="Enter knowledge shared across all runs for this task..."
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setMemorySaving(true);
+                      try {
+                        await api.tasks.updateMemory(task.id, "shared", sharedMemory);
+                      } finally {
+                        setMemorySaving(false);
+                      }
+                    }}
+                    disabled={memorySaving}
+                    className="mt-2 px-3 py-1 text-xs bg-primary0 text-white rounded hover:opacity-80 transition-opacity"
+                  >
+                    {memorySaving ? "Salvando..." : "💾 Salvar"}
+                  </button>
+                </div>
+
+                {/* Task-Local Memory */}
+                <div>
+                  <label className="text-xs font-semibold text-primary0 mb-1.5 block">
+                    📝 Task Memory (this task only)
+                  </label>
+                  <textarea
+                    value={taskMemory}
+                    onChange={(e) => setTaskMemory(e.target.value)}
+                    onFocus={() => {
+                      if (!taskMemory) {
+                        api.tasks.getMemory(task.id, "task").then((res) => {
+                          setTaskMemory(res.memory?.content ?? "");
+                        });
+                      }
+                    }}
+                    className="w-full h-32 p-3 border rounded text-xs font-mono resize-none"
+                    style={{
+                      background: "var(--bg-input)",
+                      borderColor: "var(--surface-border)",
+                      color: "var(--text-primary)",
+                    }}
+                    placeholder="Enter task-specific context and progress notes..."
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setMemorySaving(true);
+                      try {
+                        await api.tasks.updateMemory(task.id, "task", taskMemory);
+                      } finally {
+                        setMemorySaving(false);
+                      }
+                    }}
+                    disabled={memorySaving}
+                    className="mt-2 px-3 py-1 text-xs bg-primary0 text-white rounded hover:opacity-80 transition-opacity"
+                  >
+                    {memorySaving ? "Salvando..." : "💾 Salvar"}
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-dimmed pt-2 border-t border-default">
+                  Memory is injected into the agent's prompt before each run. Use this to record
+                  lessons learned, patterns observed, and important context.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── M4.4: Review Issues Tab ──────────────────────────────────── */}
+          {activeTab === "reviews" && (
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-primary">Review Rounds</h2>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setReviewsLoading(true);
+                    try {
+                      const { rounds } = await api.reviews.listRounds(task.id);
+                      const { issues } = await api.reviews.listIssues(task.id);
+                      setReviewRounds(rounds || []);
+                      setReviewIssues(issues || []);
+                    } finally {
+                      setReviewsLoading(false);
+                    }
+                  }}
+                  className="px-2 py-1 text-xs rounded bg-primary0 text-white hover:opacity-80 transition-opacity"
+                  disabled={reviewsLoading}
+                >
+                  {reviewsLoading ? "Loading..." : "Reload"}
+                </button>
+              </div>
+
+              {reviewRounds.length === 0 ? (
+                <div className="text-center py-8 text-dimmed">
+                  <p className="text-sm">No review rounds yet</p>
+                  <p className="text-xs mt-1">Run with review phase to generate rounds</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {reviewRounds.map((round: any) => {
+                    const roundIssues = reviewIssues.filter((i: any) => i.roundId === round.id);
+                    const severityColors: Record<string, { bg: string; text: string }> = {
+                      info: { bg: "var(--bg-info)", text: "var(--text-info)" },
+                      warning: { bg: "var(--bg-warning)", text: "var(--text-warning)" },
+                      blocker: { bg: "var(--bg-danger)", text: "var(--text-danger)" },
+                    };
+                    const statusColors: Record<string, string> = {
+                      open: "var(--text-warning)",
+                      valid: "var(--text-danger)",
+                      invalid: "var(--text-success)",
+                      fixed: "var(--text-info)",
+                      resolved: "var(--text-success)",
+                    };
+
+                    return (
+                      <div
+                        key={round.id}
+                        className="border rounded-lg p-3"
+                        style={{ borderColor: "var(--surface-border)" }}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-xs font-semibold text-primary0">
+                            Round {round.roundNumber} · {round.status}
+                          </h3>
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                            style={{
+                              background: "var(--bg-input)",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {roundIssues.length} issues
+                          </span>
+                        </div>
+
+                        {roundIssues.length === 0 ? (
+                          <p className="text-[11px] text-dimmed">No issues in this round</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {roundIssues.map((issue: any) => {
+                              const colors = severityColors[issue.severity] || {
+                                bg: "var(--bg-input)",
+                                text: "var(--text-primary)",
+                              };
+                              return (
+                                <div
+                                  key={issue.id}
+                                  className="flex items-start gap-2 p-2 rounded text-xs"
+                                  style={{ background: "var(--bg-input)" }}
+                                >
+                                  <span
+                                    className="px-1.5 py-0.5 rounded-full text-[9px] font-semibold shrink-0"
+                                    style={{ background: colors.bg, color: colors.text }}
+                                  >
+                                    {issue.severity.toUpperCase()}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div
+                                      className="font-medium"
+                                      style={{ color: "var(--text-primary)" }}
+                                    >
+                                      {issue.title}
+                                    </div>
+                                    {issue.content && (
+                                      <div
+                                        className="text-[10px] mt-1 opacity-80"
+                                        style={{ color: "var(--text-muted)" }}
+                                      >
+                                        {issue.content.length > 120
+                                          ? `${issue.content.slice(0, 120)}...`
+                                          : issue.content}
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                      <span
+                                        className="text-[9px] px-1 py-0.5 rounded-full"
+                                        style={{
+                                          background: "var(--bg-surface)",
+                                          color: "var(--text-muted)",
+                                        }}
+                                      >
+                                        {issue.persona}
+                                      </span>
+                                      <span
+                                        className="text-[9px] font-mono"
+                                        style={{ color: statusColors[issue.status] }}
+                                      >
+                                        [{issue.status}]
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await api.reviews.updateIssue(task.id, issue.id, {
+                                        status: issue.status === "open" ? "resolved" : "open",
+                                      });
+                                      setReviewIssues((prev) =>
+                                        prev.map((i: any) =>
+                                          i.id === issue.id
+                                            ? {
+                                                ...i,
+                                                status: i.status === "open" ? "resolved" : "open",
+                                              }
+                                            : i
+                                        )
+                                      );
+                                    }}
+                                    className="text-[10px] px-1.5 py-0.5 rounded shrink-0 hover:opacity-70 transition-opacity"
+                                    style={{
+                                      background: "var(--accent-muted)",
+                                      color: "var(--accent-text)",
+                                    }}
+                                  >
+                                    {issue.status === "open" ? "✓ Mark" : "↺ Reopen"}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* M2.2: Preview Prompt Modal */}
+      {previewPrompt !== null && (
+        <div
+          className="absolute inset-0 bg-black/60 z-50 flex items-center justify-center p-4 rounded-xl"
+          onClick={() => setPreviewPrompt(null)}
+        >
+          <div
+            className="bg-surface border border-surface-border rounded-lg max-w-4xl max-h-96 w-full flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0">
+              <h3 className="text-sm font-semibold">Preview do Prompt do Agente</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(previewPrompt);
+                    setPromptCopied(true);
+                    setTimeout(() => setPromptCopied(false), 2000);
+                  }}
+                  className="text-xs px-2 py-1 bg-primary0 text-white rounded hover:opacity-80 transition-opacity"
+                >
+                  {promptCopied ? "✓ Copiado" : "📋 Copiar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPrompt(null)}
+                  className="text-primary0 hover:text-secondary text-lg"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <pre className="flex-1 overflow-auto p-4 text-xs bg-surface-dark rounded text-text-primary font-mono whitespace-pre-wrap break-words">
+              {previewPrompt}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

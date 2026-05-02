@@ -248,13 +248,25 @@ async function safeLoadContent(
   }
 }
 
-export function buildPrompt(task: Task): string {
+export function buildPrompt(
+  task: Task,
+  sharedMemory?: string | null,
+  taskMemory?: string | null
+): string {
   // Sync fallback — used when workdir is not available
-  return assemblePrompt(task, {
-    mainLanguages: [],
-    frameworks: [],
-    agentInstructions: null,
-  });
+  return assemblePrompt(
+    task,
+    {
+      mainLanguages: [],
+      frameworks: [],
+      agentInstructions: null,
+    },
+    "",
+    "",
+    "",
+    sharedMemory,
+    taskMemory
+  );
 }
 
 function assemblePrompt(
@@ -262,7 +274,9 @@ function assemblePrompt(
   ctx: ProjectContext,
   skillsSection = "",
   lessonsSection = "",
-  ancestrySection = ""
+  ancestrySection = "",
+  sharedMemory?: string | null,
+  taskMemory?: string | null
 ): string {
   const sections: string[] = [];
 
@@ -293,6 +307,20 @@ function assemblePrompt(
   // ── Goal Ancestry (Paperclip-inspired) ─────────────────────────────────────
   if (ancestrySection) {
     sections.push(ancestrySection);
+  }
+
+  // ── M3: Workflow Memory Injection ──────────────────────────────────────────
+  if (sharedMemory || taskMemory) {
+    const memorySections: string[] = [];
+    if (sharedMemory) {
+      memorySections.push(`### Shared Context (from other runs):\n${sharedMemory}`);
+    }
+    if (taskMemory) {
+      memorySections.push(`### Task-Specific Context:\n${taskMemory}`);
+    }
+    if (memorySections.length > 0) {
+      sections.push(`## Workflow Memory\n${memorySections.join("\n\n")}`);
+    }
   }
 
   // ── Project context (when detected) ───────────────────────────────────────

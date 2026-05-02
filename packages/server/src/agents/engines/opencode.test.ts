@@ -16,14 +16,18 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     super(heartbeatIntervalMs);
   }
 
-  protected override buildCommand(_model: string, _prompt: string, _workdir: string): string[] {
+  protected override buildCommand(
+    _model: string,
+    _workdir: string,
+    _resumeSessionId?: string
+  ): string[] {
     return ["bun", "-e", this.script];
   }
 }
 
 class CommandInspectingOpenCodeEngine extends OpenCodeEngine {
-  getCommand(model: string, prompt: string, workdir: string): string[] {
-    return this.buildCommand(model, prompt, workdir);
+  getCommand(model: string, workdir: string, resumeSessionId?: string): string[] {
+    return this.buildCommand(model, workdir, resumeSessionId);
   }
 
   getStdinModeForTest(): "pipe" | "ignore" {

@@ -1,8 +1,20 @@
-import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META, type TaskPriority } from "@vibe-code/shared";
+import {
+  TASK_COMPLEXITY_LEVELS,
+  TASK_COMPLEXITY_META,
+  TASK_PRIORITY_LEVELS,
+  TASK_PRIORITY_META,
+  TASK_TYPE_META,
+  TASK_TYPES,
+  type TaskComplexity,
+  type TaskPriority,
+  type TaskType,
+} from "@vibe-code/shared";
 
 interface Filters {
   engine: string | null;
   priority: TaskPriority | null;
+  taskType: TaskType | null;
+  taskComplexity: TaskComplexity | null;
   hasPR: boolean;
   tags: string[];
   labelIds: string[];
@@ -55,6 +67,8 @@ export function FilterBar({
   const hasActiveFilter =
     filters.engine !== null ||
     filters.priority !== null ||
+    filters.taskType !== null ||
+    filters.taskComplexity !== null ||
     filters.hasPR ||
     filters.tags.length > 0 ||
     filters.labelIds.length > 0;
@@ -101,6 +115,33 @@ export function FilterBar({
         );
       })}
 
+      {TASK_TYPES.map((t) => {
+        const meta = TASK_TYPE_META[t];
+        return (
+          <Chip
+            key={t}
+            active={filters.taskType === t}
+            onClick={() => set({ taskType: filters.taskType === t ? null : t })}
+          >
+            {meta.icon} {meta.label}
+          </Chip>
+        );
+      })}
+
+      {TASK_COMPLEXITY_LEVELS.map((c) => {
+        const meta = TASK_COMPLEXITY_META[c];
+        return (
+          <Chip
+            key={c}
+            active={filters.taskComplexity === c}
+            onClick={() => set({ taskComplexity: filters.taskComplexity === c ? null : c })}
+          >
+            <span className={`${meta.textColor}`}>{meta.icon}</span>
+            {meta.label}
+          </Chip>
+        );
+      })}
+
       <Chip active={filters.hasPR} onClick={() => set({ hasPR: !filters.hasPR })}>
         ↗ PR
       </Chip>
@@ -125,7 +166,15 @@ export function FilterBar({
         <button
           type="button"
           onClick={() =>
-            onFilterChange({ engine: null, priority: null, hasPR: false, tags: [], labelIds: [] })
+            onFilterChange({
+              engine: null,
+              priority: null,
+              taskType: null,
+              taskComplexity: null,
+              hasPR: false,
+              tags: [],
+              labelIds: [],
+            })
           }
           className="text-[11px] text-primary0 hover:text-secondary cursor-pointer transition-colors ml-1"
         >
