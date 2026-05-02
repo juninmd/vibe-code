@@ -769,7 +769,10 @@ export function TaskDetail({
             </Badge>
 
             {task.agentId && (
-              <Badge variant="default" className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+              <Badge
+                variant="default"
+                className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+              >
                 <svg
                   aria-hidden="true"
                   width="10"

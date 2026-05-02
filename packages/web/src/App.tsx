@@ -890,6 +890,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     handleDeleteTask,
     showChangelog,
     showTemplates,
+    repos.length,
+    repos,
   ]);
 
   return (

@@ -270,7 +270,10 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
         )}
 
         {task.agentId && (
-          <Badge variant="default" className="text-[10px] py-0 px-1.5 flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400">
+          <Badge
+            variant="default"
+            className="text-[10px] py-0 px-1.5 flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+          >
             <svg
               aria-hidden="true"
               width="9"
