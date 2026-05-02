@@ -413,6 +413,7 @@ export function AgentOutput({
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const [showTimestamps, setShowTimestamps] = useState(false);
+  const [splitMode, setSplitMode] = useState<"none" | "right" | "down">("none");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -494,6 +495,16 @@ export function AgentOutput({
         e.preventDefault();
         setShowSearch(true);
         setTimeout(() => searchRef.current?.focus(), 0);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        e.preventDefault();
+        setSplitMode((prev) => (prev === "right" ? "none" : "right"));
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "D" && e.shiftKey) {
+        e.preventDefault();
+        setSplitMode((prev) => (prev === "down" ? "none" : "down"));
         return;
       }
       if (e.key === "Escape" && showSearch) {
@@ -593,14 +604,8 @@ export function AgentOutput({
   const displayTokens = costStats?.total_tokens ?? tokenStats.totalTokens;
   const cost = costStats?.input !== undefined ? costStats.input / 1_000_000 : 0;
 
-  return (
-    <section
-      ref={containerRef}
-      className={containerClass}
-      onKeyDown={handleContainerKeyDown}
-      tabIndex={-1}
-      aria-label="Saída do Agente"
-    >
+  const renderContent = () => (
+    <>
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-input border-b border-default flex-wrap">
         <span className="text-[10px] text-dimmed font-mono shrink-0">
@@ -694,6 +699,28 @@ export function AgentOutput({
           className="p-1 rounded text-xs text-dimmed hover:text-secondary cursor-pointer transition-colors"
         >
           ⬇
+        </button>
+
+        {/* Split toggles */}
+        <button
+          type="button"
+          onClick={() => setSplitMode((prev) => (prev === "right" ? "none" : "right"))}
+          title={splitMode === "right" ? "Remover split" : "Dividir à direita (Ctrl+D)"}
+          className={`p-1 rounded text-xs cursor-pointer transition-colors ${
+            splitMode === "right" ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
+          }`}
+        >
+          ◫
+        </button>
+        <button
+          type="button"
+          onClick={() => setSplitMode((prev) => (prev === "down" ? "none" : "down"))}
+          title={splitMode === "down" ? "Remover split" : "Dividir abaixo (Ctrl+Shift+D)"}
+          className={`p-1 rounded text-xs cursor-pointer transition-colors ${
+            splitMode === "down" ? "text-accent-text bg-accent-muted" : "text-dimmed hover:text-secondary"
+          }`}
+        >
+          ⊟
         </button>
 
         {/* Fullscreen toggle */}
@@ -873,6 +900,27 @@ export function AgentOutput({
           </div>
         </form>
       )}
+    </>
+  );
+
+  return (
+    <section
+      ref={containerRef}
+      className={containerClass}
+      onKeyDown={handleContainerKeyDown}
+      tabIndex={-1}
+      aria-label="Saída do Agente"
+    >
+      <div className={`flex w-full h-full flex-1 min-h-0 ${splitMode === "down" ? "flex-col" : ""}`}>
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col border-r border-default last:border-r-0">
+          {renderContent()}
+        </div>
+        {splitMode !== "none" && (
+          <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${splitMode === "down" ? "border-t border-default" : "border-l border-default"}`}>
+            {renderContent()}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
