@@ -146,7 +146,7 @@ const prPoller = new PrPoller(db, hub);
 prPoller.setProviderRegistry(providerRegistry);
 prPoller.start();
 
-const scheduleRunner = new ScheduleRunner(db, orchestrator);
+const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 scheduleRunner.start();
 
 // ─── Hono App ────────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ app.route("/api/inbox", createInboxRouter(db, registry, orchestrator));
 app.route("/api/settings", createSettingsRouter(db, providerRegistry, skillsLoader));
 app.route("/api/prompts", createPromptsRouter(db));
 app.route("/api/stats", createStatsRouter(db));
-app.route("/api/skills", createSkillsRouter(skillsLoader, skillRegistry));
+app.route("/api/skills", createSkillsRouter(skillsLoader, skillRegistry, db));
 app.route("/api/templates", createTemplatesRouter(db, skillsLoader));
 app.route("/api/labels", createLabelsRouter(db));
 

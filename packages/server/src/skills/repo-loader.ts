@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type {
   AgentEntry,
@@ -36,7 +36,7 @@ function parseFrontmatter(content: string): { meta: Record<string, string>; body
 
 async function safeReaddir(dir: string): Promise<string[]> {
   try {
-    return await readdir(dir);
+    return await fs.readdir(dir);
   } catch {
     return [];
   }
@@ -114,7 +114,7 @@ export class RepoSkillsLoader {
 
     for (const file of files) {
       try {
-        const content = await readFile(join(agentsDir, file), "utf8");
+        const content = await fs.readFile(join(agentsDir, file), "utf8");
         manifests[`.agents/${file}`] = content;
       } catch {
         // File doesn't exist - skip
@@ -142,7 +142,7 @@ export class RepoSkillsLoader {
     if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
       throw new Error("Access denied: path outside repo skills directory");
     }
-    return readFile(resolved, "utf8");
+    return fs.readFile(resolved, "utf8");
   }
 
   private async loadSkills(): Promise<SkillEntry[]> {
@@ -153,7 +153,7 @@ export class RepoSkillsLoader {
     for (const name of dirs) {
       const skillFile = join(skillsDir, name, "SKILL.md");
       try {
-        const raw = await readFile(skillFile, "utf8");
+        const raw = await fs.readFile(skillFile, "utf8");
         const { meta } = parseFrontmatter(raw);
         entries.push({
           name: meta.name || name,
@@ -185,7 +185,7 @@ export class RepoSkillsLoader {
       if (!file.endsWith(".instructions.md")) continue;
       const filePath = join(rulesDir, file);
       try {
-        const raw = await readFile(filePath, "utf8");
+        const raw = await fs.readFile(filePath, "utf8");
         const { meta } = parseFrontmatter(raw);
         entries.push({
           name: meta.name || file.replace(".instructions.md", ""),
@@ -215,7 +215,7 @@ export class RepoSkillsLoader {
       if (!file.endsWith(".agent.md")) continue;
       const filePath = join(agentsDir, file);
       try {
-        const raw = await readFile(filePath, "utf8");
+        const raw = await fs.readFile(filePath, "utf8");
         const { meta } = parseFrontmatter(raw);
         entries.push({
           name: meta.name || file.replace(".agent.md", ""),
@@ -242,7 +242,7 @@ export class RepoSkillsLoader {
       if (!file.endsWith(".prompt.md")) continue;
       const filePath = join(workflowsDir, file);
       try {
-        const raw = await readFile(filePath, "utf8");
+        const raw = await fs.readFile(filePath, "utf8");
         const { meta } = parseFrontmatter(raw);
         entries.push({
           name: meta.name || file.replace(".prompt.md", ""),

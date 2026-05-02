@@ -195,9 +195,11 @@ export type RunPhase =
   | "setup"
   | "worktree_ready"
   | "agent_running"
+  | "generating"
   | "validating"
   | "evaluating"
   | "reviewing"
+  | "fixing"
   | "pr_creating"
   | "stalled"
   | "timed_out";
@@ -285,6 +287,9 @@ export interface RunStateSnapshot {
   sessionId?: string | null;
   resumeFromRunId?: string | null;
   validatorAttempts?: number;
+  validationCommands?: string[];
+  validationSummary?: string | null;
+  qualityScore?: number | null;
   message?: string;
 }
 
@@ -389,6 +394,7 @@ export interface CreateTaskRequest {
   title: string;
   description?: string;
   repoId: string;
+  parentTaskId?: string;
   engine?: string;
   model?: string;
   baseBranch?: string;
@@ -559,6 +565,11 @@ export type TaskArtifactKind =
   | "docs"
   | "worktree"
   | "archive"
+  | "plan"
+  | "replay"
+  | "reflection"
+  | "memory"
+  | "governance"
   | "other";
 
 export interface TaskArtifact {
@@ -691,6 +702,34 @@ export interface TaskSpec {
   outOfScope: string[];
 }
 
+export interface TaskExecutionPlanNode {
+  id: string;
+  title: string;
+  description: string;
+  dependsOn: string[];
+  acceptanceCriteria: string[];
+  tags: string[];
+  taskType: TaskType;
+  taskComplexity: TaskComplexity;
+  maxCost?: number;
+  workflowId?: string | null;
+  agentId?: string | null;
+}
+
+export interface TaskExecutionPlan {
+  objective: string;
+  summary: string;
+  source: "heuristic" | "planner";
+  generatedAt: string;
+  nodes: TaskExecutionPlanNode[];
+}
+
+export interface TaskPlanMaterialization {
+  plan: TaskExecutionPlan;
+  createdTasks: Task[];
+  reusedTasks: Task[];
+}
+
 // ─── Settings Types ──────────────────────────────────────────────────────────
 
 export interface ProviderSettings {
@@ -816,6 +855,18 @@ export interface StatsResponse {
 
 export type SkillCategory = "skill" | "rule" | "agent" | "workflow";
 
+export type RegistryReviewStatus = "pending_review" | "active" | "rejected";
+
+export interface GovernanceMetadata {
+  version?: string;
+  sourceRef?: string;
+  sourceUrl?: string;
+  compatibility?: string | null;
+  reviewStatus?: RegistryReviewStatus;
+  installedAt?: string;
+  reviewedAt?: string | null;
+}
+
 export interface SkillEntry {
   name: string;
   description: string;
@@ -826,6 +877,7 @@ export interface SkillEntry {
   dependencies?: string[];
   tags?: string[];
   author?: string;
+  governance?: GovernanceMetadata;
 }
 
 export interface RuleEntry {
@@ -836,6 +888,7 @@ export interface RuleEntry {
   filePath: string;
   scope?: "global" | "workspace";
   dependencies?: string[];
+  governance?: GovernanceMetadata;
 }
 
 export interface AgentEntry {
@@ -845,6 +898,7 @@ export interface AgentEntry {
   filePath: string;
   scope?: "global" | "workspace";
   skills?: string[];
+  governance?: GovernanceMetadata;
 }
 
 export interface WorkflowEntry {
@@ -853,6 +907,50 @@ export interface WorkflowEntry {
   category: "workflow";
   filePath: string;
   scope?: "global" | "workspace";
+  governance?: GovernanceMetadata;
+}
+
+export interface RegistryAssetRecord {
+  id: string;
+  name: string;
+  category: SkillCategory;
+  filePath: string;
+  sourceRepo: string;
+  sourceRef: string;
+  sourceUrl: string;
+  reviewStatus: RegistryReviewStatus;
+  installedAt: string;
+  reviewedAt: string | null;
+  version?: string;
+  compatibility?: string | null;
+  checksum: string;
+}
+
+export interface InstallRegistryAssetRequest {
+  repoPath: string;
+  ref?: string;
+  assetPath?: string;
+}
+
+export interface ContractLayer {
+  id: "global_rules" | "repo_contract" | "workflow_contract" | "task_context";
+  title: string;
+  priority: number;
+  content: string;
+  source: string;
+}
+
+export interface ContractBundle {
+  layers: ContractLayer[];
+}
+
+export interface HygieneReport {
+  generatedAt: string;
+  pendingRegistryReviews: number;
+  stalePendingReviews: number;
+  memoriesNeedingCompaction: number;
+  blockedByFailedDependencies: number;
+  notes: string[];
 }
 
 export type SkillsEntry = SkillEntry | RuleEntry | AgentEntry | WorkflowEntry;

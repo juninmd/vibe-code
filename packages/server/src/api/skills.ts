@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import type { Db } from "../db";
 import type { SkillsLoader } from "../skills/loader";
 import type { SkillRegistryService } from "../skills/registry";
 
 export function createSkillsRouter(
   skillsLoader: SkillsLoader,
-  skillRegistry: SkillRegistryService
+  skillRegistry: SkillRegistryService,
+  db: Db
 ) {
   const app = new Hono();
 
@@ -81,18 +83,50 @@ export function createSkillsRouter(
 
   // POST /api/skills/registry/install — install from GitHub
   app.post("/registry/install", async (c) => {
-    const { repoPath } = await c.req.json();
+    const { repoPath, ref, assetPath } = await c.req.json();
     if (!repoPath) {
       return c.json({ error: "Missing repoPath" }, 400);
     }
     try {
-      const result = await skillRegistry.installFromGitHub(repoPath);
-      skillsLoader.invalidate(); // Force reload
+      const result = await skillRegistry.installFromGitHub({ repoPath, ref, assetPath });
       return c.json({ data: result });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ error: message }, 500);
     }
+  });
+
+  app.post("/registry/:id/approve", async (c) => {
+    try {
+      const result = await skillRegistry.approve(c.req.param("id"));
+      skillsLoader.invalidate();
+      return c.json({ data: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.post("/registry/:id/reject", async (c) => {
+    try {
+      const result = await skillRegistry.reject(c.req.param("id"));
+      return c.json({ data: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.get("/hygiene", async (c) => {
+    const cached = db.settings.get("system_hygiene_report");
+    if (cached) {
+      try {
+        return c.json({ data: JSON.parse(cached) });
+      } catch {
+        /* fall through */
+      }
+    }
+    return c.json({ data: await skillRegistry.generateHygieneReport(db) });
   });
 
   // DELETE /api/skills/registry/:name — uninstall

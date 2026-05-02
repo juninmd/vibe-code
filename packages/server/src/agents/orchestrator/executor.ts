@@ -1,21 +1,29 @@
 import { access, appendFile, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentRun, SkillPayload, Task } from "@vibe-code/shared";
+import type {
+  AgentRun,
+  RunPhase,
+  RunStateSnapshot,
+  SkillPayload,
+  Task,
+  TaskArtifactKind,
+} from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
 import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
+import { MemoryService } from "../memory-service";
 import { runBaselineCheck } from "./baseline-check";
 import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
-import { buildContextAsync } from "./prompt";
+import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
-import { verifyWorktree } from "./verify";
+import { computeRunQualityScore, verifyWorktree, type WorktreeVerificationResult } from "./verify";
 
 const REVIEW_AUTO_APPLY = process.env.VIBE_CODE_REVIEW_AUTO_APPLY !== "false";
 const DOCS_AUTO_APPLY = process.env.VIBE_CODE_DOCS_AUTO_APPLY !== "false";
@@ -114,26 +122,28 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     .join("\n");
 }
 
-function buildFinalValidatorPrompt(task: Task): string {
+function buildValidationRepairPrompt(task: Task, verification: WorktreeVerificationResult): string {
+  const failedResult = verification.results.find((result) => !result.passed);
+  const failedOutput = [failedResult?.stdout, failedResult?.stderr]
+    .filter(Boolean)
+    .join("\n")
+    .trim()
+    .slice(-6000);
+
   return [
-    "You are the final validation agent for this task.",
-    "Run a full quality gate using this repository's own CLI and conventions.",
+    "You are continuing an autonomous coding task after deterministic validation failed.",
+    "Fix the repository so the deterministic quality gate passes on the next attempt.",
     "",
-    "Mandatory flow:",
-    "1) Discover the project-native commands from scripts/Makefile/Taskfile/justfile/README and other local docs.",
-    "2) Run lint, test, and build (all three are required).",
-    "3) If any command fails, fix the code and tests, then re-run lint/test/build.",
-    "4) Repeat until lint, test, and build all pass in this worktree.",
-    "5) Do not push and do not open PR/MR; only modify repository files.",
+    "Rules:",
+    "- Do NOT ask for validation commands; the harness already ran them deterministically.",
+    "- Fix only the reported failures and any directly related defects.",
+    "- Add or adjust tests when behavior changes.",
+    "- Do not push and do not open PR/MR; only modify repository files.",
     "",
-    "Output requirements:",
-    "- Log the exact lint/test/build commands you executed.",
-    "- If a required command does not exist, add a minimal project-native command and use it.",
-    "- Keep changes scoped to this task only.",
-    "",
-    "Environment policy:",
-    "- Do NOT use `pgrep`; use alternatives (`ps`, `grep`, `lsof`, `/proc`).",
-    "- If a tool call is denied by policy, switch strategy and continue.",
+    "Deterministic validation summary:",
+    verification.summary,
+    failedResult ? `Failed command: ${failedResult.command}` : "",
+    failedOutput ? `Failure output:\n${failedOutput}` : "",
     "",
     "Task context:",
     `Title: ${task.title}`,
@@ -215,7 +225,7 @@ function recordTaskArtifact(
   task: Task,
   run: AgentRun,
   artifact: {
-    kind: "pull_request" | "branch" | "docs" | "worktree" | "archive" | "other";
+    kind: TaskArtifactKind;
     title: string;
     uri: string;
     metadata?: Record<string, unknown>;
@@ -407,6 +417,92 @@ export async function executeAgent(
   let capturedCostStats: object | null = null;
   let resumeSessionId: string | undefined;
   let activeSessionId: string | undefined;
+  let validationRecordCount = 0;
+  let latestVerification: WorktreeVerificationResult | null = null;
+  const memoryService = new MemoryService(db);
+
+  const setRunPhase = (
+    phase: RunPhase,
+    extra: Partial<RunStateSnapshot> = {},
+    broadcast = true
+  ) => {
+    db.runs.updateStateSnapshot(run.id, phase, {
+      branch,
+      worktreePath: wtPath ?? null,
+      sessionId: activeSessionId ?? null,
+      validatorAttempts,
+      ...extra,
+    });
+    if (broadcast) {
+      hub.broadcastToTask(task.id, {
+        type: "phase_changed",
+        runId: run.id,
+        taskId: task.id,
+        phase,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    logOrchestratorEvent(
+      `harness_phase_started task=${task.id.slice(0, 8)} phase=${phase} engine=${engine.name}`,
+      "info"
+    );
+  };
+
+  const recordValidationArtifact = (
+    title: string,
+    verification: WorktreeVerificationResult,
+    metadata: Record<string, unknown> = {}
+  ) => {
+    validationRecordCount += 1;
+    recordTaskArtifact(db, task, run, {
+      kind: "other",
+      title,
+      uri: `run:${run.id}:validation:${validationRecordCount}`,
+      metadata: {
+        passed: verification.passed,
+        summary: verification.summary,
+        commands: verification.commands,
+        results: verification.results.map((result) => ({
+          name: result.name,
+          command: result.command,
+          exitCode: result.exitCode,
+          passed: result.passed,
+          stdoutTail: result.stdout.slice(-2000),
+          stderrTail: result.stderr.slice(-2000),
+        })),
+        ...metadata,
+      },
+    });
+  };
+
+  const runDeterministicVerification = async (
+    title: string,
+    metadata: Record<string, unknown> = {}
+  ): Promise<WorktreeVerificationResult> => {
+    if (!wtPath) {
+      throw new Error("Missing worktree path for deterministic verification");
+    }
+
+    const verification = await verifyWorktree(wtPath, sysLog);
+    setRunPhase(
+      "validating",
+      {
+        validationCommands: [...verification.commands],
+        validationSummary: verification.summary,
+      },
+      false
+    );
+    recordValidationArtifact(title, verification, metadata);
+    if (!verification.passed) {
+      const failed = verification.results.find((result) => !result.passed);
+      logOrchestratorEvent(
+        `validation_failed command='${failed?.command ?? "unknown"}' exit_code=${failed?.exitCode ?? -1} artifact=run:${run.id}:validation:${validationRecordCount}`,
+        "error"
+      );
+    }
+    return verification;
+  };
+
   try {
     let reusableWorkspacePath: string | null = null;
 
@@ -435,17 +531,8 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { started_at: new Date().toISOString() });
-    db.runs.updateStateSnapshot(run.id, "setup", {
-      branch,
-      sessionId: activeSessionId ?? null,
+    setRunPhase("setup", {
       resumeFromRunId: resumeSessionId ? "previous-failed-run" : null,
-    });
-    hub.broadcastToTask(task.id, {
-      type: "phase_changed",
-      runId: run.id,
-      taskId: task.id,
-      phase: "setup",
-      timestamp: new Date().toISOString(),
     });
     sysLog("Setting up workspace...");
 
@@ -478,18 +565,7 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
-    db.runs.updateStateSnapshot(run.id, "worktree_ready", {
-      branch,
-      worktreePath: wtPath,
-      sessionId: activeSessionId ?? null,
-    });
-    hub.broadcastToTask(task.id, {
-      type: "phase_changed",
-      runId: run.id,
-      taskId: task.id,
-      phase: "worktree_ready",
-      timestamp: new Date().toISOString(),
-    });
+    setRunPhase("worktree_ready");
 
     // Run setup scripts if available
     await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
@@ -581,10 +657,24 @@ export async function executeAgent(
       skillsLoader,
       task.repoId,
       findingsLoader,
-      parentTaskLoader
+      parentTaskLoader,
+      (currentTask) => memoryService.getRelevantContext(currentTask),
+      () => db.metrics.skillEffectiveness()
     );
     const prompt = contextResult.prompt;
     skillPayload = contextResult.skills;
+    logOrchestratorEvent(
+      `context_bundle_built skills=${skillPayload.skills.length + skillPayload.rules.length} memories=${contextResult.memoryEntries} workflow=${skillPayload.workflow?.name ?? "none"}`
+    );
+    recordTaskArtifact(db, task, run, {
+      kind: "governance",
+      title: "Context bundle",
+      uri: `run:${run.id}:context-bundle`,
+      metadata: {
+        contractLayers: contextResult.contractBundle.layers,
+        selection: contextResult.selectionMetadata,
+      },
+    });
 
     // M7.2: Record loaded skills only after the CLI has actually started emitting events.
     const loadedSkillNames = [
@@ -656,10 +746,9 @@ export async function executeAgent(
     }
 
     // Append context file reference to prompt so agents know where to look
-    const specNote = plannerSpec
-      ? "\n**Expanded spec is available in `.vibe-code/context/SPEC.md` — read it before starting.**"
-      : "";
-    const promptWithContext = `${prompt}\n\n---\n**Session context is available in \`.vibe-code/context/PROGRESS.md\` (human-readable) and \`.vibe-code/context/TASK.json\` (structured). Read them at the start if you need previous session notes or task metadata.**${specNote}`;
+    const promptWithContext = appendRuntimeContextHints(prompt, {
+      hasPlannerSpec: Boolean(plannerSpec),
+    });
 
     const scriptsDir = join(process.cwd(), "packages", "server", "scripts");
     const agentEnv: Record<string, string> = {
@@ -675,18 +764,7 @@ export async function executeAgent(
       agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
     }
 
-    db.runs.updateStateSnapshot(run.id, "agent_running", {
-      branch,
-      worktreePath: wtPath,
-      sessionId: activeSessionId ?? null,
-    });
-    hub.broadcastToTask(task.id, {
-      type: "phase_changed",
-      runId: run.id,
-      taskId: task.id,
-      phase: "agent_running",
-      timestamp: new Date().toISOString(),
-    });
+    setRunPhase("generating");
     for await (const event of engine.execute(promptWithContext, wtPath, {
       runId: run.id,
       signal: abort.signal,
@@ -702,11 +780,7 @@ export async function executeAgent(
       recordCliLoadedSkills();
       if (event.type === "session" && event.sessionId) {
         activeSessionId = event.sessionId;
-        db.runs.updateStateSnapshot(run.id, "agent_running", {
-          branch,
-          worktreePath: wtPath,
-          sessionId: activeSessionId,
-        });
+        setRunPhase("generating", {}, false);
       }
       if (event.type === "complete") {
         agentExitCode = event.exitCode ?? 0;
@@ -738,77 +812,73 @@ export async function executeAgent(
       throw new Error(`Agent exited with code ${agentExitCode}`);
     }
 
-    sysLog(
-      `Running final validator agent (lint/test/build), max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`
-    );
-    db.runs.updateStateSnapshot(run.id, "validating", {
-      branch,
-      worktreePath: wtPath,
-      sessionId: activeSessionId ?? null,
-      validatorAttempts,
-    });
-    hub.broadcastToTask(task.id, {
-      type: "phase_changed",
-      runId: run.id,
-      taskId: task.id,
-      phase: "validating",
-      timestamp: new Date().toISOString(),
-    });
+    sysLog(`Running deterministic validation, max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
+    setRunPhase("validating");
     let validatorPassed = false;
-    let validatorExitCode: number | null = null;
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
       validatorAttempts = attempt;
-      db.runs.updateStateSnapshot(run.id, "validating", {
-        branch,
-        worktreePath: wtPath,
-        sessionId: activeSessionId ?? null,
-        validatorAttempts,
+      setRunPhase(
+        "validating",
+        {
+          message: `Validation attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}`,
+        },
+        false
+      );
+      sysLog(`Deterministic validation attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
+      latestVerification = await runDeterministicVerification("Deterministic validation", {
+        attempt,
       });
-      validatorExitCode = null;
-      const validatorPrompt = buildFinalValidatorPrompt(task);
-      sysLog(`Final validator attempt ${attempt}/${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
 
-      for await (const event of engine.execute(validatorPrompt, wtPath, {
-        runId: run.id,
-        signal: abort.signal,
-        model,
-        litellmKey,
-        litellmBaseUrl,
-        nativeApiKeys,
-        resumeSessionId: activeSessionId,
-      })) {
-        if (abort.signal.aborted) break;
-        if (event.type === "session" && event.sessionId) {
-          activeSessionId = event.sessionId;
-        }
-        if (event.type === "complete") {
-          validatorExitCode = event.exitCode ?? 0;
-          continue;
-        }
-        await handleAgentEvent(event, run.id, task.id, db, hub, () => {
-          lastActivity = Date.now();
-        });
-      }
-
-      if (abort.signal.aborted)
-        throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
-
-      if (validatorExitCode === null || validatorExitCode === 0) {
+      if (latestVerification.passed) {
         validatorPassed = true;
-        sysLog(`Final validator passed on attempt ${attempt} ✓`);
+        sysLog(`Deterministic validation passed on attempt ${attempt} ✓`);
         break;
       }
 
       if (attempt < FINAL_VALIDATOR_MAX_ATTEMPTS) {
-        sysLog(
-          `Final validator failed (exit ${validatorExitCode}). Retrying with updated context...`
-        );
+        sysLog("Deterministic validation failed. Launching targeted repair loop...");
+        setRunPhase("fixing", {
+          validationCommands: [...latestVerification.commands],
+          validationSummary: latestVerification.summary,
+        });
+        let repairExitCode: number | null = null;
+        const repairPrompt = buildValidationRepairPrompt(task, latestVerification);
+
+        for await (const event of engine.execute(repairPrompt, wtPath, {
+          runId: run.id,
+          signal: abort.signal,
+          model,
+          litellmKey,
+          litellmBaseUrl,
+          nativeApiKeys,
+          resumeSessionId: activeSessionId,
+        })) {
+          if (abort.signal.aborted) break;
+          if (event.type === "session" && event.sessionId) {
+            activeSessionId = event.sessionId;
+            setRunPhase("fixing", {}, false);
+          }
+          if (event.type === "complete") {
+            repairExitCode = event.exitCode ?? 0;
+            continue;
+          }
+          await handleAgentEvent(event, run.id, task.id, db, hub, () => {
+            lastActivity = Date.now();
+          });
+        }
+
+        if (abort.signal.aborted)
+          throw new Error(stalledDueToInactivity ? "Agent stalled" : "Agent timed out");
+
+        if (repairExitCode !== null && repairExitCode !== 0) {
+          throw new Error(`Validation repair loop exited with code ${repairExitCode}`);
+        }
       }
     }
 
     if (!validatorPassed) {
       throw new Error(
-        `Final validator failed after ${FINAL_VALIDATOR_MAX_ATTEMPTS} attempts (last exit ${validatorExitCode ?? "unknown"})`
+        `Deterministic validation failed after ${FINAL_VALIDATOR_MAX_ATTEMPTS} attempts (${latestVerification?.summary ?? "no summary"})`
       );
     }
 
@@ -817,19 +887,7 @@ export async function executeAgent(
     // M6: Post-run evaluator — grade completeness against the task spec
     if (litellmBaseUrl && litellmKey) {
       try {
-        db.runs.updateStateSnapshot(run.id, "evaluating", {
-          branch,
-          worktreePath: wtPath,
-          sessionId: activeSessionId ?? null,
-          validatorAttempts,
-        });
-        hub.broadcastToTask(task.id, {
-          type: "phase_changed",
-          runId: run.id,
-          taskId: task.id,
-          phase: "evaluating",
-          timestamp: new Date().toISOString(),
-        });
+        setRunPhase("evaluating");
         const grade = await runPostRunEvaluator(
           task.title,
           plannerSpec ?? task.description ?? "",
@@ -847,6 +905,7 @@ export async function executeAgent(
           if (!grade.pass) {
             // Send feedback to generator for one improvement loop
             sysLog("Evaluator: below threshold — running improvement loop...");
+            setRunPhase("fixing", { message: "Applying evaluator feedback" });
             const improvementPrompt = [
               "You are continuing an autonomous coding task after an evaluator found gaps.",
               "Apply the evaluator feedback below to improve the implementation.",
@@ -911,23 +970,12 @@ export async function executeAgent(
 
     if (!(await git.hasCommitsAhead(wtPath, baseBranch))) throw new Error("Agent made no changes");
 
-    await verifyWorktree(wtPath, sysLog);
+    setRunPhase("validating", { message: "Pre-review deterministic validation" });
+    await runDeterministicVerification("Pre-review validation");
 
     if (REVIEW_ENABLED) {
       sysLog("Running review pipeline...");
-      db.runs.updateStateSnapshot(run.id, "reviewing", {
-        branch,
-        worktreePath: wtPath,
-        sessionId: activeSessionId ?? null,
-        validatorAttempts,
-      });
-      hub.broadcastToTask(task.id, {
-        type: "phase_changed",
-        runId: run.id,
-        taskId: task.id,
-        phase: "reviewing",
-        timestamp: new Date().toISOString(),
-      });
+      setRunPhase("reviewing");
       const reviewResult = await runReviewPipeline(
         task,
         run,
@@ -942,6 +990,16 @@ export async function executeAgent(
         litellmBaseUrl,
         nativeApiKeys
       );
+      recordTaskArtifact(db, task, run, {
+        kind: "other",
+        title: "Review summary",
+        uri: `run:${run.id}:review`,
+        metadata: {
+          blockers: reviewResult.blockers,
+          actionableFindings: reviewResult.actionableFindings,
+          docsFindings: reviewResult.docsFindings,
+        },
+      });
 
       // M4.2: Persist review findings to DB
       reviewBlockerCount = reviewResult.blockers.length;
@@ -993,6 +1051,7 @@ export async function executeAgent(
         sysLog(
           `Applying ${reviewResult.actionableFindings.length} review suggestion(s) automatically...`
         );
+        setRunPhase("fixing", { message: "Applying review suggestions" });
         let autofixExitCode: number | null = null;
         const autofixPrompt = buildReviewAutofixPrompt(task, reviewResult.actionableFindings);
         for await (const event of engine.execute(autofixPrompt, wtPath, {
@@ -1027,7 +1086,8 @@ export async function executeAgent(
         if (await git.hasChanges(wtPath)) {
           await git.commitAll(wtPath, `chore: apply review suggestions for ${task.title}`);
           sysLog("Review suggestions applied and committed ✓");
-          await verifyWorktree(wtPath, sysLog);
+          setRunPhase("validating", { message: "Post-review deterministic validation" });
+          await runDeterministicVerification("Post-review validation");
         } else {
           sysLog("No file changes produced by review auto-apply.");
         }
@@ -1035,6 +1095,7 @@ export async function executeAgent(
 
       if (DOCS_AUTO_APPLY) {
         sysLog("Running docs finishing step...");
+        setRunPhase("fixing", { message: "Finishing task documentation" });
         let docsExitCode: number | null = null;
         const docsPrompt = buildDocsAutofixPrompt(task, reviewResult.docsFindings);
         for await (const event of engine.execute(docsPrompt, wtPath, {
@@ -1076,7 +1137,8 @@ export async function executeAgent(
             metadata: { path: docsRelativePath(task) },
           });
           sysLog("Docs step applied and committed ✓");
-          await verifyWorktree(wtPath, sysLog);
+          setRunPhase("validating", { message: "Post-docs deterministic validation" });
+          await runDeterministicVerification("Post-docs validation");
         } else {
           sysLog("Docs step finished with no file changes.");
         }
@@ -1086,23 +1148,32 @@ export async function executeAgent(
         throw new Error(`Review blockers: ${reviewResult.blockers.join(", ")}`);
     }
 
+    try {
+      const diffFiles = await git.diffSummary(baseBranch, "HEAD", { cwd: wtPath });
+      recordTaskArtifact(db, task, run, {
+        kind: "other",
+        title: "Diff summary",
+        uri: `run:${run.id}:diff`,
+        metadata: {
+          baseBranch,
+          totalAdditions: diffFiles.reduce((sum, file) => sum + file.additions, 0),
+          totalDeletions: diffFiles.reduce((sum, file) => sum + file.deletions, 0),
+          files: diffFiles.map((file) => ({
+            path: file.path,
+            additions: file.additions,
+            deletions: file.deletions,
+          })),
+        },
+      });
+    } catch {
+      // Diff artifacts are helpful but non-fatal.
+    }
+
     db.tasks.updateField(task.id, "branch_name", branch);
     let prUrl: string | null = null;
 
     try {
-      db.runs.updateStateSnapshot(run.id, "pr_creating", {
-        branch,
-        worktreePath: wtPath,
-        sessionId: activeSessionId ?? null,
-        validatorAttempts,
-      });
-      hub.broadcastToTask(task.id, {
-        type: "phase_changed",
-        runId: run.id,
-        taskId: task.id,
-        phase: "pr_creating",
-        timestamp: new Date().toISOString(),
-      });
+      setRunPhase("pr_creating");
       sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
       recordTaskArtifact(db, task, run, {
@@ -1203,6 +1274,13 @@ export async function executeAgent(
     // M5.2: Record run metrics
     try {
       const finalRun = db.runs.getById(run.id);
+      const qualityScore = computeRunQualityScore({
+        validatorAttempts: validatorAttempts ?? 0,
+        reviewBlockers: reviewBlockerCount,
+        reviewWarnings: reviewWarningCount,
+        finalStatus: finalRun?.status ?? "failed",
+        prCreated,
+      });
       db.metrics.create({
         runId: run.id,
         taskId: task.id,
@@ -1217,6 +1295,88 @@ export async function executeAgent(
         reviewWarnings: reviewWarningCount,
         finalStatus: finalRun?.status ?? "failed",
         prCreated,
+      });
+      db.runs.updateStateSnapshot(
+        run.id,
+        ((finalRun?.currentStatus as RunPhase | null) ?? "reviewing") as RunPhase,
+        {
+          branch,
+          worktreePath: wtPath ?? null,
+          sessionId: activeSessionId ?? null,
+          validatorAttempts,
+          qualityScore,
+        }
+      );
+      recordTaskArtifact(db, task, run, {
+        kind: "other",
+        title: "Run summary",
+        uri: `run:${run.id}:summary`,
+        metadata: {
+          finalStatus: finalRun?.status ?? "failed",
+          branch,
+          validatorAttempts,
+          reviewBlockers: reviewBlockerCount,
+          reviewWarnings: reviewWarningCount,
+          prCreated,
+          qualityScore,
+        },
+      });
+      const reflection = [
+        `Final status ${finalRun?.status ?? "failed"} with quality score ${qualityScore}.`,
+        latestVerification?.summary ? `Validation summary: ${latestVerification.summary}.` : "",
+        reviewBlockerCount > 0
+          ? `Review blockers remained at ${reviewBlockerCount}; address them before reusing the same flow.`
+          : "Review blockers reached zero before handoff.",
+        prCreated
+          ? "A pull request was created successfully."
+          : "No pull request was created in this run.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      recordTaskArtifact(db, task, run, {
+        kind: "replay",
+        title: "Validation replay",
+        uri: `run:${run.id}:replay`,
+        metadata: {
+          validationCommands: latestVerification?.commands ?? [],
+          validationSummary: latestVerification?.summary ?? null,
+          validatorAttempts,
+          finalStatus: finalRun?.status ?? "failed",
+          branch,
+          qualityScore,
+        },
+      });
+      recordTaskArtifact(db, task, run, {
+        kind: "reflection",
+        title: "Run reflection",
+        uri: `run:${run.id}:reflection`,
+        metadata: {
+          reflection,
+          finalStatus: finalRun?.status ?? "failed",
+          qualityScore,
+        },
+      });
+      const memories = await memoryService.appendRunSummary(task, {
+        runId: run.id,
+        finalStatus: finalRun?.status ?? "failed",
+        qualityScore,
+        validatorAttempts: validatorAttempts ?? 0,
+        reviewBlockers: reviewBlockerCount,
+        reviewWarnings: reviewWarningCount,
+        validationSummary: latestVerification?.summary ?? null,
+        validationCommands: [...(latestVerification?.commands ?? [])],
+        branch,
+        prCreated,
+        reflection,
+      });
+      recordTaskArtifact(db, task, run, {
+        kind: "memory",
+        title: "Memory snapshot",
+        uri: `run:${run.id}:memory`,
+        metadata: {
+          taskMemoryId: memories.taskMemory.id,
+          sharedMemoryId: memories.sharedMemory.id,
+        },
       });
     } catch {
       /* metrics recording is non-fatal */

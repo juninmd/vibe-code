@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createDb } from "../db";
 import type { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
@@ -21,6 +24,8 @@ mock.module("./orchestrator/review", () => ({
 const { Orchestrator } = await import("./orchestrator");
 
 type Db = ReturnType<typeof createDb>;
+
+let tempWorktrees: string[] = [];
 
 function makeDb(): Db {
   const db = createDb(":memory:");
@@ -81,7 +86,27 @@ function makeGit(
       if (failPush) throw new Error("Network error: push failed");
     },
     createPR: async () => prUrl,
-    createWorktree: async () => "/tmp/test-worktree",
+    createWorktree: async () => {
+      const worktree = await mkdtemp(join(tmpdir(), "vibe-orch-test-"));
+      tempWorktrees.push(worktree);
+      await writeFile(
+        join(worktree, "package.json"),
+        JSON.stringify(
+          {
+            name: "orchestrator-test",
+            scripts: {
+              lint: "echo lint",
+              test: "echo test",
+              build: "echo build",
+            },
+          },
+          null,
+          2
+        ),
+        "utf8"
+      );
+      return worktree;
+    },
     removeWorktree: async () => {},
     getBarePath: () => "/path/repo.git",
     fetchRepo: async () => {},
@@ -107,7 +132,7 @@ async function waitForStatus(
   db: Db,
   taskId: string,
   expected: string,
-  timeoutMs = 3000
+  timeoutMs = 6000
 ): Promise<ReturnType<Db["tasks"]["getById"]>> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -130,6 +155,15 @@ describe("Orchestrator — task flow", () => {
   beforeEach(() => {
     db = makeDb();
     hub = makeHub();
+    tempWorktrees = [];
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      tempWorktrees.map((worktree) =>
+        rm(worktree, { recursive: true, force: true }).catch(() => undefined)
+      )
+    );
   });
 
   it("moves task to in_progress immediately after launch", async () => {
@@ -141,6 +175,8 @@ describe("Orchestrator — task flow", () => {
 
     const current = db.tasks.getById(task.id);
     expect(current?.status).toBe("in_progress");
+
+    await waitForStatus(db, task.id, "review");
   });
 
   it("creates an agent run record on launch", async () => {
@@ -152,6 +188,8 @@ describe("Orchestrator — task flow", () => {
 
     expect(run.taskId).toBe(task.id);
     expect(run.engine).toBe("mock");
+
+    await waitForStatus(db, task.id, "review");
   });
 
   it("moves task to 'review' with PR when agent makes commits (exit 0)", async () => {
@@ -197,6 +235,8 @@ describe("Orchestrator — task flow", () => {
 
     expect(final?.status).toBe("failed");
     expect(final?.prUrl).toBeNull();
+
+    await orch.cancel(task.id);
   });
 
   it("moves task to 'failed' when agent makes no commits", async () => {
@@ -217,6 +257,8 @@ describe("Orchestrator — task flow", () => {
     const final = await waitForStatus(db, task.id, "failed");
 
     expect(final?.status).toBe("failed");
+
+    await orch.cancel(task.id);
   });
 
   it("moves task to 'review' without PR when push fails (network error)", async () => {
@@ -250,6 +292,52 @@ describe("Orchestrator — task flow", () => {
     await orch.launch(task);
     const final = await waitForStatus(db, task.id, "failed");
     expect(final?.status).toBe("failed");
+
+    await orch.cancel(task.id);
+  });
+
+  it("keeps dependents blocked when a dependency fails", () => {
+    const repo = seedRepo(db);
+    const dependency = db.tasks.create({ title: "Dependency", repoId: repo.id });
+    const dependent = db.tasks.create({
+      title: "Dependent",
+      repoId: repo.id,
+      dependsOn: [dependency.id],
+    });
+    db.tasks.update(dependency.id, { status: "failed" });
+
+    const orch = new Orchestrator(db, makeGit(), makeRegistry(makeEngine([])), hub);
+    expect(orch.checkBlockedByDependencies(dependent.id, dependent.dependsOn)).toEqual([
+      dependency.id,
+    ]);
+  });
+
+  it("treats review dependencies as satisfied", () => {
+    const repo = seedRepo(db);
+    const dependency = db.tasks.create({ title: "Dependency", repoId: repo.id });
+    const dependent = db.tasks.create({
+      title: "Dependent",
+      repoId: repo.id,
+      dependsOn: [dependency.id],
+    });
+    db.tasks.update(dependency.id, { status: "review" });
+
+    const orch = new Orchestrator(db, makeGit(), makeRegistry(makeEngine([])), hub);
+    expect(orch.checkBlockedByDependencies(dependent.id, dependent.dependsOn)).toEqual([]);
+  });
+
+  it("propagates cancellation to child tasks", async () => {
+    const repo = seedRepo(db);
+    const parent = db.tasks.create({ title: "Parent", repoId: repo.id });
+    const child = db.tasks.create({ title: "Child", repoId: repo.id, parentTaskId: parent.id });
+    db.tasks.update(child.id, { status: "backlog" });
+
+    const orch = new Orchestrator(db, makeGit(), makeRegistry(makeEngine([])), hub);
+    await orch.cancel(parent.id);
+
+    const updatedChild = db.tasks.getById(child.id);
+    expect(updatedChild?.status).toBe("failed");
+    expect(updatedChild?.notes).toContain("Cancelled because parent task");
   });
 });
 

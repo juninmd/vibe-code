@@ -1,32 +1,42 @@
-import { describe, expect, it, mock } from "bun:test";
-import type { SkillsIndex } from "@vibe-code/shared";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import * as actualFs from "node:fs/promises";
+import type { SkillEffectiveness, SkillsIndex } from "@vibe-code/shared";
 import { matchSkillsForTask } from "./matcher";
 
-mock.module("node:fs/promises", () => {
-  return {
-    readdir: mock(async (dir: string) => {
-      if (dir.endsWith("/workdir")) {
-        return [
-          { isFile: () => true, name: "index.ts" },
-          { isFile: () => true, name: "styles.css" },
-          { isFile: () => false, name: "src" },
-        ];
-      }
-      if (dir.endsWith("/workdir/src")) {
-        return [
-          { isFile: () => true, name: "app.tsx" },
-          { isFile: () => true, name: "utils.js" },
-        ];
-      }
-      if (dir.endsWith("/workdir/lib") || dir.endsWith("/workdir/app")) {
-        throw new Error("Not found");
-      }
-      if (dir.endsWith("bad-workdir")) {
-        throw new Error("Cannot read dir");
-      }
-      return [];
-    }),
-  };
+const originalReaddir = actualFs.readdir;
+
+beforeEach(() => {
+  spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+    const dir = path;
+    if (typeof dir !== "string") {
+      return originalReaddir(path, options as never);
+    }
+
+    if (dir.endsWith("/workdir")) {
+      return [
+        { isFile: () => true, name: "index.ts" },
+        { isFile: () => true, name: "styles.css" },
+        { isFile: () => false, name: "src" },
+      ];
+    }
+    if (dir.endsWith("/workdir/src")) {
+      return [
+        { isFile: () => true, name: "app.tsx" },
+        { isFile: () => true, name: "utils.js" },
+      ];
+    }
+    if (dir.endsWith("/workdir/lib") || dir.endsWith("/workdir/app")) {
+      throw new Error("Not found");
+    }
+    if (dir.endsWith("bad-workdir")) {
+      throw new Error("Cannot read dir");
+    }
+    return originalReaddir(path, options as never);
+  }) as typeof actualFs.readdir);
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 const mockSkillsIndex: SkillsIndex = {
@@ -230,5 +240,37 @@ describe("matcher", () => {
       0
     );
     expect(totalChars).toBeLessThanOrEqual(8000);
+  });
+
+  it("prefers historically effective skills when lexical overlap is tied", async () => {
+    const metrics: SkillEffectiveness[] = [
+      {
+        name: "Backend",
+        totalRuns: 8,
+        successRate: 96,
+        avgBlockers: 0,
+        avgWarnings: 0.2,
+      },
+    ];
+
+    const result = await matchSkillsForTask(
+      mockSkillsIndex,
+      "Backend frontend polish",
+      "Touch both frontend and backend surfaces",
+      "/workdir",
+      {
+        skillEffectiveness: metrics,
+        recentFindings: [
+          {
+            persona: "reviewer",
+            severity: "warning",
+            content: "Backend integration tends to regress when validation is skipped.",
+          },
+        ],
+      }
+    );
+
+    expect(result.metadata.rankedSkills[0]?.name).toBe("Backend");
+    expect(result.metadata.rankedSkills[0]?.reasons.join(" ")).toContain("historical-success");
   });
 });

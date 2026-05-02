@@ -1,13 +1,22 @@
 import { randomBytes } from "node:crypto";
-import { unlink } from "node:fs/promises";
+import { access, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
 import { z } from "zod";
+import { MemoryService } from "../agents/memory-service";
 import type { Orchestrator } from "../agents/orchestrator";
-import { buildPrompt } from "../agents/orchestrator/prompt";
+import {
+  appendRuntimeContextHints,
+  buildContextAsync,
+  buildPrompt,
+} from "../agents/orchestrator/prompt";
+import {
+  buildTaskExecutionPlan,
+  materializeTaskExecutionPlan,
+} from "../agents/orchestrator/task-plan";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 
@@ -23,6 +32,7 @@ const createTaskSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   repoId: z.string().min(1),
+  parentTaskId: z.string().optional(),
   engine: z.string().optional(),
   model: z.string().optional(),
   baseBranch: z.string().optional(),
@@ -31,6 +41,7 @@ const createTaskSchema = z.object({
   agentId: z.string().optional(),
   workflowId: z.string().optional(),
   dependsOn: z.array(z.string()).optional(),
+  maxCost: z.number().positive().optional(),
   goal: z.string().optional(),
   desiredOutcome: z.string().optional(),
   taskType: z
@@ -54,12 +65,18 @@ const updateTaskSchema = z.object({
   desiredOutcome: z.string().nullable().optional(),
   dependsOn: z.array(z.string()).optional(),
   pendingApproval: z.boolean().optional(),
+  maxCost: z.number().positive().nullable().optional(),
   priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
   taskType: z
     .enum(["frontend", "backend", "docs", "test", "infra", "refactor", "chore", "bugfix"])
     .nullable()
     .optional(),
   taskComplexity: z.enum(["trivial", "low", "medium", "high", "critical"]).nullable().optional(),
+});
+
+const planTaskSchema = z.object({
+  materialize: z.boolean().default(true),
+  force: z.boolean().default(false),
 });
 
 const launchTaskSchema = z.object({
@@ -86,6 +103,7 @@ const importIssuesSchema = z.object({
 
 export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
   const router = new Hono();
+  const memoryService = new MemoryService(db);
 
   function mapTasksWithRuns(repoId?: string, status?: string): TaskWithRun[] {
     const tasks = db.tasks.list(repoId, status);
@@ -196,6 +214,30 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return c.json({ data: task }, 201);
   });
 
+  router.post("/:id/plan", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = planTaskSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "validation", message: parsed.error.message }, 400);
+    }
+
+    const plan = buildTaskExecutionPlan(task);
+    const result = parsed.data.materialize
+      ? materializeTaskExecutionPlan(db, task, plan, { force: parsed.data.force })
+      : { plan, createdTasks: [], reusedTasks: [] };
+
+    return c.json({ data: result });
+  });
+
+  router.get("/:id/children", (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    return c.json({ data: db.tasks.listChildren(task.id) });
+  });
+
   // POST /tasks/bulk/from-issues — create multiple tasks from GitHub/GitLab issues
   router.post("/bulk/from-issues", async (c) => {
     const body = await c.req.json();
@@ -246,7 +288,11 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ error: "validation", message: parsed.error.message }, 400);
     }
 
-    const task = db.tasks.update(c.req.param("id"), parsed.data);
+    const updateRequest = {
+      ...parsed.data,
+      maxCost: parsed.data.maxCost ?? undefined,
+    };
+    const task = db.tasks.update(c.req.param("id"), updateRequest);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     return c.json({ data: task });
   });
@@ -321,9 +367,96 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     // M3.3: Optionally inject memory if available
     const sharedMemory = db.memories.getByTaskIdAndScope(taskId, "shared");
     const taskMemory = db.memories.getByTaskIdAndScope(taskId, "task");
+    const fallbackPrompt = appendRuntimeContextHints(
+      buildPrompt(task, sharedMemory?.content, taskMemory?.content),
+      { hasPlannerSpec: Boolean(task.plannerSpec) }
+    );
 
-    const prompt = buildPrompt(task, sharedMemory?.content, taskMemory?.content);
-    return c.json({ data: { prompt } });
+    if (!git) {
+      return c.json({ data: { prompt: fallbackPrompt, materialized: false } });
+    }
+
+    const repo = db.repos.getById(task.repoId);
+    if (!repo) {
+      return c.json({ data: { prompt: fallbackPrompt, materialized: false } });
+    }
+
+    const findingsLoader = (repoId: string) =>
+      db.findings.getRecentByRepo(repoId).map((finding) => ({
+        persona: finding.persona,
+        severity: finding.severity,
+        content: finding.content,
+      }));
+
+    const parentTaskLoader = async (parentId: string) => {
+      const parentTask = db.tasks.getById(parentId);
+      if (!parentTask) return null;
+      return {
+        id: parentTask.id,
+        title: parentTask.title,
+        description: parentTask.description,
+        parentId: parentTask.parentTaskId,
+      };
+    };
+
+    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const latestRun = db.runs.getLatestByTask(task.id);
+    let previewWorktreePath: string | null = null;
+    let cleanupWorktreePath: string | null = null;
+
+    try {
+      if (latestRun?.worktreePath) {
+        try {
+          await access(latestRun.worktreePath);
+          previewWorktreePath = latestRun.worktreePath;
+        } catch {
+          previewWorktreePath = null;
+        }
+      }
+
+      if (!previewWorktreePath) {
+        const previewRunId = `preview-${randomBytes(6).toString("hex")}`;
+        const baseBranch = task.baseBranch || repo.defaultBranch;
+        previewWorktreePath = await git.createWorktree(
+          barePath,
+          baseBranch,
+          repo.name,
+          previewRunId,
+          baseBranch,
+          false
+        );
+        cleanupWorktreePath = previewWorktreePath;
+      }
+
+      const contextResult = await buildContextAsync(
+        task,
+        previewWorktreePath,
+        orchestrator.skillsLoader,
+        task.repoId,
+        findingsLoader,
+        parentTaskLoader,
+        (currentTask) => memoryService.getRelevantContext(currentTask),
+        () => db.metrics.skillEffectiveness()
+      );
+      const prompt = appendRuntimeContextHints(contextResult.prompt, {
+        hasPlannerSpec: Boolean(task.plannerSpec),
+      });
+
+      return c.json({ data: { prompt, materialized: true } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({
+        data: {
+          prompt: fallbackPrompt,
+          materialized: false,
+          fallbackReason: message,
+        },
+      });
+    } finally {
+      if (cleanupWorktreePath) {
+        await git.removeWorktree(barePath, cleanupWorktreePath).catch(() => {});
+      }
+    }
   });
 
   // M3.2: Workflow Memory — Two-Tier (shared/task scope)

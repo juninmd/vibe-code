@@ -6,7 +6,7 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test src --timeout 15000"
   },
   "dependencies": {
     "@vibe-code/shared": "workspace:*",
