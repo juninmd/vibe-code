@@ -14,6 +14,8 @@ interface ComboboxProps {
   placeholder?: string;
   required?: boolean;
   inputId?: string;
+  className?: string;
+  inputClassName?: string;
 }
 
 export function Combobox({
@@ -23,6 +25,8 @@ export function Combobox({
   placeholder = "Search...",
   required,
   inputId,
+  className,
+  inputClassName,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -67,11 +71,11 @@ export function Combobox({
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className={`relative ${className ?? ""}`}>
       <div
-        className={`flex items-center w-full rounded-md border bg-surface text-sm transition-colors ${
+        className={`flex items-center w-full rounded-md border text-sm transition-colors ${
           open ? "border-violet-500 ring-2 ring-violet-500/20" : "border-strong"
-        }`}
+        } ${className?.includes("border-none") ? "!border-none !ring-0" : ""} ${className?.includes("bg-transparent") ? "bg-transparent" : "bg-surface"}`}
       >
         <input
           id={inputId}
@@ -88,7 +92,7 @@ export function Combobox({
           }}
           placeholder={selectedOption ? selectedOption.label : placeholder}
           required={required && !value}
-          className="flex-1 bg-transparent px-3 py-2 text-primary placeholder:text-primary0 focus:outline-none"
+          className={`flex-1 bg-transparent px-3 py-2 text-primary placeholder:text-primary0 focus:outline-none ${inputClassName ?? ""}`}
           autoComplete="off"
         />
         {value && (

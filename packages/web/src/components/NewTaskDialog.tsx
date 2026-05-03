@@ -335,14 +335,14 @@ export function NewTaskDialog({
                           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                         </svg>
                       </div>
-                      <div className="relative z-20 h-12 rounded-2xl bg-input/50 border border-white/5 focus-within:border-accent/40 overflow-hidden">
+                      <div className="relative z-20 h-12 rounded-2xl bg-input/50 border border-white/5 focus-within:border-accent/40">
                         {reposLoading ? (
-                          <div className="px-3 py-3 text-sm text-primary0 flex items-center gap-2">
+                          <div className="px-10 py-3 text-sm text-primary0 flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full bg-accent/40 animate-pulse" />
                             Loading repositories...
                           </div>
                         ) : repos.length === 0 ? (
-                          <div className="px-3 py-3 text-sm text-danger flex items-center gap-2">
+                          <div className="px-10 py-3 text-sm text-danger flex items-center gap-2">
                             <svg
                               width="14"
                               height="14"
@@ -366,6 +366,8 @@ export function NewTaskDialog({
                             onChange={setRepoId}
                             placeholder="Search repositories..."
                             required
+                            className="h-full bg-transparent border-none ring-0"
+                            inputClassName="pl-10 h-full font-bold"
                             options={repos
                               .filter((r) => r.status !== "error")
                               .map((repo) => {
