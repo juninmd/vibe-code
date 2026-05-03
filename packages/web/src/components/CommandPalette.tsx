@@ -42,13 +42,11 @@ function fuzzyScore(text: string, query: string): { score: number; matchIdxs: nu
   if (!query) return { score: 1, matchIdxs: [] };
   const t = text.toLowerCase();
   const q = query.toLowerCase();
-  // Exact match scores highest
   const exactIdx = t.indexOf(q);
   if (exactIdx >= 0) {
     const idxs = Array.from({ length: q.length }, (_, i) => exactIdx + i);
     return { score: 2, matchIdxs: idxs };
   }
-  // Fuzzy match
   const matchIdxs: number[] = [];
   let qi = 0;
   for (let i = 0; i < t.length && qi < q.length; i++) {
@@ -63,15 +61,17 @@ function fuzzyScore(text: string, query: string): { score: number; matchIdxs: nu
 
 function HighlightedLabel({ label, matchIdxs }: { label: string; matchIdxs?: number[] }) {
   if (!matchIdxs || matchIdxs.length === 0) {
-    return <span className="text-sm text-primary block truncate">{label}</span>;
+    return (
+      <span className="text-sm font-bold tracking-tight text-primary block truncate">{label}</span>
+    );
   }
   const idxSet = new Set(matchIdxs);
   return (
-    <span className="text-sm text-primary block truncate">
+    <span className="text-sm font-bold tracking-tight text-primary block truncate">
       {label.split("").map((ch, i) => {
         const key = `${i}-${ch}`;
         return idxSet.has(i) ? (
-          <span key={key} className="text-accent-text font-semibold">
+          <span key={key} className="text-accent underline underline-offset-2 decoration-2">
             {ch}
           </span>
         ) : (
@@ -115,7 +115,7 @@ export function CommandPalette({
         label: "New Task",
         description: "Create a new agent task",
         icon: "+",
-        group: "Actions",
+        group: "General",
         onSelect: () => {
           onNewTask();
           onClose();
@@ -126,7 +126,7 @@ export function CommandPalette({
         label: "Add Repository",
         description: "Clone a new Git repository",
         icon: "⊕",
-        group: "Actions",
+        group: "General",
         onSelect: () => {
           onAddRepo();
           onClose();
@@ -135,9 +135,9 @@ export function CommandPalette({
       {
         id: "settings",
         label: "Settings",
-        description: "Open settings",
+        description: "System configuration",
         icon: "⚙",
-        group: "Actions",
+        group: "General",
         onSelect: () => {
           onOpenSettings();
           onClose();
@@ -147,10 +147,10 @@ export function CommandPalette({
         ? [
             {
               id: "open-skills",
-              label: "Skills & Regras",
-              description: "Gerenciar skills, regras e agentes",
+              label: "Skills Registry",
+              description: "Manage rules and agent skills",
               icon: "✦",
-              group: "Actions",
+              group: "Intelligence",
               onSelect: () => {
                 onOpenSkills();
                 onClose();
@@ -162,10 +162,10 @@ export function CommandPalette({
         ? [
             {
               id: "open-engines",
-              label: "Engines",
-              description: "Ver status dos agentes de IA",
+              label: "AI Engines",
+              description: "View AI providers and status",
               icon: "◈",
-              group: "Actions",
+              group: "Intelligence",
               onSelect: () => {
                 onOpenEngines();
                 onClose();
@@ -177,10 +177,10 @@ export function CommandPalette({
         ? [
             {
               id: "open-stats",
-              label: "Estatísticas",
-              description: "Ver estatísticas de tasks",
+              label: "Operational Stats",
+              description: "Usage and effectiveness metrics",
               icon: "▦",
-              group: "Actions",
+              group: "Intelligence",
               onSelect: () => {
                 onOpenStats();
                 onClose();
@@ -192,10 +192,10 @@ export function CommandPalette({
         ? [
             {
               id: "open-runtimes",
-              label: "Runtimes",
-              description: "Ver compute local, engines e capacidade",
+              label: "Compute Runtimes",
+              description: "Local compute and capacity",
               icon: "▣",
-              group: "Actions",
+              group: "General",
               onSelect: () => {
                 onOpenRuntimes();
                 onClose();
@@ -207,10 +207,10 @@ export function CommandPalette({
         ? [
             {
               id: "open-inbox",
-              label: "Inbox",
-              description: "Ver falhas, reviews e sinais operacionais",
+              label: "Operations Inbox",
+              description: "Failures, reviews and signals",
               icon: "▤",
-              group: "Actions",
+              group: "Intelligence",
               onSelect: () => {
                 onOpenInbox();
                 onClose();
@@ -294,8 +294,7 @@ export function CommandPalette({
     onOpenInbox,
   ]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset to 0 whenever query changes
-  useEffect(() => setActiveIdx(0), [query]);
+  useEffect(() => setActiveIdx(0), []);
 
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`);
@@ -336,73 +335,101 @@ export function CommandPalette({
   }, [items]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]">
+    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[12vh] p-4">
       <button
         type="button"
         aria-label="Close command palette"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-md transition-all animate-in fade-in duration-300"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-xl glass-dialog border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07]">
-          <span className="text-primary0 text-sm shrink-0">⌘</span>
+      <div className="relative w-full max-w-2xl glass-panel border border-white/10 rounded-[2.5rem] shadow-2xl shadow-black/80 overflow-hidden animate-in slide-in-from-top-4 duration-300 ease-out">
+        <div className="flex items-center gap-4 px-6 py-5 border-b border-white/5 bg-white/[0.02]">
+          <span className="text-accent text-lg font-black shrink-0 ml-1">⌘</span>
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Search tasks, repos, actions..."
-            className="flex-1 bg-transparent text-sm text-primary placeholder:text-dimmed focus:outline-none"
+            placeholder="Search tasks, repositories, or commands..."
+            className="flex-1 bg-transparent text-base font-bold text-primary placeholder:text-muted focus:outline-none"
           />
-          <kbd className="shrink-0 text-[10px] text-dimmed border border-strong rounded px-1.5 py-0.5">
+          <kbd className="shrink-0 text-[9px] font-black uppercase tracking-widest text-muted border border-white/10 rounded-lg px-2 py-1 bg-white/5">
             esc
           </kbd>
         </div>
 
-        <div ref={listRef} className="max-h-[360px] overflow-y-auto py-2">
+        <div
+          ref={listRef}
+          className="max-h-[480px] overflow-y-auto py-4 px-3 custom-scrollbar bg-black/10"
+        >
           {grouped.length === 0 && (
-            <p className="text-center text-dimmed text-sm py-8">No results</p>
+            <div className="py-20 text-center space-y-2 opacity-40">
+              <p className="text-4xl">∅</p>
+              <p className="text-xs font-black uppercase tracking-widest">No results found</p>
+            </div>
           )}
           {grouped.map((group) => (
-            <div key={group.label}>
-              <p className="px-4 py-1.5 text-[10px] font-semibold text-dimmed uppercase tracking-wider">
+            <div key={group.label} className="mb-4 last:mb-0">
+              <p className="px-4 py-2 text-[9px] font-black text-accent/70 uppercase tracking-[0.2em] mb-1">
                 {group.label}
               </p>
-              {group.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  data-idx={item.idx}
-                  onClick={item.onSelect}
-                  onMouseEnter={() => setActiveIdx(item.idx)}
-                  className={`w-full flex items-center gap-3 px-4 py-2 text-left transition-colors cursor-pointer ${item.idx === activeIdx ? "bg-surface" : "hover:bg-surface-hover/50"}`}
-                >
-                  <span className="text-sm font-mono text-primary0 w-4 shrink-0 text-center">
-                    {item.icon}
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <HighlightedLabel label={item.label} matchIdxs={item.matchIdxs} />
-                    {item.description && (
-                      <span className="text-xs text-dimmed block truncate">{item.description}</span>
+              <div className="space-y-0.5">
+                {group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-idx={item.idx}
+                    onClick={item.onSelect}
+                    onMouseEnter={() => setActiveIdx(item.idx)}
+                    className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-left transition-all group active-shrink cursor-pointer ${item.idx === activeIdx ? "bg-accent text-white shadow-lg shadow-accent/20" : "hover:bg-white/5"}`}
+                  >
+                    <span
+                      className={`text-sm font-mono w-6 shrink-0 text-center transition-colors ${item.idx === activeIdx ? "text-white" : "text-accent opacity-70"}`}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <HighlightedLabel label={item.label} matchIdxs={item.matchIdxs} />
+                      {item.description && (
+                        <span
+                          className={`text-[11px] block truncate mt-0.5 transition-colors ${item.idx === activeIdx ? "text-white/70" : "text-muted"}`}
+                        >
+                          {item.description}
+                        </span>
+                      )}
+                    </span>
+                    {item.idx === activeIdx && (
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/50 animate-in fade-in slide-in-from-right-1 duration-200">
+                        Select ↵
+                      </span>
                     )}
-                  </span>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="border-t border-default px-4 py-2 flex items-center gap-4 text-[10px] text-dimmed">
-          <span>
-            <kbd className="border border-strong rounded px-1">↑↓</kbd> navigate
-          </span>
-          <span>
-            <kbd className="border border-strong rounded px-1">↵</kbd> select
-          </span>
-          <span>
-            <kbd className="border border-strong rounded px-1">esc</kbd> close
-          </span>
+        <div className="border-t border-white/5 bg-white/[0.02] px-6 py-3 flex items-center gap-6 text-[9px] font-black uppercase tracking-widest text-muted">
+          <div className="flex items-center gap-1.5">
+            <kbd className="border border-white/10 bg-white/5 rounded px-1.5 py-0.5 text-dimmed leading-none">
+              ↑↓
+            </kbd>
+            <span>Navigate</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <kbd className="border border-white/10 bg-white/5 rounded px-1.5 py-0.5 text-dimmed leading-none">
+              ↵
+            </kbd>
+            <span>Select</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <kbd className="border border-white/10 bg-white/5 rounded px-1.5 py-0.5 text-dimmed leading-none">
+              Esc
+            </kbd>
+            <span>Close</span>
+          </div>
         </div>
       </div>
     </div>

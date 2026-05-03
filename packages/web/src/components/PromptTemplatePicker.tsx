@@ -1,8 +1,10 @@
 import type { PromptTemplate } from "@vibe-code/shared";
+import type React from "react";
 import { useState } from "react";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Select } from "./ui/select";
 
 interface PromptTemplatePickerProps {
   templates: PromptTemplate[];
@@ -14,19 +16,19 @@ interface PromptTemplatePickerProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  docs: "Documentação",
-  security: "Segurança",
+  docs: "Documentation",
+  security: "Security",
   perf: "Performance",
   ui: "Interface",
-  code: "Código",
+  code: "Core Logic",
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  docs: "bg-info/15 text-info",
-  security: "bg-danger/15 text-danger",
-  perf: "bg-yellow-500/20 text-yellow-300",
-  ui: "bg-purple-500/20 text-purple-300",
-  code: "bg-green-500/20 text-green-300",
+  docs: "border-blue-500/30 bg-blue-500/10 text-blue-400",
+  security: "border-red-500/30 bg-red-500/10 text-red-400",
+  perf: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  ui: "border-purple-500/30 bg-purple-500/10 text-purple-400",
+  code: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
 };
 
 export function PromptTemplatePicker({
@@ -55,7 +57,6 @@ export function PromptTemplatePicker({
       )
     : safeTemplates;
 
-  // Group by category
   const grouped = filtered.reduce<Record<string, PromptTemplate[]>>((acc, t) => {
     const cat = t.category ?? "other";
     if (!acc[cat]) acc[cat] = [];
@@ -90,59 +91,76 @@ export function PromptTemplatePicker({
   };
 
   return (
-    <Dialog open onClose={onClose} title="Prompt Templates" size="5xl">
-      <div className="flex gap-4 h-[65vh] -mx-1">
+    <Dialog open onClose={onClose} title="Operational Blueprint Library" size="5xl">
+      <div className="flex gap-8 h-[68vh] -mx-4 -mb-4 border-t border-white/5 pt-6">
         {/* Left panel: list */}
-        <div className="flex flex-col w-72 shrink-0 gap-2">
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar templates..."
-            autoFocus
-          />
+        <div className="flex flex-col w-80 shrink-0 gap-4">
+          <div className="relative group">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="7" cy="7" r="5" />
+                <path d="M11 11l4 4" />
+              </svg>
+            </div>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search blueprints..."
+              className="pl-9 h-10 rounded-xl bg-input/40 border-white/5 focus:border-accent/40"
+              autoFocus
+            />
+          </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
             {Object.keys(grouped).length === 0 && (
-              <p className="text-center text-xs text-dimmed py-6">Nenhum template encontrado</p>
+              <div className="py-20 text-center opacity-30 space-y-2">
+                <p className="text-3xl">∅</p>
+                <p className="text-[10px] font-black uppercase tracking-widest">Library Empty</p>
+              </div>
             )}
             {Object.entries(grouped).map(([cat, items]) => (
-              <div key={cat}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary0 mb-1.5 px-1">
+              <div key={cat} className="space-y-2">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-accent/80 ml-2">
                   {CATEGORY_LABELS[cat] ?? cat}
                 </p>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {items.map((t) => (
-                    <div key={t.id} className="group flex items-center gap-1">
+                    <div key={t.id} className="group relative">
                       <button
                         type="button"
                         onClick={() => setSelected(t)}
-                        className="flex-1 min-w-0 px-2.5 py-2 rounded-lg border text-left cursor-pointer transition-colors"
-                        style={{
-                          background:
-                            selected?.id === t.id
-                              ? "var(--accent-muted, rgba(139,92,246,0.15))"
-                              : "var(--bg-card)",
-                          borderColor:
-                            selected?.id === t.id ? "var(--accent)" : "var(--glass-border)",
-                        }}
+                        className={`w-full text-left p-4 rounded-2xl border transition-all active-shrink cursor-pointer ${
+                          selected?.id === t.id
+                            ? "bg-accent/10 border-accent shadow-lg shadow-accent/10"
+                            : "bg-surface/30 border-white/5 hover:border-white/10"
+                        }`}
                       >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-medium truncate text-primary">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="text-sm font-black tracking-tight text-primary truncate flex-1">
                             {t.title}
                           </span>
-                          {t.category && (
-                            <span
-                              className={`text-[9px] px-1 py-0.5 rounded font-medium shrink-0 ${CATEGORY_COLORS[t.category] ?? "bg-surface-hover text-secondary"}`}
-                            >
-                              {CATEGORY_LABELS[t.category] ?? t.category}
+                          {t.isBuiltin && (
+                            <span className="text-[8px] font-black uppercase tracking-widest text-dimmed bg-white/5 px-1.5 rounded border border-white/5">
+                              Built-in
                             </span>
                           )}
-                          {t.isBuiltin && (
-                            <span className="text-[9px] text-dimmed shrink-0">built-in</span>
-                          )}
                         </div>
+                        {t.category && (
+                          <span
+                            className={`inline-block text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border ${CATEGORY_COLORS[t.category] ?? "border-white/10 bg-white/5 text-muted"}`}
+                          >
+                            {CATEGORY_LABELS[t.category] ?? t.category}
+                          </span>
+                        )}
                         {t.description && (
-                          <p className="text-[10px] text-primary0 mt-0.5 line-clamp-1">
+                          <p className="text-[10px] text-muted mt-2 line-clamp-1 opacity-70 group-hover:opacity-100">
                             {t.description}
                           </p>
                         )}
@@ -152,10 +170,19 @@ export function PromptTemplatePicker({
                           type="button"
                           onClick={() => handleDelete(t.id)}
                           disabled={deletingId === t.id}
-                          className="opacity-0 group-hover:opacity-100 shrink-0 text-dimmed hover:text-danger transition-all cursor-pointer p-1"
-                          title="Remover template"
+                          className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-danger text-white flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer border-2 border-app z-10"
+                          title="Purge Blueprint"
                         >
-                          {deletingId === t.id ? "..." : "✕"}
+                          <svg
+                            width="10"
+                            height="10"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          >
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
                         </button>
                       )}
                     </div>
@@ -165,42 +192,48 @@ export function PromptTemplatePicker({
             ))}
           </div>
 
-          {/* Save current as template */}
-          <div className="border-t pt-2" style={{ borderColor: "var(--glass-border)" }}>
+          {/* Persistent storage action */}
+          <div className="border-t border-white/5 pt-4 bg-white/[0.01] -mx-4 px-4 pb-4">
             {showSaveForm ? (
-              <div className="space-y-2">
-                <p className="text-[10px] text-primary0">Salvar prompt atual como template:</p>
-                <Input
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Nome do template"
-                />
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full rounded-md px-2.5 py-1.5 text-xs focus:outline-none"
-                  style={{
-                    background: "var(--bg-input)",
-                    border: "1px solid var(--glass-border)",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
+                <p className="text-[10px] font-black uppercase tracking-widest text-accent">
+                  Commit current context
+                </p>
+                <div className="space-y-2">
+                  <Input
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Blueprint identifier..."
+                    className="h-9 rounded-xl bg-input/40 text-xs"
+                  />
+                  <Select
+                    value={newCategory}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setNewCategory(e.target.value)
+                    }
+                    className="h-9 rounded-xl bg-input/40 text-xs font-bold"
+                  >
+                    {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
                 <div className="flex gap-2">
                   <Button
                     variant="primary"
                     disabled={!newTitle.trim() || !currentContent.trim() || saving}
                     onClick={handleSave}
-                    className="flex-1"
+                    className="flex-1 rounded-xl h-10 shadow-lg shadow-accent/20 font-black uppercase tracking-widest text-[9px]"
                   >
-                    {saving ? "Salvando..." : "Salvar"}
+                    {saving ? "Persisting..." : "Save Blueprint"}
                   </Button>
-                  <Button variant="ghost" onClick={() => setShowSaveForm(false)}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowSaveForm(false)}
+                    className="rounded-xl px-3"
+                  >
                     ✕
                   </Button>
                 </div>
@@ -208,34 +241,39 @@ export function PromptTemplatePicker({
             ) : (
               <Button
                 variant="ghost"
-                className="w-full text-xs"
+                className="w-full h-11 rounded-2xl border-dashed border-white/10 hover:bg-accent/5 hover:border-accent/40 text-[10px] font-black uppercase tracking-widest"
                 disabled={!currentContent.trim()}
                 onClick={() => setShowSaveForm(true)}
               >
-                + Salvar como template
+                + Persist Current Prompt
               </Button>
             )}
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="w-px shrink-0 self-stretch" style={{ background: "var(--glass-border)" }} />
-
-        {/* Right panel: preview */}
-        <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* Right panel: dynamic preview */}
+        <div className="flex-1 flex flex-col min-w-0 bg-black/20 rounded-[2rem] border border-white/5 overflow-hidden">
           {!selected ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-sm" style={{ color: "var(--text-dimmed)" }}>
-                ← Selecione um template para visualizar
-              </p>
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 opacity-30 text-center px-10">
+              <p className="text-6xl">✦</p>
+              <div className="space-y-1">
+                <p className="text-sm font-black tracking-tight text-primary">Preview Module</p>
+                <p className="text-[10px] font-black uppercase tracking-widest">
+                  Select a blueprint from the library to analyze its neural weights
+                </p>
+              </div>
             </div>
           ) : (
-            <>
-              <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col h-full animate-in fade-in duration-500">
+              <div className="p-8 border-b border-white/5 flex items-center justify-between gap-6 bg-white/[0.02]">
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-primary">{selected.title}</h3>
+                  <h3 className="text-xl font-black tracking-tight text-primary truncate">
+                    {selected.title}
+                  </h3>
                   {selected.description && (
-                    <p className="text-xs mt-0.5 text-primary0">{selected.description}</p>
+                    <p className="text-xs text-muted mt-1 leading-relaxed line-clamp-2">
+                      {selected.description}
+                    </p>
                   )}
                 </div>
                 <Button
@@ -244,27 +282,27 @@ export function PromptTemplatePicker({
                     onSelect(selected);
                     onClose();
                   }}
-                  className="shrink-0"
+                  className="shrink-0 h-11 px-8 rounded-2xl shadow-xl shadow-accent/30 font-black uppercase tracking-widest text-[10px] min-w-[160px]"
                 >
-                  Usar este prompt
+                  Deploy Module
                 </Button>
               </div>
 
-              <div
-                className="flex-1 overflow-y-auto rounded-lg border p-3"
-                style={{
-                  background: "var(--bg-card)",
-                  borderColor: "var(--glass-border)",
-                }}
-              >
-                <pre
-                  className="text-xs font-mono whitespace-pre-wrap leading-relaxed"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  {selected.content}
-                </pre>
+              <div className="flex-1 overflow-hidden flex flex-col p-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-px flex-1 bg-white/5" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-dimmed">
+                    Raw Configuration
+                  </span>
+                  <div className="h-px flex-1 bg-white/5" />
+                </div>
+                <div className="flex-1 overflow-y-auto rounded-[1.5rem] border border-white/5 bg-black/40 p-6 custom-scrollbar">
+                  <pre className="text-xs font-mono whitespace-pre-wrap leading-relaxed text-secondary selection:bg-accent/30">
+                    {selected.content}
+                  </pre>
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

@@ -96,9 +96,9 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300"
         onClick={() => onCloseRef.current()}
         aria-hidden="true"
       />
@@ -108,24 +108,38 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative glass-dialog text-primary rounded-xl border p-6 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/50 focus:outline-none`}
+        className={`relative glass-panel text-primary rounded-[2rem] border border-white/10 p-8 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/60 focus:outline-none animate-in zoom-in-95 fade-in duration-300 ease-out`}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h2 id={titleId} className="text-lg font-semibold">
-            {title}
-          </h2>
+        <div className="flex items-start justify-between mb-6">
+          <div className="space-y-1">
+            <h2 id={titleId} className="text-xl font-black tracking-tight text-primary">
+              {title}
+            </h2>
+            <div className="h-1 w-8 bg-accent rounded-full opacity-50" />
+          </div>
           <button
             ref={closeButtonRef}
             type="button"
             onClick={() => onCloseRef.current()}
             data-dialog-close
-            className="text-primary0 hover:text-secondary cursor-pointer"
+            className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
             aria-label={`Fechar ${title}`}
           >
-            &#x2715;
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              aria-hidden="true"
+            >
+              <title>Close</title>
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        {children}
+        <div className="relative z-10">{children}</div>
       </div>
     </div>
   );

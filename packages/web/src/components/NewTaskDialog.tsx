@@ -5,18 +5,16 @@ import type {
   TaskPriority,
   TaskSpec,
 } from "@vibe-code/shared";
-import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
+import { TASK_COMPLEXITY_META, TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
 import { PromptTemplatePicker } from "./PromptTemplatePicker";
 import { EMPTY_TASK_SPEC, TaskSpecEditor, taskSpecToDescription } from "./TaskSpecEditor";
-import { TaskTagsEditor } from "./TaskTags";
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
 import { getEngineMeta } from "./ui/engine-icons";
-import { GitGenericIcon, GitHubIcon, GitLabIcon } from "./ui/git-icons";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Textarea } from "./ui/textarea";
@@ -88,51 +86,46 @@ function EngineCard({
     <button
       type="button"
       onClick={onSelect}
-      className="relative flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 text-left w-full"
+      className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 text-left w-full active-shrink group ${
+        selected
+          ? "bg-accent/10 border-accent shadow-lg shadow-accent/10"
+          : "bg-surface/30 border-white/5 hover:border-white/10 hover:bg-surface/50"
+      }`}
       style={{
-        background: selected ? "var(--accent-muted)" : "var(--bg-card)",
-        borderColor: selected ? "var(--accent)" : "var(--border-default)",
-        opacity: engine.available ? 1 : 0.5,
+        opacity: engine.available ? 1 : 0.4,
       }}
     >
       {selected && (
-        <div
-          className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
-          style={{ background: "var(--accent)" }}
-        >
+        <div className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center bg-accent shadow-lg animate-in zoom-in duration-200">
           <svg
-            aria-hidden="true"
-            focusable="false"
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
             fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-white"
+            aria-hidden="true"
           >
-            <path
-              d="M2 5L4 7L8 3"
-              stroke="var(--accent-text)"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <title>Selected</title>
+            <path d="M20 6L9 17l-5-5" />
           </svg>
         </div>
       )}
-      <div className="w-12 h-12 flex items-center justify-center mb-2">
-        <Icon size={36} className={meta.color} />
+      <div
+        className={`w-14 h-14 flex items-center justify-center mb-3 transition-transform duration-300 ${selected ? "scale-110" : "group-hover:scale-105"}`}
+      >
+        <Icon size={42} className={meta.color} />
       </div>
-      <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        {engine.displayName}
-      </span>
-      <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+      <span className="text-sm font-bold tracking-tight text-primary">{engine.displayName}</span>
+      <span className="text-[10px] font-black uppercase tracking-widest text-dimmed mt-1 opacity-70">
         {meta.provider}
       </span>
       {!engine.available && (
-        <span
-          className="absolute bottom-1 right-2 text-[9px] px-1.5 py-0.5 rounded"
-          style={{ background: "var(--danger)", color: "white" }}
-        >
-          unavailable
+        <span className="absolute bottom-2 right-2 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-danger text-white shadow-lg">
+          offline
         </span>
       )}
     </button>
@@ -151,19 +144,24 @@ function ModelSelector({
   loading: boolean;
 }) {
   const grouped = groupModelsByProvider(models);
-
   if (models.length === 0 && !loading) return null;
 
   return (
-    <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
-      <div
-        className="text-[10px] uppercase font-bold tracking-wider mb-2"
-        style={{ color: "var(--text-dimmed)" }}
+    <div className="mt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+      <label
+        htmlFor="model-select"
+        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
       >
-        Select Model
-      </div>
-      <Select value={model} onChange={(e) => onChange(e.target.value)} disabled={loading}>
-        <option value="">{loading ? "Loading models..." : "Default (recommended)"}</option>
+        Intelligence Model
+      </label>
+      <Select
+        id="model-select"
+        value={model}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loading}
+        className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
+      >
+        <option value="">{loading ? "Searching models..." : "Default (recommended)"}</option>
         {grouped.map(({ provider, models: providerModels }) => (
           <optgroup key={provider} label={provider}>
             {providerModels.map((m) => (
@@ -197,12 +195,12 @@ export function NewTaskDialog({
   const [autoLaunch, setAutoLaunch] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
-  const [branches, setBranches] = useState<string[]>([]);
-  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [_branches, setBranches] = useState<string[]>([]);
+  const [_loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("none");
+  const [taskComplexity, setTaskComplexity] = useState<string>("low");
   const [agentId, setAgentId] = useState("");
-  const [workflowId, setWorkflowId] = useState("");
   const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
 
   const [isScheduled, setIsScheduled] = useState(false);
@@ -272,7 +270,6 @@ export function NewTaskDialog({
         priority: priority !== "none" ? priority : undefined,
         tags: tags.length > 0 ? tags : undefined,
         agentId: agentId || undefined,
-        workflowId: workflowId || undefined,
         autoLaunch: isScheduled ? false : autoLaunch,
         schedule: isScheduled ? { cronExpression } : undefined,
       });
@@ -288,7 +285,6 @@ export function NewTaskDialog({
       setTags([]);
       setPriority("none");
       setAgentId("");
-      setWorkflowId("");
       setIsScheduled(false);
       onClose();
     } catch (err) {
@@ -298,444 +294,412 @@ export function NewTaskDialog({
     }
   };
 
-  const _selectedEngine = engines.find((e) => e.name === engine);
-
   return (
     <>
-      <Dialog open={open} onClose={onClose} title="New Task" size="5xl">
-        <form onSubmit={handleSubmit} className="custom-scrollbar -mr-1 pr-1">
-          <div className="grid grid-cols-5 gap-6">
-            <div className="col-span-2 space-y-4">
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg"
-                style={{ background: "var(--bg-surface)" }}
-              >
-                <div
-                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
-                  style={{ background: "var(--accent)", color: "white" }}
-                >
-                  1
+      <Dialog open={open} onClose={onClose} title="Neural Task Construction" size="5xl">
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="grid grid-cols-5 gap-10">
+            {/* Main Info Column */}
+            <div className="col-span-3 space-y-8 animate-in fade-in slide-in-from-left-4 duration-500">
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black">
+                    1
+                  </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-primary">
+                    Core Objective
+                  </h3>
                 </div>
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  Task Details
-                </span>
-              </div>
 
-              <div>
-                <label
-                  htmlFor={NEW_TASK_FIELD_IDS.title}
-                  className="block text-xs font-medium mb-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Title *
-                </label>
-                <Input
-                  id={NEW_TASK_FIELD_IDS.title}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="What should the agent do?"
-                  required
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor={NEW_TASK_FIELD_IDS.repository}
-                  className="block text-xs font-medium mb-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Repository *
-                </label>
-                <div className="relative z-20">
-                  <Combobox
-                    inputId={NEW_TASK_FIELD_IDS.repository}
-                    value={repoId}
-                    onChange={setRepoId}
-                    placeholder="Search repositories..."
-                    required
-                    options={repos
-                      .filter((r) => r.status === "ready" || r.status === "pending")
-                      .map((repo) => ({
-                        value: repo.id,
-                        label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
-                        sublabel: repo.status !== "ready" ? repo.status : undefined,
-                        disabled: repo.status !== "ready",
-                      }))}
-                  />
-                </div>
-                {repoId &&
-                  (() => {
-                    const selectedRepo = repos.find((r) => r.id === repoId);
-                    if (!selectedRepo) return null;
-                    const ProviderIcon =
-                      selectedRepo.provider === "github"
-                        ? GitHubIcon
-                        : selectedRepo.provider === "gitlab"
-                          ? GitLabIcon
-                          : GitGenericIcon;
-                    return (
-                      <div className="flex items-center gap-2 mt-2 px-2">
-                        <span style={{ color: "var(--text-muted)" }}>
-                          <ProviderIcon size={13} className="shrink-0" />
-                        </span>
-                        <span
-                          className="text-[11px] truncate"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          {selectedRepo.url}
-                        </span>
-                      </div>
-                    );
-                  })()}
-
-                {repoId && (
-                  <div className="mt-3">
+                <div className="space-y-4">
+                  <div>
                     <label
-                      htmlFor={NEW_TASK_FIELD_IDS.baseBranch}
-                      className="block text-xs font-medium mb-2"
-                      style={{ color: "var(--text-muted)" }}
+                      htmlFor={NEW_TASK_FIELD_IDS.repository}
+                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
                     >
-                      Base Branch
-                      {loadingBranches && (
-                        <span
-                          className="ml-1 animate-pulse"
-                          style={{ color: "var(--text-dimmed)" }}
-                        >
-                          loading...
-                        </span>
-                      )}
+                      Target Repository
                     </label>
-                    <Select
-                      id={NEW_TASK_FIELD_IDS.baseBranch}
-                      value={baseBranch}
-                      onChange={(e) => setBaseBranch(e.target.value)}
-                      disabled={loadingBranches}
-                      className="[& option:first-child]:font-semibold"
-                    >
-                      {loadingBranches ? (
-                        <option value="">Loading branches...</option>
-                      ) : branches.length > 0 ? (
-                        branches.map((b, i) => (
-                          <option key={b} value={b}>
-                            {b}
-                            {i === 0 ? " ★" : ""}
-                          </option>
-                        ))
-                      ) : (
-                        <option value={baseBranch || "main"}>{baseBranch || "main"} ★</option>
-                      )}
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label
-                    htmlFor={NEW_TASK_FIELD_IDS.description}
-                    className="text-xs font-medium"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    Description
-                  </label>
-                  <div
-                    className="flex rounded-lg overflow-hidden border"
-                    style={{ borderColor: "var(--border-default)" }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setGuidedMode(false)}
-                      className="text-[10px] px-2.5 py-1 cursor-pointer transition-colors font-medium"
-                      style={{
-                        background: !guidedMode ? "var(--accent-muted)" : "transparent",
-                        color: !guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
-                      }}
-                    >
-                      Simple
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGuidedMode(true)}
-                      className="text-[10px] px-2.5 py-1 cursor-pointer transition-colors font-medium"
-                      style={{
-                        background: guidedMode ? "var(--accent-muted)" : "transparent",
-                        color: guidedMode ? "var(--accent-text)" : "var(--text-dimmed)",
-                      }}
-                    >
-                      Guided
-                    </button>
-                  </div>
-                </div>
-                {guidedMode ? (
-                  <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
-                ) : (
-                  <>
-                    <Textarea
-                      id={NEW_TASK_FIELD_IDS.description}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Detailed instructions for the AI agent..."
-                      rows={8}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPicker(true)}
-                      className="text-[10px] font-medium flex items-center gap-1.5 mt-1.5 cursor-pointer transition-colors"
-                      style={{ color: "var(--accent-text)" }}
-                    >
-                      <svg
-                        aria-hidden="true"
-                        focusable="false"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                      >
-                        <path
-                          d="M6 1L7.5 4.5L11 6L7.5 7.5L6 11L4.5 7.5L1 6L4.5 4.5Z"
-                          fill="currentColor"
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors z-30">
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          aria-hidden="true"
+                        >
+                          <title>Select icon</title>
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                        </svg>
+                      </div>
+                      <div className="relative z-20 h-12 rounded-2xl bg-input/50 border border-white/5 focus-within:border-accent/40 overflow-hidden">
+                        <Combobox
+                          inputId={NEW_TASK_FIELD_IDS.repository}
+                          value={repoId}
+                          onChange={setRepoId}
+                          placeholder="Search repositories..."
+                          required
+                          options={repos
+                            .filter((r) => r.status === "ready" || r.status === "pending")
+                            .map((repo) => ({
+                              value: repo.id,
+                              label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
+                              sublabel: repo.status !== "ready" ? repo.status : undefined,
+                              disabled: repo.status !== "ready",
+                            }))}
                         />
-                      </svg>
-                      Use Template
-                    </button>
-                  </>
-                )}
-              </div>
+                      </div>
+                    </div>
+                  </div>
 
-              <div>
-                <div
-                  className="block text-xs font-medium mb-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Priority
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {TASK_PRIORITY_LEVELS.map((p) => {
-                    const meta = TASK_PRIORITY_META[p];
-                    const isActive = priority === p;
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPriority(p)}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border cursor-pointer transition-all ${isActive ? `${meta.bgColor} ${meta.textColor} ${meta.borderColor}` : "bg-surface-hover border-strong text-secondary hover:border-strong"}`}
+                  <div>
+                    <label
+                      htmlFor={NEW_TASK_FIELD_IDS.title}
+                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
+                    >
+                      Task Title
+                    </label>
+                    <Input
+                      id={NEW_TASK_FIELD_IDS.title}
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="e.g., refactor: optimize database query performance"
+                      className="h-12 rounded-2xl bg-input/50 border-white/5 focus:border-accent/40 text-sm font-bold"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2 ml-1">
+                      <label
+                        htmlFor={NEW_TASK_FIELD_IDS.description}
+                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed"
                       >
-                        {meta.icon} {meta.label}
-                      </button>
-                    );
-                  })}
+                        Implementation Brief
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowPicker(true)}
+                          className="text-[10px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-colors"
+                        >
+                          Use Template ✦
+                        </button>
+                        <div className="h-4 w-px bg-white/10" />
+                        <div className="flex rounded-lg overflow-hidden bg-white/5 p-0.5 border border-white/5">
+                          <button
+                            type="button"
+                            onClick={() => setGuidedMode(false)}
+                            className={`text-[9px] px-2 py-1 rounded-md font-black uppercase tracking-widest transition-all ${!guidedMode ? "bg-white text-black shadow-sm" : "text-muted hover:text-primary"}`}
+                          >
+                            Simple
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setGuidedMode(true)}
+                            className={`text-[9px] px-2 py-1 rounded-md font-black uppercase tracking-widest transition-all ${guidedMode ? "bg-white text-black shadow-sm" : "text-muted hover:text-primary"}`}
+                          >
+                            Guided
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {guidedMode ? (
+                      <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
+                    ) : (
+                      <Textarea
+                        id={NEW_TASK_FIELD_IDS.description}
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Describe exactly what needs to be changed..."
+                        className="min-h-[160px] rounded-[1.5rem] bg-input/50 border-white/5 focus:border-accent/40 text-sm leading-relaxed p-5"
+                        required
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <div
-                  className="block text-xs font-medium mb-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Tags
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label
+                    htmlFor="complexity-select"
+                    className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
+                  >
+                    Complexity Mapping
+                  </label>
+                  <div id="complexity-select" className="flex flex-wrap gap-2">
+                    {(["trivial", "low", "medium", "high", "critical"] as const).map((c) => {
+                      const meta = TASK_COMPLEXITY_META[c];
+                      const isActive = taskComplexity === c;
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setTaskComplexity(c)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all active-shrink ${
+                            isActive
+                              ? "bg-white text-black border-white shadow-lg"
+                              : "bg-white/5 border-transparent text-muted hover:border-white/10 hover:text-primary"
+                          }`}
+                        >
+                          {meta.icon} {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <TaskTagsEditor tags={tags} onChange={setTags} />
+
+                <div>
+                  <label
+                    htmlFor="priority-select"
+                    className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
+                  >
+                    Priority Signal
+                  </label>
+                  <div id="priority-select" className="flex flex-wrap gap-2">
+                    {TASK_PRIORITY_LEVELS.map((p) => {
+                      const meta = TASK_PRIORITY_META[p];
+                      const isActive = priority === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setPriority(p)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all active-shrink ${
+                            isActive
+                              ? "bg-accent border-accent text-white shadow-lg shadow-accent/25"
+                              : "bg-white/5 border-transparent text-muted hover:border-white/10 hover:text-primary"
+                          }`}
+                        >
+                          {meta.icon} {meta.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="col-span-3 space-y-5">
-              <div
-                className="flex items-center gap-2 p-3 rounded-lg"
-                style={{ background: "var(--bg-surface)" }}
-              >
-                <div
-                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold"
-                  style={{ background: "var(--accent)", color: "white" }}
-                >
-                  2
-                </div>
-                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  Configuration
-                </span>
-              </div>
-
-              <div>
-                <label
-                  htmlFor={NEW_TASK_FIELD_IDS.agent}
-                  className="block text-xs font-medium mb-2"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Agent
-                </label>
-                {skillsIndex &&
-                (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) ? (
-                  <Select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-                    <option value="">None</option>
-                    {skillsIndex.agents.map((a) => (
-                      <option key={a.name} value={a.name}>
-                        {a.name}
-                        {a.description ? ` — ${a.description.slice(0, 50)}` : ""}
-                      </option>
-                    ))}
-                    {skillsIndex.workflows.map((w) => (
-                      <option key={w.name} value={w.name}>
-                        {w.name}
-                        {w.description ? ` — ${w.description.slice(0, 50)}` : ""}
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <div
-                    className="text-xs px-3 py-2 rounded-lg border"
-                    style={{
-                      background: "var(--bg-input)",
-                      borderColor: "var(--border-default)",
-                      color: "var(--text-dimmed)",
-                    }}
-                  >
-                    No agents or workflows available
+            {/* Configuration Column */}
+            <div className="col-span-2 space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black">
+                    2
                   </div>
-                )}
-              </div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-primary">
+                    Intelligence & Context
+                  </h3>
+                </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-                    AI Engine *
+                <div className="space-y-5">
+                  <div>
+                    <label
+                      htmlFor={NEW_TASK_FIELD_IDS.agent}
+                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
+                    >
+                      Specialized Agent
+                    </label>
+                    {skillsIndex &&
+                    (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) ? (
+                      <Select
+                        value={agentId}
+                        onChange={(e) => setAgentId(e.target.value)}
+                        className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
+                      >
+                        <option value="">Generalist Orchestrator</option>
+                        {skillsIndex.agents.map((a) => (
+                          <option key={a.name} value={a.name}>
+                            {a.name}
+                          </option>
+                        ))}
+                        {skillsIndex.workflows.map((w) => (
+                          <option key={w.name} value={w.name}>
+                            {w.name} (Workflow)
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <div className="p-3 rounded-2xl border border-white/5 bg-input/20 text-[10px] font-black uppercase tracking-widest text-dimmed text-center italic">
+                        No specialized assets available
+                      </div>
+                    )}
                   </div>
-                  {enginesLoading && (
-                    <span
-                      className="text-[10px] animate-pulse"
-                      style={{ color: "var(--text-dimmed)" }}
-                    >
-                      loading...
-                    </span>
-                  )}
-                  {enginesError && (
-                    <span
-                      className="text-[10px]"
-                      style={{ color: "var(--danger)" }}
-                      title={enginesError}
-                    >
-                      ⚠ Failed to load
-                    </span>
-                  )}
+
+                  <div>
+                    <div className="flex items-center justify-between mb-3 ml-1">
+                      <label
+                        htmlFor="engine-matrix"
+                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed"
+                      >
+                        AI Engine Matrix
+                      </label>
+                      {enginesLoading && (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-accent animate-pulse">
+                          Syncing...
+                        </span>
+                      )}
+                    </div>
+                    <div id="engine-matrix" className="grid grid-cols-2 gap-3">
+                      {engines
+                        .filter((e) => e.available)
+                        .map((eng) => (
+                          <EngineCard
+                            key={eng.name}
+                            engine={eng}
+                            selected={engine === eng.name}
+                            onSelect={() => setEngine(eng.name)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+
+                  <ModelSelector
+                    models={models}
+                    model={model}
+                    onChange={setModel}
+                    loading={loadingModels}
+                  />
+
+                  <div className="pt-4 p-5 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
+                    <label className="flex items-center justify-between cursor-pointer group">
+                      <div className="space-y-0.5">
+                        <p className="text-sm font-bold text-primary">Automated Scheduling</p>
+                        <p className="text-[10px] text-muted font-medium">
+                          Run this operation on a interval
+                        </p>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={isScheduled}
+                          onChange={(e) => setIsScheduled(e.target.checked)}
+                          className="sr-only"
+                        />
+                        <div
+                          className={`w-12 h-7 rounded-full transition-all active-shrink ${isScheduled ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
+                        >
+                          <div
+                            className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${isScheduled ? "left-6" : "left-1"}`}
+                          />
+                        </div>
+                      </div>
+                    </label>
+
+                    {!isScheduled && (
+                      <label className="flex items-center justify-between cursor-pointer group">
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-bold text-primary">Instant Execution</p>
+                          <p className="text-[10px] text-muted font-medium">
+                            Launch agent immediately after creation
+                          </p>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            checked={autoLaunch}
+                            onChange={(e) => setAutoLaunch(e.target.checked)}
+                            className="sr-only"
+                          />
+                          <div
+                            className={`w-12 h-7 rounded-full transition-all active-shrink ${autoLaunch ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
+                          >
+                            <div
+                              className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${autoLaunch ? "left-6" : "left-1"}`}
+                            />
+                          </div>
+                        </div>
+                      </label>
+                    )}
+
+                    {isScheduled && (
+                      <div className="pt-2 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <Select
+                          value={isCustomCron ? "custom" : cronExpression}
+                          onChange={(e) => {
+                            if (e.target.value === "custom") {
+                              setIsCustomCron(true);
+                            } else {
+                              setIsCustomCron(false);
+                              setCronExpression(e.target.value);
+                            }
+                          }}
+                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-bold"
+                        >
+                          {CRON_PRESETS.map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                          <option value="custom">Custom Expression...</option>
+                        </Select>
+                        {isCustomCron && (
+                          <Input
+                            type="text"
+                            placeholder="Cron (e.g., 0 9 * * 1-5)"
+                            value={cronExpression}
+                            onChange={(e) => setCronExpression(e.target.value)}
+                            className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-mono"
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {engines
-                    .filter((e) => e.available)
-                    .map((eng) => (
-                      <EngineCard
-                        key={eng.name}
-                        engine={eng}
-                        selected={engine === eng.name}
-                        onSelect={() => setEngine(eng.name)}
-                      />
-                    ))}
-                </div>
-                <ModelSelector
-                  models={models}
-                  model={model}
-                  onChange={setModel}
-                  loading={loadingModels}
-                />
               </div>
             </div>
           </div>
 
-          <div
-            className="mt-6 pt-4 border-t flex items-center gap-3"
-            style={{ borderColor: "var(--border-subtle)" }}
-          >
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isScheduled}
-                onChange={(e) => setIsScheduled(e.target.checked)}
-                className="rounded cursor-pointer"
-                style={{
-                  borderColor: "var(--border-default)",
-                  background: "var(--bg-input)",
-                  accentColor: "var(--accent)",
-                }}
-              />
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Schedule recurring task
-              </span>
-            </label>
+          <div className="mt-12 pt-8 border-t border-white/5 flex items-center justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              {submitError && (
+                <div className="flex items-center gap-3 text-danger animate-in shake-1">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    aria-hidden="true"
+                  >
+                    <title>Error icon</title>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4M12 16h.01" />
+                  </svg>
+                  <p className="text-[10px] font-black uppercase tracking-widest truncate">
+                    {submitError}
+                  </p>
+                </div>
+              )}{" "}
+            </div>
 
-            {!isScheduled && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoLaunch}
-                  onChange={(e) => setAutoLaunch(e.target.checked)}
-                  className="rounded cursor-pointer"
-                  style={{
-                    borderColor: "var(--border-default)",
-                    background: "var(--bg-input)",
-                    accentColor: "var(--accent)",
-                  }}
-                />
-                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  Launch immediately
-                </span>
-              </label>
-            )}
-
-            {isScheduled && (
-              <Select
-                value={isCustomCron ? "custom" : cronExpression}
-                onChange={(e) => {
-                  if (e.target.value === "custom") {
-                    setIsCustomCron(true);
-                  } else {
-                    setIsCustomCron(false);
-                    setCronExpression(e.target.value);
-                  }
-                }}
+            <div className="flex items-center gap-4 shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onClose}
+                disabled={submitting}
+                className="rounded-2xl h-12 px-8 font-black uppercase tracking-widest text-[10px]"
               >
-                {CRON_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-                <option value="custom">Custom...</option>
-              </Select>
-            )}
-
-            {isScheduled && isCustomCron && (
-              <input
-                type="text"
-                placeholder="Expressão cron, ex: 0 9 * * 1-5"
-                value={cronExpression}
-                onChange={(e) => setCronExpression(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border"
-                style={{
-                  background: "var(--bg-input)",
-                  borderColor: "var(--border-default)",
-                  color: "var(--text-primary)",
-                }}
-              />
-            )}
-
-            <div className="flex-1" />
-
-            {submitError && (
-              <p
-                className="text-xs truncate"
-                style={{ color: "var(--danger)" }}
-                title={submitError}
+                Discard
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!title.trim() || !repoId || !engine || submitting}
+                className="rounded-2xl h-12 px-12 shadow-2xl shadow-accent/30 font-black uppercase tracking-[0.15em] text-[10px] min-w-[200px]"
               >
-                ⚠ {submitError}
-              </p>
-            )}
-
-            <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!title.trim() || !repoId || !engine || submitting}
-            >
-              {submitting ? "Creating..." : isScheduled ? "Create Schedule" : "Create Task"}
-            </Button>
+                {submitting
+                  ? "Engaging System..."
+                  : isScheduled
+                    ? "Establish Schedule"
+                    : "Deploy AI Agent"}
+              </Button>
+            </div>
           </div>
         </form>
       </Dialog>

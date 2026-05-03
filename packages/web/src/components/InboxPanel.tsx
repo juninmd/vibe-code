@@ -16,30 +16,30 @@ const SEVERITY_META: Record<
   { label: string; icon: string; className: string }
 > = {
   critical: {
-    label: "critico",
+    label: "critical",
     icon: "!",
-    className: "border-red-800/50 bg-red-950/30 text-red-300",
+    className: "border-danger/30 bg-danger/10 text-danger shadow-danger/10",
   },
   warning: {
-    label: "atencao",
-    icon: "△",
-    className: "border-amber-800/50 bg-amber-950/30 text-amber-300",
+    label: "warning",
+    icon: "!",
+    className: "border-warning/30 bg-warning/10 text-warning shadow-warning/10",
   },
   success: {
-    label: "pronto",
+    label: "resolved",
     icon: "✓",
-    className: "border-emerald-800/50 bg-emerald-950/25 text-emerald-300",
+    className: "border-success/30 bg-success/10 text-success shadow-success/10",
   },
   info: {
     label: "info",
-    icon: "•",
-    className: "border-blue-800/40 bg-blue-950/20 text-blue-300",
+    icon: "i",
+    className: "border-white/10 bg-white/5 text-primary",
   },
 };
 
 function formatRelative(value: string): string {
   const diff = Date.now() - new Date(value).getTime();
-  if (diff < 60_000) return "agora";
+  if (diff < 60_000) return "now";
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
   return `${Math.floor(diff / 86_400_000)}d`;
@@ -48,15 +48,15 @@ function formatRelative(value: string): string {
 function groupLabel(type: InboxItem["type"]): string {
   switch (type) {
     case "task_failed":
-      return "Falhas";
+      return "Runtime Failures";
     case "task_review":
-      return "Review";
+      return "Pending Reviews";
     case "task_running":
-      return "Rodando";
+      return "Active Operations";
     case "engine_unavailable":
-      return "Engines";
+      return "Engine Issues";
     case "runtime_saturated":
-      return "Runtime";
+      return "Capacity Alerts";
   }
 }
 
@@ -69,15 +69,12 @@ export function InboxPanel({
 }: InboxPanelProps) {
   const [items, setItems] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const loadInbox = useCallback(() => {
     setLoading(true);
-    setError(null);
     api.inbox
       .list()
       .then(setItems)
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -112,48 +109,59 @@ export function InboxPanel({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="Inbox" size="2xl">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-zinc-500">
-            Sinais operacionais inspirados no Multica: falhas, reviews, execucoes e runtime.
-          </p>
+    <Dialog open={open} onClose={onClose} title="Operations Center" size="2xl">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted">
+              Real-time System Signals
+            </p>
+          </div>
           <button
             type="button"
             onClick={loadInbox}
             disabled={loading}
-            className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+            className="p-1.5 rounded-lg text-muted hover:text-primary transition-all cursor-pointer"
           >
-            {loading ? "Atualizando..." : "Atualizar"}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              className={loading ? "animate-spin" : ""}
+              aria-hidden="true"
+            >
+              <title>Refresh</title>
+              <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
           </button>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
-            {error}
-          </div>
-        )}
-
-        {loading && items.length === 0 ? (
-          <div className="space-y-2">
-            <div className="h-16 rounded-xl bg-zinc-900/60 animate-pulse" />
-            <div className="h-16 rounded-xl bg-zinc-900/60 animate-pulse" />
-            <div className="h-16 rounded-xl bg-zinc-900/60 animate-pulse" />
-          </div>
-        ) : items.length === 0 ? (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 py-12 text-center">
-            <p className="text-sm text-zinc-500">Nada precisa de atencao agora.</p>
-            <p className="mt-1 text-xs text-zinc-700">Falhas e reviews aparecem aqui.</p>
+        {items.length === 0 && !loading ? (
+          <div className="py-20 text-center space-y-4 rounded-[2rem] bg-white/[0.02] border border-white/5 border-dashed">
+            <p className="text-4xl grayscale opacity-40">✦</p>
+            <div className="space-y-1">
+              <p className="text-sm font-black tracking-tight text-primary">All Systems Green</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+                No pending operational signals
+              </p>
+            </div>
           </div>
         ) : (
-          <div className="max-h-[62vh] overflow-y-auto pr-1 space-y-4">
+          <div className="max-h-[62vh] overflow-y-auto pr-1 space-y-8 custom-scrollbar">
             {groups.map(([label, groupItems]) => (
-              <section key={label}>
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              <section
+                key={label}
+                className="animate-in fade-in slide-in-from-bottom-2 duration-400"
+              >
+                <div className="mb-3 flex items-center justify-between px-2">
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-accent/80">
                     {label}
                   </h3>
-                  <span className="text-[10px] text-zinc-700 tabular-nums">
+                  <span className="text-[10px] font-black tabular-nums bg-white/5 px-1.5 rounded-md text-muted">
                     {groupItems.length}
                   </span>
                 </div>
@@ -165,36 +173,39 @@ export function InboxPanel({
                         key={item.id}
                         type="button"
                         onClick={() => handleAction(item)}
-                        className="w-full rounded-xl border border-zinc-800/80 bg-zinc-950/40 px-3 py-3 text-left transition-colors hover:bg-zinc-900/70"
+                        className="w-full rounded-[1.5rem] border border-white/5 bg-white/[0.03] p-4 text-left transition-all hover:bg-white/[0.07] hover:border-white/10 group active-shrink cursor-pointer"
                       >
-                        <div className="flex items-start gap-3">
-                          <span
-                            className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold ${meta.className}`}
-                            title={meta.label}
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={`mt-0.5 w-8 h-8 shrink-0 flex items-center justify-center rounded-xl border-2 text-xs font-black shadow-lg ${meta.className}`}
                           >
                             {meta.icon}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span className="truncate text-sm font-medium text-zinc-100">
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="truncate text-sm font-black tracking-tight text-primary group-hover:text-accent transition-colors">
                                 {item.title}
-                              </span>
-                              <span className="shrink-0 text-[10px] text-zinc-700">
+                              </p>
+                              <span className="shrink-0 text-[10px] font-bold text-dimmed">
                                 {formatRelative(item.createdAt)}
                               </span>
-                            </span>
-                            <span className="mt-1 block text-xs text-zinc-500">
+                            </div>
+                            <p className="mt-1 text-[11px] text-secondary leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity">
                               {item.description}
-                            </span>
+                            </p>
                             {item.repoName && (
-                              <span className="mt-1.5 inline-flex rounded border border-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-600">
-                                {item.repoName}
-                              </span>
+                              <div className="mt-3 flex items-center gap-2">
+                                <span className="inline-flex rounded-lg bg-white/5 border border-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-dimmed">
+                                  {item.repoName}
+                                </span>
+                                {item.actionLabel && (
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-accent opacity-50 group-hover:opacity-100 transition-all">
+                                    {item.actionLabel} ↗
+                                  </span>
+                                )}
+                              </div>
                             )}
-                          </span>
-                          <span className="mt-1 shrink-0 text-[10px] text-zinc-600">
-                            {item.actionLabel}
-                          </span>
+                          </div>
                         </div>
                       </button>
                     );

@@ -4,12 +4,7 @@ import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
 
-interface TemplatesPanelProps {
-  open: boolean;
-  onClose: () => void;
-}
-
-export function TemplatesPanel({ open, onClose }: TemplatesPanelProps) {
+export function TemplatesPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [templates, setTemplates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportName, setExportName] = useState("");
@@ -61,131 +56,83 @@ export function TemplatesPanel({ open, onClose }: TemplatesPanelProps) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="Templates" size="lg">
-      <div className="space-y-6 -mx-6 -mb-6">
-        <div className="p-5 space-y-5" style={{ borderBottom: "1px solid var(--glass-border)" }}>
-          <div className="flex items-start gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-xl"
-              style={{ background: "var(--accent-muted)" }}
-            >
+    <Dialog open={open} onClose={onClose} title="Workspace Portability" size="lg">
+      <div className="space-y-10">
+        <div className="p-6 rounded-[2rem] bg-accent/5 border border-accent/20 space-y-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center text-2xl shadow-xl shadow-accent/20 shrink-0">
               📦
             </div>
-            <div>
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                Workspace Templates
-              </h3>
-              <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                Exporte e compartilhe suas configurações de skills, regras, agentes e workflows
+            <div className="space-y-1">
+              <h3 className="text-lg font-black tracking-tight text-primary">Snapshot Context</h3>
+              <p className="text-[11px] text-muted leading-relaxed font-medium">
+                Export and share your intelligence modules: skills, rules, and workflows.
               </p>
             </div>
           </div>
 
           <div className="flex gap-2">
             <Input
-              placeholder="Nome do template..."
+              placeholder="Archive identifier..."
               value={exportName}
               onChange={(e) => setExportName(e.target.value)}
-              className="h-9 text-xs"
+              className="h-11 rounded-xl bg-input/40 border-white/5 text-sm font-bold"
               onKeyDown={(e) => e.key === "Enter" && handleExport()}
             />
             <Button
               variant="primary"
-              size="sm"
               disabled={!exportName.trim() || exporting}
               onClick={handleExport}
+              className="h-11 rounded-xl px-8 shadow-xl shadow-accent/25 font-black uppercase tracking-widest text-[10px] min-w-[120px]"
             >
-              {exporting ? "..." : "Exportar"}
+              {exporting ? "Compiling..." : "Export"}
             </Button>
           </div>
         </div>
 
-        <div className="px-5 pb-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
-              Templates Disponíveis
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-2">
+            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-accent/80">
+              Available Snapshots
             </h4>
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded"
-              style={{ background: "var(--bg-input)", color: "var(--text-dimmed)" }}
-            >
-              {templates.length} {templates.length === 1 ? "template" : "templates"}
+            <span className="text-[10px] font-black tabular-nums bg-white/5 px-2 py-0.5 rounded-md text-dimmed border border-white/5">
+              {templates.length} found
             </span>
           </div>
 
           {loading ? (
-            <div className="py-8 text-center">
-              <p className="text-xs animate-pulse" style={{ color: "var(--text-muted)" }}>
-                Carregando...
-              </p>
+            <div className="py-12 flex justify-center animate-pulse">
+              <div className="w-8 h-8 border-4 border-white/5 border-t-accent rounded-full animate-spin" />
             </div>
           ) : templates.length === 0 ? (
-            <div
-              className="py-10 text-center rounded-xl border border-dashed"
-              style={{ borderColor: "var(--glass-border)" }}
-            >
-              <p className="text-2xl mb-2">📦</p>
-              <p className="text-xs" style={{ color: "var(--text-dimmed)" }}>
-                Nenhum template ainda
-              </p>
-              <p className="text-[10px] mt-1" style={{ color: "var(--text-dimmed)" }}>
-                Exporte suas skills para criar um template
-              </p>
+            <div className="py-20 text-center rounded-[2rem] border border-white/5 border-dashed opacity-30 space-y-4">
+              <p className="text-4xl">∅</p>
+              <p className="text-[10px] font-black uppercase tracking-widest">Repository Empty</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid gap-2">
               {templates.map((name) => (
                 <div
                   key={name}
-                  className="p-3.5 rounded-xl border transition-colors group"
-                  style={{
-                    background: "var(--bg-card)",
-                    borderColor: "var(--glass-border)",
-                  }}
+                  className="p-4 rounded-2xl border border-white/5 bg-white/[0.03] transition-all hover:bg-white/[0.07] hover:border-white/10 group"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 text-lg"
-                        style={{ background: "var(--bg-input)" }}
-                      >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition-transform">
                         📦
                       </div>
-                      <div>
-                        <h5
-                          className="text-xs font-semibold"
-                          style={{ color: "var(--text-primary)" }}
-                        >
+                      <div className="min-w-0">
+                        <h5 className="text-sm font-black tracking-tight text-primary truncate">
                           {name}
                         </h5>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background: "var(--accent-muted)", color: "var(--accent)" }}
-                          >
-                            skills
-                          </span>
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b" }}
-                          >
-                            rules
-                          </span>
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
-                          >
-                            agents
-                          </span>
-                          <span
-                            className="text-[9px] px-1.5 py-0.5 rounded"
-                            style={{ background: "rgba(16,185,129,0.15)", color: "#10b981" }}
-                          >
-                            workflows
-                          </span>
+                        <div className="flex gap-2 mt-1.5 opacity-60">
+                          <div className="w-1 h-1 rounded-full bg-accent" />
+                          <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                          <div className="w-1 h-1 rounded-full bg-amber-500" />
                         </div>
                       </div>
                     </div>
+
                     <div className="flex items-center gap-2">
                       {confirmImport === name ? (
                         <>
@@ -194,11 +141,17 @@ export function TemplatesPanel({ open, onClose }: TemplatesPanelProps) {
                             size="xs"
                             onClick={() => handleImport(name)}
                             disabled={importing === name}
+                            className="rounded-lg font-black uppercase text-[9px] h-8 px-4 shadow-lg shadow-accent/20"
                           >
-                            {importing === name ? "..." : "Confirmar"}
+                            {importing === name ? "..." : "Confirm"}
                           </Button>
-                          <Button variant="ghost" size="xs" onClick={() => setConfirmImport(null)}>
-                            Cancelar
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => setConfirmImport(null)}
+                            className="h-8"
+                          >
+                            ✕
                           </Button>
                         </>
                       ) : (
@@ -206,9 +159,9 @@ export function TemplatesPanel({ open, onClose }: TemplatesPanelProps) {
                           variant="ghost"
                           size="xs"
                           onClick={() => handleImport(name)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-8 px-4 rounded-lg font-black uppercase text-[9px] opacity-0 group-hover:opacity-100 border-white/5 bg-white/5"
                         >
-                          Importar
+                          Import
                         </Button>
                       )}
                     </div>
@@ -219,20 +172,14 @@ export function TemplatesPanel({ open, onClose }: TemplatesPanelProps) {
           )}
         </div>
 
-        <div
-          className="px-5 py-3 border-t"
-          style={{ background: "var(--bg-input)", borderColor: "var(--glass-border)" }}
-        >
-          <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-dimmed)" }}>
-            Templates são salvos em{" "}
-            <code
-              className="px-1 py-0.5 rounded text-[9px]"
-              style={{ background: "var(--bg-surface)", color: "var(--text-muted)" }}
-            >
+        <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 text-[9px] font-black uppercase tracking-widest text-dimmed leading-loose">
+          <p>
+            Local registry path:{" "}
+            <code className="bg-white/5 px-2 py-0.5 rounded text-accent">
               ~/.vibe-code/templates/
             </code>
-            . Compartilhe os arquivos JSON com outros workspaces.
           </p>
+          <p className="mt-1 opacity-50">Snapshots can be synced via Git or shared as JSON.</p>
         </div>
       </div>
     </Dialog>

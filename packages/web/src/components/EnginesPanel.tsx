@@ -3,27 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { getEngineMeta } from "./ui/engine-icons";
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-surface-hover hover:bg-border-strong text-secondary cursor-pointer transition-colors shrink-0"
-    >
-      {copied ? "✓" : "copy"}
-    </button>
-  );
-}
-
 function EngineCard({
   engine,
   onOpenSettings,
@@ -33,141 +12,74 @@ function EngineCard({
 }) {
   const meta = getEngineMeta(engine.name);
   const Icon = meta.icon;
-
-  const [showInstall, setShowInstall] = useState(false);
   const needsConfig = !!engine.setupIssue && engine.setupIssue !== "Gemini CLI não instalado";
-  const unavailableLabel = needsConfig ? "precisa configurar" : "não instalado";
 
   return (
     <div
-      className={`rounded-xl border p-4 transition-all duration-200 ${
+      className={`p-5 rounded-3xl border transition-all duration-300 ${
         engine.available
-          ? `${meta.bgColor} ${meta.borderColor}`
-          : "bg-input/50 border-default opacity-70"
+          ? "bg-white/[0.03] border-white/10 shadow-lg"
+          : "bg-black/20 border-white/5 opacity-60"
       }`}
     >
-      <div className="flex items-start gap-3">
-        {/* Icon */}
+      <div className="flex items-start gap-4">
         <div
-          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-            engine.available ? meta.bgColor : "bg-surface/50"
-          } border ${engine.available ? meta.borderColor : "border-strong/30"}`}
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
+            engine.available ? "bg-accent/10 border-accent/20" : "bg-white/5 border-white/5"
+          }`}
         >
-          <Icon size={20} className={engine.available ? meta.color : "text-dimmed"} />
+          <Icon size={28} className={engine.available ? meta.color : "text-muted"} />
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-primary">{engine.displayName}</h3>
-
-            {/* Status indicator */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <h3 className="text-sm font-black tracking-tight text-primary">{engine.displayName}</h3>
             <span
-              className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+              className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
                 engine.available
-                  ? "bg-success/15 text-success border border-success/30"
-                  : needsConfig
-                    ? "bg-warning/15 text-warning border border-warning/30"
-                    : "bg-surface text-primary0 border border-strong/40"
+                  ? "bg-success/10 border-success/20 text-success"
+                  : "bg-white/5 border-white/10 text-muted"
               }`}
             >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  engine.available
-                    ? "bg-emerald-400 animate-pulse"
-                    : needsConfig
-                      ? "bg-amber-400"
-                      : "bg-border-strong"
-                }`}
-              />
-              {engine.available ? "disponível" : unavailableLabel}
+              {engine.available ? "Online" : "Offline"}
             </span>
-
-            {/* Active runs */}
             {engine.activeRuns > 0 && (
-              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/15 text-info border border-info/30 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                {engine.activeRuns} rodando
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-info/10 border border-info/20 text-info text-[9px] font-black uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                {engine.activeRuns} Active
               </span>
             )}
           </div>
-
-          {/* Provider + version */}
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[11px] text-primary0">{meta.provider}</span>
-            {engine.version && (
-              <>
-                <span className="text-dimmed">·</span>
-                <code className="text-[10px] text-secondary font-mono">{engine.version}</code>
-              </>
-            )}
-          </div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-dimmed mt-1.5">
+            {meta.provider}
+          </p>
         </div>
-
-        {/* Action button */}
-        {meta.docsUrl && (
-          <a
-            href={meta.docsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-[10px] text-primary0 hover:text-secondary transition-colors"
-          >
-            docs ↗
-          </a>
-        )}
       </div>
 
-      {/* Description */}
       {meta.description && (
-        <p className="text-xs text-primary0 mt-2.5 leading-relaxed">{meta.description}</p>
+        <p className="text-[11px] text-secondary leading-relaxed mt-4 opacity-80">
+          {meta.description}
+        </p>
       )}
 
       {engine.setupIssue && (
         <div
-          className={`mt-3 text-xs rounded-lg px-3 py-2 border ${
+          className={`mt-4 p-4 rounded-2xl border text-xs ${
             needsConfig
-              ? "border-warning/30 bg-warning/15 text-warning"
-              : "border-default bg-input/50 text-primary0"
+              ? "bg-warning/5 border-warning/20 text-warning"
+              : "bg-white/5 border-white/5 text-muted"
           }`}
         >
+          <p className="font-bold mb-1">Configuration Required</p>
           {engine.setupIssue}
-          {needsConfig && (
-            <span className="flex items-center gap-1 mt-1 text-[11px]">
-              Abra{" "}
-              {onOpenSettings ? (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  className="underline text-warning hover:text-warning cursor-pointer"
-                >
-                  Settings
-                </button>
-              ) : (
-                "Settings"
-              )}{" "}
-              para concluir a configuração.
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Not installed: install instructions */}
-      {!engine.available && !needsConfig && meta.install && (
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => setShowInstall((v) => !v)}
-            className="text-xs text-secondary hover:text-primary cursor-pointer transition-colors flex items-center gap-1"
-          >
-            <span className={`transition-transform ${showInstall ? "rotate-90" : ""}`}>▶</span>
-            Como instalar
-          </button>
-          {showInstall && (
-            <div className="mt-2 flex items-center gap-1 bg-input border border-strong rounded px-3 py-2">
-              <code className="text-[11px] text-secondary font-mono flex-1 break-all">
-                {meta.install}
-              </code>
-              <CopyButton text={meta.install} />
-            </div>
+          {needsConfig && onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="ml-1 underline decoration-2 underline-offset-4 font-black uppercase tracking-widest text-[9px] hover:text-primary transition-colors cursor-pointer"
+            >
+              Fix in Settings
+            </button>
           )}
         </div>
       )}
@@ -175,30 +87,26 @@ function EngineCard({
   );
 }
 
-interface EnginesPanelProps {
+export function EnginesPanel({
+  onClose,
+  onOpenSettings,
+}: {
   onClose: () => void;
   onOpenSettings?: () => void;
-}
-
-export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
+}) {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   const fetchEngines = useCallback(async (isManual = false) => {
     if (isManual) setRefreshing(true);
-    setError(null);
     try {
       const data = await api.engines.list();
       setEngines(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao buscar engines");
+    } catch {
     } finally {
       setLoading(false);
       setRefreshing(false);
-      setLastRefresh(new Date());
     }
   }, []);
 
@@ -206,92 +114,80 @@ export function EnginesPanel({ onClose, onOpenSettings }: EnginesPanelProps) {
     fetchEngines();
   }, [fetchEngines]);
 
-  const availableCount = engines.filter((e) => e.available).length;
-  const totalActiveRuns = engines.reduce((sum, e) => sum + e.activeRuns, 0);
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end">
       <button
         type="button"
-        aria-label="Fechar painel de engines"
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in duration-300"
         onClick={onClose}
       />
-      <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+      <div className="relative h-full w-full max-w-md glass-panel border-l border-white/10 flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-right duration-500 ease-out">
+        <div className="p-8 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.02]">
           <div>
-            <h2 className="text-base font-semibold text-primary">Serviços de IA</h2>
-            <p className="text-xs text-primary0 mt-0.5">
-              {loading ? (
-                <span className="animate-pulse">Verificando...</span>
-              ) : (
-                <>
-                  {availableCount}/{engines.length} disponíveis
-                  {totalActiveRuns > 0 && (
-                    <span className="ml-2 text-info">· {totalActiveRuns} em execução</span>
-                  )}
-                </>
-              )}
-            </p>
+            <h2 className="text-xl font-black tracking-tight text-primary">Intelligence Hub</h2>
+            <div className="flex items-center gap-2 mt-2">
+              <div className="h-1 w-6 bg-accent rounded-full" />
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
+                AI Engine Runtimes
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => fetchEngines(true)}
-              disabled={refreshing || loading}
-              title="Atualizar"
-              className="p-1.5 rounded-lg text-primary0 hover:text-secondary hover:bg-surface-hover cursor-pointer transition-colors text-sm disabled:opacity-40"
+              className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
             >
-              <span className={refreshing ? "inline-block animate-spin" : ""}>↻</span>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className={refreshing ? "animate-spin" : ""}
+                aria-hidden="true"
+              >
+                <title>Refresh</title>
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-primary0 hover:text-secondary hover:bg-surface-hover cursor-pointer transition-colors"
+              className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
             >
-              ✕
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                aria-hidden="true"
+              >
+                <title>Close</title>
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>
 
-        {/* Engine Cards */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {error && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-danger/30 bg-danger/15 text-danger text-xs">
-              <span>⚠</span>
-              <span className="flex-1 truncate">{error}</span>
-              <button
-                type="button"
-                onClick={() => fetchEngines(true)}
-                className="text-danger hover:text-danger cursor-pointer shrink-0"
-              >
-                Tentar novamente
-              </button>
-            </div>
-          )}
-          {loading ? (
-            <div className="space-y-3">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-surface-hover animate-pulse" />
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/10">
+          {loading
+            ? [1, 2, 3].map((i) => (
+                <div key={i} className="h-32 rounded-3xl bg-white/5 animate-pulse" />
+              ))
+            : engines.map((e) => (
+                <EngineCard key={e.name} engine={e} onOpenSettings={onOpenSettings} />
               ))}
-            </div>
-          ) : engines.length === 0 ? (
-            <div className="text-center py-12 text-dimmed text-sm">Nenhum engine registrado</div>
-          ) : (
-            engines.map((engine) => (
-              <EngineCard key={engine.name} engine={engine} onOpenSettings={onOpenSettings} />
-            ))
-          )}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-white/[0.06] text-[10px] text-dimmed shrink-0 flex items-center justify-between">
-          <span>
-            Atualizado{" "}
-            {lastRefresh.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-          <span>Use o botão ↻ para atualizar</span>
+        <div className="p-6 border-t border-white/5 bg-white/[0.02] flex justify-center">
+          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-muted opacity-50">
+            Secure Agent Infrastructure
+          </p>
         </div>
       </div>
     </div>

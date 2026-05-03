@@ -1,48 +1,22 @@
 import { useCallback, useState } from "react";
 import { useScheduledTasks } from "../hooks/useScheduledTasks";
-import { useTaskRuns } from "../hooks/useTaskRuns";
+import { Button } from "./ui/button";
 
 export function ScheduledTasksPanel() {
   const { tasks, loading, error, refetch } = useScheduledTasks();
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingCron, setEditingCron] = useState<string>("");
-  const [cronError, setCronError] = useState<string | null>(null);
-  const [isSubmittingCron, setIsSubmittingCron] = useState(false);
   const [isExecutingTask, setIsExecutingTask] = useState<string | null>(null);
-  const [isTogglingTask, setIsTogglingTask] = useState<string | null>(null);
-
-  const { runs: selectedTaskRuns, fetch: fetchTaskRuns } = useTaskRuns(selectedTaskId);
-
-  const handleViewRuns = useCallback(
-    (taskId: string) => {
-      setSelectedTaskId(taskId);
-      fetchTaskRuns();
-    },
-    [fetchTaskRuns]
-  );
 
   const handleRunNow = useCallback(
     async (taskId: string) => {
       setIsExecutingTask(taskId);
       try {
-        console.info(`🚀 Executing task ${taskId} immediately`);
-
         const response = await fetch(`/api/tasks/${taskId}/schedule/run-now`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.message || `HTTP ${response.status}`);
-        }
-
-        console.info(`✅ Run triggered for task ${taskId}`);
+        if (!response.ok) throw new Error("Trigger failed");
         refetch();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`❌ Failed to run task ${taskId}:`, msg);
+      } catch {
       } finally {
         setIsExecutingTask(null);
       }
@@ -52,274 +26,133 @@ export function ScheduledTasksPanel() {
 
   const handleToggleSchedule = useCallback(
     async (taskId: string, currentEnabled: boolean) => {
-      setIsTogglingTask(taskId);
       try {
-        const newState = !currentEnabled;
-        console.debug(`🔀 Toggling schedule ${taskId} to ${newState}`);
-
         const response = await fetch(`/api/tasks/${taskId}/schedule/toggle`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: newState }),
+          body: JSON.stringify({ enabled: !currentEnabled }),
         });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.message || `HTTP ${response.status}`);
-        }
-
-        console.info(`✅ Schedule toggled for task ${taskId} to ${newState}`);
+        if (!response.ok) throw new Error("Toggle failed");
         refetch();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`❌ Failed to toggle schedule ${taskId}:`, msg);
-      } finally {
-        setIsTogglingTask(null);
-      }
+      } catch {}
     },
     [refetch]
   );
 
-  const handleEditCron = useCallback((taskId: string, currentCron: string) => {
-    setEditingTaskId(taskId);
-    setEditingCron(currentCron);
-    setCronError(null);
-  }, []);
-
-  const handleSaveCron = useCallback(
-    async (taskId: string) => {
-      setIsSubmittingCron(true);
-      setCronError(null);
-
-      try {
-        console.debug(`✏️ Validating cron expression: ${editingCron}`);
-
-        const response = await fetch(`/api/tasks/${taskId}/schedule`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cronExpression: editingCron }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          const errorMsg = data.message || `HTTP ${response.status}`;
-          console.warn(`⚠️ Invalid cron: ${errorMsg}`);
-          setCronError(errorMsg);
-          return;
-        }
-
-        console.info(`✅ Cron expression updated for task ${taskId}`);
-        setEditingTaskId(null);
-        refetch();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`❌ Failed to update cron for task ${taskId}:`, msg);
-        setCronError(msg);
-      } finally {
-        setIsSubmittingCron(false);
-      }
-    },
-    [editingCron, refetch]
-  );
-
-  const handleCancelEdit = useCallback(() => {
-    setEditingTaskId(null);
-    setEditingCron("");
-    setCronError(null);
-  }, []);
-
-  const enabledCount = tasks.filter((t) => t.schedule.enabled).length;
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] shrink-0">
+    <div className="flex flex-col h-full bg-black/20">
+      <div className="p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between shrink-0">
         <div>
-          <h3 className="text-sm font-semibold text-primary">Tasks Scheduled</h3>
-          <p className="text-xs text-primary0 mt-0.5">
-            {loading ? (
-              <span className="animate-pulse">Carregando...</span>
-            ) : (
-              <>
-                {enabledCount}/{tasks.length} ativas
-              </>
-            )}
-          </p>
+          <h2 className="text-xl font-black tracking-tight text-primary">Task Automations</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="h-1 w-6 bg-accent rounded-full" />
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
+              Cron Schedules
+            </p>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => refetch()}
-          disabled={loading}
-          className="p-1.5 rounded-lg text-primary0 hover:text-secondary hover:bg-surface-hover cursor-pointer transition-colors text-sm disabled:opacity-40"
-          title="Atualizar"
+          className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all cursor-pointer"
         >
-          <span className={loading ? "inline-block animate-spin" : ""}>↻</span>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            className={loading ? "animate-spin" : ""}
+            aria-hidden="true"
+          >
+            <title>Refresh</title>
+            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
         </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
         {error && (
-          <div className="bg-danger/15 border border-danger/30 text-danger p-3 rounded-lg text-sm">
+          <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-danger text-xs font-bold">
             {error}
           </div>
         )}
 
-        {tasks.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="text-dimmed text-4xl mb-2">📋</div>
-            <h4 className="text-sm font-medium text-secondary">Sem agendamentos</h4>
-            <p className="text-xs text-primary0 mt-1">Nenhuma tarefa agendada no momento.</p>
+        {tasks.length === 0 && !loading ? (
+          <div className="py-20 text-center space-y-4 opacity-30">
+            <p className="text-5xl">⏰</p>
+            <p className="text-xs font-black uppercase tracking-widest">No active automations</p>
           </div>
         ) : (
           tasks.map(({ schedule, task }) => (
             <div
               key={schedule.id}
-              className={`rounded-lg border p-3 transition-all duration-200 ${
-                schedule.enabled
-                  ? "bg-input border-strong/50"
-                  : "bg-input/50 border-default opacity-70"
-              }`}
+              className={`p-5 rounded-[2rem] border transition-all duration-300 ${schedule.enabled ? "bg-white/[0.03] border-white/10" : "bg-black/20 border-white/5 opacity-60"}`}
             >
-              <div className="space-y-2">
-                {/* Task title + status */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-primary truncate">{task.title}</h4>
-                    <p className="text-xs text-primary0 truncate">{task.description}</p>
-                  </div>
-                  <span
-                    className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                      schedule.enabled
-                        ? "bg-success/15 text-success border border-success/30"
-                        : "bg-surface text-primary0 border border-strong/40"
-                    }`}
-                  >
-                    <span
-                      className={`w-1 h-1 rounded-full ${
-                        schedule.enabled ? "bg-emerald-400 animate-pulse" : "bg-border-strong"
-                      }`}
-                    />
-                    {schedule.enabled ? "ativo" : "inativo"}
-                  </span>
-                </div>
-
-                {/* Cron info */}
-                {editingTaskId === schedule.id ? (
-                  <div className="space-y-2">
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        value={editingCron}
-                        onChange={(e) => setEditingCron(e.target.value)}
-                        placeholder="Cron expression (e.g., 0 9 * * MON)"
-                        className="text-xs px-2 py-1 rounded border border-strong bg-surface text-primary flex-1 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    {cronError && (
-                      <p className="text-xs text-danger bg-danger/15 px-2 py-1 rounded">
-                        {cronError}
-                      </p>
-                    )}
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleSaveCron(schedule.id)}
-                        disabled={isSubmittingCron || !editingCron.trim()}
-                        className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        {isSubmittingCron ? "Salvando..." : "Salvar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        className="text-xs px-2 py-1 rounded bg-surface-hover text-primary hover:bg-border-strong transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <code className="text-[10px] text-secondary font-mono bg-surface px-1.5 py-0.5 rounded flex-1">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-black tracking-tight text-primary truncate">
+                    {task.title}
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="text-[10px] font-black text-accent bg-accent/10 px-2 py-0.5 rounded-lg">
                       {schedule.cronExpression}
                     </code>
-                    <button
-                      type="button"
-                      onClick={() => handleEditCron(schedule.id, schedule.cronExpression)}
-                      className="text-[10px] text-primary0 hover:text-secondary transition-colors"
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSchedule(schedule.id, schedule.enabled)}
+                  className={`w-12 h-7 rounded-full relative transition-all active-shrink ${schedule.enabled ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
+                >
+                  <div
+                    className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${schedule.enabled ? "left-6" : "left-1"}`}
+                  />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {schedule.nextRunAt && schedule.enabled && (
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-muted">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      aria-hidden="true"
                     >
-                      ✏️
-                    </button>
+                      <title>Clock</title>
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                    <span>Next execution: {new Date(schedule.nextRunAt).toLocaleString()}</span>
                   </div>
                 )}
 
-                {/* Next run */}
-                {schedule.nextRunAt && schedule.enabled && (
-                  <p className="text-[10px] text-primary0">
-                    Próxima: {new Date(schedule.nextRunAt).toLocaleString("pt-BR")}
-                  </p>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-1 pt-1">
-                  <button
-                    type="button"
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleRunNow(schedule.id)}
                     disabled={isExecutingTask === schedule.id}
-                    className="text-[10px] px-2 py-1 rounded bg-info/15 text-info border border-info/30 hover:bg-info/15 disabled:opacity-50 transition-colors"
-                    title="Executar agora"
+                    className="flex-1 rounded-xl h-9 text-[10px] font-black uppercase tracking-widest border-white/5 hover:bg-white/5"
                   >
-                    {isExecutingTask === schedule.id ? "🚀 Executando..." : "🚀 Executar agora"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSchedule(schedule.id, schedule.enabled)}
-                    disabled={isTogglingTask === schedule.id}
-                    className={`text-[10px] px-2 py-1 rounded border transition-colors disabled:opacity-50 ${
-                      schedule.enabled
-                        ? "bg-success/15 text-success border-success/30 hover:bg-success/15"
-                        : "bg-surface text-primary0 border-strong/40 hover:bg-surface-hover"
-                    }`}
-                    title="Ativar/desativar agendamento"
-                  >
-                    {isTogglingTask === schedule.id
-                      ? "⏸️ Processando..."
-                      : schedule.enabled
-                        ? "⏸️ Desativar"
-                        : "▶️ Ativar"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleViewRuns(schedule.id)}
-                    className="text-[10px] px-2 py-1 rounded bg-surface text-secondary border border-strong/40 hover:bg-surface-hover transition-colors"
-                    title="Ver histórico de execuções"
-                  >
-                    📜 Histórico
-                  </button>
+                    Run Now
+                  </Button>
                 </div>
-
-                {/* Runs history dropdown */}
-                {selectedTaskId === schedule.id && selectedTaskRuns.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-strong/50 space-y-1">
-                    <p className="text-[10px] text-primary0 font-medium">Últimas execuções:</p>
-                    {selectedTaskRuns.slice(0, 3).map((run) => (
-                      <div key={run.id} className="text-[9px] text-secondary flex justify-between">
-                        <span>
-                          {run.status === "completed" ? "✅" : run.status === "failed" ? "❌" : "⏱️"}{" "}
-                          {run.startedAt
-                            ? new Date(run.startedAt).toLocaleString("pt-BR")
-                            : "data desconhecida"}
-                        </span>
-                        <span className="text-dimmed">{run.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           ))
         )}
+      </div>
+
+      <div className="p-6 border-t border-white/5 bg-white/[0.02] flex justify-center">
+        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-muted opacity-50">
+          Background Automation Engine
+        </p>
       </div>
     </div>
   );
