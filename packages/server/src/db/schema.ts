@@ -234,14 +234,6 @@ export function initDatabase(dbPath: string): Database {
       CREATE INDEX IF NOT EXISTS idx_review_findings_run ON review_findings(run_id);
     `);
 
-  // Compozy-inspired: task_type and task_complexity columns
-  if (!taskColNames.includes("task_type")) {
-    db.exec("ALTER TABLE tasks ADD COLUMN task_type TEXT");
-  }
-  if (!taskColNames.includes("task_complexity")) {
-    db.exec("ALTER TABLE tasks ADD COLUMN task_complexity TEXT");
-  }
-
   // Compozy-inspired: workflow_memories table (two-tier cross-task memory)
   db.exec(`
     CREATE TABLE IF NOT EXISTS workflow_memories (
