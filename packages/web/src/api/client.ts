@@ -393,5 +393,6 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name, overwrite }),
       }),
+    downloadUrl: (name: string) => `${BASE}/templates/${name}/download`,
   },
 };

@@ -114,5 +114,22 @@ export function createTemplatesRouter(_db: Db, skillsLoader: SkillsLoader) {
     }
   });
 
+  // GET /api/templates/:name/download — Download the template as a JSON file
+  app.get("/:name/download", async (c) => {
+    try {
+      const name = c.req.param("name");
+      const templatesDir = join(homedir(), ".vibe-code", "templates");
+      const filePath = join(templatesDir, `${name}.json`);
+      const content = await readFile(filePath, "utf8");
+
+      return c.body(content, 200, {
+        "Content-Type": "application/json",
+        "Content-Disposition": `attachment; filename="${name}.json"`,
+      });
+    } catch (err: any) {
+      return c.json({ error: "Template not found or error reading file" }, 404);
+    }
+  });
+
   return app;
 }

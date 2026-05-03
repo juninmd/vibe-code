@@ -134,6 +134,25 @@ export function TemplatesPanel({ open, onClose }: { open: boolean; onClose: () =
                     </div>
 
                     <div className="flex items-center gap-2">
+                      <a
+                        href={api.templates.downloadUrl(name)}
+                        download
+                        className="flex items-center justify-center h-8 px-4 rounded-lg font-black uppercase text-[9px] opacity-0 group-hover:opacity-100 transition-all border border-white/5 bg-white/5 hover:bg-white/10 text-muted hover:text-primary"
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          className="mr-1.5"
+                          aria-hidden="true"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                        </svg>
+                        Download
+                      </a>
                       {confirmImport === name ? (
                         <>
                           <Button
