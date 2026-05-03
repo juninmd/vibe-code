@@ -44,10 +44,6 @@ const createTaskSchema = z.object({
   maxCost: z.number().positive().optional(),
   goal: z.string().optional(),
   desiredOutcome: z.string().optional(),
-  taskType: z
-    .enum(["frontend", "backend", "docs", "test", "infra", "refactor", "chore", "bugfix"])
-    .optional(),
-  taskComplexity: z.enum(["trivial", "low", "medium", "high", "critical"]).optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -67,11 +63,6 @@ const updateTaskSchema = z.object({
   pendingApproval: z.boolean().optional(),
   maxCost: z.number().positive().nullable().optional(),
   priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
-  taskType: z
-    .enum(["frontend", "backend", "docs", "test", "infra", "refactor", "chore", "bugfix"])
-    .nullable()
-    .optional(),
-  taskComplexity: z.enum(["trivial", "low", "medium", "high", "critical"]).nullable().optional(),
 });
 
 const planTaskSchema = z.object({
