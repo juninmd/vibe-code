@@ -203,6 +203,35 @@ function HeaderAction({
           <path d="M2 3h12l-5 6v4l-2 2V9L2 3Z" />
         </svg>
       )}
+      {icon === "download" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          aria-hidden="true"
+        >
+          <title>Export</title>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+        </svg>
+      )}
+      {icon === "history" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          aria-hidden="true"
+        >
+          <title>History</title>
+          <path d="M12 8v4l3 3M12 22A10 10 0 1 0 12 2a10 10 0 0 0 0 20z" />
+        </svg>
+      )}
+      {icon === "help" && <span className="font-black">?</span>}
       <span>{label}</span>
     </button>
   );
@@ -1050,6 +1079,21 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             </div>
 
             <div className="flex items-center gap-3 ml-4 shrink-0">
+              <div className="hidden lg:flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default shadow-inner">
+                <HeaderAction icon="download" label="Export" onClick={exportBoard} />
+                <HeaderAction
+                  icon="history"
+                  label="Changelog"
+                  onClick={() => setShowChangelog(true)}
+                />
+                <HeaderAction
+                  icon="help"
+                  label="Shortcuts"
+                  onClick={() => setShowShortcuts(true)}
+                />
+              </div>
+              <div className="h-6 w-px bg-white/10 mx-1 hidden lg:block" />
+
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
                 <HeaderAction
                   icon="plus"
