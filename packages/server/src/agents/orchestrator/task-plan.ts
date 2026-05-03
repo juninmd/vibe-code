@@ -1,10 +1,8 @@
 import type {
   Task,
-  TaskComplexity,
   TaskExecutionPlan,
   TaskExecutionPlanNode,
   TaskPlanMaterialization,
-  TaskType,
 } from "@vibe-code/shared";
 import type { Db } from "../../db";
 
@@ -53,7 +51,7 @@ function extractCandidateSteps(task: Task): string[] {
   ];
 }
 
-function inferTaskType(text: string): TaskType {
+function inferTaskType(text: string): string {
   const lower = text.toLowerCase();
   if (/(ui|ux|component|css|layout|screen|page|react|frontend)/.test(lower)) return "frontend";
   if (/(test|assert|coverage|vitest|integration|e2e)/.test(lower)) return "test";
@@ -63,15 +61,6 @@ function inferTaskType(text: string): TaskType {
   if (/(bug|fix|regression|broken|failure|error)/.test(lower)) return "bugfix";
   if (/(chore|maintenance|upgrade|dependency|rename)/.test(lower)) return "chore";
   return "backend";
-}
-
-function inferComplexity(text: string, totalSteps: number): TaskComplexity {
-  const lower = text.toLowerCase();
-  if (/(multi|distributed|migration|critical|rewrite|platform)/.test(lower)) return "high";
-  if (/(simple|small|minor|copy|rename)/.test(lower)) return "low";
-  if (totalSteps <= 2) return "low";
-  if (totalSteps >= 5) return "high";
-  return "medium";
 }
 
 function inferAcceptanceCriteria(step: string): string[] {
@@ -127,8 +116,6 @@ function buildPlanNodes(_task: Task, steps: string[]): TaskExecutionPlanNode[] {
       dependsOn,
       acceptanceCriteria: inferAcceptanceCriteria(step),
       tags: [inferTaskType(step), "planned"],
-      taskType: inferTaskType(step),
-      taskComplexity: inferComplexity(step, effectiveSteps.length),
     };
   });
 }
@@ -196,8 +183,6 @@ export function materializeTaskExecutionPlan(
       maxCost: node.maxCost ?? budgets[index],
       goal: node.description,
       desiredOutcome: node.acceptanceCriteria.join("; "),
-      taskType: node.taskType,
-      taskComplexity: node.taskComplexity,
     });
     nodeIdToTaskId.set(node.id, childTask.id);
     return childTask;

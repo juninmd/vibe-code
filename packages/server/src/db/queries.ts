@@ -19,11 +19,9 @@ import type {
   Task,
   TaskArtifact,
   TaskArtifactKind,
-  TaskComplexity,
   TaskPriority,
   TaskSchedule,
   TaskStatus,
-  TaskType,
   UpdateTaskRequest,
 } from "@vibe-code/shared";
 
@@ -363,9 +361,7 @@ export function createTaskQueries(db: Database) {
             req.issueUrl ?? null,
             req.goal ?? null,
             req.desiredOutcome ?? null,
-            issueNum,
-            req.taskType ?? null,
-            req.taskComplexity ?? null
+            issueNum
           ) as TaskRow | null;
       })();
 

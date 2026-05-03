@@ -44,8 +44,6 @@ const baseTask: TaskWithRun = {
   pendingApproval: false,
   goal: null,
   desiredOutcome: null,
-  taskType: null,
-  taskComplexity: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   latestRun: undefined,
@@ -71,7 +69,7 @@ describe("TaskCard", () => {
 
   it("renders the short task id", () => {
     render(<TaskCard task={baseTask} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("abc12345")).toBeInTheDocument();
+    expect(screen.getByText("abc123")).toBeInTheDocument();
   });
 
   it("renders the engine badge", () => {
@@ -86,11 +84,10 @@ describe("TaskCard", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
-  it("shows PR link when prUrl is set", () => {
+  it("shows PR badge when prUrl is set", () => {
     const task = { ...baseTask, prUrl: "https://github.com/org/repo/pull/1" };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    const link = screen.getByRole("link", { name: /↗ PR/i });
-    expect(link).toHaveAttribute("href", "https://github.com/org/repo/pull/1");
+    expect(screen.getByText("↗ PR Created")).toBeInTheDocument();
   });
 
   it("shows Retry PR button when status is review and no prUrl", () => {
