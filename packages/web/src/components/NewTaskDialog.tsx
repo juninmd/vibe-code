@@ -342,13 +342,23 @@ export function NewTaskDialog({
                           placeholder="Search repositories..."
                           required
                           options={repos
-                            .filter((r) => r.status === "ready" || r.status === "pending")
-                            .map((repo) => ({
-                              value: repo.id,
-                              label: `${repo.name}${repo.status === "pending" ? " (cloning…)" : ""}`,
-                              sublabel: repo.status !== "ready" ? repo.status : undefined,
-                              disabled: repo.status !== "ready",
-                            }))}
+                            .filter((r) => r.status !== "error")
+                            .map((repo) => {
+                              const sublabel =
+                                repo.status === "ready"
+                                  ? undefined
+                                  : repo.status === "cloning"
+                                    ? "cloning…"
+                                    : repo.status === "pending"
+                                      ? "pending"
+                                      : repo.status;
+                              return {
+                                value: repo.id,
+                                label: repo.name,
+                                sublabel,
+                                disabled: repo.status !== "ready",
+                              };
+                            })}
                         />
                       </div>
                     </div>
