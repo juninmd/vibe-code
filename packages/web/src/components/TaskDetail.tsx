@@ -59,6 +59,16 @@ const statusVariant: Record<
   failed: "danger",
 };
 
+// Aura styles based on status for the modal background
+const auraStyle: Record<string, string> = {
+  scheduled: "radial-gradient(ellipse at top right, rgba(245, 158, 11, 0.08), transparent 50%)",
+  backlog: "radial-gradient(ellipse at top right, rgba(100, 100, 100, 0.05), transparent 50%)",
+  in_progress: "radial-gradient(ellipse at top right, rgba(59, 130, 246, 0.15), transparent 50%)",
+  review: "radial-gradient(ellipse at top right, rgba(139, 92, 246, 0.15), transparent 50%)",
+  done: "radial-gradient(ellipse at top right, rgba(16, 185, 129, 0.1), transparent 50%)",
+  failed: "radial-gradient(ellipse at top right, rgba(239, 68, 68, 0.15), transparent 50%)",
+};
+
 const statusLabel: Record<string, string> = {
   scheduled: "⏰ Agendada",
   backlog: "Backlog",
@@ -693,9 +703,21 @@ export function TaskDetail({
       />
 
       {/* Modal */}
-      <div className="relative glass-dialog w-full max-w-3xl max-h-[92vh] flex flex-col rounded-xl border shadow-2xl shadow-black/50">
+      <div
+        className="relative glass-dialog w-full max-w-4xl max-h-[94vh] flex flex-col rounded-2xl border shadow-2xl shadow-black/80 overflow-hidden"
+        style={{
+          background: "var(--bg-surface)",
+          backgroundImage: auraStyle[task.status] || auraStyle.default,
+          borderColor: "var(--glass-border)",
+          backdropFilter: "blur(40px)",
+          WebkitBackdropFilter: "blur(40px)",
+        }}
+      >
+        {/* Inner glow border for premium feel */}
+        <div className="absolute inset-0 rounded-2xl pointer-events-none border border-white/5" />
+
         {/* ── Modal Header ────────────────────────────────── */}
-        <div className="shrink-0 px-5 pt-4 pb-0">
+        <div className="shrink-0 px-6 pt-5 pb-0 relative z-10">
           {/* Title row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2.5 min-w-0">
@@ -848,81 +870,65 @@ export function TaskDetail({
           </div>
 
           {/* Tab bar */}
-          <div className="flex gap-0 mt-3 border-b border-default">
-            {(
-              [
-                { id: "info" as const, label: "Info" },
-                { id: "terminal" as const, label: "Terminal" },
-                { id: "diff" as const, label: "Diff" },
-                { id: "artifacts" as const, label: "Artifacts" },
-                { id: "skills" as const, label: "Skills" },
-                { id: "cost" as const, label: "Custo" },
-                { id: "memory" as const, label: "Memory" },
-                { id: "reviews" as const, label: "Reviews" },
-              ] satisfies { id: ActiveTab; label: string }[]
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
-                style={{
-                  borderColor: activeTab === id ? "var(--accent, #7c3aed)" : "transparent",
-                  color: activeTab === id ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
-                }}
-              >
-                {label}
-                {id === "terminal" && isRunning && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                )}
-                {id === "diff" && task.branchName && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: "var(--text-dimmed)" }}
-                  />
-                )}
-                {id === "artifacts" && artifacts.length > 0 && (
-                  <span
-                    className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                    style={{
-                      background:
-                        activeTab === "artifacts" ? "var(--accent-muted)" : "var(--bg-input)",
-                      color: activeTab === "artifacts" ? "var(--accent-text)" : "var(--text-muted)",
-                    }}
+          <div className="flex justify-center mt-6 border-b border-white/5 relative z-20">
+            <div className="flex gap-1 overflow-x-auto no-scrollbar pb-px">
+              {(
+                [
+                  { id: "info" as const, label: "INFO" },
+                  { id: "terminal" as const, label: "TERMINAL" },
+                  { id: "diff" as const, label: "DIFF" },
+                  { id: "artifacts" as const, label: "ARTIFACTS" },
+                  { id: "skills" as const, label: "SKILLS" },
+                  { id: "cost" as const, label: "TELEMETRY" },
+                  { id: "memory" as const, label: "MEMORY" },
+                  { id: "reviews" as const, label: "REVIEWS" },
+                ] satisfies { id: ActiveTab; label: string }[]
+              ).map(({ id, label }) => {
+                if (id === "skills" && matchedSkills.length === 0) return null;
+                const isActive = activeTab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`px-4 py-2.5 text-[10px] font-black tracking-[0.15em] transition-all relative group ${isActive ? "text-primary" : "text-muted hover:text-secondary"}`}
                   >
-                    {artifacts.length}
-                  </span>
-                )}
-              </button>
-            ))}
-            {matchedSkills.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("skills")}
-                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
-                style={{
-                  borderColor: activeTab === "skills" ? "var(--accent, #7c3aed)" : "transparent",
-                  color:
-                    activeTab === "skills" ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
-                }}
-              >
-                Skills
-                <span
-                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                  style={{
-                    background: activeTab === "skills" ? "var(--accent-muted)" : "var(--bg-input)",
-                    color: activeTab === "skills" ? "var(--accent-text)" : "var(--text-muted)",
-                  }}
-                >
-                  {matchedSkills.length}
-                </span>
-              </button>
-            )}
+                    <div className="flex items-center gap-2">
+                      {label}
+                      {id === "terminal" && isRunning && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-info shadow-[0_0_8px_var(--info)] animate-pulse" />
+                      )}
+                      {id === "diff" && task.branchName && !isActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                      )}
+                      {id === "artifacts" && artifacts.length > 0 && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-sm font-bold ${isActive ? "bg-white/10 text-primary" : "bg-white/5 text-muted"}`}
+                        >
+                          {artifacts.length}
+                        </span>
+                      )}
+                      {id === "skills" && matchedSkills.length > 0 && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-sm font-bold ${isActive ? "bg-accent/20 text-accent-light" : "bg-white/5 text-muted"}`}
+                        >
+                          {matchedSkills.length}
+                        </span>
+                      )}
+                    </div>
+                    {/* Active Indicator */}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* ── Tab Content ─────────────────────────────────── */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-black/20">
           {/* Approval Request / Governance Gate */}
           {task.pendingApproval && (
             <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
@@ -984,59 +990,67 @@ export function TaskDetail({
             </div>
           )}
 
-          {/* Goal Ancestry (Parent Task) */}
-          {parentTask && (
-            <div className="bg-surface/20 border border-strong rounded-lg p-3 space-y-2">
-              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                Parent Task (Ancestry)
-              </h3>
-              <div className="flex items-start gap-2">
-                <span className="text-info text-xs mt-0.5">↳</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-secondary truncate">{parentTask.title}</p>
-                  <p className="text-[11px] text-dimmed line-clamp-1">{parentTask.description}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Sub-tasks (Delegation) */}
-          {subTasks.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                Sub-tasks (Delegated Work)
-              </h3>
-              <div className="grid gap-2">
-                {subTasks.map((st) => (
-                  <div
-                    key={st.id}
-                    className="flex items-center justify-between gap-3 bg-surface/10 border border-strong rounded-lg p-2.5"
-                  >
+          {/* Goal Ancestry & Delegation (Spatial Memory) */}
+          {(parentTask || subTasks.length > 0) && (
+            <div className="relative pl-6 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-transparent before:via-white/20 before:to-transparent">
+              {parentTask && (
+                <div className="relative">
+                  <div className="absolute -left-6 top-2 w-3 h-px bg-white/20" />
+                  <div className="absolute -left-[14px] top-1.5 w-1.5 h-1.5 rounded-full bg-primary0 shadow-[0_0_8px_rgba(255,255,255,0.5)]" />
+                  <h3 className="text-[9px] font-black text-primary0 uppercase tracking-[0.2em] mb-1.5">
+                    Ancestry Lineage
+                  </h3>
+                  <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3 backdrop-blur-sm transition-all hover:bg-white/[0.04]">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={statusVariant[st.status] ?? "default"}
-                          className="text-[9px] px-1 py-0 h-auto"
-                        >
-                          {statusLabel[st.status] ?? st.status}
-                        </Badge>
-                        <span className="text-xs font-medium text-secondary truncate">
-                          {st.title}
+                      <p className="text-xs font-bold text-secondary truncate">
+                        {parentTask.title}
+                      </p>
+                      <p className="text-[10px] text-dimmed line-clamp-1 mt-0.5">
+                        {parentTask.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {subTasks.length > 0 && (
+                <div className="relative">
+                  <div className="absolute -left-6 top-2 w-3 h-px bg-white/20" />
+                  <div className="absolute -left-[14px] top-1.5 w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_var(--accent)]" />
+                  <h3 className="text-[9px] font-black text-primary0 uppercase tracking-[0.2em] mb-2">
+                    Delegated Branches
+                  </h3>
+                  <div className="grid gap-2">
+                    {subTasks.map((st) => (
+                      <div
+                        key={st.id}
+                        className="flex items-center justify-between gap-3 bg-white/[0.02] border border-white/5 rounded-xl p-2.5 backdrop-blur-sm transition-all hover:bg-white/[0.04]"
+                      >
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          <Badge
+                            variant={statusVariant[st.status] ?? "default"}
+                            className="text-[9px] px-1.5 py-0 h-auto"
+                          >
+                            {statusLabel[st.status] ?? st.status}
+                          </Badge>
+                          <span className="text-xs font-medium text-secondary truncate">
+                            {st.title}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-dimmed font-mono shrink-0 opacity-50">
+                          {st.id.slice(0, 8)}
                         </span>
                       </div>
-                    </div>
-                    <span className="text-[10px] text-dimmed font-mono shrink-0">
-                      {st.id.slice(0, 8)}
-                    </span>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* ── Info Tab ──────────────────────────────────── */}
           {activeTab === "info" && (
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* PR Creation Pipeline */}
               <PipelineSteps
                 task={task}
@@ -1147,60 +1161,76 @@ export function TaskDetail({
               )}
 
               {/* Goal Alignment */}
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Goal</h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="group">
+                  <h3 className="text-[10px] font-black text-primary0 mb-2 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500/40" />
+                    Mission Goal
+                  </h3>
                   <textarea
                     value={goalValue}
                     onChange={(e) => setGoalValue(e.target.value)}
                     onBlur={handleAlignmentBlur}
-                    placeholder="Por que esta tarefa existe?"
+                    placeholder="Why does this task exist?"
                     rows={3}
-                    className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                    className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-blue-500/40 focus:bg-white/[0.05] transition-all resize-none shadow-inner"
                   />
                 </div>
-                <div>
-                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Desired outcome</h3>
+                <div className="group">
+                  <h3 className="text-[10px] font-black text-primary0 mb-2 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/40" />
+                    Desired Outcome
+                  </h3>
                   <textarea
                     value={outcomeValue}
                     onChange={(e) => setOutcomeValue(e.target.value)}
                     onBlur={handleAlignmentBlur}
-                    placeholder="Qual resultado concreto encerra o trabalho?"
+                    placeholder="What concrete result closes this work?"
                     rows={3}
-                    className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                    className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-emerald-500/40 focus:bg-white/[0.05] transition-all resize-none shadow-inner"
                   />
                 </div>
               </div>
 
               {/* Description */}
               {task.description && (
-                <div>
-                  <h3 className="text-xs font-medium text-primary0 mb-1.5">Descrição</h3>
-                  <p className="text-sm text-secondary whitespace-pre-wrap leading-relaxed">
+                <div className="bg-white/[0.02] border border-white/5 rounded-xl p-5">
+                  <h3 className="text-[10px] font-black text-primary0 mb-3 uppercase tracking-widest">
+                    Protocol Specification
+                  </h3>
+                  <p className="text-sm text-secondary whitespace-pre-wrap leading-relaxed opacity-90">
                     {task.description}
                   </p>
                 </div>
               )}
 
               {/* Tags */}
-              <div>
-                <h3 className="text-xs font-medium text-primary0 mb-1.5">Tags</h3>
+              <div className="bg-white/[0.01] border border-white/5 rounded-xl p-4">
+                <h3 className="text-[10px] font-black text-primary0 mb-3 uppercase tracking-widest">
+                  Resource Classifiers
+                </h3>
                 <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
               </div>
 
               {/* Notes */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-xs font-medium text-primary0">Notas internas</h3>
-                  {notesSaved && <span className="text-[10px] text-success">✓ salvo</span>}
+              <div className="bg-white/[0.01] border border-white/5 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[10px] font-black text-primary0 uppercase tracking-widest">
+                    Operator Notes
+                  </h3>
+                  {notesSaved && (
+                    <span className="text-[9px] font-bold text-emerald-400 animate-pulse">
+                      SYNCED ✓
+                    </span>
+                  )}
                 </div>
                 <textarea
                   value={notesValue}
                   onChange={(e) => setNotesValue(e.target.value)}
                   onBlur={handleNotesBlur}
-                  placeholder="Anotações pessoais (não enviadas ao agente)…"
-                  rows={3}
-                  className="w-full bg-surface-hover border border-strong rounded-md px-2.5 py-2 text-xs text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
+                  placeholder="Private annotations (not shared with agent)…"
+                  rows={2}
+                  className="w-full bg-transparent border-none p-0 text-xs text-dimmed placeholder-zinc-700 focus:outline-none resize-none"
                 />
               </div>
 
@@ -1305,7 +1335,7 @@ export function TaskDetail({
                   </div>
                 )}
 
-                <div className="flex gap-2 flex-wrap items-center">
+                <div className="flex gap-3 flex-wrap items-center pt-4 border-t border-white/5">
                   {(task.status === "backlog" || task.status === "failed") && (
                     <Button
                       variant="primary"
@@ -1318,8 +1348,9 @@ export function TaskDetail({
                           setLoadingAction(null);
                         }
                       }}
+                      className="rounded-xl h-12 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-xl shadow-blue-500/20 font-black uppercase tracking-widest text-[10px] active-shrink"
                     >
-                      {loadingAction === "launch" ? "Iniciando..." : "▶ Iniciar Agent"}
+                      {loadingAction === "launch" ? "INITIALIZING..." : "▶ ENGAGE AGENT"}
                     </Button>
                   )}
                   {task.status === "failed" && (
@@ -1334,8 +1365,9 @@ export function TaskDetail({
                           setLoadingAction(null);
                         }
                       }}
+                      className="rounded-xl h-12 px-6 border-white/10 bg-white/5 font-black uppercase tracking-widest text-[10px] active-shrink"
                     >
-                      {loadingAction === "retry" ? "Reiniciando..." : "↺ Tentar novamente"}
+                      {loadingAction === "retry" ? "REBOOTING..." : "↺ RE-RUN PROTOCOL"}
                     </Button>
                   )}
                   {task.status === "in_progress" && (
@@ -1350,27 +1382,38 @@ export function TaskDetail({
                           setLoadingAction(null);
                         }
                       }}
+                      className="rounded-xl h-12 px-8 bg-gradient-to-r from-red-600 to-rose-600 shadow-xl shadow-red-500/20 font-black uppercase tracking-widest text-[10px] active-shrink"
                     >
-                      {loadingAction === "cancel" ? "Cancelando..." : "⏹ Cancelar"}
+                      {loadingAction === "cancel" ? "ABORTING..." : "⏹ TERMINATE"}
                     </Button>
                   )}
                   {confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-secondary">Tem certeza?</span>
-                      <Button variant="danger" onClick={() => onDelete(task.id)}>
-                        Confirmar
+                    <div className="flex items-center gap-2 p-1 bg-red-500/10 border border-red-500/20 rounded-xl">
+                      <span className="text-[10px] font-black uppercase px-3 text-red-400">
+                        Confirm Purge?
+                      </span>
+                      <Button
+                        variant="danger"
+                        onClick={() => onDelete(task.id)}
+                        className="h-9 px-4 text-[10px] font-black uppercase bg-red-600 rounded-lg"
+                      >
+                        YES
                       </Button>
-                      <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                        Não
+                      <Button
+                        variant="ghost"
+                        onClick={() => setConfirmDelete(false)}
+                        className="h-9 px-4 text-[10px] font-black uppercase text-white rounded-lg"
+                      >
+                        NO
                       </Button>
                     </div>
                   ) : (
                     <Button
                       variant="ghost"
                       onClick={() => setConfirmDelete(true)}
-                      className="text-primary0 hover:text-danger"
+                      className="text-primary0 hover:text-red-400 font-black uppercase tracking-widest text-[10px]"
                     >
-                      Deletar
+                      PURGE DATA
                     </Button>
                   )}
                 </div>
@@ -1558,139 +1601,149 @@ export function TaskDetail({
             </div>
           )}
 
-          {/* ── Cost Tab ───────────────────────────────────── */}
+          {/* ── Cost Tab (Neuromorphic Grid) ───────────────────────────────────── */}
           {activeTab === "cost" && task.latestRun?.costStats && (
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    Custo do Provider
-                  </h2>
-                  {task.maxCost !== undefined && (
-                    <span
-                      className="text-[10px] px-2 py-1 rounded"
-                      style={{ background: "var(--bg-input)", color: "var(--text-muted)" }}
-                    >
-                      Budget: ${task.maxCost.toFixed(2)}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div
-                    className="rounded-lg p-4 border"
-                    style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/20">
+              <div className="flex items-center justify-between">
+                <h2
+                  className="text-sm font-black tracking-widest uppercase"
+                  style={{ color: "var(--text-primary)" }}
+                >
+                  System Telemetry
+                </h2>
+                {task.maxCost !== undefined && (
+                  <span
+                    className="text-[10px] font-mono px-2.5 py-1 rounded border border-white/10"
+                    style={{ background: "rgba(0,0,0,0.4)", color: "var(--text-muted)" }}
                   >
-                    <div
-                      className="text-[10px] uppercase tracking-wider mb-1"
-                      style={{ color: "var(--text-dimmed)" }}
-                    >
-                      Total Tokens
-                    </div>
-                    <div
-                      className="text-xl font-semibold tabular-nums"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      {(task.latestRun.costStats.total_tokens || 0).toLocaleString()}
-                    </div>
-                  </div>
+                    BUDGET: ${task.maxCost.toFixed(2)}
+                  </span>
+                )}
+              </div>
 
+              {/* Primary Metrics Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div
+                  className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                  style={{
+                    background: "rgba(20,20,20,0.6)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
                   <div
-                    className="rounded-lg p-4 border"
-                    style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                    className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                    style={{ color: "var(--text-dimmed)" }}
                   >
-                    <div
-                      className="text-[10px] uppercase tracking-wider mb-1"
-                      style={{ color: "var(--text-dimmed)" }}
-                    >
-                      Custo Total
-                    </div>
-                    <div
-                      className="text-xl font-semibold tabular-nums"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      ${((task.latestRun.costStats.input || 0) / 1000000).toFixed(6)}
-                    </div>
+                    Total Tokens
                   </div>
-
-                  {task.latestRun.costStats.duration_ms && (
-                    <div
-                      className="rounded-lg p-4 border"
-                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
-                    >
-                      <div
-                        className="text-[10px] uppercase tracking-wider mb-1"
-                        style={{ color: "var(--text-dimmed)" }}
-                      >
-                        Latência
-                      </div>
-                      <div
-                        className="text-xl font-semibold tabular-nums"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
-                      </div>
-                    </div>
-                  )}
-
-                  {task.latestRun.costStats.tool_calls !== undefined && (
-                    <div
-                      className="rounded-lg p-4 border"
-                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
-                    >
-                      <div
-                        className="text-[10px] uppercase tracking-wider mb-1"
-                        style={{ color: "var(--text-dimmed)" }}
-                      >
-                        Tool Calls
-                      </div>
-                      <div
-                        className="text-xl font-semibold tabular-nums"
-                        style={{ color: "var(--text-primary)" }}
-                      >
-                        {task.latestRun.costStats.tool_calls}
-                      </div>
-                    </div>
-                  )}
+                  <div
+                    className="text-2xl font-black font-mono tracking-tight relative z-10"
+                    style={{ color: "var(--text-primary)" }}
+                  >
+                    {(task.latestRun.costStats.total_tokens || 0).toLocaleString()}
+                  </div>
                 </div>
 
                 <div
-                  className="rounded-lg p-4 border"
-                  style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                  className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                  style={{
+                    background: "rgba(20,20,20,0.6)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                  <div
+                    className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                    style={{ color: "var(--text-dimmed)" }}
+                  >
+                    Op Cost
+                  </div>
+                  <div className="text-2xl font-black font-mono tracking-tight relative z-10 text-emerald-400">
+                    ${((task.latestRun.costStats.input || 0) / 1000000).toFixed(6)}
+                  </div>
+                </div>
+
+                {task.latestRun.costStats.duration_ms && (
+                  <div
+                    className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                    style={{
+                      background: "rgba(20,20,20,0.6)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                    <div
+                      className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                      style={{ color: "var(--text-dimmed)" }}
+                    >
+                      Latency
+                    </div>
+                    <div
+                      className="text-2xl font-black font-mono tracking-tight relative z-10"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
+                    </div>
+                  </div>
+                )}
+
+                {task.latestRun.costStats.tool_calls !== undefined && (
+                  <div
+                    className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                    style={{
+                      background: "rgba(20,20,20,0.6)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                    <div
+                      className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                      style={{ color: "var(--text-dimmed)" }}
+                    >
+                      Tool Invocations
+                    </div>
+                    <div
+                      className="text-2xl font-black font-mono tracking-tight relative z-10"
+                      style={{ color: "var(--text-primary)" }}
+                    >
+                      {task.latestRun.costStats.tool_calls}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Detailed Breakdown */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div
+                  className="rounded-xl p-5 border border-white/5"
+                  style={{ background: "rgba(10,10,10,0.8)" }}
                 >
                   <h3
-                    className="text-xs font-semibold mb-3"
+                    className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2"
                     style={{ color: "var(--text-secondary)" }}
                   >
-                    Tokens
+                    <span className="w-2 h-2 rounded-sm bg-blue-500/50" />
+                    Token Flux
                   </h3>
-                  <div className="flex flex-wrap gap-4 text-xs">
-                    <div>
-                      <span className="text-dimmed">Input: </span>
-                      <span
-                        className="font-medium tabular-nums"
-                        style={{ color: "var(--text-primary)" }}
-                      >
+                  <div className="space-y-4 font-mono text-xs">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <span className="text-dimmed">Input Stream</span>
+                      <span className="text-blue-400 font-bold">
                         ↓{(task.latestRun.costStats.input_tokens || 0).toLocaleString()}
                       </span>
                     </div>
                     {task.latestRun.costStats.cached && task.latestRun.costStats.cached > 0 && (
-                      <div>
-                        <span className="text-dimmed">Cached: </span>
-                        <span
-                          className="font-medium tabular-nums"
-                          style={{ color: "var(--text-primary)" }}
-                        >
-                          +{task.latestRun.costStats.cached.toLocaleString()}
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <span className="text-dimmed">Cache Hit</span>
+                        <span className="text-emerald-400 font-bold">
+                          +{(task.latestRun.costStats.cached || 0).toLocaleString()}
                         </span>
                       </div>
                     )}
-                    <div>
-                      <span className="text-dimmed">Output: </span>
-                      <span
-                        className="font-medium tabular-nums"
-                        style={{ color: "var(--text-primary)" }}
-                      >
+                    <div className="flex items-center justify-between">
+                      <span className="text-dimmed">Output Stream</span>
+                      <span className="text-purple-400 font-bold">
                         ↑{(task.latestRun.costStats.output_tokens || 0).toLocaleString()}
                       </span>
                     </div>
@@ -1700,55 +1753,43 @@ export function TaskDetail({
                 {task.latestRun.costStats.models &&
                   Object.keys(task.latestRun.costStats.models).length > 0 && (
                     <div
-                      className="rounded-lg p-4 border"
-                      style={{ background: "var(--bg-card)", borderColor: "var(--glass-border)" }}
+                      className="rounded-xl p-5 border border-white/5"
+                      style={{ background: "rgba(10,10,10,0.8)" }}
                     >
                       <h3
-                        className="text-xs font-semibold mb-3"
+                        className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2"
                         style={{ color: "var(--text-secondary)" }}
                       >
-                        Modelos
+                        <span className="w-2 h-2 rounded-sm bg-purple-500/50" />
+                        Model Utilization
                       </h3>
                       <div className="space-y-3">
                         {Object.entries(task.latestRun.costStats.models).map(([model, stats]) => (
                           <div
                             key={model}
-                            className="flex items-center justify-between p-3 rounded-lg"
-                            style={{ background: "var(--bg-input)" }}
+                            className="flex items-center justify-between p-2.5 rounded-lg border border-white/5"
+                            style={{ background: "rgba(255,255,255,0.02)" }}
                           >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm"
-                                style={{ background: "var(--accent-muted)" }}
-                              >
-                                🤖
-                              </div>
-                              <span
-                                className="text-xs font-mono"
-                                style={{ color: "var(--text-primary)" }}
-                              >
-                                {model}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4 text-xs">
+                            <span
+                              className="text-[10px] font-mono truncate mr-4"
+                              style={{ color: "var(--text-primary)" }}
+                              title={model}
+                            >
+                              {model.split("/").pop()}
+                            </span>
+                            <div className="flex items-center gap-4 text-[10px] font-mono shrink-0">
                               <div className="text-right">
-                                <div className="text-dimmed">tokens</div>
-                                <div
-                                  className="font-medium tabular-nums"
-                                  style={{ color: "var(--text-primary)" }}
-                                >
+                                <span className="text-dimmed mr-1">T:</span>
+                                <span className="text-blue-300">
                                   {stats.total_tokens.toLocaleString()}
-                                </div>
+                                </span>
                               </div>
                               {stats.input !== undefined && (
-                                <div className="text-right">
-                                  <div className="text-dimmed">custo</div>
-                                  <div
-                                    className="font-medium tabular-nums"
-                                    style={{ color: "var(--accent)" }}
-                                  >
-                                    ${(stats.input / 1000000).toFixed(6)}
-                                  </div>
+                                <div className="text-right min-w-[60px]">
+                                  <span className="text-dimmed mr-1">$</span>
+                                  <span className="text-emerald-400">
+                                    {(stats.input / 1000000).toFixed(4)}
+                                  </span>
                                 </div>
                               )}
                             </div>
