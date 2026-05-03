@@ -182,7 +182,6 @@ export function NewTaskDialog({
   repos,
   engines,
   enginesLoading,
-  enginesError,
   onSubmit,
 }: NewTaskDialogProps) {
   const [title, setTitle] = useState("");
