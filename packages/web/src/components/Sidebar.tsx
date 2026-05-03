@@ -306,13 +306,13 @@ export function Sidebar({
                   onClick={() => onSelectRepo(repo.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all active-shrink cursor-pointer border ${
                     isSelected
-                      ? "bg-accent/15 text-accent border-accent/20 shadow-sm"
-                      : "text-secondary hover:bg-surface-hover hover:text-primary border-transparent"
+                      ? "bg-accent text-white shadow-lg shadow-accent/25 border-accent/20"
+                      : "text-secondary hover:text-primary bg-white/[0.02] border-white/5 hover:bg-white/[0.04] hover:border-white/10"
                   }`}
                   title={collapsed ? repo.name : ""}
                 >
                   <div
-                    className={`shrink-0 transition-colors ${collapsed ? "w-full flex justify-center" : isSelected ? "text-accent" : providerColor}`}
+                    className={`shrink-0 transition-colors ${collapsed ? "w-full flex justify-center" : isSelected ? "text-white" : providerColor}`}
                   >
                     <ProviderIcon size={18} />
                   </div>
