@@ -9,9 +9,6 @@ import {
 import { memo, useEffect, useRef, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import type { RetryState } from "../hooks/useRetryQueue";
-import { formatDuration } from "../utils/date";
-import { getPhaseLabel } from "../utils/runPhase";
-import { TaskTagsDisplay } from "./TaskTags";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getEngineMeta } from "./ui/engine-icons";
@@ -62,13 +59,6 @@ function RetryCountdown({ dueAt, attempt }: { dueAt: number; attempt: number }) 
   );
 }
 
-const PRIORITY_CONFIG = [
-  { label: "P3", color: "text-dimmed", bg: "bg-surface-hover", dot: "bg-border-strong" },
-  { label: "P2", color: "text-info", bg: "bg-info/15", dot: "bg-sky-500" },
-  { label: "P1", color: "text-warning", bg: "bg-warning/15", dot: "bg-amber-400" },
-  { label: "P0", color: "text-danger", bg: "bg-danger/15", dot: "bg-red-400" },
-];
-
 function PriorityBadge({ priority }: { priority: import("@vibe-code/shared").TaskPriority }) {
   if (priority === "none") return null;
   const meta = TASK_PRIORITY_META[priority];
@@ -82,21 +72,6 @@ function PriorityBadge({ priority }: { priority: import("@vibe-code/shared").Tas
   );
 }
 
-/** @deprecated kept for legacy priority: number usage during transition */
-function _PriorityDot({ priority }: { priority: number }) {
-  const cfg = PRIORITY_CONFIG[Math.min(priority, 3)] ?? PRIORITY_CONFIG[0];
-  if (priority === 0) return null;
-  return (
-    <span
-      title={`Priority ${priority}`}
-      className={`shrink-0 inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded ${cfg.bg} ${cfg.color}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  );
-}
-
 function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -104,7 +79,7 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
   });
 
   const [retrying, setRetrying] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
+  const [_retryError, setRetryError] = useState<string | null>(null);
   const isRunning = task.latestRun?.status === "running";
   const elapsed = useElapsedTime(task.latestRun?.startedAt, isRunning);
 
@@ -141,364 +116,183 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
       {...attributes}
       {...listeners}
       onClick={() => onClick(task)}
-      className={`glass-card border rounded-2xl p-3 cursor-grab active:cursor-grabbing transition-all duration-250 group relative shadow-lg shadow-black/35 overflow-hidden ${
+      className={`glass-card border rounded-2xl p-4 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-soft hover-lift active-shrink ${
         isRunning
-          ? "border-info/30 shadow-cyan-500/20 running-glow"
+          ? "border-info/40 shadow-glow-accent"
           : task.status === "failed"
-            ? "border-danger/30 hover:border-danger/30 hover:shadow-red-900/30"
-            : "hover:border-sky-300/25 hover:shadow-blue-900/30 hover:translate-y-[-1px]"
+            ? "border-danger/30 hover:border-danger/40 hover:shadow-glow-danger"
+            : "hover:border-accent/30"
       }`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.04] via-transparent to-cyan-400/[0.05] opacity-80" />
-
       {isRunning && (
-        <>
-          <div className="absolute inset-x-2 top-0 h-[2px] overflow-hidden rounded-full bg-info/15">
-            <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-cyan-300 to-transparent animate-[pulse_1.1s_ease-in-out_infinite]" />
-          </div>
-          <div className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-gradient-to-b from-cyan-300 via-blue-400 to-indigo-400 animate-pulse" />
-        </>
-      )}
-
-      <div className="relative z-10 flex items-start gap-2 mb-1.5">
-        {ProviderIcon && (
-          <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
-            <ProviderIcon size={13} />
-          </span>
-        )}
-        <h3
-          className="text-[13px] font-medium line-clamp-2 flex-1 leading-snug"
-          style={{ color: "var(--text-primary)" }}
-        >
-          {task.title}
-        </h3>
-        <div className="flex items-center gap-1 shrink-0">
-          <PriorityBadge priority={task.priority} />
-          {task.issueNumber != null ? (
-            <span
-              title={task.id}
-              className="text-[9px] font-mono select-all leading-snug mt-px px-1 py-0.5 rounded bg-surface-hover border border-strong"
-              style={{ color: "var(--text-dimmed)" }}
-            >
-              #{task.issueNumber}
-            </span>
-          ) : (
-            <span
-              title={task.id}
-              className="text-[9px] font-mono select-all leading-snug mt-px"
-              style={{ color: "var(--text-dimmed)" }}
-            >
-              {task.id.slice(0, 8)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {task.description && (
-        <p
-          className="text-xs line-clamp-2 mb-2.5 ml-[21px] leading-relaxed"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {task.description}
-        </p>
-      )}
-
-      {task.tags && task.tags.length > 0 && (
-        <div className="mb-2 ml-[21px]">
-          <TaskTagsDisplay tags={task.tags} small />
+        <div className="absolute inset-x-0 top-0 h-1 overflow-hidden rounded-t-2xl bg-info/10">
+          <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-[pulse_1.5s_ease-in-out_infinite]" />
         </div>
       )}
 
-      {(task.taskType || task.taskComplexity) && (
-        <div className="mb-2 ml-[21px] flex flex-wrap gap-1">
-          {task.taskType &&
-            (() => {
-              const m = TASK_TYPE_META[task.taskType];
-              return (
-                <span
-                  className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded border ${m.bgColor} ${m.textColor} ${m.borderColor}`}
-                >
-                  {m.icon} {m.label}
-                </span>
-              );
-            })()}
-          {task.taskComplexity &&
-            (() => {
-              const m = TASK_COMPLEXITY_META[task.taskComplexity];
-              return (
-                <span
-                  className={`inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded border ${m.bgColor} ${m.textColor} ${m.borderColor}`}
-                >
-                  {m.icon} {m.label}
-                </span>
-              );
-            })()}
-        </div>
-      )}
-
-      {task.labels && task.labels.length > 0 && (
-        <div className="mb-2 ml-[21px] flex flex-wrap gap-1">
-          {task.labels.map((label) => (
-            <span
-              key={label.id}
-              className="inline-flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
-              style={{
-                backgroundColor: `${label.color}22`,
-                borderColor: `${label.color}55`,
-                color: label.color,
-              }}
-            >
+      <div className="relative z-10 flex flex-col gap-3">
+        {/* Header: Title and Issue/ID */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5 flex-1 min-w-0">
+            {ProviderIcon && (
               <span
-                className="w-1.5 h-1.5 rounded-full shrink-0"
-                style={{ backgroundColor: label.color }}
-              />
-              {label.name}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="relative z-10 flex items-center gap-1.5 flex-wrap ml-[21px]">
-        {task.repo &&
-          (task.repo.url ? (
-            <a
-              href={task.repo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-[11px] font-medium transition-colors"
-              style={{ color: "var(--text-muted)" }}
-              title={task.repo.url}
-            >
-              {task.repo.name}
-            </a>
-          ) : (
-            <span className="text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
-              {task.repo.name}
-            </span>
-          ))}
-
-        {task.branchName && (
-          <span
-            className="hidden sm:inline-flex items-center gap-1 text-[11px] px-1.5 py-px rounded-md font-mono"
-            style={{
-              color: "var(--text-muted)",
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-default)",
-            }}
-          >
-            <svg
-              aria-hidden="true"
-              width="9"
-              height="9"
-              viewBox="0 0 16 16"
-              fill="currentColor"
-              className="text-dimmed"
-            >
-              <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 3.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM4.25 12.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM2 13.25a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0zM5 6.25V7.5A2.5 2.5 0 0 0 7.5 10H9v1.75A2.25 2.25 0 1 0 3 11.75V6.25A2.25 2.25 0 1 0 5 6.25z" />
-            </svg>
-            {task.branchName.replace("vibe-code/", "vc/")}
-          </span>
-        )}
-
-        {task.agentId && (
-          <Badge
-            variant="default"
-            className="text-[10px] py-0 px-1.5 flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
-          >
-            <svg
-              aria-hidden="true"
-              width="9"
-              height="9"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-              <path d="M2 14c0-2.2 2.7-4 6-4s6 1.8 6 4" />
-            </svg>
-            {task.agentId}
-          </Badge>
-        )}
-
-        {task.engine &&
-          (() => {
-            const eng = getEngineMeta(task.engine);
-            const EngIcon = eng.icon;
-            return (
-              <Badge variant="purple" className="text-[10px] py-0 px-1.5 flex items-center gap-1">
-                <EngIcon size={9} className={eng.color} />
-                {task.engine}
-                {task.model && (
-                  <span
-                    className="text-[9px] opacity-60 font-mono ml-0.5 max-w-[80px] truncate"
-                    title={task.model}
-                  >
-                    /{task.model.split("/").pop()?.replace(":free", "")}
-                  </span>
-                )}
-              </Badge>
-            );
-          })()}
-
-        {task.latestRun?.litellmTokenId && (
-          <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-80">
-            LiteLLM
-          </Badge>
-        )}
-
-        {task.status === "scheduled" && (
-          <Badge
-            variant="warning"
-            className="text-[10px] py-0 px-1.5 inline-flex items-center gap-1"
-          >
-            <svg
-              aria-hidden="true"
-              width="10"
-              height="10"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="8" cy="8" r="5.5" />
-              <path d="M8 5.5v3l2 1.3" />
-            </svg>
-            scheduled
-          </Badge>
-        )}
-        {task.parentTaskId && (
-          <Badge variant="default" className="text-[10px] py-0 px-1.5 opacity-60">
-            ↳ derived
-          </Badge>
-        )}
-        {task.status === "failed" && (
-          <Badge variant="danger" className="text-[10px] py-0 px-1.5">
-            Failed
-          </Badge>
-        )}
-        {task.status === "failed" && task.latestRun?.errorMessage && (
-          <span
-            className="text-[9px] text-danger/70 font-mono truncate max-w-[140px]"
-            title={task.latestRun.errorMessage}
-          >
-            {task.latestRun.errorMessage}
-          </span>
-        )}
-
-        {task.status === "review" && !task.prUrl && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: this wrapper only prevents drag/click propagation around the nested button
-          <div
-            className="relative z-10"
-            onPointerDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <Button
-              size="xs"
-              variant="primary"
-              className="h-5 text-[10px] px-2"
-              onClick={handleRetryPR}
-              disabled={retrying}
-            >
-              {retrying ? "…" : "Retry PR"}
-            </Button>
-            {retryError && (
-              <span className="absolute left-0 top-full mt-1 z-20 text-[10px] text-danger bg-input border border-danger/30 rounded px-1.5 py-0.5 whitespace-nowrap max-w-[200px] truncate">
-                {retryError}
+                className={`mt-0.5 shrink-0 ${provider?.color} opacity-80 group-hover:opacity-100 transition-opacity`}
+              >
+                <ProviderIcon size={14} />
               </span>
             )}
+            <h3 className="text-[13px] font-semibold line-clamp-2 leading-tight tracking-tight text-primary">
+              {task.title}
+            </h3>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <PriorityBadge priority={task.priority} />
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface-hover border border-strong/40 text-dimmed">
+              {task.issueNumber != null ? `#${task.issueNumber}` : task.id.slice(0, 6)}
+            </span>
+          </div>
+        </div>
+
+        {/* Description */}
+        {task.description && (
+          <p className="text-[11px] line-clamp-2 leading-relaxed text-secondary opacity-70 group-hover:opacity-90 transition-opacity">
+            {task.description}
+          </p>
+        )}
+
+        {/* Tags & Metadata Badges */}
+        {(task.tags?.length > 0 ||
+          task.taskType ||
+          task.taskComplexity ||
+          (task.labels && task.labels.length > 0)) && (
+          <div className="flex flex-wrap gap-1.5">
+            {task.taskType &&
+              (() => {
+                const m = TASK_TYPE_META[task.taskType];
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border ${m.bgColor} ${m.textColor} ${m.borderColor} opacity-80`}
+                  >
+                    {m.label}
+                  </span>
+                );
+              })()}
+            {task.taskComplexity &&
+              (() => {
+                const m = TASK_COMPLEXITY_META[task.taskComplexity];
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border ${m.bgColor} ${m.textColor} ${m.borderColor} opacity-80`}
+                  >
+                    {m.icon} {m.label}
+                  </span>
+                );
+              })()}
+            {task.tags?.map((tag) => (
+              <span
+                key={tag}
+                className="text-[9px] px-1.5 py-0.5 rounded-sm bg-accent-muted/10 border border-accent/20 text-accent-text/80 font-medium"
+              >
+                #{tag}
+              </span>
+            ))}
+            {task.labels?.map((label) => (
+              <span
+                key={label.id}
+                className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
+                style={{
+                  backgroundColor: `${label.color}15`,
+                  borderColor: `${label.color}40`,
+                  color: label.color,
+                }}
+              >
+                <span
+                  className="w-1 h-1 rounded-full shrink-0"
+                  style={{ backgroundColor: label.color }}
+                />
+                {label.name}
+              </span>
+            ))}
           </div>
         )}
 
-        {task.prUrl && (
-          <a
-            href={task.prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-0.5"
-          >
-            <Badge
-              variant="success"
-              className="text-[10px] py-0 px-1.5 hover:opacity-80 transition-opacity"
-            >
-              ↗ PR
-            </Badge>
-          </a>
-        )}
-
-        {task.issueUrl &&
-          (() => {
-            const { name, icon: IssueIcon, color } = getProviderFromUrl(task.issueUrl);
-            return (
-              <a
-                href={task.issueUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-0.5"
-              >
-                <Badge
-                  variant="info"
-                  className={`text-[10px] py-0 px-1.5 hover:opacity-80 transition-opacity ${color}`}
-                >
-                  <IssueIcon size={9} className="mr-0.5" />
-                  {name}
-                </Badge>
-              </a>
-            );
-          })()}
-
-        {retryEntry && task.status === "failed" && (
-          <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
-        )}
-
-        {isRunning && (
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-info ml-auto whitespace-nowrap overflow-hidden max-w-[170px] bg-info/15 border border-info/30 px-2 py-[2px] rounded-md">
-            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-pulse" />
-            <span className="truncate">{getPhaseLabel(task.latestRun?.currentStatus)}</span>
-            {elapsed && <span className="shrink-0 text-info/80 tabular-nums">{elapsed}</span>}
-          </span>
-        )}
-
-        {task.latestRun?.costStats && (
-          <div className={`${isRunning ? "ml-2" : "ml-auto"} flex flex-col items-end gap-0.5`}>
-            {(() => {
-              const stats = task.latestRun?.costStats;
-              if (!stats) return null;
-              const cost = stats.input !== undefined ? stats.input / 1_000_000 : 0;
-              const hasTokens = stats.input_tokens > 0 || stats.output_tokens > 0;
-
-              return (
-                <span
-                  className="text-[9px] font-mono whitespace-nowrap flex items-center gap-1.5"
-                  style={{ color: "var(--text-dimmed)" }}
-                >
-                  {cost > 0 && (
-                    <span className="text-warning-muted font-bold">${cost.toFixed(3)}</span>
-                  )}
-                  {hasTokens && (
-                    <span className="flex items-center gap-1">
-                      <span title="Input Tokens">
-                        ↓{Math.round(stats.input_tokens / 100) / 10}k
-                      </span>
-                      <span title="Output Tokens">
-                        ↑{Math.round(stats.output_tokens / 100) / 10}k
-                      </span>
-                    </span>
-                  )}
-                </span>
-              );
-            })()}
-            {!isRunning && task.latestRun?.startedAt && task.latestRun?.finishedAt && (
-              <span className="text-[10px] tabular-nums" style={{ color: "var(--text-dimmed)" }}>
-                ⏱ {formatDuration(task.latestRun.startedAt, task.latestRun.finishedAt)}
+        {/* Footer: Repo, Agent, Stats */}
+        <div className="flex items-center justify-between pt-1 border-t border-strong/10">
+          <div className="flex items-center gap-2 overflow-hidden min-w-0">
+            {task.repo && (
+              <span className="text-[10px] font-medium truncate text-muted opacity-60 hover:opacity-100 transition-opacity">
+                {task.repo.name}
               </span>
+            )}
+
+            {task.engine &&
+              (() => {
+                const eng = getEngineMeta(task.engine);
+                const EngIcon = eng.icon;
+                return (
+                  <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-surface-hover/50 border border-strong/20">
+                    <EngIcon size={10} className={eng.color} />
+                    <span className="text-[9px] font-medium opacity-80 uppercase tracking-tighter">
+                      {task.engine}
+                    </span>
+                  </div>
+                );
+              })()}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isRunning ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-info tabular-nums">
+                <span className="w-1 h-1 rounded-full bg-info animate-pulse" />
+                {elapsed}
+              </span>
+            ) : task.latestRun?.costStats ? (
+              <span className="text-[10px] font-mono font-bold text-warning-muted">
+                $
+                {(task.latestRun.costStats.input
+                  ? task.latestRun.costStats.input / 1_000_000
+                  : 0
+                ).toFixed(2)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Special States (PR, Failed, Scheduled) */}
+        {(task.status === "review" ||
+          task.status === "failed" ||
+          task.status === "scheduled" ||
+          task.prUrl) && (
+          <div className="flex items-center gap-2 mt-1">
+            {task.prUrl && (
+              <Badge variant="success" className="text-[9px] font-bold uppercase py-0 px-1.5">
+                ↗ PR Created
+              </Badge>
+            )}
+            {task.status === "failed" && (
+              <Badge variant="danger" className="text-[9px] font-bold uppercase py-0 px-1.5">
+                Failed
+              </Badge>
+            )}
+            {task.status === "scheduled" && (
+              <Badge variant="warning" className="text-[9px] font-bold uppercase py-0 px-1.5">
+                Scheduled
+              </Badge>
+            )}
+            {retryEntry && task.status === "failed" && (
+              <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
+            )}
+            {task.status === "review" && !task.prUrl && (
+              <Button
+                type="button"
+                size="xs"
+                variant="primary"
+                className="h-5 text-[9px] font-bold uppercase px-2"
+                onClick={handleRetryPR}
+                disabled={retrying}
+              >
+                {retrying ? "…" : "Retry PR"}
+              </Button>
             )}
           </div>
         )}

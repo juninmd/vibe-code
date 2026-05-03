@@ -37,9 +37,7 @@ import { StatsDialog } from "./components/StatsDialog";
 import { TaskDetail } from "./components/TaskDetail";
 import { TemplatesPanel } from "./components/TemplatesPanel";
 import { Button } from "./components/ui/button";
-import { getEngineMeta } from "./components/ui/engine-icons";
 import { Toaster } from "./components/ui/Toaster";
-import { WorkspaceSelector } from "./components/WorkspaceSelector";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
 import { useRepos } from "./hooks/useRepos";
@@ -137,12 +135,85 @@ export default function App() {
   return <AuthenticatedApp auth={auth} onLogout={loadAuth} />;
 }
 
+function HeaderAction({
+  icon,
+  label,
+  onClick,
+  variant = "ghost",
+  active = false,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  variant?: "primary" | "ghost";
+  active?: boolean;
+}) {
+  const isPrimary = variant === "primary";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active-shrink cursor-pointer ${
+        isPrimary
+          ? "bg-accent text-white shadow-lg shadow-accent/25 hover:bg-accent-hover"
+          : active
+            ? "bg-accent/20 text-accent border border-accent/30"
+            : "text-secondary hover:text-primary hover:bg-white/5 border border-transparent"
+      }`}
+    >
+      {icon === "plus" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <title>Add</title>
+          <path d="M8 3v10M3 8h10" />
+        </svg>
+      )}
+      {icon === "import" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <title>Import</title>
+          <path d="M8 12V3m0 9l-4-4m4 4l4-4M3 14h10" />
+        </svg>
+      )}
+      {icon === "filter" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <title>Filter</title>
+          <path d="M2 3h12l-5 6v4l-2 2V9L2 3Z" />
+        </svg>
+      )}
+      <span>{label}</span>
+    </button>
+  );
+}
+
 function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () => void }) {
   const toastCtx = useToastState();
   const { toast } = toastCtx;
 
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedAgent, _setSelectedAgent] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
@@ -165,8 +236,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [filters, setFilters] = useState<Filters>({
     engine: null,
     priority: null,
-    taskType: null,
-    taskComplexity: null,
     hasPR: false,
     tags: [],
     labelIds: [],
@@ -178,7 +247,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const refreshEnginesThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedTaskRef = useRef(selectedTask);
   selectedTaskRef.current = selectedTask;
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const _searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
     useRepos();
@@ -214,9 +283,9 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     engines,
     loading: enginesLoading,
     error: enginesError,
-    availableCount,
-    totalActiveRuns,
-    refresh: refreshEngines,
+    availableCount: _availableCount,
+    totalActiveRuns: _totalActiveRuns,
+    refresh: _refreshEngines,
   } = useEngines(15_000);
   const { notify } = useBrowserNotifications();
 
@@ -232,7 +301,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       refreshEnginesThrottleRef.current = null;
       refreshEngines();
     }, 1500);
-  }, [refreshEngines]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -609,12 +678,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     if (filters.priority !== null) {
       result = result.filter((t) => t.priority === filters.priority);
     }
-    if (filters.taskType !== null) {
-      result = result.filter((t) => t.taskType === filters.taskType);
-    }
-    if (filters.taskComplexity !== null) {
-      result = result.filter((t) => t.taskComplexity === filters.taskComplexity);
-    }
     if (filters.hasPR) {
       result = result.filter((t) => !!t.prUrl);
     }
@@ -942,343 +1005,184 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           connected={connected}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Reconnect banner — only show after first successful connection is lost */}
-          {!connected && wasConnected.current && (
-            <div className="bg-warning/15 border-b border-warning/30 px-4 py-1.5 text-xs text-warning flex items-center gap-2 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              Disconnected — attempting to reconnect...
-            </div>
-          )}
-
-          {/* Header */}
-          <header className="bg-app/50 backdrop-blur-md border-b border-default px-4 py-3 flex items-center gap-4 shrink-0">
-            {/* Workspace Selector */}
-            <div className="hidden md:block min-w-max">
-              <WorkspaceSelector />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-medium text-secondary truncate">
-                {selectedRepoId ? (selectedRepo?.name ?? "Repository") : "All Repositories"}
-              </h2>
-              <p className="text-xs text-dimmed flex items-center gap-2">
-                {filteredTasks.length !== tasks.length
-                  ? `${filteredTasks.length} de ${tasks.length} tasks`
-                  : `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`}
-                {selectedRepo?.url && (
-                  <a
-                    href={selectedRepo.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary0 hover:text-secondary transition-colors"
-                    title={selectedRepo.url}
-                  >
-                    open repo
-                  </a>
-                )}
-              </p>
-            </div>
-
-            {/* Schedules indicator */}
-            <button
-              type="button"
-              onClick={() => setShowSchedulesPanel(true)}
-              title="Manage Scheduled Tasks"
-              aria-label="Manage Scheduled Tasks"
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                role="img"
-                aria-label="Schedule"
-                className="opacity-70 group-hover:opacity-100 transition-opacity text-primary0 group-hover:text-primary"
-              >
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-            </button>
-
-            {/* Engine status indicator */}
-            <button
-              type="button"
-              onClick={() => setShowEnginesPanel(true)}
-              title="Manage AI Services (E)"
-              className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-strong bg-surface/50 hover:bg-surface-hover hover:border-strong cursor-pointer transition-colors group"
-            >
-              <div className="flex items-center gap-1">
-                {engines.slice(0, 4).map((e) => (
-                  <span
-                    key={e.name}
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      e.available ? "bg-emerald-400" : "bg-border-strong"
-                    } ${e.activeRuns > 0 ? "animate-pulse" : ""}`}
-                    title={`${e.displayName}: ${e.available ? "disponível" : "não instalado"}${e.activeRuns > 0 ? ` · ${e.activeRuns} rodando` : ""}`}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-secondary group-hover:text-primary transition-colors">
-                {availableCount}/{engines.length}
-              </span>
-              {totalActiveRuns > 0 && (
-                <span className="text-xs bg-info/15 text-info border border-info/30 rounded-full px-1.5 py-0.5 leading-none font-medium">
-                  {totalActiveRuns} active{totalActiveRuns !== 1 ? "s" : ""}
+        <div className="flex-1 flex flex-col min-w-0 bg-app overflow-hidden">
+          {/* Top Header */}
+          <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-surface/20 backdrop-blur-xl z-30">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
+                  Workspace
                 </span>
-              )}
-            </button>
+                <div className="h-4 w-px bg-white/10" />
+                <h2 className="text-sm font-bold text-primary truncate max-w-[200px]">
+                  {selectedRepo ? selectedRepo.name : "All Projects"}
+                </h2>
+              </div>
 
-            {/* Filters */}
-            <div className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-surface border border-strong focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
-              {(() => {
-                const eng = selectedAgent ? getEngineMeta(selectedAgent) : null;
-                const Icon = eng?.icon;
-                return Icon ? (
-                  <span className={eng?.color}>
-                    <Icon size={12} />
-                  </span>
-                ) : (
-                  <svg
-                    aria-hidden="true"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                    className="text-secondary opacity-70"
-                  >
-                    <path d="M8 2C5.5 5 4 6.5 4 8C4 9.5 5.5 11 8 14C10.5 11 12 9.5 12 8C12 6.5 10.5 5 8 2Z" />
-                  </svg>
-                );
-              })()}
-              <select
-                value={selectedAgent ?? ""}
-                onChange={(e) => setSelectedAgent(e.target.value || null)}
-                className="bg-transparent border-none text-secondary focus:outline-none cursor-pointer outline-none w-full"
-              >
-                <option value="">All Engines</option>
-                {engines
-                  .filter((e) => e.available)
-                  .map((e) => (
-                    <option key={e.name} value={e.name}>
-                      {e.displayName}
-                    </option>
-                  ))}
-              </select>
+              <div className="hidden md:flex items-center gap-2 flex-1 max-w-md ml-4">
+                <div className="relative w-full group">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-label="Search icon"
+                    >
+                      <circle cx="7" cy="7" r="5" />
+                      <path d="M11 11l4 4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Quick search... (Ctrl+K)"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onFocus={() => setShowCommandPalette(true)}
+                    className="w-full h-10 pl-10 pr-4 rounded-xl text-xs bg-input/40 border border-default hover:border-strong focus:border-accent/40 focus:ring-4 focus:ring-accent/10 transition-all outline-none"
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Search */}
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-primary0 text-xs pointer-events-none">
-                /
-              </span>
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-                  searchTimeoutRef.current = setTimeout(() => {
-                    setSearch(e.target.value);
-                  }, 200);
-                }}
-                placeholder="Search tasks..."
-                className="pl-6 pr-3 py-1.5 text-xs rounded-md bg-surface border border-strong text-secondary placeholder-zinc-600 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 w-40 focus:w-52 transition-all"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-primary0 hover:text-secondary cursor-pointer"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowCommandPalette(true)}
-              title="Command palette (⌘K)"
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
-            >
-              <span>⌘K</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={exportBoard}
-              title="Exportar board como JSON"
-              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
-            >
-              ↓ Export
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowChangelog(true)}
-              title="Ver Changelog de Versões"
-              className="hidden sm:flex items-center px-2.5 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mr-1 opacity-70"
-              >
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-              Changelog
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowShortcuts(true)}
-              title="Atalhos (?) "
-              className="hidden sm:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors"
-            >
-              ?
-            </button>
-
-            <button
-              type="button"
-              onClick={async () => {
-                await api.auth.logout();
-                onLogout();
-              }}
-              title={auth.user ? `Sair de @${auth.user.username}` : "Sair"}
-              className="hidden md:flex items-center px-2 py-1.5 text-xs text-primary0 hover:text-secondary border border-strong hover:border-strong rounded-md bg-surface/50 cursor-pointer transition-colors gap-2"
-            >
-              {auth.user?.avatarUrl && (
-                <img
-                  src={auth.user.avatarUrl}
-                  alt={auth.user.username}
-                  className="w-5 h-5 rounded-full"
+            <div className="flex items-center gap-3 ml-4 shrink-0">
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
+                <HeaderAction
+                  icon="plus"
+                  label="Task"
+                  onClick={() => setShowNewTask(true)}
+                  variant="primary"
                 />
-              )}
-              {auth.user ? `@${auth.user.username}` : "Sair"}
-            </button>
+                {selectedRepo &&
+                  (selectedRepo.provider === "github" || selectedRepo.provider === "gitlab") && (
+                    <HeaderAction
+                      icon="import"
+                      label="Issues"
+                      onClick={() => setShowIssueImporter(true)}
+                    />
+                  )}
+                <HeaderAction
+                  icon="filter"
+                  label={showFilterBar ? "Hide" : "Filter"}
+                  onClick={() => _setShowFilterBar(!showFilterBar)}
+                  active={showFilterBar}
+                />
+              </div>
 
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowNewTask(true)}
-              title="Nova task (N)"
-            >
-              + Task
-            </Button>
-            {selectedRepo &&
-              (selectedRepo.provider === "github" || selectedRepo.provider === "gitlab") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowIssueImporter(true)}
-                  title="Importar issues como tasks"
-                >
-                  ↓ Issues
-                </Button>
-              )}
+              <div className="h-6 w-px bg-white/10 mx-1" />
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await api.auth.logout();
+                  onLogout();
+                }}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-bold text-secondary hover:text-primary hover:bg-surface-hover border border-transparent hover:border-white/10 transition-all active-shrink cursor-pointer"
+              >
+                {auth.user?.avatarUrl ? (
+                  <img
+                    src={auth.user.avatarUrl}
+                    alt={auth.user.username}
+                    className="w-6 h-6 rounded-full ring-2 ring-accent/20"
+                  />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center text-[10px] text-white font-black shadow-lg shadow-accent/20">
+                    {auth.user?.username[0].toUpperCase()}
+                  </div>
+                )}
+                <span className="hidden lg:inline text-dimmed hover:text-primary transition-colors">
+                  @{auth.user?.username}
+                </span>
+              </button>
+            </div>
           </header>
 
-          {/* Filter Bar */}
+          {/* Filter Bar Panel */}
           {showFilterBar && (
-            <FilterBar
-              filters={filters}
-              onFilterChange={setFilters}
-              availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
-              availableTags={availableTags}
-              search={search}
-              onSearchChange={setSearch}
-            />
+            <div className="px-6 py-4 bg-surface/10 border-b border-white/5 animate-in slide-in-from-top duration-300 ease-out">
+              <FilterBar
+                filters={filters}
+                onFilterChange={setFilters}
+                availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
+                availableTags={availableTags}
+                search={search}
+                onSearchChange={setSearch}
+              />
+            </div>
           )}
 
-          {/* Board */}
-          <main className="flex-1 overflow-hidden p-4">
+          {/* Board Main Area */}
+          <main className="flex-1 overflow-hidden relative">
             {tasksLoading ? (
               <SkeletonBoard />
             ) : tasksError ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <div className="w-14 h-14 rounded-full bg-danger/15 border border-danger/30 flex items-center justify-center">
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-danger"
-                      aria-label="Error icon"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <h3 className="text-sm font-semibold text-primary">Falha ao carregar tasks</h3>
-                    <p className="text-xs text-secondary max-w-xs">{tasksError}</p>
-                  </div>
+              <div className="flex flex-col items-center justify-center h-full gap-8 animate-in fade-in zoom-in duration-500">
+                <div className="w-24 h-24 rounded-[2.5rem] bg-danger/10 border border-danger/20 flex items-center justify-center shadow-2xl shadow-danger/20 rotate-12">
+                  <svg
+                    width="40"
+                    height="40"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="text-danger -rotate-12"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                </div>
+                <div className="text-center space-y-3">
+                  <h3 className="text-xl font-black text-primary tracking-tight">Sync Lost</h3>
+                  <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
+                    The connection to the orchestrator was lost. Re-establishing secure tunnel...
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={refresh}
-                  className="px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer"
+                  className="bg-accent text-white px-8 h-12 rounded-2xl shadow-xl shadow-accent/25 hover:scale-105 transition-transform active:scale-95 font-bold uppercase tracking-widest text-[10px]"
                 >
-                  Tentar novamente
+                  Retry Connection
                 </button>
               </div>
             ) : (
               <ErrorBoundary>
-                <Board
-                  tasks={filteredTasks}
-                  onTaskClick={handleTaskClick}
-                  onTaskMove={handleTaskMove}
-                  onRetryPR={retryPR}
-                  onArchiveDone={async () => {
-                    try {
-                      await archiveDone();
-                      toast("Completed tasks archived", "info");
-                    } catch {
-                      toast("Failed to archive completed tasks", "error");
-                    }
-                  }}
-                  onClearFailed={async () => {
-                    try {
-                      await clearFailed();
-                      toast("Failed tasks removed", "info");
-                    } catch {
-                      toast("Failed to clear failed tasks", "error");
-                    }
-                  }}
-                  onRetryAllFailed={async () => {
-                    try {
-                      await retryAllFailed();
-                      toast("Restarting failed tasks", "info");
-                    } catch {
-                      toast("Failed to retry failed tasks", "error");
-                    }
-                  }}
-                  retryQueueMap={retryQueueMap}
-                />
+                <div className="h-full w-full p-8 overflow-hidden">
+                  <Board
+                    tasks={filteredTasks}
+                    onTaskClick={handleTaskClick}
+                    onTaskMove={handleTaskMove}
+                    onRetryPR={retryPR}
+                    onArchiveDone={async () => {
+                      try {
+                        await archiveDone();
+                        toast("Completed tasks archived", "info");
+                      } catch {
+                        toast("Failed to archive completed tasks", "error");
+                      }
+                    }}
+                    onClearFailed={async () => {
+                      try {
+                        await clearFailed();
+                        toast("Failed tasks removed", "info");
+                      } catch {
+                        toast("Failed to clear failed tasks", "error");
+                      }
+                    }}
+                    onRetryAllFailed={async () => {
+                      try {
+                        await retryAllFailed();
+                        toast("Restarting failed tasks", "info");
+                      } catch {
+                        toast("Failed to retry failed tasks", "error");
+                      }
+                    }}
+                    retryQueueMap={retryQueueMap}
+                  />
+                </div>
               </ErrorBoundary>
             )}
           </main>
