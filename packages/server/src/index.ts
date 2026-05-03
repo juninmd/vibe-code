@@ -2,8 +2,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { config } from "dotenv";
 
-const rootDir = join(__dirname, "..", "..");
-config({ path: join(rootDir, ".env") });
+const rootDir = join(__dirname, "..", "..", "..");
+const envPath = join(rootDir, ".env");
+config({ path: envPath });
 
 import type { WsClientMessage } from "@vibe-code/shared";
 import { Hono } from "hono";

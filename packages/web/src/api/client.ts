@@ -118,7 +118,7 @@ export const api = {
   auth: {
     me: () => request<AuthStatus>("/auth/me"),
     logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
-    loginUrl: () => `${BASE}/auth/github/start`,
+    loginUrl: () => "/api/auth/github/start",
   },
 
   repos: {
