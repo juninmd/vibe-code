@@ -6,75 +6,76 @@ interface SkeletonProps {
 
 export const Skeleton = memo(function Skeleton({ className = "" }: SkeletonProps) {
   return (
-    <div className={`animate-pulse rounded-md bg-surface-hover ${className}`} aria-hidden="true" />
+    <div
+      className={`relative overflow-hidden rounded-lg bg-white/5 ${className}`}
+      aria-hidden="true"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+    </div>
   );
 });
 
-interface SkeletonCardProps {
-  lines?: number;
-}
-
-export const SkeletonCard = memo(function SkeletonCard({ lines = 3 }: SkeletonCardProps) {
+export const SkeletonCard = memo(function SkeletonCard({ lines = 2 }: { lines?: number }) {
   return (
-    <div className="glass-card p-4 flex flex-col gap-3 rounded-xl">
-      <div className="flex items-start gap-3">
-        <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
-        <div className="flex-1 min-w-0">
-          <Skeleton className="h-3.5 w-3/4 rounded" />
-          <Skeleton className="h-2.5 w-1/2 rounded mt-1.5" />
+    <div className="glass-panel p-5 flex flex-col gap-4 rounded-3xl border border-white/5">
+      <div className="flex items-start gap-4">
+        <Skeleton className="w-10 h-10 rounded-2xl shrink-0" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
         </div>
-        <Skeleton className="w-16 h-5 rounded-full" />
+        <Skeleton className="w-16 h-6 rounded-full" />
       </div>
-      {Array.from({ length: lines }).map((_, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton items are static
-        <Skeleton key={i} className="h-2 w-full rounded" />
-      ))}
-      <div className="flex items-center gap-2 pt-1">
-        <Skeleton className="h-5 w-20 rounded" />
-        <Skeleton className="h-5 w-16 rounded" />
+      <div className="space-y-2">
+        {Array.from({ length: lines }).map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: skeletons are static loading states
+          <Skeleton key={i} className="h-2.5 w-full" />
+        ))}
+      </div>
+      <div className="flex items-center gap-2 pt-2">
+        <Skeleton className="h-6 w-24 rounded-xl" />
+        <Skeleton className="h-6 w-16 rounded-xl" />
       </div>
     </div>
   );
 });
 
-interface SkeletonColumnProps {
+export const SkeletonColumn = memo(function SkeletonColumn({
+  taskCount = 3,
+}: {
   taskCount?: number;
-}
-
-export const SkeletonColumn = memo(function SkeletonColumn({ taskCount = 3 }: SkeletonColumnProps) {
+}) {
   return (
-    <div className="flex-1 min-w-[220px] min-h-0 flex flex-col rounded-2xl glass-card border border-default/50">
-      <div className="px-4 pt-3.5 pb-3 border-b" style={{ borderColor: "var(--glass-border)" }}>
-        <div className="flex items-center gap-2.5">
-          <Skeleton className="w-2 h-2 rounded-full" />
-          <Skeleton className="h-3.5 w-24 rounded" />
-          <Skeleton className="h-4 w-6 rounded-full" />
+    <div className="flex-1 min-w-[280px] min-h-0 flex flex-col rounded-[2.5rem] bg-white/[0.02] border border-white/5">
+      <div className="px-6 py-5 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <Skeleton className="w-2.5 h-2.5 rounded-full" />
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-6 w-8 rounded-full ml-auto" />
         </div>
       </div>
-      <div className="flex-1 overflow-hidden px-2.5 py-2.5 space-y-2 min-h-[80px]">
+      <div className="flex-1 overflow-hidden p-4 space-y-4">
         {Array.from({ length: taskCount }).map((_, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static list
-          <SkeletonCard key={i} lines={2} />
+          // biome-ignore lint/suspicious/noArrayIndexKey: skeletons are static loading states
+          <SkeletonCard key={i} />
         ))}
       </div>
     </div>
   );
 });
 
-interface SkeletonBoardProps {
+export const SkeletonBoard = memo(function SkeletonBoard({
+  columnCount = 4,
+  tasksPerColumn = 2,
+}: {
   columnCount?: number;
   tasksPerColumn?: number;
-}
-
-export const SkeletonBoard = memo(function SkeletonBoard({
-  columnCount = 5,
-  tasksPerColumn = 3,
-}: SkeletonBoardProps) {
+}) {
   return (
-    <div className="flex flex-col gap-4 pb-4 h-full">
-      <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
+    <div className="h-full w-full p-8 overflow-hidden">
+      <div className="flex gap-6 h-full min-w-0">
         {Array.from({ length: columnCount }).map((_, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static list
+          // biome-ignore lint/suspicious/noArrayIndexKey: skeletons are static loading states
           <SkeletonColumn key={i} taskCount={tasksPerColumn} />
         ))}
       </div>

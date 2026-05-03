@@ -17,6 +17,91 @@ import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
 import { Select } from "./ui/select";
 
+function HeaderTinyAction({
+  icon,
+  onClick,
+  href,
+  title,
+  disabled,
+}: {
+  icon: string;
+  onClick?: () => void;
+  href?: string;
+  title: string;
+  disabled?: boolean;
+}) {
+  const content = (
+    <>
+      {icon === "editor" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M16 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 22v-4M15 22v-4M8 3v4M14 3v4" />
+        </svg>
+      )}
+      {icon === "download" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+        </svg>
+      )}
+      {icon === "clone" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+      {icon === "eye" && (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+        >
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      )}
+    </>
+  );
+
+  const className =
+    "p-1.5 rounded-lg text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer";
+
+  if (href) {
+    return (
+      <a href={href} download className={className} title={title}>
+        {content}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick} className={className} title={title} disabled={disabled}>
+      {content}
+    </button>
+  );
+}
+
 interface TaskDetailProps {
   task: TaskWithRun;
   engines?: EngineInfo[];
@@ -687,163 +772,169 @@ export function TaskDetail({
       {/* Backdrop */}
       <button
         type="button"
-        aria-label="Fechar detalhe da tarefa"
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        aria-label="Close task detail"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative glass-dialog w-full max-w-3xl max-h-[92vh] flex flex-col rounded-xl border shadow-2xl shadow-black/50">
+      <div className="relative glass-panel w-full max-w-4xl max-h-[94vh] flex flex-col rounded-[2.5rem] border border-white/10 shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 fade-in duration-300 ease-out">
         {/* ── Modal Header ────────────────────────────────── */}
-        <div className="shrink-0 px-5 pt-4 pb-0">
+        <div className="shrink-0 px-8 pt-8 pb-4 bg-white/[0.02] border-b border-white/5">
           {/* Title row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2.5 min-w-0">
-              {ProviderIcon && (
-                <div className={`mt-1 shrink-0 ${provider?.color}`}>
-                  <ProviderIcon size={18} />
-                </div>
-              )}
-              <div className="min-w-0">
-                <h2 className="text-base font-semibold leading-tight text-primary">{task.title}</h2>
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <Badge
+                  variant={statusVariant[task.status] ?? "default"}
+                  className="text-[10px] font-black uppercase tracking-widest py-0.5 px-2.5 rounded-lg border-white/10 shadow-sm"
+                >
+                  {statusLabel[task.status] ?? task.status}
+                </Badge>
                 {task.repo && (
                   <a
                     href={task.repo.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-primary0 hover:text-secondary transition-colors truncate block mt-0.5"
+                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-dimmed hover:text-accent transition-colors px-2 py-0.5 rounded-lg bg-white/5 border border-white/5"
                   >
+                    {ProviderIcon && <ProviderIcon size={12} className={provider?.color} />}
                     {task.repo.name}
                   </a>
                 )}
+                {task.issueNumber != null && (
+                  <span className="text-[10px] font-black uppercase tracking-widest text-dimmed px-2 py-0.5 rounded-lg bg-white/5 border border-white/5">
+                    Issue #{task.issueNumber}
+                  </span>
+                )}
               </div>
+              <h1 className="text-2xl font-black tracking-tight text-primary leading-tight text-balance">
+                {task.title}
+              </h1>
             </div>
 
-            {/* Header actions */}
-            <div className="flex items-center gap-1 shrink-0">
-              {task.branchName && (
-                <>
-                  <button
-                    type="button"
-                    title="Abrir no Editor"
-                    onClick={async () => {
-                      try {
+            {/* Header actions group */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-input/40 border border-default mr-2">
+                {task.branchName && (
+                  <>
+                    <HeaderTinyAction
+                      icon="editor"
+                      onClick={async () => {
                         setLoadingAction("open-editor");
-                        await api.tasks.openEditor(task.id);
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : String(err));
+                        try {
+                          await api.tasks.openEditor(task.id);
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : String(err));
+                        } finally {
+                          setLoadingAction(null);
+                        }
+                      }}
+                      disabled={loadingAction === "open-editor"}
+                      title="Open in Editor"
+                    />
+                    <HeaderTinyAction
+                      icon="download"
+                      href={api.tasks.downloadUrl(task.id)}
+                      title="Download Code (ZIP)"
+                    />
+                  </>
+                )}
+                {onClone && (
+                  <HeaderTinyAction
+                    icon="clone"
+                    onClick={async () => {
+                      setLoadingAction("clone");
+                      try {
+                        await onClone(task.id);
+                        onClose();
                       } finally {
                         setLoadingAction(null);
                       }
                     }}
-                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs font-medium"
-                    disabled={loadingAction === "open-editor"}
-                  >
-                    {loadingAction === "open-editor" ? "..." : "<>"}
-                  </button>
-                  <a
-                    href={api.tasks.downloadUrl(task.id)}
-                    download
-                    title="Baixar código (ZIP)"
-                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-sm"
-                  >
-                    ↓
-                  </a>
-                </>
-              )}
-              {onClone && (
-                <button
-                  type="button"
+                    disabled={!!loadingAction}
+                    title="Clone Task"
+                  />
+                )}
+                <HeaderTinyAction
+                  icon="eye"
                   onClick={async () => {
-                    setLoadingAction("clone");
+                    setLoadingAction("preview-prompt");
                     try {
-                      await onClone(task.id);
-                      onClose();
+                      const result = await api.tasks.previewPrompt(task.id);
+                      setPreviewPrompt(result.prompt);
                     } finally {
                       setLoadingAction(null);
                     }
                   }}
-                  disabled={!!loadingAction}
-                  title="Clonar tarefa"
-                  className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
-                >
-                  ⎘
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={async () => {
-                  setLoadingAction("preview-prompt");
-                  try {
-                    const result = await api.tasks.previewPrompt(task.id);
-                    setPreviewPrompt(result.prompt);
-                  } finally {
-                    setLoadingAction(null);
-                  }
-                }}
-                disabled={loadingAction === "preview-prompt"}
-                title="Preview prompt do agente"
-                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs"
-              >
-                {loadingAction === "preview-prompt" ? "..." : "👁"}
-              </button>
+                  disabled={loadingAction === "preview-prompt"}
+                  title="Preview Agent Prompt"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={onClose}
-                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
+                className="p-2 rounded-2xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
               >
-                ✕
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
               </button>
             </div>
           </div>
 
-          {/* Status badges row */}
-          <div className="flex flex-wrap gap-2 items-center mt-3">
-            <Badge variant={statusVariant[task.status] ?? "default"}>
-              {statusLabel[task.status] ?? task.status}
-            </Badge>
-
+          {/* Status Context Row */}
+          <div className="flex flex-wrap gap-3 items-center mt-6">
             {task.agentId && (
-              <Badge
-                variant="default"
-                className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
-              >
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
                 <svg
-                  aria-hidden="true"
-                  width="10"
-                  height="10"
-                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  strokeWidth="2.5"
                 >
-                  <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-                  <path d="M2 14c0-2.2 2.7-4 6-4s6 1.8 6 4" />
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
-                {task.agentId}
-              </Badge>
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {task.agentId}
+                </span>
+              </div>
             )}
 
             {task.engine && (
-              <Badge variant="purple">
-                {task.engine}
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {task.engine}
+                </span>
                 {task.model && (
-                  <span className="opacity-70 ml-1 font-normal">
-                    ·{" "}
-                    {task.model.includes("/")
-                      ? task.model.split("/").slice(1).join("/")
-                      : task.model}
-                  </span>
+                  <>
+                    <div className="w-1 h-1 rounded-full bg-purple-400/40" />
+                    <span className="text-[10px] font-bold opacity-80">
+                      {task.model.split("/").pop()}
+                    </span>
+                  </>
                 )}
-              </Badge>
+              </div>
             )}
+
             {isRunning && (
-              <span className="flex items-center gap-1.5 text-xs text-info bg-info/15 rounded-full px-2 py-0.5 border border-info/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                {task.latestRun?.currentStatus || "Rodando"}
-              </span>
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-info/10 border border-info/20 text-info">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_var(--info)]" />
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {task.latestRun?.currentStatus || "Running"}
+                </span>
+              </div>
             )}
           </div>
 

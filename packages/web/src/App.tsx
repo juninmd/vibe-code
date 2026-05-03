@@ -299,9 +299,9 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     if (refreshEnginesThrottleRef.current) return;
     refreshEnginesThrottleRef.current = setTimeout(() => {
       refreshEnginesThrottleRef.current = null;
-      refreshEngines();
+      _refreshEngines();
     }, 1500);
-  }, []);
+  }, [_refreshEngines]);
 
   useEffect(() => {
     return () => {

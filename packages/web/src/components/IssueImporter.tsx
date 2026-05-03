@@ -1,10 +1,11 @@
 import type { Repository, RepositoryIssue } from "@vibe-code/shared";
+import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { Select } from "./ui/select";
 
 interface IssueImporterProps {
   open: boolean;
@@ -50,38 +51,21 @@ export function IssueImporter({ open, onClose, repo, onImport }: IssueImporterPr
     }
   }, [open, fetchIssues]);
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
   const availableLabels = useMemo(() => {
     const labels = new Set<string>();
     for (const issue of allIssues) {
-      for (const label of issue.labels) {
-        labels.add(label);
-      }
+      for (const label of issue.labels) labels.add(label);
     }
     return Array.from(labels).sort();
   }, [allIssues]);
 
-  const issues = useMemo(() => {
+  const filteredIssues = useMemo(() => {
     let filtered = allIssues;
-    if (labelFilter) {
-      filtered = filtered.filter((i) => i.labels.includes(labelFilter));
-    }
+    if (labelFilter) filtered = filtered.filter((i) => i.labels.includes(labelFilter));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
-        (i) =>
-          i.title.toLowerCase().includes(q) ||
-          i.body?.toLowerCase().includes(q) ||
-          i.number.toString().includes(q)
+        (i) => i.title.toLowerCase().includes(q) || i.number.toString().includes(q)
       );
     }
     return filtered;
@@ -96,15 +80,8 @@ export function IssueImporter({ open, onClose, repo, onImport }: IssueImporterPr
     });
   };
 
-  const toggleSelectAll = () => {
-    setSelected((prev) => {
-      if (prev.size === issues.length) return new Set();
-      return new Set(issues.map((i) => i.id));
-    });
-  };
-
   const handleImportSelected = async () => {
-    const selectedIssues = issues.filter((i) => selected.has(i.id));
+    const selectedIssues = filteredIssues.filter((i) => selected.has(i.id));
     if (selectedIssues.length === 0) return;
     setImporting(true);
     try {
@@ -115,267 +92,263 @@ export function IssueImporter({ open, onClose, repo, onImport }: IssueImporterPr
     }
   };
 
-  const handleImportOne = async (issue: RepositoryIssue) => {
-    setImporting(true);
-    try {
-      await onImport([issue]);
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  const handleAutoImport = async () => {
-    if (issues.length === 0) return;
-    setImporting(true);
-    try {
-      await onImport(issues);
-      onClose();
-    } finally {
-      setImporting(false);
-    }
-  };
-
   return (
-    <Dialog open={open} onClose={onClose} title="Importar Issues como Tasks" size="2xl">
-      <div className="space-y-4">
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-[180px]">
-            <label htmlFor="issue-search" className="block text-xs text-primary0 mb-1">
-              Buscar
-            </label>
-            <Input
-              id="issue-search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Título, descrição ou número..."
-            />
-          </div>
-          <div className="min-w-[180px]">
-            <label htmlFor="issue-label-filter" className="block text-xs text-primary0 mb-1">
-              Label
-            </label>
-            <select
-              id="issue-label-filter"
-              value={labelFilter}
-              onChange={(e) => setLabelFilter(e.target.value)}
-              className="w-full bg-input border border-strong rounded px-2 py-1.5 text-xs text-secondary focus:outline-none focus:border-zinc-500"
-            >
-              <option value="">Todos os labels</option>
-              {availableLabels.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <span className="block text-xs text-primary0 mb-1">Status</span>
-            <div className="flex rounded-md overflow-hidden border border-strong">
-              {(["open", "closed", "all"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStateFilter(s)}
-                  className="px-3 py-1.5 text-xs cursor-pointer transition-colors"
-                  style={{
-                    background: stateFilter === s ? "var(--accent-muted)" : "transparent",
-                    color: stateFilter === s ? "var(--accent-text)" : "var(--text-muted)",
-                  }}
-                >
-                  {s === "open" ? "Abertas" : s === "closed" ? "Fechadas" : "Todas"}
-                </button>
-              ))}
+    <Dialog open={open} onClose={onClose} title="GitHub Synchronization" size="5xl">
+      <div className="space-y-8">
+        <div className="p-6 rounded-[2rem] bg-accent/5 border border-accent/20 flex flex-col md:flex-row gap-6 items-end">
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-accent">
+                Upstream Query
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    aria-hidden="true"
+                  >
+                    <title>Search icon</title>
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                </div>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search issues by title or #ID..."
+                  className="pl-10 h-11 rounded-2xl bg-input/40 border-white/5"
+                />
+              </div>
+              <Select
+                value={labelFilter}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setLabelFilter(e.target.value)
+                }
+                className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-xs"
+              >
+                <option value="">Filter by Label</option>
+                {availableLabels.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </Select>
             </div>
           </div>
-          <Button variant="outline" onClick={fetchIssues} disabled={loading} className="h-9">
-            {loading ? "Carregando..." : "Atualizar"}
-          </Button>
-        </div>
-
-        {/* Available labels quick filter */}
-        {availableLabels.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-[10px] text-dimmed shrink-0">Labels:</span>
-            {availableLabels.map((l) => (
+          <div className="flex rounded-xl overflow-hidden border border-white/10 bg-white/5 p-1 h-11 shrink-0">
+            {(["open", "closed", "all"] as const).map((s) => (
               <button
-                key={l}
+                key={s}
                 type="button"
-                onClick={() => setLabelFilter(labelFilter === l ? "" : l)}
-                className="text-[10px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors"
-                style={{
-                  background: labelFilter === l ? "var(--accent-muted)" : "transparent",
-                  borderColor: labelFilter === l ? "var(--accent)" : "var(--border-default)",
-                  color: labelFilter === l ? "var(--accent-text)" : "var(--text-muted)",
-                }}
+                onClick={() => setStateFilter(s)}
+                className={`px-4 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${stateFilter === s ? "bg-white text-black shadow-lg" : "text-muted hover:text-primary"}`}
               >
-                {l}
+                {s}
               </button>
             ))}
           </div>
-        )}
-
-        {/* Auto mode toggle */}
-        <div className="flex items-center gap-2 p-3 rounded-lg border border-default bg-input/30">
-          <input
-            type="checkbox"
-            id="auto-mode"
-            checked={autoMode}
-            onChange={(e) => setAutoMode(e.target.checked)}
-            className="rounded cursor-pointer"
-            style={{ accentColor: "var(--accent)" }}
-          />
-          <label htmlFor="auto-mode" className="text-xs cursor-pointer flex-1">
-            <span className="font-medium">Importar todas automaticamente</span>
-            <span className="text-primary0 ml-1.5">
-              (importa todas as {issues.length} issues encontradas ao clicar em "Importar")
-            </span>
-          </label>
+          <Button
+            variant="ghost"
+            onClick={fetchIssues}
+            disabled={loading}
+            className="h-11 rounded-xl px-6 border-white/10 bg-white/5"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              className={loading ? "animate-spin" : ""}
+              aria-hidden="true"
+            >
+              <title>Refresh icon</title>
+              <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </Button>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="p-3 rounded-lg border border-danger/30 bg-danger/15 text-xs text-danger">
-            <p className="font-medium">Erro ao carregar issues</p>
-            <p className="text-primary0 mt-0.5">{error}</p>
-            <p className="text-primary0 mt-1">
-              Verifique se o token do provider está configurado em Settings.
-            </p>
-          </div>
-        )}
-
-        {/* Issues list */}
-        <div className="max-h-[400px] overflow-y-auto rounded-lg border border-default">
+        <div className="relative rounded-[2.5rem] border border-white/10 bg-black/20 overflow-hidden">
           {loading ? (
-            <div className="px-4 py-12 text-center text-xs text-primary0">
-              Carregando issues do repositório...
+            <div className="py-32 flex flex-col items-center justify-center gap-4 animate-pulse">
+              <div className="w-12 h-12 border-4 border-accent/20 border-t-accent rounded-full animate-spin" />
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted">
+                Syncing with Upstream...
+              </p>
             </div>
-          ) : issues.length === 0 ? (
-            <div className="px-4 py-12 text-center text-xs text-primary0">
-              {allIssues.length === 0
-                ? "Nenhuma issue encontrada"
-                : labelFilter
-                  ? `Nenhuma issue encontrada com label "${labelFilter}"`
-                  : "Nenhuma issue corresponde à busca"}
+          ) : error ? (
+            <div className="py-20 text-center space-y-4 px-10">
+              <div className="w-16 h-16 rounded-[2rem] bg-danger/10 border border-danger/20 flex items-center justify-center text-danger shadow-2xl mx-auto">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  aria-hidden="true"
+                >
+                  <title>Error icon</title>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <div className="space-y-2">
+                <p className="text-lg font-black text-primary">Integration Error</p>
+                <p className="text-sm text-muted leading-relaxed max-w-sm mx-auto">{error}</p>
+              </div>
+              <Button variant="primary" onClick={fetchIssues} className="rounded-xl h-10 px-8">
+                Retry Connection
+              </Button>
+            </div>
+          ) : filteredIssues.length === 0 ? (
+            <div className="py-32 text-center opacity-30 space-y-4">
+              <p className="text-6xl">∅</p>
+              <p className="text-xs font-black uppercase tracking-widest">
+                No issues found matching criteria
+              </p>
             </div>
           ) : (
-            <>
-              {/* Header with select all and count */}
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-default bg-surface/50">
-                <input
-                  type="checkbox"
-                  checked={selected.size === issues.length && issues.length > 0}
-                  onChange={toggleSelectAll}
-                  className="rounded cursor-pointer"
-                  style={{ accentColor: "var(--accent)" }}
-                />
-                <span className="text-xs text-primary0">
-                  {selected.size > 0 ? `${selected.size} selecionadas` : "Selecionar todas"}
-                </span>
-                <span className="ml-auto text-xs text-dimmed">
-                  {issues.length} de {allIssues.length} issues
-                </span>
-              </div>
-
-              {issues.map((issue) => {
+            <div className="max-h-[45vh] overflow-y-auto divide-y divide-white/5 custom-scrollbar">
+              {filteredIssues.map((issue) => {
                 const isSelected = selected.has(issue.id);
                 return (
                   <div
                     key={issue.id}
-                    className={`flex items-start gap-3 px-3 py-3 border-b border-default/50 last:border-0 hover:bg-surface-hover/50 transition-colors ${isSelected ? "bg-accent-muted/20" : ""}`}
+                    className={`flex items-start gap-5 p-5 transition-all hover:bg-white/[0.04] group ${isSelected ? "bg-accent/5" : ""}`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(issue.id)}
-                      className="mt-0.5 rounded cursor-pointer shrink-0"
-                      style={{ accentColor: "var(--accent)" }}
-                    />
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleSelect(issue.id)}
+                        className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center active-shrink ${isSelected ? "bg-accent border-accent text-white shadow-lg shadow-accent/25" : "border-white/10 hover:border-white/30"}`}
+                      >
+                        {isSelected && (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                            aria-hidden="true"
+                          >
+                            <title>Check icon</title>
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        )}
+                      </button>{" "}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-start justify-between gap-4">
                         <a
                           href={issue.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm font-medium text-secondary hover:text-primary transition-colors flex-1 truncate"
+                          className="text-sm font-black tracking-tight text-primary hover:text-accent transition-colors truncate"
                         >
                           {issue.title}
                         </a>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {issue.state === "open" ? (
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" title="Aberta" />
-                          ) : (
-                            <span className="w-2 h-2 rounded-full bg-zinc-500" title="Fechada" />
-                          )}
-                          <span className="text-[10px] text-dimmed">#{issue.number}</span>
-                        </div>
+                        <span className="text-[10px] font-mono text-dimmed shrink-0">
+                          #{issue.number}
+                        </span>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                        {issue.labels.slice(0, 5).map((lbl) => (
-                          <Badge
-                            key={lbl}
-                            variant={lbl === labelFilter ? "purple" : "default"}
-                            className="text-[9px] py-0"
-                          >
-                            {lbl}
-                          </Badge>
-                        ))}
-                        {issue.labels.length > 5 && (
-                          <span className="text-[9px] text-dimmed">+{issue.labels.length - 5}</span>
-                        )}
-                        {issue.assignees.length > 0 && (
-                          <span className="text-[10px] text-dimmed ml-1">
-                            {issue.assignees.join(", ")}
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {issue.state === "open" ? (
+                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                            Open
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-muted text-[9px] font-black uppercase tracking-widest">
+                            Closed
                           </span>
                         )}
+                        {issue.labels.map((l) => (
+                          <span
+                            key={l}
+                            className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[9px] font-bold text-secondary"
+                          >
+                            {l}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleImportOne(issue)}
-                      disabled={importing}
-                      className="text-[10px] h-6 px-2 shrink-0"
-                    >
-                      + Task
-                    </Button>
+                    <div className="opacity-0 group-hover:opacity-100 transition-all">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => onImport([issue])}
+                        disabled={importing}
+                        className="h-8 rounded-lg font-black uppercase text-[9px] px-3 bg-white/5 border-white/5"
+                      >
+                        Quick Deploy
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-2 border-t border-default">
-          <p className="text-xs text-primary0">
-            {autoMode
-              ? `Ao importar, todas as ${issues.length} issues serão criadas como tasks`
-              : `${selected.size} issue${selected.size !== 1 ? "s" : ""} selecionada${selected.size !== 1 ? "s" : ""}`}
-          </p>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Cancelar
+        <div className="flex items-center justify-between gap-6 pt-4">
+          <label className="flex items-center gap-4 cursor-pointer group">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={autoMode}
+                onChange={(e) => setAutoMode(e.target.checked)}
+                className="sr-only"
+              />
+              <div
+                className={`w-12 h-7 rounded-full transition-all active-shrink ${autoMode ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
+              >
+                <div
+                  className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${autoMode ? "left-6" : "left-1"}`}
+                />
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-sm font-black text-primary">Automated Bulk Import</p>
+              <p className="text-[10px] text-muted font-medium uppercase tracking-widest">
+                Create tasks for all visible items ({filteredIssues.length})
+              </p>
+            </div>
+          </label>
+
+          <div className="flex items-center gap-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+              {selected.size} Modules Selected
+            </p>
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="rounded-xl h-12 px-8 font-black uppercase tracking-widest text-[10px]"
+            >
+              Discard
             </Button>
-            {autoMode ? (
-              <Button
-                variant="primary"
-                onClick={handleAutoImport}
-                disabled={importing || issues.length === 0}
-              >
-                {importing ? "Importando..." : `Importar ${issues.length} Issues`}
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={handleImportSelected}
-                disabled={importing || selected.size === 0}
-              >
-                {importing
-                  ? "Importando..."
-                  : `Criar ${selected.size} Task${selected.size !== 1 ? "s" : ""}`}
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              onClick={autoMode ? () => onImport(filteredIssues) : handleImportSelected}
+              disabled={importing || (autoMode ? filteredIssues.length === 0 : selected.size === 0)}
+              className="rounded-2xl h-12 px-12 shadow-2xl shadow-accent/30 font-black uppercase tracking-[0.15em] text-[10px] min-w-[220px]"
+            >
+              {importing
+                ? "Engaging context..."
+                : autoMode
+                  ? `Sync ${filteredIssues.length} Modules`
+                  : `Sync ${selected.size} Modules`}
+            </Button>
           </div>
         </div>
       </div>
