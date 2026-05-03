@@ -1002,6 +1002,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           onOpenTemplates={() => setShowTemplates(true)}
           onOpenInbox={() => setShowInbox(true)}
           onOpenQuickView={() => setShowQuickView(true)}
+          onOpenEngines={() => setShowEnginesPanel(true)}
+          onOpenSchedules={() => setShowSchedulesPanel(true)}
           connected={connected}
         />
 
