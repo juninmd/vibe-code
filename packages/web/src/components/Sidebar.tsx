@@ -41,6 +41,8 @@ interface SidebarProps {
   onOpenTemplates?: () => void;
   onOpenInbox?: () => void;
   onOpenQuickView?: () => void;
+  onOpenEngines?: () => void;
+  onOpenSchedules?: () => void;
   connected: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
@@ -55,11 +57,13 @@ export function Sidebar({
   onDeleteAllLocalClones: _onDeleteAllLocalClones,
   onOpenSettings,
   onOpenStats,
-  onOpenSkills: _onOpenSkills,
+  onOpenSkills,
   onOpenRuntimes,
   onOpenTemplates: _onOpenTemplates,
   onOpenInbox,
   onOpenQuickView: _onOpenQuickView,
+  onOpenEngines,
+  onOpenSchedules,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -360,9 +364,22 @@ export function Sidebar({
         {/* Secondary Navigation */}
         <div className="p-3 space-y-1.5 border-t border-white/5 bg-surface/30 backdrop-blur-md">
           <SidebarNavItem icon="inbox" label="Inbox" onClick={onOpenInbox} collapsed={collapsed} />
+          <SidebarNavItem icon="code" label="Skills" onClick={onOpenSkills} collapsed={collapsed} />
           <SidebarNavItem
             icon="engines"
-            label="Engines"
+            label="AI Engines"
+            onClick={onOpenEngines}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon="clock"
+            label="Schedules"
+            onClick={onOpenSchedules}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon="grid"
+            label="Runtimes"
             onClick={onOpenRuntimes}
             collapsed={collapsed}
           />
@@ -399,7 +416,7 @@ function SidebarNavItem({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-secondary hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "justify-center" : ""}`}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-secondary hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "justify-center" : ""}`}
       title={collapsed ? label : ""}
     >
       <div className="shrink-0 opacity-70">
@@ -416,6 +433,19 @@ function SidebarNavItem({
             <path d="M3 3h10l1 5v5H2V8l1-5ZM2 8h4l1 2h2l1-2h4" />
           </svg>
         )}
+        {icon === "code" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Skills"
+          >
+            <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
+          </svg>
+        )}
         {icon === "engines" && (
           <svg
             width="18"
@@ -425,6 +455,33 @@ function SidebarNavItem({
             stroke="currentColor"
             strokeWidth="2"
             aria-label="Engines"
+          >
+            <path d="M2 4h12M2 8h12M2 12h12M5 4v8M11 4v8" />
+          </svg>
+        )}
+        {icon === "clock" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Schedules"
+          >
+            <circle cx="8" cy="8" r="7" />
+            <path d="M8 3v5l4 2" />
+          </svg>
+        )}
+        {icon === "grid" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Runtimes"
           >
             <rect x="2" y="3" width="12" height="7" rx="1" />
             <path d="M5 13h6M8 10v3" />
