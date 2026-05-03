@@ -1128,6 +1128,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     stroke="currentColor"
                     strokeWidth="2"
                     className="text-danger -rotate-12"
+                    aria-label="Error icon"
                   >
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="8" x2="12" y2="12" />

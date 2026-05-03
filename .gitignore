@@ -7,3 +7,4 @@ dist/
 .env
 .env.local
 coverage/
+packages/server/~/.vibe-code/repos/*

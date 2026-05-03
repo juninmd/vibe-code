@@ -1,8 +1,5 @@
 import type { Repository } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RepoManifests } from "./RepoManifests";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
 
 const SIDEBAR_WIDTH_KEY = "vibe-code-sidebar-width";
@@ -29,16 +26,6 @@ function readStoredCollapsed(): boolean {
   return false;
 }
 
-const statusMeta: Record<
-  string,
-  { variant: "default" | "success" | "warning" | "danger" | "info"; label: string }
-> = {
-  pending: { variant: "warning", label: "pending" },
-  cloning: { variant: "info", label: "cloning" },
-  ready: { variant: "success", label: "ready" },
-  error: { variant: "danger", label: "error" },
-};
-
 interface SidebarProps {
   repos: Repository[];
   selectedRepoId: string | null;
@@ -64,15 +51,15 @@ export function Sidebar({
   onSelectRepo,
   onAddRepo,
   onRemoveRepo,
-  onDeleteLocalClone,
-  onDeleteAllLocalClones,
+  onDeleteLocalClone: _onDeleteLocalClone,
+  onDeleteAllLocalClones: _onDeleteAllLocalClones,
   onOpenSettings,
   onOpenStats,
-  onOpenSkills,
+  onOpenSkills: _onOpenSkills,
   onOpenRuntimes,
-  onOpenTemplates,
+  onOpenTemplates: _onOpenTemplates,
   onOpenInbox,
-  onOpenQuickView,
+  onOpenQuickView: _onOpenQuickView,
   connected,
   repoStats,
 }: SidebarProps) {
@@ -82,8 +69,6 @@ export function Sidebar({
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
-
-  const selectedRepo = repos.find((repo) => repo.id === selectedRepoId) ?? null;
 
   const filtered = search
     ? repos.filter(
@@ -119,15 +104,8 @@ export function Sidebar({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       try {
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(startWidth.current + 0));
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
       } catch {}
-      // persist latest after drag ends — read from DOM width via ref is simplest:
-      setWidth((w) => {
-        try {
-          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w));
-        } catch {}
-        return w;
-      });
     };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
@@ -135,7 +113,7 @@ export function Sidebar({
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, []);
+  }, [width]);
 
   const toggleCollapse = () => {
     setCollapsed((v) => {
@@ -147,577 +125,340 @@ export function Sidebar({
     });
   };
 
-  const sidebarWidth = collapsed ? 52 : width;
+  const sidebarWidth = collapsed ? 64 : width;
 
   return (
     <aside
-      className="relative shrink-0 border-r flex flex-col glass-panel transition-[width] duration-150"
+      className="relative shrink-0 border-r flex flex-col glass-panel transition-[width] duration-200 shadow-2xl z-40"
       style={{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }}
     >
-      {/* Drag handle */}
+      {/* Resizer handle */}
       {!collapsed && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: resize handle requires mouse events
         <div
+          aria-hidden="true"
           onMouseDown={onMouseDown}
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-20 group/handle hover:bg-info/15 transition-colors"
-          title="Arrastar para redimensionar"
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize z-50 group hover:bg-accent/40 transition-colors"
         >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-px h-10 bg-surface-hover/50 group-hover/handle:bg-info/15 transition-colors" />
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-px h-12 bg-white/5 group-hover:bg-accent/40 transition-colors" />
         </div>
       )}
 
-      {/* Collapsed icon-rail */}
-      {collapsed ? (
-        <div className="flex flex-col items-center py-3 gap-2 flex-1 overflow-hidden">
-          {/* Expand button */}
-          <button
-            type="button"
-            onClick={toggleCollapse}
-            title="Expandir sidebar"
-            className="p-2 rounded-md text-primary0 hover:text-primary hover:bg-surface-hover transition-all cursor-pointer"
-          >
-            <svg
-              aria-hidden="true"
-              width="15"
-              height="15"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      {/* Main Container */}
+      <div className="flex flex-col h-full overflow-hidden">
+        {/* Brand Header */}
+        <div className="p-4 flex flex-col gap-5 shrink-0">
+          <div className="flex items-center justify-between">
+            <div
+              className={`flex items-center gap-3 transition-opacity duration-200 ${collapsed ? "opacity-0 invisible w-0" : "opacity-100"}`}
             >
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-          </button>
-          <span
-            className={`w-1.5 h-1.5 rounded-full mt-1 ${connected ? "bg-emerald-400" : "bg-border-strong"}`}
-            title={connected ? "Conectado" : "Desconectado"}
-          />
-          <div className="flex-1" />
-          {onOpenSkills && (
-            <button
-              type="button"
-              onClick={onOpenSkills}
-              title="Skills & Regras"
-              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
-              </svg>
-            </button>
-          )}
-          {onOpenStats && (
-            <button
-              type="button"
-              onClick={onOpenStats}
-              title="Estatísticas"
-              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="8" width="3" height="6" rx="0.5" />
-                <rect x="6.5" y="4" width="3" height="10" rx="0.5" />
-                <rect x="11" y="2" width="3" height="12" rx="0.5" />
-              </svg>
-            </button>
-          )}
-          {onOpenQuickView && (
-            <button
-              type="button"
-              onClick={onOpenQuickView}
-              title="Repositórios em Cards"
-              className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="3" width="5" height="5" rx="1" />
-                <rect x="9" y="3" width="5" height="5" rx="1" />
-                <rect x="2" y="10" width="5" height="3" rx="1" />
-                <rect x="9" y="10" width="5" height="3" rx="1" />
-              </svg>
-            </button>
-          )}
-          {onOpenInbox && (
-            <button
-              type="button"
-              onClick={onOpenInbox}
-              title="Inbox"
-              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 3h10l1 5v5H2V8l1-5Z" />
-                <path d="M2 8h4l1 2h2l1-2h4" />
-              </svg>
-            </button>
-          )}
-          {onOpenRuntimes && (
-            <button
-              type="button"
-              onClick={onOpenRuntimes}
-              title="Runtimes"
-              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-            >
-              <svg
-                aria-hidden="true"
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
-                <path d="M5 13h6M8 11v2" />
-              </svg>
-            </button>
-          )}
-          {onOpenTemplates && (
-            <button
-              type="button"
-              onClick={onOpenTemplates}
-              title="Templates"
-              className="p-2 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-            >
-              <span className="text-sm">📦</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            title="Settings"
-            className="p-2 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-          >
-            <svg
-              aria-hidden="true"
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="8" cy="8" r="2" />
-              <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.93 3.93l.7.7M11.37 11.37l.7.7M3.93 12.07l.7-.7M11.37 4.63l.7-.7" />
-            </svg>
-          </button>
-        </div>
-      ) : (
-        <>
-          {/* Brand header */}
-          <div className="px-4 pt-4 pb-3 border-b border-white/[0.05]">
-            {/* Row 1: logo + collapse + connection */}
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                type="button"
-                onClick={toggleCollapse}
-                title="Recolher sidebar"
-                className="p-0.5 rounded text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-              >
-                <svg
-                  aria-hidden="true"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M10 3l-5 5 5 5" />
-                </svg>
-              </button>
-              <h1
-                className="text-[15px] font-bold flex-1 tracking-tight"
-                style={{
-                  background: "linear-gradient(90deg, #e4e4e7 0%, #a1a1aa 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                }}
-              >
-                Vibe Code
-              </h1>
-              <span
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${connected ? "bg-emerald-400" : "bg-border-strong"}`}
-                title={connected ? "Conectado" : "Desconectado"}
-              />
-            </div>
-            {/* Row 2: action buttons */}
-            <div className="flex items-center gap-0.5 flex-wrap">
-              {onOpenStats && (
-                <button
-                  type="button"
-                  onClick={onOpenStats}
-                  aria-label="Abrir estatísticas"
-                  title="Estatísticas"
-                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="2" y="8" width="3" height="6" rx="0.5" />
-                    <rect x="6.5" y="4" width="3" height="10" rx="0.5" />
-                    <rect x="11" y="2" width="3" height="12" rx="0.5" />
-                  </svg>
-                </button>
-              )}
-              {onOpenQuickView && (
-                <button
-                  type="button"
-                  onClick={onOpenQuickView}
-                  aria-label="Visualização rápida"
-                  title="Repositórios em Cards"
-                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="2" y="3" width="5" height="5" rx="1" />
-                    <rect x="9" y="3" width="5" height="5" rx="1" />
-                    <rect x="2" y="10" width="5" height="3" rx="1" />
-                    <rect x="9" y="10" width="5" height="3" rx="1" />
-                  </svg>
-                </button>
-              )}
-              {onOpenSkills && (
-                <button
-                  type="button"
-                  onClick={onOpenSkills}
-                  aria-label="Abrir skills e regras"
-                  title="Skills & Regras"
-                  className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M2 3h12M2 7h8M2 11h10M2 15h6" />
-                  </svg>
-                </button>
-              )}
-              {onOpenInbox && (
-                <button
-                  type="button"
-                  onClick={onOpenInbox}
-                  aria-label="Abrir inbox"
-                  title="Inbox"
-                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M3 3h10l1 5v5H2V8l1-5Z" />
-                    <path d="M2 8h4l1 2h2l1-2h4" />
-                  </svg>
-                </button>
-              )}
-              {onOpenRuntimes && (
-                <button
-                  type="button"
-                  onClick={onOpenRuntimes}
-                  aria-label="Abrir runtimes"
-                  title="Runtimes"
-                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-                >
-                  <svg
-                    aria-hidden="true"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="2.5" y="3" width="11" height="8" rx="1.5" />
-                    <path d="M5 13h6M8 11v2" />
-                  </svg>
-                </button>
-              )}
-              {onOpenTemplates && (
-                <button
-                  type="button"
-                  onClick={onOpenTemplates}
-                  aria-label="Abrir templates"
-                  title="Templates"
-                  className="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all cursor-pointer"
-                >
-                  <span className="text-xs">📦</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                aria-label="Abrir configurações"
-                title="Settings"
-                className="p-1 rounded-md text-dimmed hover:text-secondary hover:bg-surface-hover transition-all cursor-pointer"
-              >
-                <svg
-                  aria-hidden="true"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="8" cy="8" r="2" />
-                  <path d="M8 2v1M8 13v1M2 8h1M13 8h1M3.93 3.93l.7.7M11.37 11.37l.7.7M3.93 12.07l.7-.7M11.37 4.63l.7-.7" />
-                </svg>
-              </button>
-            </div>
-            <p className="text-[11px] text-dimmed">AI Agent Task Manager</p>
-          </div>
-
-          <div className="p-3 flex-1 flex flex-col overflow-hidden gap-2">
-            {/* Section header */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-[11px] font-semibold text-primary0 uppercase tracking-wider px-0.5">
-                Repositories
-              </h2>
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={onDeleteAllLocalClones}
-                  title="Apagar todos os clones locais"
-                >
-                  ⌫
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={onAddRepo}
-                  title="Adicionar repositório (Ctrl+Shift+O)"
-                >
-                  +
-                </Button>
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent via-accent to-accent-hover flex items-center justify-center shadow-lg shadow-accent/30 hover:scale-105 transition-transform active-shrink cursor-pointer">
+                <span className="text-white font-black text-sm">V</span>
               </div>
+              {!collapsed && (
+                <div>
+                  <h1 className="text-sm font-black tracking-tight text-primary leading-none">
+                    Vibe Code
+                  </h1>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-zinc-600"}`}
+                    />
+                    <span className="text-[9px] font-bold text-muted uppercase tracking-widest leading-none">
+                      {connected ? "Connected" : "Offline"}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-
-            {selectedRepo && (
-              <div className="flex items-center gap-1 rounded-lg border border-default/70 bg-input/40 px-2 py-1.5">
-                <span className="truncate flex-1 text-[11px] text-primary0">
-                  Clone: {selectedRepo.localPath ? "pronto" : "ausente"}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onDeleteLocalClone(selectedRepo.id)}
-                  title="Apagar clone local do repositório selecionado"
-                  disabled={!selectedRepo.localPath}
-                >
-                  ✕
-                </Button>
-              </div>
-            )}
-
-            {/* Filter input */}
-            {repos.length > 1 && (
-              <div className="relative">
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className={`p-2 rounded-lg text-muted hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "w-full flex justify-center" : ""}`}
+              title={collapsed ? "Expand (Ctrl+B)" : "Collapse (Ctrl+B)"}
+            >
+              {collapsed ? (
                 <svg
-                  aria-hidden="true"
-                  width="12"
-                  height="12"
+                  width="18"
+                  height="18"
                   viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dimmed pointer-events-none"
+                  aria-label="Expand"
                 >
-                  <circle cx="7" cy="7" r="4" />
-                  <path d="M11 11l3 3" strokeLinecap="round" />
+                  <path d="M6 3l5 5-5 5" />
                 </svg>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filtrar..."
-                  className="w-full pl-7 pr-3 py-1.5 rounded-lg text-xs focus:outline-none transition-colors"
-                  style={{
-                    background: "var(--bg-input)",
-                    border: "1px solid var(--border-default)",
-                    color: "var(--text-primary)",
-                  }}
-                />
+              ) : (
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-label="Collapse"
+                >
+                  <path d="M10 3L5 8l5 5" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {!collapsed && (
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-label="Search"
+                >
+                  <circle cx="7" cy="7" r="5" />
+                  <path d="M11 11l4 4" strokeLinecap="round" />
+                </svg>
               </div>
-            )}
+              <input
+                type="text"
+                placeholder="Search resources..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full h-10 pl-10 pr-4 rounded-xl text-xs bg-input/50 border border-default focus:border-accent/40 focus:ring-4 focus:ring-accent/10 transition-all outline-none"
+              />
+            </div>
+          )}
+        </div>
 
-            {/* Repo list */}
-            <div className="space-y-0.5 overflow-y-auto flex-1">
-              {/* All repos option */}
-              <button
-                type="button"
-                onClick={() => onSelectRepo(null)}
-                className="w-full text-left px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer"
-                style={{
-                  background: selectedRepoId === null ? "var(--accent-muted)" : "transparent",
-                  color: selectedRepoId === null ? "var(--text-primary)" : "var(--text-muted)",
-                }}
+        {/* Navigation Section */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6 space-y-1 custom-scrollbar">
+          {!collapsed && (
+            <div className="px-2 mb-2 flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-[0.15em] text-dimmed">
+                Explorer
+              </span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={onAddRepo}
+                  className="p-1.5 rounded-lg hover:bg-surface-hover text-muted hover:text-accent transition-colors active-shrink cursor-pointer"
+                  title="Add Repository"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-label="Add"
+                  >
+                    <path d="M8 3v10M3 8h10" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Special Items */}
+          <button
+            type="button"
+            onClick={() => onSelectRepo(null)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all active-shrink cursor-pointer mb-2 ${
+              selectedRepoId === null
+                ? "bg-accent text-white shadow-lg shadow-accent/25 border border-accent/20"
+                : "text-secondary hover:bg-surface-hover hover:text-primary border border-transparent"
+            }`}
+            title={collapsed ? "All Workspaces" : ""}
+          >
+            <div className={`${collapsed ? "w-full flex justify-center" : ""}`}>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-label="All Workspaces"
               >
-                <div className="flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 flex items-center justify-center text-dimmed text-[11px]">
-                    ◈
-                  </span>
-                  <span className="font-medium">Todos</span>
-                  {repos.length > 0 && (
-                    <span className="ml-auto text-[10px] text-dimmed">{repos.length}</span>
-                  )}
-                </div>
-              </button>
+                <rect x="2" y="2" width="12" height="12" rx="2" />
+                <path d="M2 6h12M6 2v12" />
+              </svg>
+            </div>
+            {!collapsed && <span className="flex-1 text-left">All Workspaces</span>}
+          </button>
 
-              {filtered.map((repo) => {
-                const prov = getProviderFromUrl(repo.url);
-                const ProvIcon = prov.icon;
-                const meta = statusMeta[repo.status] ?? {
-                  variant: "default" as const,
-                  label: repo.status,
-                };
-                const isSelected = selectedRepoId === repo.id;
+          {/* Repo List */}
+          {filtered.map((repo) => {
+            const { icon: ProviderIcon, color: providerColor } = getProviderFromUrl(repo.url);
+            const stats = repoStats?.[repo.id];
+            const isSelected = selectedRepoId === repo.id;
 
-                return (
-                  <div key={repo.id} className="group flex items-center gap-1">
-                    <button
-                      type="button"
-                      className="flex flex-1 items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-all cursor-pointer text-left"
-                      style={{
-                        background: isSelected ? "var(--accent-muted)" : "transparent",
-                        color: isSelected ? "var(--text-primary)" : "var(--text-muted)",
-                      }}
-                      onClick={() => onSelectRepo(repo.id)}
-                    >
-                      <span
-                        className={`shrink-0 ${isSelected ? prov.color : ""}`}
-                        style={isSelected ? {} : { color: "var(--text-muted)" }}
-                      >
-                        <ProvIcon size={13} />
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <span className="block truncate font-medium">{repo.name}</span>
-                        {repo.status === "error" && repo.errorMessage && (
-                          <span className="block text-[9px] text-danger/80 truncate mt-0.5">
-                            {repo.errorMessage}
-                          </span>
-                        )}
-                      </div>
-                      {repo.status !== "ready" && (
-                        <Badge variant={meta.variant} className="text-[9px] py-0 px-1 shrink-0">
-                          {meta.label}
-                        </Badge>
+            return (
+              <div key={repo.id} className="relative group/item mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => onSelectRepo(repo.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all active-shrink cursor-pointer border ${
+                    isSelected
+                      ? "bg-accent/15 text-accent border-accent/20 shadow-sm"
+                      : "text-secondary hover:bg-surface-hover hover:text-primary border-transparent"
+                  }`}
+                  title={collapsed ? repo.name : ""}
+                >
+                  <div
+                    className={`shrink-0 transition-colors ${collapsed ? "w-full flex justify-center" : isSelected ? "text-accent" : providerColor}`}
+                  >
+                    <ProviderIcon size={18} />
+                  </div>
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 text-left truncate">{repo.name}</span>
+                      {stats && stats.running > 0 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-info animate-pulse shadow-[0_0_10px_var(--info)]" />
                       )}
-                      {repoStats?.[repo.id] && repo.status === "ready" && (
-                        <span className="text-[9px] text-dimmed shrink-0 tabular-nums">
-                          {repoStats[repo.id].total > 0 &&
-                            `${repoStats[repo.id].done}/${repoStats[repo.id].total}`}
-                          {repoStats[repo.id].running > 0 && ` ⚡`}
+                      {stats && stats.total > 0 && !stats.running && (
+                        <span className="text-[10px] tabular-nums opacity-40 font-mono">
+                          {stats.done}/{stats.total}
                         </span>
                       )}
-                    </button>
+                    </>
+                  )}
+                </button>
+
+                {!collapsed && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover/item:flex items-center gap-1">
                     <button
                       type="button"
-                      aria-label={`Remover repositório ${repo.name}`}
-                      onClick={() => onRemoveRepo(repo.id)}
-                      className="opacity-0 group-hover:opacity-100 shrink-0 text-dimmed hover:text-danger transition-all cursor-pointer ml-0.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveRepo(repo.id);
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-danger/10 text-muted hover:text-danger transition-colors cursor-pointer"
+                      title="Remove Repository"
                     >
-                      ✕
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-label="Remove"
+                      >
+                        <path d="M4 4l8 8M12 4L4 12" />
+                      </svg>
                     </button>
                   </div>
-                );
-              })}
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-              {repos.length === 0 && (
-                <div className="text-dimmed px-2.5 py-6 text-center text-[11px] space-y-1">
-                  <p className="text-xl">📂</p>
-                  <p>Nenhum repositório</p>
-                </div>
-              )}
-
-              {repos.length > 0 && filtered.length === 0 && (
-                <p className="text-xs text-dimmed px-2.5 py-4 text-center">No results</p>
-              )}
-            </div>
-
-            {selectedRepoId && <RepoManifests repoId={selectedRepoId} />}
-          </div>
-        </>
-      )}
+        {/* Secondary Navigation */}
+        <div className="p-3 space-y-1.5 border-t border-white/5 bg-surface/30 backdrop-blur-md">
+          <SidebarNavItem icon="inbox" label="Inbox" onClick={onOpenInbox} collapsed={collapsed} />
+          <SidebarNavItem
+            icon="engines"
+            label="Engines"
+            onClick={onOpenRuntimes}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon="stats"
+            label="Estatísticas"
+            onClick={onOpenStats}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon="settings"
+            label="Configurações"
+            onClick={onOpenSettings}
+            collapsed={collapsed}
+          />
+        </div>
+      </div>
     </aside>
+  );
+}
+
+function SidebarNavItem({
+  icon,
+  label,
+  onClick,
+  collapsed,
+}: {
+  icon: string;
+  label: string;
+  onClick?: () => void;
+  collapsed: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-secondary hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "justify-center" : ""}`}
+      title={collapsed ? label : ""}
+    >
+      <div className="shrink-0 opacity-70">
+        {icon === "inbox" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Inbox"
+          >
+            <path d="M3 3h10l1 5v5H2V8l1-5ZM2 8h4l1 2h2l1-2h4" />
+          </svg>
+        )}
+        {icon === "engines" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Engines"
+          >
+            <rect x="2" y="3" width="12" height="7" rx="1" />
+            <path d="M5 13h6M8 10v3" />
+          </svg>
+        )}
+        {icon === "stats" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Stats"
+          >
+            <path d="M2 13V8h3v5H2ZM6 13V4h3v9H6ZM11 13V1h3v12h-3Z" />
+          </svg>
+        )}
+        {icon === "settings" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Settings"
+          >
+            <circle cx="8" cy="8" r="2" />
+            <path d="M8 2v1M8 13v1M2 8h1M13 8h1" />
+          </svg>
+        )}
+      </div>
+      {!collapsed && <span className="flex-1 text-left">{label}</span>}
+    </button>
   );
 }
