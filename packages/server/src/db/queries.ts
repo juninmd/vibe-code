@@ -97,8 +97,7 @@ interface TaskRow {
   depends_on: string | null;
   pending_approval: number;
   max_cost: number | null;
-  task_type: string | null;
-  task_complexity: string | null;
+
   created_at: string;
   updated_at: string;
 }
@@ -186,8 +185,7 @@ function mapTask(row: TaskRow): Task {
     dependsOn: JSON.parse(row.depends_on || "[]") as string[],
     pendingApproval: Boolean(row.pending_approval),
     maxCost: row.max_cost ?? undefined,
-    taskType: (row.task_type as TaskType | null) ?? null,
-    taskComplexity: (row.task_complexity as TaskComplexity | null) ?? null,
+
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
