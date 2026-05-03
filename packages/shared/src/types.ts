@@ -14,6 +14,96 @@ export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
 
 export const TASK_PRIORITY_LEVELS: TaskPriority[] = ["none", "low", "medium", "high", "urgent"];
 
+export const TASK_PRIORITY_META: Record<
+  TaskPriority,
+  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  none: {
+    label: "No priority",
+    icon: "—",
+    textColor: "text-dimmed",
+    bgColor: "bg-surface-hover",
+    borderColor: "border-strong",
+  },
+  low: {
+    label: "Low",
+    icon: "↑",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  medium: {
+    label: "Medium",
+    icon: "↑↑",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  high: {
+    label: "High",
+    icon: "↑↑",
+    textColor: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/30",
+  },
+  urgent: {
+    label: "Urgent",
+    icon: "!!",
+    textColor: "text-purple-400",
+    bgColor: "bg-purple-500/10",
+    borderColor: "border-purple-500/30",
+  },
+};
+export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type RunPhase =
+  | "setup"
+  | "worktree_ready"
+  | "agent_running"
+  | "generating"
+  | "validating"
+  | "evaluating"
+  | "reviewing"
+  | "fixing"
+  | "pr_creating"
+  | "stalled"
+  | "timed_out";
+export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
+
+export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  scheduled: "Agendadas",
+  backlog: "Backlog",
+  in_progress: "In Progress",
+  review: "Review",
+  done: "Done",
+  failed: "Failed",
+  archived: "Archived",
+};
+
+// ─── Entities ────────────────────────────────────────────────────────────────
+
+export interface Repository {
+  id: string;
+  name: string;
+  url: string;
+  defaultBranch: string;
+  localPath: string | null;
+  status: RepoStatus;
+  provider: GitProvider;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Label {
+  id: string;
+  repoId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
 // ─── Task Type (Compozy-inspired) ─────────────────────────────────────────────
 export type TaskType =
   | "frontend"
@@ -150,96 +240,6 @@ export const TASK_COMPLEXITY_META: Record<
   },
 };
 
-export const TASK_PRIORITY_META: Record<
-  TaskPriority,
-  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
-> = {
-  none: {
-    label: "No priority",
-    icon: "—",
-    textColor: "text-dimmed",
-    bgColor: "bg-surface-hover",
-    borderColor: "border-strong",
-  },
-  low: {
-    label: "Low",
-    icon: "↑",
-    textColor: "text-emerald-400",
-    bgColor: "bg-emerald-500/10",
-    borderColor: "border-emerald-500/30",
-  },
-  medium: {
-    label: "Medium",
-    icon: "↑↑",
-    textColor: "text-amber-400",
-    bgColor: "bg-amber-500/10",
-    borderColor: "border-amber-500/30",
-  },
-  high: {
-    label: "High",
-    icon: "↑↑",
-    textColor: "text-orange-400",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/30",
-  },
-  urgent: {
-    label: "Urgent",
-    icon: "!!",
-    textColor: "text-purple-400",
-    bgColor: "bg-purple-500/10",
-    borderColor: "border-purple-500/30",
-  },
-};
-export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-export type RunPhase =
-  | "setup"
-  | "worktree_ready"
-  | "agent_running"
-  | "generating"
-  | "validating"
-  | "evaluating"
-  | "reviewing"
-  | "fixing"
-  | "pr_creating"
-  | "stalled"
-  | "timed_out";
-export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
-
-export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
-
-export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  scheduled: "Agendadas",
-  backlog: "Backlog",
-  in_progress: "In Progress",
-  review: "Review",
-  done: "Done",
-  failed: "Failed",
-  archived: "Archived",
-};
-
-// ─── Entities ────────────────────────────────────────────────────────────────
-
-export interface Repository {
-  id: string;
-  name: string;
-  url: string;
-  defaultBranch: string;
-  localPath: string | null;
-  status: RepoStatus;
-  provider: GitProvider;
-  errorMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Label {
-  id: string;
-  repoId: string;
-  name: string;
-  color: string;
-  createdAt: string;
-}
-
 export interface Task {
   id: string;
   issueNumber?: number;
@@ -263,10 +263,6 @@ export interface Task {
   notes: string;
   goal: string | null;
   desiredOutcome: string | null;
-  /** Compozy-inspired task type for classification and filtering. */
-  taskType: TaskType | null;
-  /** Compozy-inspired complexity estimate for the task. */
-  taskComplexity: TaskComplexity | null;
   /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
   plannerSpec?: string | null;
   /** IDs of tasks that must complete before this task can start. */
@@ -275,6 +271,8 @@ export interface Task {
   pendingApproval: boolean;
   /** Budget hard-stop limit in dollars. */
   maxCost?: number;
+  taskType?: TaskType | null;
+  taskComplexity?: TaskComplexity | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -407,8 +405,6 @@ export interface CreateTaskRequest {
   issueUrl?: string;
   goal?: string;
   desiredOutcome?: string;
-  taskType?: TaskType;
-  taskComplexity?: TaskComplexity;
 }
 
 export interface UpdateTaskRequest {
@@ -426,8 +422,6 @@ export interface UpdateTaskRequest {
   dependsOn?: string[];
   pendingApproval?: boolean;
   maxCost?: number;
-  taskType?: TaskType | null;
-  taskComplexity?: TaskComplexity | null;
 }
 
 export interface CreateLabelRequest {
@@ -709,8 +703,6 @@ export interface TaskExecutionPlanNode {
   dependsOn: string[];
   acceptanceCriteria: string[];
   tags: string[];
-  taskType: TaskType;
-  taskComplexity: TaskComplexity;
   maxCost?: number;
   workflowId?: string | null;
   agentId?: string | null;

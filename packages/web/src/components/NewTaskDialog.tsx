@@ -129,11 +129,8 @@ function EngineCard({
           </svg>
         </div>
       )}
-      <div
-        className="w-12 h-12 rounded-xl flex items-center justify-center mb-2"
-        style={{ background: meta.bgColor }}
-      >
-        <Icon size={28} className={meta.color} />
+      <div className="w-12 h-12 flex items-center justify-center mb-2">
+        <Icon size={36} className={meta.color} />
       </div>
       <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
         {engine.displayName}
