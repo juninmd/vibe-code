@@ -946,194 +946,201 @@ export function TaskDetail({
             )}
           </div>
 
-          {/* Tab bar */}
-          <div className="flex gap-0 mt-3 border-b border-default">
+          {/* Nav Tabs */}
+          <div className="flex gap-6 mt-8">
             {(
               [
-                { id: "info" as const, label: "Info" },
-                { id: "terminal" as const, label: "Terminal" },
-                { id: "diff" as const, label: "Diff" },
-                { id: "artifacts" as const, label: "Artifacts" },
-                { id: "skills" as const, label: "Skills" },
-                { id: "cost" as const, label: "Custo" },
-                { id: "memory" as const, label: "Memory" },
-                { id: "reviews" as const, label: "Reviews" },
-              ] satisfies { id: ActiveTab; label: string }[]
-            ).map(({ id, label }) => (
+                { id: "info", label: "Overview", icon: "ℹ" },
+                { id: "terminal", label: "Terminal", icon: "⌨" },
+                { id: "diff", label: "Diff", icon: "Δ" },
+                { id: "artifacts", label: "Artifacts", icon: "📦" },
+                { id: "skills", label: "Skills", icon: "✦" },
+                { id: "cost", label: "Cost", icon: "$" },
+                { id: "memory", label: "Memory", icon: "🧠" },
+                { id: "reviews", label: "Reviews", icon: "◎" },
+              ] as const
+            ).map((tab) => (
               <button
-                key={id}
+                key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(id)}
-                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
-                style={{
-                  borderColor: activeTab === id ? "var(--accent, #7c3aed)" : "transparent",
-                  color: activeTab === id ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
-                }}
+                onClick={() => setActiveTab(tab.id as ActiveTab)}
+                className={`relative px-1 pb-3 text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${
+                  activeTab === tab.id ? "text-primary" : "text-muted hover:text-secondary"
+                }`}
               >
-                {label}
-                {id === "terminal" && isRunning && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                )}
-                {id === "diff" && task.branchName && (
-                  <span
-                    className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: "var(--text-dimmed)" }}
-                  />
-                )}
-                {id === "artifacts" && artifacts.length > 0 && (
-                  <span
-                    className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                    style={{
-                      background:
-                        activeTab === "artifacts" ? "var(--accent-muted)" : "var(--bg-input)",
-                      color: activeTab === "artifacts" ? "var(--accent-text)" : "var(--text-muted)",
-                    }}
-                  >
-                    {artifacts.length}
-                  </span>
+                <span className="flex items-center gap-2">
+                  <span className="opacity-50">{tab.icon}</span>
+                  {tab.label}
+                  {tab.id === "artifacts" && artifacts.length > 0 && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent font-black">
+                      {artifacts.length}
+                    </span>
+                  )}
+                  {tab.id === "skills" && matchedSkills.length > 0 && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent font-black">
+                      {matchedSkills.length}
+                    </span>
+                  )}
+                </span>
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-accent rounded-full shadow-[0_0_10px_var(--accent)] animate-in slide-in-from-bottom-1 duration-200" />
                 )}
               </button>
             ))}
-            {matchedSkills.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("skills")}
-                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
-                style={{
-                  borderColor: activeTab === "skills" ? "var(--accent, #7c3aed)" : "transparent",
-                  color:
-                    activeTab === "skills" ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
-                }}
-              >
-                Skills
-                <span
-                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                  style={{
-                    background: activeTab === "skills" ? "var(--accent-muted)" : "var(--bg-input)",
-                    color: activeTab === "skills" ? "var(--accent-text)" : "var(--text-muted)",
-                  }}
-                >
-                  {matchedSkills.length}
-                </span>
-              </button>
-            )}
           </div>
         </div>
 
-        {/* ── Tab Content ─────────────────────────────────── */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Approval Request / Governance Gate */}
-          {task.pendingApproval && (
-            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
-              <div className="flex items-center gap-2 text-warning">
-                <span className="text-lg">🛡️</span>
-                <h3 className="text-sm font-semibold">Governance Gate: Aprovação Necessária</h3>
-              </div>
+        {/* ── Scrollable Body ──────────────────────────────── */}
+        <div className="flex-1 overflow-hidden flex flex-col bg-white/[0.01]">
+          {/* Quick config bar */}
+          {(task.status === "backlog" ||
+            task.status === "failed" ||
+            task.status === "in_progress") && (
+            <div className="shrink-0 px-8 py-5 bg-accent/5 border-b border-white/5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-accent/70 ml-1">
+                    Agent Engine
+                  </span>
+                  <div className="h-10 flex items-center gap-2.5 px-3.5 rounded-[1rem] bg-input/40 border border-white/5 focus-within:border-accent/40 focus-within:ring-4 focus-within:ring-accent/10 transition-all">
+                    {selectedEngine && <span className="opacity-70">🤖</span>}
+                    <Select
+                      value={selectedEngine}
+                      onChange={(e) => setSelectedEngine(e.target.value)}
+                      className="bg-transparent border-none text-xs font-black text-primary focus:ring-0 h-auto p-0 min-w-0 flex-1"
+                    >
+                      <option value="">Select Engine</option>
+                      <option value="auto">Auto (First Available)</option>
+                      {engines?.map((e) => (
+                        <option key={e.name} value={e.name} disabled={!e.available}>
+                          {e.displayName} {!e.available ? "(offline)" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <p className="text-xs text-secondary leading-relaxed">
-                  {approvalRequest?.message || "O agente solicitou autorização para continuar."}
-                </p>
-                {approvalRequest?.command && (
-                  <div className="bg-black/40 rounded p-2 border border-strong">
-                    <code className="text-[11px] text-warning font-mono break-all">
-                      $ {approvalRequest.command}
-                    </code>
+                {availableModels.length > 0 && (
+                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-accent/70 ml-1">
+                      Intelligence Model
+                    </span>
+                    <div className="h-10 flex items-center gap-2.5 px-3.5 rounded-[1rem] bg-input/40 border border-white/5 focus-within:border-accent/40 focus-within:ring-4 focus-within:ring-accent/10 transition-all">
+                      <Select
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="bg-transparent border-none text-xs font-black text-primary focus:ring-0 h-auto p-0 min-w-0 flex-1"
+                        disabled={loadingModels}
+                      >
+                        <option value="">
+                          {loadingModels ? "Searching models..." : "Default Model"}
+                        </option>
+                        {groupModelsByProvider(availableModels).map(({ provider, models }) => (
+                          <optgroup key={provider} label={provider}>
+                            {models.map((m) => (
+                              <option key={m} value={m}>
+                                {m.split("/").pop()}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  className="bg-warning hover:bg-warning/80 text-black border-none h-8 text-xs px-4"
-                  disabled={!!loadingAction}
-                  onClick={async () => {
-                    setLoadingAction("approve");
-                    try {
-                      await onApprove?.(task.id);
-                    } finally {
-                      setLoadingAction(null);
-                    }
-                  }}
-                >
-                  {loadingAction === "approve" ? "Aprovando..." : "✅ Aprovar"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="text-danger hover:bg-danger/10 h-8 text-xs px-4 border border-danger/20"
-                  disabled={!!loadingAction}
-                  onClick={async () => {
-                    setLoadingAction("reject");
-                    try {
-                      await onReject?.(task.id);
-                    } finally {
-                      setLoadingAction(null);
-                    }
-                  }}
-                >
-                  {loadingAction === "reject" ? "Rejeitando..." : "❌ Rejeitar"}
-                </Button>
-              </div>
-              {approvalRequest?.requestedAt && (
-                <p className="text-[9px] text-dimmed italic">
-                  Solicitado em {formatDateTime(approvalRequest.requestedAt)}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Goal Ancestry (Parent Task) */}
-          {parentTask && (
-            <div className="bg-surface/20 border border-strong rounded-lg p-3 space-y-2">
-              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                Parent Task (Ancestry)
-              </h3>
-              <div className="flex items-start gap-2">
-                <span className="text-info text-xs mt-0.5">↳</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-secondary truncate">{parentTask.title}</p>
-                  <p className="text-[11px] text-dimmed line-clamp-1">{parentTask.description}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Sub-tasks (Delegation) */}
-          {subTasks.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                Sub-tasks (Delegated Work)
-              </h3>
-              <div className="grid gap-2">
-                {subTasks.map((st) => (
-                  <div
-                    key={st.id}
-                    className="flex items-center justify-between gap-3 bg-surface/10 border border-strong rounded-lg p-2.5"
+              <div className="flex items-center gap-3 shrink-0 pt-4">
+                {(task.status === "backlog" || task.status === "failed") && (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    disabled={!!loadingAction || !selectedEngine}
+                    onClick={async () => {
+                      setLoadingAction("launch");
+                      try {
+                        await onLaunch(task.id, selectedEngine, selectedModel);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                    className="h-11 px-8 rounded-2xl shadow-xl shadow-accent/25 font-black uppercase tracking-widest text-[10px]"
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant={statusVariant[st.status] ?? "default"}
-                          className="text-[9px] px-1 py-0 h-auto"
-                        >
-                          {statusLabel[st.status] ?? st.status}
-                        </Badge>
-                        <span className="text-xs font-medium text-secondary truncate">
-                          {st.title}
-                        </span>
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-dimmed font-mono shrink-0">
-                      {st.id.slice(0, 8)}
+                    {loadingAction === "launch" ? "Launching..." : "▶ Start Agent"}
+                  </Button>
+                )}
+                {task.status === "failed" && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    disabled={!!loadingAction || !selectedEngine}
+                    onClick={async () => {
+                      setLoadingAction("retry");
+                      try {
+                        await onRetry(task.id, selectedEngine, selectedModel);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                    className="h-11 px-8 rounded-2xl border-white/10 hover:bg-white/5 font-black uppercase tracking-widest text-[10px]"
+                  >
+                    {loadingAction === "retry" ? "Restarting..." : "↺ Restart"}
+                  </Button>
+                )}
+                {task.status === "in_progress" && (
+                  <Button
+                    variant="danger"
+                    size="lg"
+                    disabled={!!loadingAction}
+                    onClick={async () => {
+                      setLoadingAction("cancel");
+                      try {
+                        await onCancel(task.id);
+                      } finally {
+                        setLoadingAction(null);
+                      }
+                    }}
+                    className="h-11 px-8 rounded-2xl shadow-xl shadow-danger/25 font-black uppercase tracking-widest text-[10px]"
+                  >
+                    {loadingAction === "cancel" ? "Stopping..." : "⏹ Stop Agent"}
+                  </Button>
+                )}
+                {confirmDelete ? (
+                  <div className="flex items-center gap-2 h-11 px-4 rounded-2xl bg-danger/10 border border-danger/20">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-danger mr-2">
+                      Sure?
                     </span>
+                    <Button
+                      variant="danger"
+                      size="xs"
+                      onClick={() => onDelete(task.id)}
+                      className="h-7 px-4 rounded-lg font-black uppercase tracking-widest text-[9px]"
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setConfirmDelete(false)}
+                      className="h-7 px-3 rounded-lg"
+                    >
+                      No
+                    </Button>
                   </div>
-                ))}
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setConfirmDelete(true)}
+                    className="h-11 px-6 rounded-2xl text-muted hover:text-danger hover:bg-danger/10 font-black uppercase tracking-widest text-[10px]"
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
             </div>
           )}
 
-          {/* ── Info Tab ──────────────────────────────────── */}
+          {/* ── Overview Tab ──────────────────────────────────── */}
           {activeTab === "info" && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* PR Creation Pipeline */}
@@ -2126,24 +2133,27 @@ export function TaskDetail({
 
       {/* M2.2: Preview Prompt Modal */}
       {previewPrompt !== null && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 rounded-xl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 rounded-[2.5rem]">
           <button
             type="button"
-            aria-label="Fechar preview do prompt"
-            className="absolute inset-0 bg-black/60 rounded-xl"
+            aria-label="Close prompt preview"
+            className="absolute inset-0 bg-black/60 rounded-[2.5rem]"
             onClick={() => setPreviewPrompt(null)}
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="preview-prompt-title"
-            className="relative bg-surface border border-surface-border rounded-lg max-w-4xl max-h-96 w-full flex flex-col shadow-2xl"
+            className="relative glass-panel border border-white/10 rounded-[2rem] max-w-4xl max-h-[80vh] w-full flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95"
           >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0">
-              <h3 id="preview-prompt-title" className="text-sm font-semibold">
-                Preview do Prompt do Agente
+            <div className="flex items-center justify-between px-6 py-4 bg-white/[0.02] border-b border-white/5 shrink-0">
+              <h3
+                id="preview-prompt-title"
+                className="text-sm font-black tracking-tight text-primary"
+              >
+                Agent Prompt Preview
               </h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -2151,20 +2161,20 @@ export function TaskDetail({
                     setPromptCopied(true);
                     setTimeout(() => setPromptCopied(false), 2000);
                   }}
-                  className="text-xs px-2 py-1 bg-primary0 text-white rounded hover:opacity-80 transition-opacity"
+                  className="text-[9px] font-black uppercase tracking-widest px-4 py-2 bg-accent text-white rounded-xl shadow-lg shadow-accent/20 active-shrink transition-transform"
                 >
-                  {promptCopied ? "✓ Copiado" : "📋 Copiar"}
+                  {promptCopied ? "✓ Copied" : "Copy Full Prompt"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreviewPrompt(null)}
-                  className="text-primary0 hover:text-secondary text-lg"
+                  className="p-2 text-muted hover:text-primary transition-colors cursor-pointer rounded-xl hover:bg-white/5"
                 >
                   ✕
                 </button>
               </div>
             </div>
-            <pre className="flex-1 overflow-auto p-4 text-xs bg-surface-dark rounded text-text-primary font-mono whitespace-pre-wrap break-words">
+            <pre className="flex-1 overflow-auto p-6 text-xs bg-black/40 text-secondary font-mono whitespace-pre-wrap break-words custom-scrollbar">
               {previewPrompt}
             </pre>
           </div>
