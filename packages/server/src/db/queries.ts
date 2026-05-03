@@ -341,7 +341,7 @@ export function createTaskQueries(db: Database) {
 
         return db
           .prepare(
-            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, task_type, task_complexity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
             req.title,
@@ -431,14 +431,7 @@ export function createTaskQueries(db: Database) {
         sets.push("priority = ?");
         values.push(priorityToInt(req.priority));
       }
-      if (req.taskType !== undefined) {
-        sets.push("task_type = ?");
-        values.push(req.taskType ?? null);
-      }
-      if (req.taskComplexity !== undefined) {
-        sets.push("task_complexity = ?");
-        values.push(req.taskComplexity ?? null);
-      }
+
       if (sets.length === 0) {
         const currentRow = stmts.getById.get(id);
         return currentRow ? mapTask(currentRow) : null;
