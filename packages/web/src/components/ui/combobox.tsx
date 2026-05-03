@@ -4,6 +4,7 @@ interface ComboboxOption {
   value: string;
   label: string;
   sublabel?: string;
+  disabled?: boolean;
 }
 
 interface ComboboxProps {
@@ -146,13 +147,17 @@ export function Combobox({
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
+                    if (option.disabled) return;
                     handleSelect(option.value);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors cursor-pointer flex items-center justify-between ${
-                    option.value === value
-                      ? "bg-accent-muted text-accent-text"
-                      : "text-secondary hover:bg-surface-hover"
+                    option.disabled
+                      ? "text-primary0 cursor-not-allowed bg-surface/80"
+                      : option.value === value
+                        ? "bg-accent-muted text-accent-text"
+                        : "text-secondary hover:bg-surface-hover"
                   }`}
+                  disabled={option.disabled}
                 >
                   <span>{option.label}</span>
                   {option.sublabel && (

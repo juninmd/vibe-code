@@ -40,6 +40,7 @@ function HeaderTinyAction({
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
+          aria-hidden="true"
         >
           <path d="M16 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 22v-4M15 22v-4M8 3v4M14 3v4" />
         </svg>
@@ -52,6 +53,7 @@ function HeaderTinyAction({
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
+          aria-hidden="true"
         >
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
         </svg>
@@ -64,6 +66,7 @@ function HeaderTinyAction({
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
+          aria-hidden="true"
         >
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
@@ -77,6 +80,7 @@ function HeaderTinyAction({
           fill="none"
           stroke="currentColor"
           strokeWidth="2.5"
+          aria-hidden="true"
         >
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
           <circle cx="12" cy="12" r="3" />
@@ -884,7 +888,9 @@ export function TaskDetail({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
+                  aria-hidden="true"
                 >
+                  <title>Close</title>
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
@@ -902,7 +908,9 @@ export function TaskDetail({
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
+                  aria-hidden="true"
                 >
+                  <title>Agent icon</title>
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>

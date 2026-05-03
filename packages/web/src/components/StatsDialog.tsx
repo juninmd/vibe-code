@@ -1,5 +1,5 @@
 import type { EngineEffectiveness, SkillEffectiveness, StatsResponse } from "@vibe-code/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
@@ -91,7 +91,7 @@ function StatCard({
   );
 }
 
-function _ProgressBar({
+function ProgressBar({
   value,
   max,
   color,
@@ -250,6 +250,397 @@ function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolea
   );
 }
 
+function EnginesSection({
+  stats,
+  engineStats,
+}: {
+  stats: StatsResponse;
+  engineStats: EngineEffectiveness[];
+}) {
+  const maxRuns = Math.max(...stats.runsByEngine.map((e) => e.runs), 1);
+  const maxModel = Math.max(...stats.runsByModel.map((m) => m.runs), 1);
+
+  return (
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="grid md:grid-cols-2 gap-8">
+        <div className="space-y-6">
+          <SectionTitle>Engine Distribution</SectionTitle>
+          <div className="space-y-4">
+            {stats.runsByEngine.map((e) => {
+              const successPct = e.runs > 0 ? Math.round((e.completed / e.runs) * 100) : 0;
+              const successColor =
+                successPct >= 70
+                  ? "var(--success)"
+                  : successPct >= 40
+                    ? "var(--warning)"
+                    : "var(--danger)";
+
+              return (
+                <div
+                  key={e.engine}
+                  className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black tracking-tight text-primary">
+                      {e.engine}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted tabular-nums">
+                      {e.runs} runs · {formatDuration(e.avgDurationSecs)} avg
+                    </span>
+                  </div>
+                  <ProgressBar value={e.runs} max={maxRuns} color="var(--accent)" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <ProgressBar
+                        value={e.completed}
+                        max={e.runs}
+                        color="var(--success)"
+                        secondaryValue={e.failed}
+                        secondaryColor="var(--danger)"
+                      />
+                    </div>
+                    <span
+                      className="text-[10px] font-black uppercase tracking-widest shrink-0"
+                      style={{ color: successColor }}
+                    >
+                      {successPct}% ok
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <SectionTitle>Model Popularity</SectionTitle>
+          <div className="p-6 rounded-3xl bg-white/[0.02] border border-white/5 space-y-5">
+            {stats.runsByModel.length === 0 ? (
+              <p className="text-[10px] font-black uppercase tracking-widest text-dimmed text-center py-4">
+                No data
+              </p>
+            ) : (
+              stats.runsByModel.slice(0, 8).map((m) => (
+                <div key={m.model} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-secondary truncate pr-4">
+                      {m.model.split("/").pop()}
+                    </span>
+                    <span className="text-[10px] font-black tracking-widest text-muted">
+                      {m.runs}
+                    </span>
+                  </div>
+                  <ProgressBar value={m.runs} max={maxModel} color="var(--info)" />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {engineStats.length > 0 && (
+        <div className="space-y-4">
+          <SectionTitle>Effectiveness Ranking</SectionTitle>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {engineStats.map((e) => (
+              <div key={e.engine} className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+                <span className="text-xs font-black uppercase tracking-widest text-primary block mb-3">
+                  {e.engine}
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+                  <div className="p-2 rounded-xl bg-black/20 border border-white/5">
+                    <span className="text-muted block mb-1">Success</span>
+                    <span className="text-success">{e.successRate}%</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-black/20 border border-white/5">
+                    <span className="text-muted block mb-1">Avg Time</span>
+                    <span className="text-primary">{formatDuration(e.avgDurationSecs)}</span>
+                  </div>
+                  <div className="col-span-2 p-2 rounded-xl bg-black/20 border border-info/20">
+                    <span className="text-info/70 block mb-1">PR Creation Rate</span>
+                    <span className="text-info text-xs">{Math.round(e.prRate * 100)}%</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TasksSection({ stats }: { stats: StatsResponse }) {
+  const STATUS_COLORS: Record<string, string> = {
+    done: "var(--success)",
+    in_progress: "var(--info)",
+    review: "#a78bfa",
+    failed: "var(--danger)",
+    backlog: "var(--text-muted)",
+    scheduled: "var(--warning)",
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {stats.tasksByStatus.length > 0 && (
+        <div className="space-y-4">
+          <SectionTitle>Pipeline Distribution</SectionTitle>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {stats.tasksByStatus.map((s) => (
+              <div
+                key={s.status}
+                className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between"
+              >
+                <span
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: STATUS_COLORS[s.status] ?? "var(--text-muted)" }}
+                >
+                  {s.status.replace("_", " ")}
+                </span>
+                <span className="text-lg font-black tabular-nums text-primary">{s.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stats.tasksByRepo.length > 0 && (
+        <div className="space-y-4">
+          <SectionTitle>Repository Completion Rates</SectionTitle>
+          <div className="grid md:grid-cols-2 gap-4">
+            {stats.tasksByRepo.slice(0, 10).map((r) => {
+              const completionPct = r.total > 0 ? Math.round((r.done / r.total) * 100) : 0;
+              const failedPct = r.total > 0 ? Math.round((r.failed / r.total) * 100) : 0;
+
+              return (
+                <div
+                  key={r.repoId}
+                  className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black tracking-tight text-primary truncate flex-1">
+                      {r.repoName}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted">
+                      {r.done}/{r.total} <span className="text-success">({completionPct}%)</span>
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden flex bg-white/5">
+                    <div
+                      className="h-full transition-all duration-500 bg-success shadow-[0_0_8px_var(--success)]"
+                      style={{ width: `${completionPct}%` }}
+                    />
+                    <div
+                      className="h-full transition-all duration-500 bg-danger"
+                      style={{ width: `${failedPct}%` }}
+                    />
+                  </div>
+                  {r.failed > 0 && (
+                    <p className="text-[9px] font-bold text-danger text-right">
+                      {r.failed} failures
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActivitySection({ stats }: { stats: StatsResponse }) {
+  const maxDay = useMemo(
+    () => Math.max(...stats.dailyActivity.map((d) => d.runs), 1),
+    [stats.dailyActivity]
+  );
+
+  if (stats.dailyActivity.length === 0) {
+    return (
+      <div className="py-20 text-center opacity-30 space-y-3">
+        <p className="text-5xl">▦</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+          No activity in the last 30 days
+        </p>
+      </div>
+    );
+  }
+
+  const totalInPeriod = stats.dailyActivity.reduce((a, d) => a + d.runs, 0);
+  const failedInPeriod = stats.dailyActivity.reduce((a, d) => a + d.failed, 0);
+  const successInPeriod = stats.dailyActivity.reduce((a, d) => a + d.completed, 0);
+
+  return (
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="space-y-6">
+        <SectionTitle>30-Day Operation Volume</SectionTitle>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-center">
+            <p className="text-2xl font-black text-primary">{totalInPeriod}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-muted mt-1">
+              Total Runs
+            </p>
+          </div>
+          <div className="p-4 rounded-2xl bg-success/5 border border-success/20 text-center">
+            <p className="text-2xl font-black text-success">{successInPeriod}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-success/70 mt-1">
+              Successful
+            </p>
+          </div>
+          <div className="p-4 rounded-2xl bg-danger/5 border border-danger/20 text-center">
+            <p className="text-2xl font-black text-danger">{failedInPeriod}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-danger/70 mt-1">
+              Failed
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 rounded-[2rem] bg-black/40 border border-white/5">
+          <div className="flex items-end gap-1 h-32">
+            {stats.dailyActivity.map((d) => {
+              const pct = (d.runs / maxDay) * 100;
+              const isBad = d.failed > d.completed;
+              return (
+                <div
+                  key={d.date}
+                  className="flex-1 rounded-t-sm transition-all hover:opacity-100 opacity-60 hover:scale-x-110"
+                  style={{
+                    height: `${Math.max(pct, 4)}%`,
+                    background: isBad ? "var(--danger)" : "var(--accent)",
+                  }}
+                  title={`${d.date}: ${d.runs} runs (${d.completed} ok, ${d.failed} falhas)`}
+                />
+              );
+            })}
+          </div>
+          <div className="flex justify-between mt-4">
+            <span className="text-[10px] font-bold text-dimmed">
+              {stats.dailyActivity[0]?.date}
+            </span>
+            <span className="text-[10px] font-bold text-dimmed">
+              {stats.dailyActivity[stats.dailyActivity.length - 1]?.date}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <SectionTitle>Intensity Heatmap</SectionTitle>
+        <div className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 flex flex-col items-center">
+          <div className="flex flex-wrap gap-1.5 justify-center">
+            {stats.dailyActivity.map((d) => {
+              const intensity = maxDay > 0 ? d.runs / maxDay : 0;
+              const isBad = d.failed > d.completed && d.runs > 0;
+              return (
+                <div
+                  key={d.date}
+                  className="w-4 h-4 rounded-sm transition-all hover:scale-125"
+                  style={{
+                    background:
+                      d.runs === 0
+                        ? "var(--border-default)"
+                        : isBad
+                          ? `rgba(248, 113, 113, ${0.3 + intensity * 0.7})`
+                          : `rgba(124, 58, 237, ${0.3 + intensity * 0.7})`,
+                  }}
+                  title={`${d.date}: ${d.runs} runs`}
+                />
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-3 mt-6">
+            <span className="text-[9px] font-black uppercase tracking-widest text-dimmed">Low</span>
+            <div className="flex gap-1">
+              {[0.2, 0.4, 0.6, 0.8, 1].map((v) => (
+                <div
+                  key={v}
+                  className="w-3 h-3 rounded-sm"
+                  style={{ background: `rgba(124, 58, 237, ${v})` }}
+                />
+              ))}
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-dimmed">
+              High
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkillsSection({ skills }: { skills: SkillEffectiveness[] }) {
+  if (skills.length === 0) {
+    return (
+      <div className="py-20 text-center opacity-30 space-y-3">
+        <p className="text-5xl">⚡</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+          No skill metrics available
+        </p>
+        <p className="text-xs text-dimmed">Metrics appear after runs with evaluations enabled</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <SectionTitle>Skill Effectiveness ROI</SectionTitle>
+      <div className="grid md:grid-cols-2 gap-4">
+        {skills.map((s) => (
+          <div
+            key={s.name}
+            className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-black tracking-tight text-primary">{s.name}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black uppercase tracking-widest text-muted bg-white/5 px-2 py-0.5 rounded-lg">
+                  {s.totalRuns} runs
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] font-bold">
+                <span className="text-muted">Success Rate</span>
+                <span
+                  style={{
+                    color:
+                      s.successRate >= 70
+                        ? "var(--success)"
+                        : s.successRate >= 40
+                          ? "var(--warning)"
+                          : "var(--danger)",
+                  }}
+                >
+                  {s.successRate}%
+                </span>
+              </div>
+              <ProgressBar value={s.successRate} max={100} color="var(--success)" />
+            </div>
+
+            {(s.avgBlockers > 0 || s.avgWarnings > 0) && (
+              <div className="flex gap-2 pt-2 border-t border-white/5">
+                {s.avgBlockers > 0 && (
+                  <span className="text-[9px] font-bold text-danger bg-danger/10 px-2 py-0.5 rounded-md">
+                    {s.avgBlockers.toFixed(1)} blockers/run
+                  </span>
+                )}
+                {s.avgWarnings > 0 && (
+                  <span className="text-[9px] font-bold text-warning bg-warning/10 px-2 py-0.5 rounded-md">
+                    {s.avgWarnings.toFixed(1)} warnings/run
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function StatsDialog({ open, onClose }: StatsDialogProps) {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [skillStats, setSkillStats] = useState<SkillEffectiveness[]>([]);
@@ -319,7 +710,9 @@ export function StatsDialog({ open, onClose }: StatsDialogProps) {
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.5"
+                aria-hidden="true"
               >
+                <title>Export</title>
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
               Export JSON
@@ -347,7 +740,9 @@ export function StatsDialog({ open, onClose }: StatsDialogProps) {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2.5"
+                  aria-hidden="true"
                 >
+                  <title>Error</title>
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="8" x2="12" y2="12" />
                   <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -362,19 +757,16 @@ export function StatsDialog({ open, onClose }: StatsDialogProps) {
               </Button>
             </div>
           ) : stats ? (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto pb-10">
               {activeSection === "overview" && (
                 <OverviewSection stats={stats} ready={animationsReady} />
               )}
-              {/* Other sections would go here... I'll implement overview first as requested */}
-              {activeSection !== "overview" && (
-                <div className="flex flex-col items-center justify-center h-64 text-center space-y-4 opacity-50">
-                  <p className="text-4xl">🚧</p>
-                  <p className="text-xs font-black uppercase tracking-widest text-dimmed">
-                    Section Modernization in Progress
-                  </p>
-                </div>
+              {activeSection === "engines" && (
+                <EnginesSection stats={stats} engineStats={engineStats} />
               )}
+              {activeSection === "tasks" && <TasksSection stats={stats} />}
+              {activeSection === "activity" && <ActivitySection stats={stats} />}
+              {activeSection === "skills" && <SkillsSection skills={skillStats} />}
             </div>
           ) : null}
         </div>
