@@ -17,95 +17,6 @@ import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
 import { Select } from "./ui/select";
 
-function HeaderTinyAction({
-  icon,
-  onClick,
-  href,
-  title,
-  disabled,
-}: {
-  icon: string;
-  onClick?: () => void;
-  href?: string;
-  title: string;
-  disabled?: boolean;
-}) {
-  const content = (
-    <>
-      {icon === "editor" && (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-        >
-          <path d="M16 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 22v-4M15 22v-4M8 3v4M14 3v4" />
-        </svg>
-      )}
-      {icon === "download" && (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-        >
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-        </svg>
-      )}
-      {icon === "clone" && (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-        >
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-        </svg>
-      )}
-      {icon === "eye" && (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          aria-hidden="true"
-        >
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      )}
-    </>
-  );
-
-  const className =
-    "p-1.5 rounded-lg text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer";
-
-  if (href) {
-    return (
-      <a href={href} download className={className} title={title}>
-        {content}
-      </a>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={className} title={title} disabled={disabled}>
-      {content}
-    </button>
-  );
-}
-
 interface TaskDetailProps {
   task: TaskWithRun;
   engines?: EngineInfo[];
@@ -776,371 +687,354 @@ export function TaskDetail({
       {/* Backdrop */}
       <button
         type="button"
-        aria-label="Close task detail"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300"
+        aria-label="Fechar detalhe da tarefa"
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative glass-panel w-full max-w-4xl max-h-[94vh] flex flex-col rounded-[2.5rem] border border-white/10 shadow-2xl shadow-black/60 overflow-hidden animate-in zoom-in-95 fade-in duration-300 ease-out">
+      <div className="relative glass-dialog w-full max-w-3xl max-h-[92vh] flex flex-col rounded-xl border shadow-2xl shadow-black/50">
         {/* ── Modal Header ────────────────────────────────── */}
-        <div className="shrink-0 px-8 pt-8 pb-4 bg-white/[0.02] border-b border-white/5">
+        <div className="shrink-0 px-5 pt-4 pb-0">
           {/* Title row */}
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <Badge
-                  variant={statusVariant[task.status] ?? "default"}
-                  className="text-[10px] font-black uppercase tracking-widest py-0.5 px-2.5 rounded-lg border-white/10 shadow-sm"
-                >
-                  {statusLabel[task.status] ?? task.status}
-                </Badge>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5 min-w-0">
+              {ProviderIcon && (
+                <div className={`mt-1 shrink-0 ${provider?.color}`}>
+                  <ProviderIcon size={18} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold leading-tight text-primary">{task.title}</h2>
                 {task.repo && (
                   <a
                     href={task.repo.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-dimmed hover:text-accent transition-colors px-2 py-0.5 rounded-lg bg-white/5 border border-white/5"
+                    className="text-[11px] text-primary0 hover:text-secondary transition-colors truncate block mt-0.5"
                   >
-                    {ProviderIcon && <ProviderIcon size={12} className={provider?.color} />}
                     {task.repo.name}
                   </a>
                 )}
-                {task.issueNumber != null && (
-                  <span className="text-[10px] font-black uppercase tracking-widest text-dimmed px-2 py-0.5 rounded-lg bg-white/5 border border-white/5">
-                    Issue #{task.issueNumber}
-                  </span>
-                )}
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-primary leading-tight text-balance">
-                {task.title}
-              </h1>
             </div>
 
-            {/* Header actions group */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-input/40 border border-default mr-2">
-                {task.branchName && (
-                  <>
-                    <HeaderTinyAction
-                      icon="editor"
-                      onClick={async () => {
-                        setLoadingAction("open-editor");
-                        try {
-                          await api.tasks.openEditor(task.id);
-                        } catch (err) {
-                          alert(err instanceof Error ? err.message : String(err));
-                        } finally {
-                          setLoadingAction(null);
-                        }
-                      }}
-                      disabled={loadingAction === "open-editor"}
-                      title="Open in Editor"
-                    />
-                    <HeaderTinyAction
-                      icon="download"
-                      href={api.tasks.downloadUrl(task.id)}
-                      title="Download Code (ZIP)"
-                    />
-                  </>
-                )}
-                {onClone && (
-                  <HeaderTinyAction
-                    icon="clone"
+            {/* Header actions */}
+            <div className="flex items-center gap-1 shrink-0">
+              {task.branchName && (
+                <>
+                  <button
+                    type="button"
+                    title="Abrir no Editor"
                     onClick={async () => {
-                      setLoadingAction("clone");
                       try {
-                        await onClone(task.id);
-                        onClose();
+                        setLoadingAction("open-editor");
+                        await api.tasks.openEditor(task.id);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : String(err));
                       } finally {
                         setLoadingAction(null);
                       }
                     }}
-                    disabled={!!loadingAction}
-                    title="Clone Task"
-                  />
-                )}
-                <HeaderTinyAction
-                  icon="eye"
+                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs font-medium"
+                    disabled={loadingAction === "open-editor"}
+                  >
+                    {loadingAction === "open-editor" ? "..." : "<>"}
+                  </button>
+                  <a
+                    href={api.tasks.downloadUrl(task.id)}
+                    download
+                    title="Baixar código (ZIP)"
+                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-sm"
+                  >
+                    ↓
+                  </a>
+                </>
+              )}
+              {onClone && (
+                <button
+                  type="button"
                   onClick={async () => {
-                    setLoadingAction("preview-prompt");
+                    setLoadingAction("clone");
                     try {
-                      const result = await api.tasks.previewPrompt(task.id);
-                      setPreviewPrompt(result.prompt);
+                      await onClone(task.id);
+                      onClose();
                     } finally {
                       setLoadingAction(null);
                     }
                   }}
-                  disabled={loadingAction === "preview-prompt"}
-                  title="Preview Agent Prompt"
-                />
-              </div>
-
+                  disabled={!!loadingAction}
+                  title="Clonar tarefa"
+                  className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
+                >
+                  ⎘
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  setLoadingAction("preview-prompt");
+                  try {
+                    const result = await api.tasks.previewPrompt(task.id);
+                    setPreviewPrompt(result.prompt);
+                  } finally {
+                    setLoadingAction(null);
+                  }
+                }}
+                disabled={loadingAction === "preview-prompt"}
+                title="Preview prompt do agente"
+                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs"
+              >
+                {loadingAction === "preview-prompt" ? "..." : "👁"}
+              </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 rounded-2xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
+                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
               >
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  aria-hidden="true"
-                >
-                  <title>Close</title>
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
+                ✕
               </button>
             </div>
           </div>
 
-          {/* Status Context Row */}
-          <div className="flex flex-wrap gap-3 items-center mt-6">
+          {/* Status badges row */}
+          <div className="flex flex-wrap gap-2 items-center mt-3">
+            <Badge variant={statusVariant[task.status] ?? "default"}>
+              {statusLabel[task.status] ?? task.status}
+            </Badge>
+
             {task.agentId && (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+              <Badge
+                variant="default"
+                className="flex items-center gap-1 opacity-90 border-blue-500/30 bg-blue-500/10 text-blue-400"
+              >
                 <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2.5"
-                  aria-hidden="true"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <title>Agent icon</title>
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
+                  <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                  <path d="M2 14c0-2.2 2.7-4 6-4s6 1.8 6 4" />
                 </svg>
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {task.agentId}
-                </span>
-              </div>
+                {task.agentId}
+              </Badge>
             )}
 
             {task.engine && (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {task.engine}
-                </span>
+              <Badge variant="purple">
+                {task.engine}
                 {task.model && (
-                  <>
-                    <div className="w-1 h-1 rounded-full bg-purple-400/40" />
-                    <span className="text-[10px] font-bold opacity-80">
-                      {task.model.split("/").pop()}
-                    </span>
-                  </>
+                  <span className="opacity-70 ml-1 font-normal">
+                    ·{" "}
+                    {task.model.includes("/")
+                      ? task.model.split("/").slice(1).join("/")
+                      : task.model}
+                  </span>
                 )}
-              </div>
+              </Badge>
             )}
-
             {isRunning && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-info/10 border border-info/20 text-info">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_var(--info)]" />
-                <span className="text-[10px] font-black uppercase tracking-widest">
-                  {task.latestRun?.currentStatus || "Running"}
-                </span>
-              </div>
+              <span className="flex items-center gap-1.5 text-xs text-info bg-info/15 rounded-full px-2 py-0.5 border border-info/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                {task.latestRun?.currentStatus || "Rodando"}
+              </span>
             )}
           </div>
 
-          {/* Nav Tabs */}
-          <div className="flex gap-6 mt-8">
+          {/* Tab bar */}
+          <div className="flex gap-0 mt-3 border-b border-default">
             {(
               [
-                { id: "info", label: "Overview", icon: "ℹ" },
-                { id: "terminal", label: "Terminal", icon: "⌨" },
-                { id: "diff", label: "Diff", icon: "Δ" },
-                { id: "artifacts", label: "Artifacts", icon: "📦" },
-                { id: "skills", label: "Skills", icon: "✦" },
-                { id: "cost", label: "Cost", icon: "$" },
-                { id: "memory", label: "Memory", icon: "🧠" },
-                { id: "reviews", label: "Reviews", icon: "◎" },
-              ] as const
-            ).map((tab) => (
+                { id: "info" as const, label: "Info" },
+                { id: "terminal" as const, label: "Terminal" },
+                { id: "diff" as const, label: "Diff" },
+                { id: "artifacts" as const, label: "Artifacts" },
+                { id: "skills" as const, label: "Skills" },
+                { id: "cost" as const, label: "Custo" },
+                { id: "memory" as const, label: "Memory" },
+                { id: "reviews" as const, label: "Reviews" },
+              ] satisfies { id: ActiveTab; label: string }[]
+            ).map(({ id, label }) => (
               <button
-                key={tab.id}
+                key={id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as ActiveTab)}
-                className={`relative px-1 pb-3 text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${
-                  activeTab === tab.id ? "text-primary" : "text-muted hover:text-secondary"
-                }`}
+                onClick={() => setActiveTab(id)}
+                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+                style={{
+                  borderColor: activeTab === id ? "var(--accent, #7c3aed)" : "transparent",
+                  color: activeTab === id ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <span className="opacity-50">{tab.icon}</span>
-                  {tab.label}
-                  {tab.id === "artifacts" && artifacts.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent font-black">
-                      {artifacts.length}
-                    </span>
-                  )}
-                  {tab.id === "skills" && matchedSkills.length > 0 && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent font-black">
-                      {matchedSkills.length}
-                    </span>
-                  )}
-                </span>
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-accent rounded-full shadow-[0_0_10px_var(--accent)] animate-in slide-in-from-bottom-1 duration-200" />
+                {label}
+                {id === "terminal" && isRunning && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                )}
+                {id === "diff" && task.branchName && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: "var(--text-dimmed)" }}
+                  />
+                )}
+                {id === "artifacts" && artifacts.length > 0 && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                    style={{
+                      background:
+                        activeTab === "artifacts" ? "var(--accent-muted)" : "var(--bg-input)",
+                      color: activeTab === "artifacts" ? "var(--accent-text)" : "var(--text-muted)",
+                    }}
+                  >
+                    {artifacts.length}
+                  </span>
                 )}
               </button>
             ))}
+            {matchedSkills.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab("skills")}
+                className="px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5"
+                style={{
+                  borderColor: activeTab === "skills" ? "var(--accent, #7c3aed)" : "transparent",
+                  color:
+                    activeTab === "skills" ? "var(--accent-light, #c4b5fd)" : "var(--text-muted)",
+                }}
+              >
+                Skills
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                  style={{
+                    background: activeTab === "skills" ? "var(--accent-muted)" : "var(--bg-input)",
+                    color: activeTab === "skills" ? "var(--accent-text)" : "var(--text-muted)",
+                  }}
+                >
+                  {matchedSkills.length}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* ── Scrollable Body ──────────────────────────────── */}
-        <div className="flex-1 overflow-hidden flex flex-col bg-white/[0.01]">
-          {/* Quick config bar */}
-          {(task.status === "backlog" ||
-            task.status === "failed" ||
-            task.status === "in_progress") && (
-            <div className="shrink-0 px-8 py-5 bg-accent/5 border-b border-white/5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-accent/70 ml-1">
-                    Agent Engine
-                  </span>
-                  <div className="h-10 flex items-center gap-2.5 px-3.5 rounded-[1rem] bg-input/40 border border-white/5 focus-within:border-accent/40 focus-within:ring-4 focus-within:ring-accent/10 transition-all">
-                    {selectedEngine && <span className="opacity-70">🤖</span>}
-                    <Select
-                      value={selectedEngine}
-                      onChange={(e) => setSelectedEngine(e.target.value)}
-                      className="bg-transparent border-none text-xs font-black text-primary focus:ring-0 h-auto p-0 min-w-0 flex-1"
-                    >
-                      <option value="">Select Engine</option>
-                      <option value="auto">Auto (First Available)</option>
-                      {engines?.map((e) => (
-                        <option key={e.name} value={e.name} disabled={!e.available}>
-                          {e.displayName} {!e.available ? "(offline)" : ""}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                </div>
+        {/* ── Tab Content ─────────────────────────────────── */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Approval Request / Governance Gate */}
+          {task.pendingApproval && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-2 text-warning">
+                <span className="text-lg">🛡️</span>
+                <h3 className="text-sm font-semibold">Governance Gate: Aprovação Necessária</h3>
+              </div>
 
-                {availableModels.length > 0 && (
-                  <div className="flex flex-col gap-1.5 min-w-0 flex-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-accent/70 ml-1">
-                      Intelligence Model
-                    </span>
-                    <div className="h-10 flex items-center gap-2.5 px-3.5 rounded-[1rem] bg-input/40 border border-white/5 focus-within:border-accent/40 focus-within:ring-4 focus-within:ring-accent/10 transition-all">
-                      <Select
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
-                        className="bg-transparent border-none text-xs font-black text-primary focus:ring-0 h-auto p-0 min-w-0 flex-1"
-                        disabled={loadingModels}
-                      >
-                        <option value="">
-                          {loadingModels ? "Searching models..." : "Default Model"}
-                        </option>
-                        {groupModelsByProvider(availableModels).map(({ provider, models }) => (
-                          <optgroup key={provider} label={provider}>
-                            {models.map((m) => (
-                              <option key={m} value={m}>
-                                {m.split("/").pop()}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </Select>
-                    </div>
+              <div className="space-y-2">
+                <p className="text-xs text-secondary leading-relaxed">
+                  {approvalRequest?.message || "O agente solicitou autorização para continuar."}
+                </p>
+                {approvalRequest?.command && (
+                  <div className="bg-black/40 rounded p-2 border border-strong">
+                    <code className="text-[11px] text-warning font-mono break-all">
+                      $ {approvalRequest.command}
+                    </code>
                   </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-3 shrink-0 pt-4">
-                {(task.status === "backlog" || task.status === "failed") && (
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    disabled={!!loadingAction || !selectedEngine}
-                    onClick={async () => {
-                      setLoadingAction("launch");
-                      try {
-                        await onLaunch(task.id, selectedEngine, selectedModel);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                    className="h-11 px-8 rounded-2xl shadow-xl shadow-accent/25 font-black uppercase tracking-widest text-[10px]"
-                  >
-                    {loadingAction === "launch" ? "Launching..." : "▶ Start Agent"}
-                  </Button>
-                )}
-                {task.status === "failed" && (
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    disabled={!!loadingAction || !selectedEngine}
-                    onClick={async () => {
-                      setLoadingAction("retry");
-                      try {
-                        await onRetry(task.id, selectedEngine, selectedModel);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                    className="h-11 px-8 rounded-2xl border-white/10 hover:bg-white/5 font-black uppercase tracking-widest text-[10px]"
-                  >
-                    {loadingAction === "retry" ? "Restarting..." : "↺ Restart"}
-                  </Button>
-                )}
-                {task.status === "in_progress" && (
-                  <Button
-                    variant="danger"
-                    size="lg"
-                    disabled={!!loadingAction}
-                    onClick={async () => {
-                      setLoadingAction("cancel");
-                      try {
-                        await onCancel(task.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                    className="h-11 px-8 rounded-2xl shadow-xl shadow-danger/25 font-black uppercase tracking-widest text-[10px]"
-                  >
-                    {loadingAction === "cancel" ? "Stopping..." : "⏹ Stop Agent"}
-                  </Button>
-                )}
-                {confirmDelete ? (
-                  <div className="flex items-center gap-2 h-11 px-4 rounded-2xl bg-danger/10 border border-danger/20">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-danger mr-2">
-                      Sure?
-                    </span>
-                    <Button
-                      variant="danger"
-                      size="xs"
-                      onClick={() => onDelete(task.id)}
-                      className="h-7 px-4 rounded-lg font-black uppercase tracking-widest text-[9px]"
-                    >
-                      Yes
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => setConfirmDelete(false)}
-                      className="h-7 px-3 rounded-lg"
-                    >
-                      No
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setConfirmDelete(true)}
-                    className="h-11 px-6 rounded-2xl text-muted hover:text-danger hover:bg-danger/10 font-black uppercase tracking-widest text-[10px]"
-                  >
-                    Delete
-                  </Button>
-                )}
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  className="bg-warning hover:bg-warning/80 text-black border-none h-8 text-xs px-4"
+                  disabled={!!loadingAction}
+                  onClick={async () => {
+                    setLoadingAction("approve");
+                    try {
+                      await onApprove?.(task.id);
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                >
+                  {loadingAction === "approve" ? "Aprovando..." : "✅ Aprovar"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-danger hover:bg-danger/10 h-8 text-xs px-4 border border-danger/20"
+                  disabled={!!loadingAction}
+                  onClick={async () => {
+                    setLoadingAction("reject");
+                    try {
+                      await onReject?.(task.id);
+                    } finally {
+                      setLoadingAction(null);
+                    }
+                  }}
+                >
+                  {loadingAction === "reject" ? "Rejeitando..." : "❌ Rejeitar"}
+                </Button>
+              </div>
+              {approvalRequest?.requestedAt && (
+                <p className="text-[9px] text-dimmed italic">
+                  Solicitado em {formatDateTime(approvalRequest.requestedAt)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Goal Ancestry (Parent Task) */}
+          {parentTask && (
+            <div className="bg-surface/20 border border-strong rounded-lg p-3 space-y-2">
+              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                Parent Task (Ancestry)
+              </h3>
+              <div className="flex items-start gap-2">
+                <span className="text-info text-xs mt-0.5">↳</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-secondary truncate">{parentTask.title}</p>
+                  <p className="text-[11px] text-dimmed line-clamp-1">{parentTask.description}</p>
+                </div>
               </div>
             </div>
           )}
 
-          {/* ── Overview Tab ──────────────────────────────────── */}
+          {/* Sub-tasks (Delegation) */}
+          {subTasks.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                Sub-tasks (Delegated Work)
+              </h3>
+              <div className="grid gap-2">
+                {subTasks.map((st) => (
+                  <div
+                    key={st.id}
+                    className="flex items-center justify-between gap-3 bg-surface/10 border border-strong rounded-lg p-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={statusVariant[st.status] ?? "default"}
+                          className="text-[9px] px-1 py-0 h-auto"
+                        >
+                          {statusLabel[st.status] ?? st.status}
+                        </Badge>
+                        <span className="text-xs font-medium text-secondary truncate">
+                          {st.title}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-dimmed font-mono shrink-0">
+                      {st.id.slice(0, 8)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Info Tab ──────────────────────────────────── */}
           {activeTab === "info" && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {/* PR Creation Pipeline */}
@@ -2133,27 +2027,24 @@ export function TaskDetail({
 
       {/* M2.2: Preview Prompt Modal */}
       {previewPrompt !== null && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 rounded-[2.5rem]">
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 rounded-xl">
           <button
             type="button"
-            aria-label="Close prompt preview"
-            className="absolute inset-0 bg-black/60 rounded-[2.5rem]"
+            aria-label="Fechar preview do prompt"
+            className="absolute inset-0 bg-black/60 rounded-xl"
             onClick={() => setPreviewPrompt(null)}
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="preview-prompt-title"
-            className="relative glass-panel border border-white/10 rounded-[2rem] max-w-4xl max-h-[80vh] w-full flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95"
+            className="relative bg-surface border border-surface-border rounded-lg max-w-4xl max-h-96 w-full flex flex-col shadow-2xl"
           >
-            <div className="flex items-center justify-between px-6 py-4 bg-white/[0.02] border-b border-white/5 shrink-0">
-              <h3
-                id="preview-prompt-title"
-                className="text-sm font-black tracking-tight text-primary"
-              >
-                Agent Prompt Preview
+            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border shrink-0">
+              <h3 id="preview-prompt-title" className="text-sm font-semibold">
+                Preview do Prompt do Agente
               </h3>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -2161,20 +2052,20 @@ export function TaskDetail({
                     setPromptCopied(true);
                     setTimeout(() => setPromptCopied(false), 2000);
                   }}
-                  className="text-[9px] font-black uppercase tracking-widest px-4 py-2 bg-accent text-white rounded-xl shadow-lg shadow-accent/20 active-shrink transition-transform"
+                  className="text-xs px-2 py-1 bg-primary0 text-white rounded hover:opacity-80 transition-opacity"
                 >
-                  {promptCopied ? "✓ Copied" : "Copy Full Prompt"}
+                  {promptCopied ? "✓ Copiado" : "📋 Copiar"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreviewPrompt(null)}
-                  className="p-2 text-muted hover:text-primary transition-colors cursor-pointer rounded-xl hover:bg-white/5"
+                  className="text-primary0 hover:text-secondary text-lg"
                 >
                   ✕
                 </button>
               </div>
             </div>
-            <pre className="flex-1 overflow-auto p-6 text-xs bg-black/40 text-secondary font-mono whitespace-pre-wrap break-words custom-scrollbar">
+            <pre className="flex-1 overflow-auto p-4 text-xs bg-surface-dark rounded text-text-primary font-mono whitespace-pre-wrap break-words">
               {previewPrompt}
             </pre>
           </div>

@@ -278,8 +278,15 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   selectedTaskRef.current = selectedTask;
   const _searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { repos, addRepo, removeRepo, deleteLocalClone, purgeLocalClones, addOrUpdateRepo } =
-    useRepos();
+  const {
+    repos,
+    loading: reposLoading,
+    addRepo,
+    removeRepo,
+    deleteLocalClone,
+    purgeLocalClones,
+    addOrUpdateRepo,
+  } = useRepos();
   const {
     tasks,
     loading: tasksLoading,
@@ -1405,6 +1412,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           open={showNewTask}
           onClose={() => setShowNewTask(false)}
           repos={repos}
+          reposLoading={reposLoading}
           engines={engines}
           enginesLoading={enginesLoading}
           enginesError={enginesError}

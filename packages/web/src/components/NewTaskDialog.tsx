@@ -33,6 +33,7 @@ interface NewTaskDialogProps {
   open: boolean;
   onClose: () => void;
   repos: Repository[];
+  reposLoading?: boolean;
   engines: EngineInfo[];
   enginesLoading?: boolean;
   enginesError?: string | null;
@@ -180,6 +181,7 @@ export function NewTaskDialog({
   open,
   onClose,
   repos,
+  reposLoading,
   engines,
   enginesLoading,
   onSubmit,
@@ -334,31 +336,56 @@ export function NewTaskDialog({
                         </svg>
                       </div>
                       <div className="relative z-20 h-12 rounded-2xl bg-input/50 border border-white/5 focus-within:border-accent/40 overflow-hidden">
-                        <Combobox
-                          inputId={NEW_TASK_FIELD_IDS.repository}
-                          value={repoId}
-                          onChange={setRepoId}
-                          placeholder="Search repositories..."
-                          required
-                          options={repos
-                            .filter((r) => r.status !== "error")
-                            .map((repo) => {
-                              const sublabel =
-                                repo.status === "ready"
-                                  ? undefined
-                                  : repo.status === "cloning"
-                                    ? "cloning…"
-                                    : repo.status === "pending"
-                                      ? "pending"
-                                      : repo.status;
-                              return {
-                                value: repo.id,
-                                label: repo.name,
-                                sublabel,
-                                disabled: repo.status !== "ready",
-                              };
-                            })}
-                        />
+                        {reposLoading ? (
+                          <div className="px-3 py-3 text-sm text-primary0 flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-accent/40 animate-pulse" />
+                            Loading repositories...
+                          </div>
+                        ) : repos.length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-danger flex items-center gap-2">
+                            <svg
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              aria-hidden="true"
+                            >
+                              <title>Alert</title>
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="8" x2="12" y2="12" />
+                              <line x1="12" y1="16" x2="12.01" y2="16" />
+                            </svg>
+                            No repositories found
+                          </div>
+                        ) : (
+                          <Combobox
+                            inputId={NEW_TASK_FIELD_IDS.repository}
+                            value={repoId}
+                            onChange={setRepoId}
+                            placeholder="Search repositories..."
+                            required
+                            options={repos
+                              .filter((r) => r.status !== "error")
+                              .map((repo) => {
+                                const sublabel =
+                                  repo.status === "ready"
+                                    ? undefined
+                                    : repo.status === "cloning"
+                                      ? "cloning…"
+                                      : repo.status === "pending"
+                                        ? "pending"
+                                        : repo.status;
+                                return {
+                                  value: repo.id,
+                                  label: repo.name,
+                                  sublabel,
+                                  disabled: repo.status !== "ready",
+                                };
+                              })}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
