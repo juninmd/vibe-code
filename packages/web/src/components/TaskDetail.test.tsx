@@ -15,6 +15,9 @@ vi.mock("../api/client", () => ({
       getMemory: vi.fn().mockResolvedValue({ memory: "", scope: "task", needsCompaction: false }),
       updateMemory: vi.fn().mockResolvedValue({ memory: "", needsCompaction: false }),
     },
+    engines: {
+      models: vi.fn().mockResolvedValue([]),
+    },
   },
 }));
 
