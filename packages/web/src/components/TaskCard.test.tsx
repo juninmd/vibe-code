@@ -69,12 +69,12 @@ describe("TaskCard", () => {
 
   it("renders the short task id", () => {
     render(<TaskCard task={baseTask} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("abc123")).toBeInTheDocument();
+    expect(screen.getByText("abc1")).toBeInTheDocument();
   });
 
   it("renders the engine badge", () => {
     render(<TaskCard task={baseTask} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("claude-code")).toBeInTheDocument();
+    expect(screen.getByText(/claude-code/i)).toBeInTheDocument();
   });
 
   it("calls onClick when card is clicked", async () => {
@@ -87,7 +87,7 @@ describe("TaskCard", () => {
   it("shows PR badge when prUrl is set", () => {
     const task = { ...baseTask, prUrl: "https://github.com/org/repo/pull/1" };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("↗ PR Created")).toBeInTheDocument();
+    expect(screen.getByText("PR")).toBeInTheDocument();
   });
 
   it("shows Retry PR button when status is review and no prUrl", () => {

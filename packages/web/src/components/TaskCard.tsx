@@ -72,7 +72,37 @@ function PriorityBadge({ priority }: { priority: import("@vibe-code/shared").Tas
   );
 }
 
+const statusColor: Record<string, { bg: string; border: string; glow: string }> = {
+  running: {
+    bg: "from-cyan-500/20 to-blue-500/20",
+    border: "border-cyan-500/30",
+    glow: "shadow-[0_0_20px_-5px_rgba(6,182,212,0.3)]",
+  },
+  failed: {
+    bg: "from-red-500/10 to-orange-500/10",
+    border: "border-red-500/30",
+    glow: "shadow-[0_0_20px_-5px_rgba(239,68,68,0.2)]",
+  },
+  review: {
+    bg: "from-purple-500/10 to-pink-500/10",
+    border: "border-purple-500/30",
+    glow: "shadow-[0_0_20px_-5px_rgba(168,85,247,0.2)]",
+  },
+  done: {
+    bg: "from-emerald-500/10 to-teal-500/10",
+    border: "border-emerald-500/30",
+    glow: "shadow-[0_0_20px_-5px_rgba(16,185,129,0.2)]",
+  },
+  scheduled: {
+    bg: "from-amber-500/10 to-yellow-500/10",
+    border: "border-amber-500/30",
+    glow: "shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]",
+  },
+  backlog: { bg: "from-zinc-500/10 to-neutral-500/10", border: "border-zinc-500/20", glow: "" },
+};
+
 function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardProps) {
+  const colors = statusColor[task.status] || statusColor.backlog;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -107,195 +137,179 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
   const ProviderIcon = provider?.icon;
 
+  const isFailed = task.status === "failed";
+  const isReview = task.status === "review";
+  const isScheduled = task.status === "scheduled";
+  const isDone = task.status === "done";
+  const hasPR = !!task.prUrl;
+  const hasMetadata = !!(
+    task.tags?.length ||
+    task.taskType ||
+    task.taskComplexity ||
+    task.labels?.length
+  );
+
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: sortable card uses pointer interaction on the wrapper by design
-    // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard semantics are intentionally delegated to inner controls because the card contains nested interactive elements
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
+      role="button"
+      aria-label={`Task: ${task.title}`}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(task);
+        }
+      }}
       onClick={() => onClick(task)}
-      className={`glass-card border rounded-2xl p-4 cursor-grab active:cursor-grabbing transition-all duration-200 group relative shadow-soft hover-lift active-shrink ${
-        isRunning
-          ? "border-info/40 shadow-glow-accent"
-          : task.status === "failed"
-            ? "border-danger/30 hover:border-danger/40 hover:shadow-glow-danger"
-            : "hover:border-accent/30"
-      }`}
+      className={`group relative rounded-lg cursor-grab active:cursor-grabbing transition-all duration-300 overflow-hidden ${isRunning ? colors.glow : ""}`}
     >
+      <div
+        className={`absolute inset-0 bg-gradient-to-br ${colors.bg} opacity-50 group-hover:opacity-80 transition-opacity duration-300`}
+      />
+
       {isRunning && (
-        <div className="absolute inset-x-0 top-0 h-1 overflow-hidden rounded-t-2xl bg-info/10">
-          <div className="h-full w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-[pulse_1.5s_ease-in-out_infinite]" />
+        <div className="absolute inset-0 animate-[pulse_2s_ease-in-out_infinite]">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent -translate-x-full animate-[shimmer_2s_ease-in-out_infinite]" />
         </div>
       )}
 
-      <div className="relative z-10 flex flex-col gap-3">
-        {/* Header: Title and Issue/ID */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-2.5 flex-1 min-w-0">
-            {ProviderIcon && (
-              <span
-                className={`mt-0.5 shrink-0 ${provider?.color} opacity-80 group-hover:opacity-100 transition-opacity`}
-              >
-                <ProviderIcon size={14} />
+      <div
+        className={`absolute left-0 top-0 bottom-0 w-0.5 ${colors.border} group-hover:w-1 transition-all duration-200`}
+      />
+
+      <div className="relative z-10">
+        <div className="p-3 border-b border-white/[0.05]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2 min-w-0 flex-1">
+              {ProviderIcon && (
+                <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
+                  <ProviderIcon size={13} />
+                </span>
+              )}
+              <h3 className="text-[12px] font-medium line-clamp-2 leading-snug text-primary">
+                {task.title}
+              </h3>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <PriorityBadge priority={task.priority} />
+              <span className="text-[9px] font-mono text-dimmed">
+                {task.issueNumber != null ? `#${task.issueNumber}` : task.id.slice(0, 4)}
               </span>
-            )}
-            <h3 className="text-[13px] font-semibold line-clamp-2 leading-tight tracking-tight text-primary">
-              {task.title}
-            </h3>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <PriorityBadge priority={task.priority} />
-            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface-hover border border-strong/40 text-dimmed">
-              {task.issueNumber != null ? `#${task.issueNumber}` : task.id.slice(0, 6)}
-            </span>
+            </div>
           </div>
         </div>
 
-        {/* Description */}
-        {task.description && (
-          <p className="text-[11px] line-clamp-2 leading-relaxed text-secondary opacity-70 group-hover:opacity-90 transition-opacity">
-            {task.description}
-          </p>
-        )}
+        <div className="p-3">
+          {task.description && (
+            <p className="text-[11px] line-clamp-1 text-secondary opacity-60 mb-2">
+              {task.description}
+            </p>
+          )}
 
-        {/* Tags & Metadata Badges */}
-        {(task.tags?.length > 0 ||
-          task.taskType ||
-          task.taskComplexity ||
-          (task.labels && task.labels.length > 0)) && (
-          <div className="flex flex-wrap gap-1.5">
-            {task.taskType &&
-              (() => {
-                const m = TASK_TYPE_META[task.taskType];
-                return (
-                  <span
-                    className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border ${m.bgColor} ${m.textColor} ${m.borderColor} opacity-80`}
-                  >
-                    {m.label}
-                  </span>
-                );
-              })()}
-            {task.taskComplexity &&
-              (() => {
-                const m = TASK_COMPLEXITY_META[task.taskComplexity];
-                return (
-                  <span
-                    className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border ${m.bgColor} ${m.textColor} ${m.borderColor} opacity-80`}
-                  >
-                    {m.icon} {m.label}
-                  </span>
-                );
-              })()}
-            {task.tags?.map((tag) => (
-              <span
-                key={tag}
-                className="text-[9px] px-1.5 py-0.5 rounded-sm bg-accent-muted/10 border border-accent/20 text-accent-text/80 font-medium"
-              >
-                #{tag}
-              </span>
-            ))}
-            {task.labels?.map((label) => (
-              <span
-                key={label.id}
-                className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
-                style={{
-                  backgroundColor: `${label.color}15`,
-                  borderColor: `${label.color}40`,
-                  color: label.color,
-                }}
-              >
+          {hasMetadata && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {task.taskType && (
                 <span
-                  className="w-1 h-1 rounded-full shrink-0"
-                  style={{ backgroundColor: label.color }}
-                />
-                {label.name}
-              </span>
-            ))}
-          </div>
-        )}
+                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${TASK_TYPE_META[task.taskType].bgColor} ${TASK_TYPE_META[task.taskType].textColor}`}
+                >
+                  {TASK_TYPE_META[task.taskType].label}
+                </span>
+              )}
+              {task.taskComplexity && (
+                <span
+                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${TASK_COMPLEXITY_META[task.taskComplexity].bgColor} ${TASK_COMPLEXITY_META[task.taskComplexity].textColor}`}
+                >
+                  {TASK_COMPLEXITY_META[task.taskComplexity].icon}
+                </span>
+              )}
+              {task.tags?.slice(0, 2).map((tag) => (
+                <span key={tag} className="text-[9px] text-accent-text/70">
+                  #{tag}
+                </span>
+              ))}
+              {task.labels?.slice(0, 1).map((label) => (
+                <span key={label.id} className="text-[9px]" style={{ color: label.color }}>
+                  {label.name}
+                </span>
+              ))}
+            </div>
+          )}
 
-        {/* Footer: Repo, Agent, Stats */}
-        <div className="flex items-center justify-between pt-1 border-t border-strong/10">
-          <div className="flex items-center gap-2 overflow-hidden min-w-0">
-            {task.repo && (
-              <span className="text-[10px] font-medium truncate text-muted opacity-60 hover:opacity-100 transition-opacity">
-                {task.repo.name}
-              </span>
-            )}
+          <div className="flex items-center justify-between pt-2 border-t border-white/[0.05]">
+            <div className="flex items-center gap-2 min-w-0">
+              {task.repo && (
+                <span className="text-[10px] text-muted truncate group-hover:text-secondary transition-colors">
+                  {task.repo.name}
+                </span>
+              )}
+              {task.engine &&
+                (() => {
+                  const eng = getEngineMeta(task.engine);
+                  const EngIcon = eng.icon;
+                  return (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <EngIcon size={9} className={eng.color} />
+                      <span className="text-[9px] text-muted/70 uppercase">{task.engine}</span>
+                    </div>
+                  );
+                })()}
+            </div>
 
-            {task.engine &&
-              (() => {
-                const eng = getEngineMeta(task.engine);
-                const EngIcon = eng.icon;
-                return (
-                  <div className="flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded bg-surface-hover/50 border border-strong/20">
-                    <EngIcon size={10} className={eng.color} />
-                    <span className="text-[9px] font-medium opacity-80 uppercase tracking-tighter">
-                      {task.engine}
-                    </span>
-                  </div>
-                );
-              })()}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {isRunning ? (
-              <span className="flex items-center gap-1.5 text-[10px] font-bold text-info tabular-nums">
-                <span className="w-1 h-1 rounded-full bg-info animate-pulse" />
-                {elapsed}
-              </span>
-            ) : task.latestRun?.costStats ? (
-              <span className="text-[10px] font-mono font-bold text-warning-muted">
-                $
-                {(task.latestRun.costStats.input
-                  ? task.latestRun.costStats.input / 1_000_000
-                  : 0
-                ).toFixed(2)}
-              </span>
-            ) : null}
+            <div className="flex items-center gap-2 shrink-0">
+              {isRunning ? (
+                <span className="flex items-center gap-1.5 text-[10px] text-info tabular-nums font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)] animate-pulse" />
+                  {elapsed}
+                </span>
+              ) : task.latestRun?.costStats ? (
+                <span className="text-[10px] font-mono text-warning/80 bg-warning/10 px-1.5 py-0.5 rounded">
+                  ${((task.latestRun.costStats.input || 0) / 1_000_000).toFixed(2)}
+                </span>
+              ) : isDone ? (
+                <span className="text-[10px] text-emerald-400">done</span>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        {/* Special States (PR, Failed, Scheduled) */}
-        {(task.status === "review" ||
-          task.status === "failed" ||
-          task.status === "scheduled" ||
-          task.prUrl) && (
-          <div className="flex items-center gap-2 mt-1">
-            {task.prUrl && (
-              <Badge variant="success" className="text-[9px] font-bold uppercase py-0 px-1.5">
-                ↗ PR Created
-              </Badge>
-            )}
-            {task.status === "failed" && (
-              <Badge variant="danger" className="text-[9px] font-bold uppercase py-0 px-1.5">
-                Failed
-              </Badge>
-            )}
-            {task.status === "scheduled" && (
-              <Badge variant="warning" className="text-[9px] font-bold uppercase py-0 px-1.5">
-                Scheduled
-              </Badge>
-            )}
-            {retryEntry && task.status === "failed" && (
-              <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
-            )}
-            {task.status === "review" && !task.prUrl && (
-              <Button
-                type="button"
-                size="xs"
-                variant="primary"
-                className="h-5 text-[9px] font-bold uppercase px-2"
-                onClick={handleRetryPR}
-                disabled={retrying}
-              >
-                {retrying ? "…" : "Retry PR"}
-              </Button>
-            )}
-          </div>
-        )}
+        <div
+          className={`p-2.5 flex items-center gap-2 ${isFailed ? "bg-danger/10" : isReview ? "bg-purple-500/10" : "bg-white/[0.02]"}`}
+        >
+          {hasPR && (
+            <Badge variant="success" className="text-[8px] py-0.5 px-2 font-medium">
+              PR
+            </Badge>
+          )}
+          {isFailed && (
+            <Badge variant="danger" className="text-[8px] py-0.5 px-2 font-medium">
+              Failed
+            </Badge>
+          )}
+          {isScheduled && (
+            <Badge variant="warning" className="text-[8px] py-0.5 px-2 font-medium">
+              Scheduled
+            </Badge>
+          )}
+          {retryEntry && isFailed && (
+            <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
+          )}
+          {isReview && !hasPR && (
+            <Button
+              type="button"
+              size="xs"
+              variant="primary"
+              className="h-5 text-[8px] px-2"
+              onClick={handleRetryPR}
+              disabled={retrying}
+            >
+              {retrying ? "..." : "Retry PR"}
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

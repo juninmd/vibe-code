@@ -105,6 +105,7 @@ export function PromptTemplatePicker({
                 stroke="currentColor"
                 strokeWidth="2"
               >
+                <title>Search Icon</title>
                 <circle cx="7" cy="7" r="5" />
                 <path d="M11 11l4 4" />
               </svg>
@@ -181,6 +182,7 @@ export function PromptTemplatePicker({
                             stroke="currentColor"
                             strokeWidth="4"
                           >
+                            <title>Purge Icon</title>
                             <path d="M18 6L6 18M6 6l12 12" />
                           </svg>
                         </button>
