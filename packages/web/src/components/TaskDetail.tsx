@@ -668,7 +668,7 @@ export function TaskDetail({
     });
   };
 
-  const handleAlignmentBlur = () => {
+  const _handleAlignmentBlur = () => {
     if (!onUpdateTask) return;
     const goal = goalValue.trim();
     const desiredOutcome = outcomeValue.trim();

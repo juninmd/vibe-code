@@ -1,8 +1,8 @@
-import { describe, expect, it, mock, type Mock } from "bun:test";
-import { handleAgentEvent } from "./event-handler";
+import { describe, expect, it, mock } from "bun:test";
 import type { Db } from "../../db";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEvent } from "../engine";
+import { handleAgentEvent } from "./event-handler";
 
 describe("handleAgentEvent", () => {
   const mockDb = {
@@ -74,36 +74,28 @@ describe("handleAgentEvent", () => {
     });
   });
 
-  it("handles status event when run is not found", async () => {
-    const event: AgentEvent = { type: "status", content: "Working..." };
-    const localMockDb = { ...mockDb, runs: { ...mockDb.runs, getById: mock(() => undefined) } } as unknown as Db;
-
-    await handleAgentEvent(event, "run1", "task1", localMockDb, mockHub);
-
-    expect(localMockDb.runs.getById).toHaveBeenCalledWith("run1");
-  });
-
   it("handles cost event correctly", async () => {
-    const event: AgentEvent = { type: "cost", costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 } };
+    const event: AgentEvent = {
+      type: "cost",
+      costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 },
+    };
     const onActivity = mock(() => {});
 
     await handleAgentEvent(event, "run1", "task1", mockDb, mockHub, onActivity);
 
     expect(onActivity).not.toHaveBeenCalled(); // cost event doesn't trigger onActivity unless it has content, but type limits it
-    expect(mockDb.runs.updateCostStats).toHaveBeenCalledWith("run1", { total_tokens: 100, input_tokens: 50, output_tokens: 50 });
+    expect(mockDb.runs.updateCostStats).toHaveBeenCalledWith("run1", {
+      total_tokens: 100,
+      input_tokens: 50,
+      output_tokens: 50,
+    });
     expect(mockHub.broadcastAll).toHaveBeenCalledWith({
       type: "run_updated",
-      run: expect.objectContaining({ id: "run1", costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 } }),
+      run: expect.objectContaining({
+        id: "run1",
+        costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 },
+      }),
     });
-  });
-
-  it("handles cost event when run is not found", async () => {
-    const event: AgentEvent = { type: "cost", costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 } };
-    const localMockDb = { ...mockDb, runs: { ...mockDb.runs, getById: mock(() => undefined), updateCostStats: mock(() => {}) } } as unknown as Db;
-
-    await handleAgentEvent(event, "run1", "task1", localMockDb, mockHub);
-
-    expect(localMockDb.runs.updateCostStats).toHaveBeenCalledWith("run1", { total_tokens: 100, input_tokens: 50, output_tokens: 50 });
   });
 
   it("handles session event correctly", async () => {
@@ -116,15 +108,6 @@ describe("handleAgentEvent", () => {
       type: "run_updated",
       run: expect.objectContaining({ id: "run1", status: "running" }),
     });
-  });
-
-  it("handles session event when run is not found", async () => {
-    const event: AgentEvent = { type: "session", sessionId: "sess_123" };
-    const localMockDb = { ...mockDb, runs: { ...mockDb.runs, getById: mock(() => undefined), updateSessionId: mock(() => {}) } } as unknown as Db;
-
-    await handleAgentEvent(event, "run1", "task1", localMockDb, mockHub);
-
-    expect(localMockDb.runs.updateSessionId).toHaveBeenCalledWith("run1", "sess_123");
   });
 
   it("handles tool_use event correctly", async () => {
@@ -171,5 +154,50 @@ describe("handleAgentEvent", () => {
         timestamp: expect.any(String),
       })
     );
+  });
+
+  describe("run not found scenarios", () => {
+    it("handles events when run is missing without crashing", async () => {
+      const localMockDb = {
+        ...mockDb,
+        runs: {
+          ...mockDb.runs,
+          getById: mock(() => undefined),
+          updateCostStats: mock(() => {}),
+          updateSessionId: mock(() => {}),
+        },
+      } as unknown as Db;
+
+      await handleAgentEvent(
+        { type: "status", content: "Working..." },
+        "run1",
+        "task1",
+        localMockDb,
+        mockHub
+      );
+      expect(localMockDb.runs.getById).toHaveBeenCalledWith("run1");
+
+      await handleAgentEvent(
+        { type: "cost", costStats: { total_tokens: 100, input_tokens: 50, output_tokens: 50 } },
+        "run1",
+        "task1",
+        localMockDb,
+        mockHub
+      );
+      expect(localMockDb.runs.updateCostStats).toHaveBeenCalledWith("run1", {
+        total_tokens: 100,
+        input_tokens: 50,
+        output_tokens: 50,
+      });
+
+      await handleAgentEvent(
+        { type: "session", sessionId: "sess_123" },
+        "run1",
+        "task1",
+        localMockDb,
+        mockHub
+      );
+      expect(localMockDb.runs.updateSessionId).toHaveBeenCalledWith("run1", "sess_123");
+    });
   });
 });

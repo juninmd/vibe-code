@@ -63,9 +63,10 @@ export function TaskTagsDisplay({ tags, small }: TaskTagsDisplayProps) {
 interface TaskTagsEditorProps {
   tags: string[];
   onChange: (tags: string[]) => void;
+  compact?: boolean;
 }
 
-export function TaskTagsEditor({ tags, onChange }: TaskTagsEditorProps) {
+export function TaskTagsEditor({ tags, onChange, compact }: TaskTagsEditorProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     if (e.key === "Enter" || e.key === ",") {
@@ -81,7 +82,9 @@ export function TaskTagsEditor({ tags, onChange }: TaskTagsEditorProps) {
   };
 
   return (
-    <div className="flex flex-wrap gap-1 items-center min-h-[28px] bg-surface-hover border border-strong rounded-md px-2 py-1 focus-within:border-zinc-500">
+    <div
+      className={`flex flex-wrap gap-1 items-center bg-surface-hover border border-strong rounded-md px-2 py-1 focus-within:border-zinc-500 ${compact ? "min-h-[24px]" : "min-h-[28px]"}`}
+    >
       {tags.map((tag) => (
         <TagChip key={tag} tag={tag} onRemove={() => onChange(tags.filter((t) => t !== tag))} />
       ))}
