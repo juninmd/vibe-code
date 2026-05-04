@@ -10,6 +10,7 @@ import type {
 } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import { sanitizeRunForExternal } from "../../security/access-control";
 import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
@@ -439,12 +440,26 @@ export async function executeAgent(
       ...extra,
     });
     if (broadcast) {
+      const ts = new Date().toISOString();
       hub.broadcastToTask(task.id, {
         type: "phase_changed",
         runId: run.id,
         taskId: task.id,
         phase,
-        timestamp: new Date().toISOString(),
+        timestamp: ts,
+      });
+      hub.broadcastToTask(task.id, {
+        type: "execution_event",
+        taskId: task.id,
+        runId: run.id,
+        event: {
+          id: `${Date.now()}-${phase}`,
+          runId: run.id,
+          taskId: task.id,
+          type: "phase",
+          phase,
+          timestamp: ts,
+        },
       });
     }
     logOrchestratorEvent(
@@ -1211,6 +1226,19 @@ export async function executeAgent(
           taskId: task.id,
           message: `Task "${task.title}" is awaiting human approval before PR creation.`,
         });
+        hub.broadcastToTask(task.id, {
+          type: "execution_event",
+          taskId: task.id,
+          runId: run.id,
+          event: {
+            id: `${Date.now()}-approval`,
+            runId: run.id,
+            taskId: task.id,
+            type: "approval",
+            content: "Awaiting human approval before PR creation",
+            timestamp: new Date().toISOString(),
+          },
+        });
         db.tasks.update(task.id, { status: "review", pendingApproval: true });
         const pendingTask = db.tasks.getById(task.id);
         hub.broadcastAll({
@@ -1224,7 +1252,8 @@ export async function executeAgent(
         });
         if (capturedCostStats) db.runs.updateCostStats(run.id, capturedCostStats);
         hub.flushLogs(task.id);
-        if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
+        if (completedRun)
+          hub.broadcastAll({ type: "run_updated", run: sanitizeRunForExternal(db, completedRun) });
         logAgentFinish(task.id, "completed", "Awaiting human approval");
         orchestrator?.unblockDependents(task.id);
         return;
@@ -1254,7 +1283,8 @@ export async function executeAgent(
     }
     // Flush any pending log batches before broadcasting terminal state
     hub.flushLogs(task.id);
-    if (completedRun) hub.broadcastAll({ type: "run_updated", run: completedRun });
+    if (completedRun)
+      hub.broadcastAll({ type: "run_updated", run: sanitizeRunForExternal(db, completedRun) });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
 
@@ -1280,7 +1310,8 @@ export async function executeAgent(
     db.tasks.update(task.id, { status: isCancelled ? "backlog" : "failed" });
     // Flush pending logs before broadcasting terminal state
     hub.flushLogs(task.id);
-    if (failedRun) hub.broadcastAll({ type: "run_updated", run: failedRun });
+    if (failedRun)
+      hub.broadcastAll({ type: "run_updated", run: sanitizeRunForExternal(db, failedRun) });
     const finalTask = db.tasks.getById(task.id);
     if (finalTask) hub.broadcastAll({ type: "task_updated", task: finalTask });
     logAgentFinish(task.id, isCancelled ? "cancelled" : "failed", errMsg);
