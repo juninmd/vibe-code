@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -7,7 +7,13 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["packages/**/*.ts", "packages/**/*.tsx"]
+    "includes": [
+      "packages/**/*.ts",
+      "packages/**/*.tsx",
+      "!**/~/**",
+      "!**/dist/**",
+      "!**/node_modules/**"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -29,7 +35,8 @@
         "noSvgWithoutTitle": "warn",
         "noLabelWithoutControl": "warn",
         "noStaticElementInteractions": "warn",
-        "useKeyWithClickEvents": "warn"
+        "useKeyWithClickEvents": "warn",
+        "useSemanticElements": "warn"
       },
       "correctness": {
         "noUnusedVariables": "warn",

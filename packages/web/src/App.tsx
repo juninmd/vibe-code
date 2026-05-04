@@ -6,6 +6,8 @@ import type {
   WsServerMessage,
 } from "@vibe-code/shared";
 import {
+  lazy,
+  Suspense,
   startTransition,
   useCallback,
   useDeferredValue,
@@ -15,27 +17,11 @@ import {
   useState,
 } from "react";
 import { api } from "./api/client";
-import { AddRepoDialog } from "./components/AddRepoDialog";
 import { Board } from "./components/Board";
-import { ChangelogModal } from "./components/ChangelogModal";
-import { CommandPalette } from "./components/CommandPalette";
-import { EnginesPanel } from "./components/EnginesPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FilterBar, type Filters } from "./components/FilterBar";
-import { InboxPanel } from "./components/InboxPanel";
-import { IssueImporter } from "./components/IssueImporter";
-import { NewTaskDialog } from "./components/NewTaskDialog";
-import { RepoQuickView } from "./components/RepoQuickView";
-import { RuntimeDashboard } from "./components/RuntimeDashboard";
-import { ScheduledTasksPanel } from "./components/ScheduledTasksPanel";
-import { SettingsDialog } from "./components/SettingsDialog";
-import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
-import { SkillsBrowser } from "./components/SkillsBrowser";
-import { StatsDialog } from "./components/StatsDialog";
-import { TaskDetail } from "./components/TaskDetail";
-import { TemplatesPanel } from "./components/TemplatesPanel";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
@@ -45,6 +31,56 @@ import { useRetryQueue } from "./hooks/useRetryQueue";
 import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
+
+// Lazy-loaded components for better performance
+const AddRepoDialog = lazy(() =>
+  import("./components/AddRepoDialog").then((m) => ({ default: m.AddRepoDialog }))
+);
+const ChangelogModal = lazy(() =>
+  import("./components/ChangelogModal").then((m) => ({ default: m.ChangelogModal }))
+);
+const CommandPalette = lazy(() =>
+  import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette }))
+);
+const EnginesPanel = lazy(() =>
+  import("./components/EnginesPanel").then((m) => ({ default: m.EnginesPanel }))
+);
+const InboxPanel = lazy(() =>
+  import("./components/InboxPanel").then((m) => ({ default: m.InboxPanel }))
+);
+const IssueImporter = lazy(() =>
+  import("./components/IssueImporter").then((m) => ({ default: m.IssueImporter }))
+);
+const NewTaskDialog = lazy(() =>
+  import("./components/NewTaskDialog").then((m) => ({ default: m.NewTaskDialog }))
+);
+const RepoQuickView = lazy(() =>
+  import("./components/RepoQuickView").then((m) => ({ default: m.RepoQuickView }))
+);
+const RuntimeDashboard = lazy(() =>
+  import("./components/RuntimeDashboard").then((m) => ({ default: m.RuntimeDashboard }))
+);
+const ScheduledTasksPanel = lazy(() =>
+  import("./components/ScheduledTasksPanel").then((m) => ({ default: m.ScheduledTasksPanel }))
+);
+const SettingsDialog = lazy(() =>
+  import("./components/SettingsDialog").then((m) => ({ default: m.SettingsDialog }))
+);
+const ShortcutsModal = lazy(() =>
+  import("./components/ShortcutsModal").then((m) => ({ default: m.ShortcutsModal }))
+);
+const SkillsBrowser = lazy(() =>
+  import("./components/SkillsBrowser").then((m) => ({ default: m.SkillsBrowser }))
+);
+const StatsDialog = lazy(() =>
+  import("./components/StatsDialog").then((m) => ({ default: m.StatsDialog }))
+);
+const TaskDetail = lazy(() =>
+  import("./components/TaskDetail").then((m) => ({ default: m.TaskDetail }))
+);
+const TemplatesPanel = lazy(() =>
+  import("./components/TemplatesPanel").then((m) => ({ default: m.TemplatesPanel }))
+);
 
 const MAX_LIVE_LOGS_PER_TASK = 1500;
 
@@ -1243,269 +1279,270 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         </div>
 
         {/* Task Detail Slide-over */}
-        {selectedTask && (
-          <TaskDetail
-            task={selectedTask}
-            engines={engines}
-            liveLogs={liveLogs[selectedTask.id] ?? []}
-            onClose={handleCloseDetail}
-            onLaunch={async (id, engine, model) => {
-              setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-              await launchTask(id, engine, model);
-              toast("Agent started", "success");
-            }}
-            onCancel={async (id) => {
-              await cancelTask(id);
-              toast("Agent canceled", "info");
-            }}
-            onRetry={async (id, engine, model) => {
-              setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-              await retryTask(id, engine, model);
-              toast("Agent restarted", "success");
-            }}
-            onRetryPR={async (id) => {
-              await retryPR(id);
-              toast("Creating PR...", "info");
-            }}
-            onApprove={async (id) => {
-              await approveTask(id);
-              toast("Solicitação aprovada", "success");
-            }}
-            onReject={async (id) => {
-              await rejectTask(id);
-              toast("Solicitação rejeitada", "info");
-            }}
-            onDelete={async (id) => {
-              const taskToDelete = tasks.find((t) => t.id === id);
-              await removeTask(id);
-              handleCloseDetail();
-              toast(
-                "Task deletada",
-                "info",
-                taskToDelete
-                  ? {
-                      label: "Desfazer",
-                      onClick: async () => {
-                        await createTask({
-                          title: taskToDelete.title,
-                          description: taskToDelete.description,
-                          repoId: taskToDelete.repoId,
-                          engine: taskToDelete.engine ?? undefined,
-                          tags: taskToDelete.tags,
-                        });
-                        toast("Task restaurada", "success");
-                      },
-                    }
-                  : undefined
-              );
-            }}
-            onSendInput={(taskId, input) => {
-              send({ type: "agent_input", taskId, input });
-            }}
-            onClone={async (id) => {
-              const cloned = await cloneTask(id);
-              toast(`"${cloned.title}" clonada`, "success");
-            }}
-            onUpdateTask={async (id, data) => {
-              await updateTask(id, data);
-            }}
-            onTaskRefresh={refresh}
-            onSkillClick={handleSkillClick}
-            allTasks={tasks}
-          />
-        )}
-
-        {showEnginesPanel && (
-          <EnginesPanel
-            onClose={() => setShowEnginesPanel(false)}
-            onOpenSettings={() => {
-              setShowEnginesPanel(false);
-              setShowSettings(true);
-            }}
-          />
-        )}
-
-        {showSchedulesPanel && (
-          <div className="fixed inset-0 z-50 flex items-start justify-end">
-            <button
-              type="button"
-              aria-label="Fechar painel de tasks agendadas"
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => setShowSchedulesPanel(false)}
+        <Suspense fallback={null}>
+          {selectedTask && (
+            <TaskDetail
+              task={selectedTask}
+              engines={engines}
+              liveLogs={liveLogs[selectedTask.id] ?? []}
+              onClose={handleCloseDetail}
+              onLaunch={async (id, engine, model) => {
+                setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+                await launchTask(id, engine, model);
+                toast("Agent started", "success");
+              }}
+              onCancel={async (id) => {
+                await cancelTask(id);
+                toast("Agent canceled", "info");
+              }}
+              onRetry={async (id, engine, model) => {
+                setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+                await retryTask(id, engine, model);
+                toast("Agent restarted", "success");
+              }}
+              onRetryPR={async (id) => {
+                await retryPR(id);
+                toast("Creating PR...", "info");
+              }}
+              onApprove={async (id) => {
+                await approveTask(id);
+                toast("Solicitação aprovada", "success");
+              }}
+              onReject={async (id) => {
+                await rejectTask(id);
+                toast("Solicitação rejeitada", "info");
+              }}
+              onDelete={async (id) => {
+                const taskToDelete = tasks.find((t) => t.id === id);
+                await removeTask(id);
+                handleCloseDetail();
+                toast(
+                  "Task deletada",
+                  "info",
+                  taskToDelete
+                    ? {
+                        label: "Desfazer",
+                        onClick: async () => {
+                          await createTask({
+                            title: taskToDelete.title,
+                            description: taskToDelete.description,
+                            repoId: taskToDelete.repoId,
+                            engine: taskToDelete.engine ?? undefined,
+                            tags: taskToDelete.tags,
+                          });
+                          toast("Task restaurada", "success");
+                        },
+                      }
+                    : undefined
+                );
+              }}
+              onSendInput={(taskId, input) => {
+                send({ type: "agent_input", taskId, input });
+              }}
+              onClone={async (id) => {
+                const cloned = await cloneTask(id);
+                toast(`"${cloned.title}" clonada`, "success");
+              }}
+              onUpdateTask={async (id, data) => {
+                await updateTask(id, data);
+              }}
+              onTaskRefresh={refresh}
+              onSkillClick={handleSkillClick}
+              allTasks={tasks}
             />
-            <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
-              <ScheduledTasksPanel />
-              <div className="absolute top-4 right-4 z-10">
-                <button
-                  type="button"
-                  onClick={() => setShowSchedulesPanel(false)}
-                  className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-hover transition-colors"
-                >
-                  ✕
-                </button>
+          )}
+
+          {showEnginesPanel && (
+            <EnginesPanel
+              onClose={() => setShowEnginesPanel(false)}
+              onOpenSettings={() => {
+                setShowEnginesPanel(false);
+                setShowSettings(true);
+              }}
+            />
+          )}
+
+          {showSchedulesPanel && (
+            <div className="fixed inset-0 z-50 flex items-start justify-end">
+              <button
+                type="button"
+                aria-label="Fechar painel de tasks agendadas"
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                onClick={() => setShowSchedulesPanel(false)}
+              />
+              <div className="relative h-full w-full max-w-md glass-panel border-l flex flex-col overflow-hidden shadow-2xl shadow-black/40">
+                <ScheduledTasksPanel />
+                <div className="absolute top-4 right-4 z-10">
+                  <button
+                    type="button"
+                    onClick={() => setShowSchedulesPanel(false)}
+                    className="p-1.5 rounded-lg text-secondary hover:text-primary hover:bg-surface-hover transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {showTemplates && (
-          <TemplatesPanel open={showTemplates} onClose={() => setShowTemplates(false)} />
-        )}
+          {showTemplates && (
+            <TemplatesPanel open={showTemplates} onClose={() => setShowTemplates(false)} />
+          )}
 
-        {/* Shortcuts Modal */}
-        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+          {/* Shortcuts Modal */}
+          {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
-        {/* Changelog Modal */}
-        {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+          {/* Changelog Modal */}
+          {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
 
-        {/* Command Palette */}
-        {showCommandPalette && (
-          <CommandPalette
-            tasks={tasks}
+          {/* Command Palette */}
+          {showCommandPalette && (
+            <CommandPalette
+              tasks={tasks}
+              repos={repos}
+              onClose={() => setShowCommandPalette(false)}
+              onSelectTask={(task) => {
+                setShowCommandPalette(false);
+                handleTaskClick(task);
+              }}
+              onSelectRepo={(repoId) => {
+                setShowCommandPalette(false);
+                setSelectedRepoId(repoId);
+              }}
+              onNewTask={() => {
+                setShowCommandPalette(false);
+                setShowNewTask(true);
+              }}
+              onAddRepo={() => {
+                setShowCommandPalette(false);
+                setShowAddRepo(true);
+              }}
+              onOpenSettings={() => {
+                setShowCommandPalette(false);
+                setShowSettings(true);
+              }}
+              onOpenSkills={() => {
+                setShowCommandPalette(false);
+                setShowSkills(true);
+              }}
+              onOpenEngines={() => {
+                setShowCommandPalette(false);
+                setShowEnginesPanel(true);
+              }}
+              onOpenStats={() => {
+                setShowCommandPalette(false);
+                setShowStats(true);
+              }}
+              onOpenRuntimes={() => {
+                setShowCommandPalette(false);
+                setShowRuntimes(true);
+              }}
+              onOpenInbox={() => {
+                setShowCommandPalette(false);
+                setShowInbox(true);
+              }}
+            />
+          )}
+
+          {/* Dialogs */}
+          <NewTaskDialog
+            open={showNewTask}
+            onClose={() => setShowNewTask(false)}
             repos={repos}
-            onClose={() => setShowCommandPalette(false)}
-            onSelectTask={(task) => {
-              setShowCommandPalette(false);
-              handleTaskClick(task);
-            }}
-            onSelectRepo={(repoId) => {
-              setShowCommandPalette(false);
-              setSelectedRepoId(repoId);
-            }}
-            onNewTask={() => {
-              setShowCommandPalette(false);
-              setShowNewTask(true);
-            }}
-            onAddRepo={() => {
-              setShowCommandPalette(false);
-              setShowAddRepo(true);
-            }}
-            onOpenSettings={() => {
-              setShowCommandPalette(false);
-              setShowSettings(true);
-            }}
-            onOpenSkills={() => {
-              setShowCommandPalette(false);
-              setShowSkills(true);
-            }}
-            onOpenEngines={() => {
-              setShowCommandPalette(false);
-              setShowEnginesPanel(true);
-            }}
-            onOpenStats={() => {
-              setShowCommandPalette(false);
-              setShowStats(true);
-            }}
-            onOpenRuntimes={() => {
-              setShowCommandPalette(false);
-              setShowRuntimes(true);
-            }}
-            onOpenInbox={() => {
-              setShowCommandPalette(false);
-              setShowInbox(true);
-            }}
-          />
-        )}
-
-        {/* Dialogs */}
-        <NewTaskDialog
-          open={showNewTask}
-          onClose={() => setShowNewTask(false)}
-          repos={repos}
-          reposLoading={reposLoading}
-          engines={engines}
-          enginesLoading={enginesLoading}
-          enginesError={enginesError}
-          onSubmit={async ({
-            autoLaunch,
-            model,
-            schedule,
-            baseBranch,
-            tags,
-            agentId,
-            workflowId,
-            ...data
-          }) => {
-            const task = await createTask({
-              ...data,
+            reposLoading={reposLoading}
+            engines={engines}
+            enginesLoading={enginesLoading}
+            enginesError={enginesError}
+            onSubmit={async ({
+              autoLaunch,
+              model,
+              schedule,
               baseBranch,
               tags,
-              model,
               agentId,
               workflowId,
-            });
-            if (!task) return;
-
-            if (schedule) {
-              await api.schedules.upsert(task.id, {
-                cronExpression: schedule.cronExpression,
-                enabled: true,
+              ...data
+            }) => {
+              const task = await createTask({
+                ...data,
+                baseBranch,
+                tags,
+                model,
+                agentId,
+                workflowId,
               });
-              toast(`"${data.title}" agendada (${schedule.cronExpression})`, "success");
-            } else if (autoLaunch) {
-              await launchTask(task.id, data.engine, model);
-              toast(`"${data.title}" iniciada`, "success");
-            } else {
-              toast(`"${data.title}" adicionada ao backlog`, "success");
-            }
-          }}
-        />
+              if (!task) return;
 
-        <AddRepoDialog
-          open={showAddRepo}
-          onClose={() => setShowAddRepo(false)}
-          onSubmit={async (data) => {
-            await addRepo(data);
-            toast("Repository adicionado — clonando...", "success");
-          }}
-        />
-
-        <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
-
-        <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
-
-        <RepoQuickView
-          open={showQuickView}
-          onClose={() => setShowQuickView(false)}
-          repos={repos}
-          tasks={tasks}
-          onSelectRepo={(id) => {
-            setSelectedRepoId(id);
-          }}
-          onOpenRepo={(repo) => {
-            setSelectedRepoId(repo.id);
-          }}
-        />
-
-        <RuntimeDashboard open={showRuntimes} onClose={() => setShowRuntimes(false)} />
-
-        <InboxPanel
-          open={showInbox}
-          onClose={() => setShowInbox(false)}
-          onOpenTask={handleOpenTaskById}
-          onOpenEngines={() => setShowEnginesPanel(true)}
-          onOpenRuntimes={() => setShowRuntimes(true)}
-        />
-
-        {selectedRepo && (
-          <IssueImporter
-            open={showIssueImporter}
-            onClose={() => setShowIssueImporter(false)}
-            repo={selectedRepo}
-            onImport={handleImportIssues}
+              if (schedule) {
+                await api.schedules.upsert(task.id, {
+                  cronExpression: schedule.cronExpression,
+                  enabled: true,
+                });
+                toast(`"${data.title}" agendada (${schedule.cronExpression})`, "success");
+              } else if (autoLaunch) {
+                await launchTask(task.id, data.engine, model);
+                toast(`"${data.title}" iniciada`, "success");
+              } else {
+                toast(`"${data.title}" adicionada ao backlog`, "success");
+              }
+            }}
           />
-        )}
 
-        <SkillsBrowser
-          open={showSkills}
-          onClose={() => {
-            setShowSkills(false);
-            setInitialSkillName(null);
-          }}
-          initialSkillName={initialSkillName ?? undefined}
-          matchedSkills={selectedTaskLoadedSkills}
-        />
+          <AddRepoDialog
+            open={showAddRepo}
+            onClose={() => setShowAddRepo(false)}
+            onSubmit={async (data) => {
+              await addRepo(data);
+              toast("Repository adicionado — clonando...", "success");
+            }}
+          />
 
+          <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+
+          <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
+
+          <RepoQuickView
+            open={showQuickView}
+            onClose={() => setShowQuickView(false)}
+            repos={repos}
+            tasks={tasks}
+            onSelectRepo={(id) => {
+              setSelectedRepoId(id);
+            }}
+            onOpenRepo={(repo) => {
+              setSelectedRepoId(repo.id);
+            }}
+          />
+
+          <RuntimeDashboard open={showRuntimes} onClose={() => setShowRuntimes(false)} />
+
+          <InboxPanel
+            open={showInbox}
+            onClose={() => setShowInbox(false)}
+            onOpenTask={handleOpenTaskById}
+            onOpenEngines={() => setShowEnginesPanel(true)}
+            onOpenRuntimes={() => setShowRuntimes(true)}
+          />
+
+          {selectedRepo && (
+            <IssueImporter
+              open={showIssueImporter}
+              onClose={() => setShowIssueImporter(false)}
+              repo={selectedRepo}
+              onImport={handleImportIssues}
+            />
+          )}
+
+          <SkillsBrowser
+            open={showSkills}
+            onClose={() => {
+              setShowSkills(false);
+              setInitialSkillName(null);
+            }}
+            initialSkillName={initialSkillName ?? undefined}
+            matchedSkills={selectedTaskLoadedSkills}
+          />
+        </Suspense>
         <Toaster />
       </div>
     </ToastContext.Provider>

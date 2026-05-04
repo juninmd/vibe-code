@@ -312,6 +312,8 @@ export interface AgentRun {
     output_tokens: number;
     cached?: number;
     input?: number;
+    output?: number;
+    total?: number;
     duration_ms?: number;
     tool_calls?: number;
     models?: Record<
@@ -322,9 +324,11 @@ export interface AgentRun {
         output_tokens: number;
         cached?: number;
         input?: number;
+        output?: number;
+        total?: number;
       }
     >;
-  } | null;
+  };
   createdAt: string;
 }
 
