@@ -911,14 +911,19 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ error: "invalid_state", message: "No path available to open" }, 400);
     }
 
-    const editorCommand = process.env.EDITOR || "code";
+    const onlyPath = c.req.query("onlyPath") === "true";
+    if (onlyPath) {
+      return c.json({ data: { ok: true, path: targetPath } });
+    }
+
+    const editorCommand = process.env.VIBE_CODE_EDITOR || process.env.EDITOR || "code";
 
     try {
       Bun.spawn([editorCommand, targetPath], {
         detached: true,
         stdio: ["ignore", "ignore", "ignore"],
       }).unref();
-      return c.json({ data: { ok: true } });
+      return c.json({ data: { ok: true, path: targetPath } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "editor_failed", message: `Failed to open editor: ${msg}` }, 500);

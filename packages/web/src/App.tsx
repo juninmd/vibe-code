@@ -1096,10 +1096,23 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         toast(`Task duplicada`, "info");
         return;
       }
-      // Ctrl+Shift+C — clear search
+      // Ctrl+Shift+C — copy path (if task selected) or clear search
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
         e.preventDefault();
-        setSearch("");
+        if (selectedTask && !isTyping) {
+          api.tasks.getTaskPath(selectedTask.id).then((res) => {
+            if (res.path) {
+              navigator.clipboard.writeText(res.path);
+              toast("Path copied to clipboard", "success");
+            } else {
+              toast("No worktree path found", "error");
+            }
+          }).catch(() => {
+            toast("Failed to get worktree path", "error");
+          });
+        } else {
+          setSearch("");
+        }
         return;
       }
     };
