@@ -1,25 +1,31 @@
-import { describe, expect, it, mock } from "bun:test";
-import { withHeartbeat, getHeartbeatIntervalMs } from "./heartbeat";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { AgentEvent } from "../engine";
+import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
 describe("heartbeat", () => {
   describe("getHeartbeatIntervalMs", () => {
-    it("returns default 30000 when env not set", () => {
-      const old = process.env.VIBE_CODE_HEARTBEAT_MS;
-      delete process.env.VIBE_CODE_HEARTBEAT_MS;
-      expect(getHeartbeatIntervalMs()).toBe(30_000);
-      if (old !== undefined) process.env.VIBE_CODE_HEARTBEAT_MS = old;
+    let oldEnv: string | undefined;
+
+    beforeEach(() => {
+      oldEnv = process.env.VIBE_CODE_HEARTBEAT_MS;
     });
 
-    it("returns env value if set", () => {
-      const old = process.env.VIBE_CODE_HEARTBEAT_MS;
-      process.env.VIBE_CODE_HEARTBEAT_MS = "5000";
-      expect(getHeartbeatIntervalMs()).toBe(5000);
-      if (old !== undefined) {
-        process.env.VIBE_CODE_HEARTBEAT_MS = old;
+    afterEach(() => {
+      if (oldEnv !== undefined) {
+        process.env.VIBE_CODE_HEARTBEAT_MS = oldEnv;
       } else {
         delete process.env.VIBE_CODE_HEARTBEAT_MS;
       }
+    });
+
+    it("returns default 30000 when env not set", () => {
+      delete process.env.VIBE_CODE_HEARTBEAT_MS;
+      expect(getHeartbeatIntervalMs()).toBe(30_000);
+    });
+
+    it("returns env value if set", () => {
+      process.env.VIBE_CODE_HEARTBEAT_MS = "5000";
+      expect(getHeartbeatIntervalMs()).toBe(5000);
     });
   });
 
@@ -53,7 +59,9 @@ describe("heartbeat", () => {
       }
 
       // Should have at least one heartbeat
-      const heartbeats = events.filter((e) => e.type === "log" && e.stream === "system" && e.content?.includes("Still running"));
+      const heartbeats = events.filter(
+        (e) => e.type === "log" && e.stream === "system" && e.content?.includes("Still running")
+      );
       expect(heartbeats.length).toBeGreaterThan(0);
 
       const normalLogs = events.filter((e) => e.content === "first" || e.content === "second");
@@ -90,8 +98,8 @@ describe("heartbeat", () => {
         events.push(ev);
       }
 
-      expect(events.some(e => e.content === "first")).toBe(true);
-      expect(events.some(e => e.content === "never")).toBe(false);
+      expect(events.some((e) => e.content === "first")).toBe(true);
+      expect(events.some((e) => e.content === "never")).toBe(false);
     });
   });
 });
