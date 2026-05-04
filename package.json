@@ -12,14 +12,14 @@
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
-    "lint": "node_modules/.bin/biome check packages/",
-    "lint:fix": "node_modules/.bin/biome check --write packages/",
+    "lint": "bunx biome check packages/",
+    "lint:fix": "bunx biome check --write packages/",
     "format": "bunx biome format --write packages/",
     "prepare": "husky"
   },
   "lint-staged": {
     "packages/**/*.{ts,tsx}": [
-      "node_modules/.bin/biome check --write --no-errors-on-unmatched"
+      "bunx biome check --write --no-errors-on-unmatched"
     ]
   },
   "devDependencies": {
