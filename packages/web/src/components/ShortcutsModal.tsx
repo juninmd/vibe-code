@@ -9,7 +9,7 @@ const SHORTCUTS = [
   { keys: ["Ctrl", "1-9"], description: "Switch repository (workspace)" },
   { keys: ["Ctrl", "K"], description: "Command palette" },
   { keys: ["Ctrl", "S"], description: "Export board" },
-  { keys: ["Ctrl", "Shift", "C"], description: "Clear search" },
+  { keys: ["Ctrl", "Shift", "C"], description: "Copy path" },
   { keys: ["Ctrl", "D"], description: "Split terminal right" },
   { keys: ["Ctrl", "Shift", "D"], description: "Split terminal down" },
   { keys: ["?"], description: "Show shortcuts" },

@@ -15,6 +15,9 @@ describe("handleAgentEvent", () => {
       updateCostStats: mock(() => {}),
       updateSessionId: mock(() => {}),
     },
+    settings: {
+      get: mock(() => "false"),
+    },
   } as unknown as Db;
 
   const mockHub = {
