@@ -30,16 +30,25 @@ describe("heartbeat", () => {
   });
 
   describe("withHeartbeat", () => {
+    async function collectEvents(
+      sourceGen: AsyncGenerator<AgentEvent>,
+      interval: number,
+      signal?: AbortSignal
+    ) {
+      const events: AgentEvent[] = [];
+      for await (const ev of withHeartbeat(sourceGen, interval, signal)) {
+        events.push(ev);
+      }
+      return events;
+    }
+
     it("yields events without heartbeat if they arrive quickly", async () => {
       async function* source(): AsyncGenerator<AgentEvent> {
         yield { type: "log", content: "hello" };
         yield { type: "log", content: "world" };
       }
 
-      const events: AgentEvent[] = [];
-      for await (const ev of withHeartbeat(source(), 1000)) {
-        events.push(ev);
-      }
+      const events = await collectEvents(source(), 1000);
 
       expect(events).toHaveLength(2);
       expect(events[0]).toEqual({ type: "log", content: "hello" });
@@ -53,10 +62,7 @@ describe("heartbeat", () => {
         yield { type: "log", content: "second" };
       }
 
-      const events: AgentEvent[] = [];
-      for await (const ev of withHeartbeat(source(), 50)) {
-        events.push(ev);
-      }
+      const events = await collectEvents(source(), 50);
 
       // Should have at least one heartbeat
       const heartbeats = events.filter(
@@ -73,10 +79,7 @@ describe("heartbeat", () => {
         yield { type: "log", content: "done" };
       }
 
-      const events: AgentEvent[] = [];
-      for await (const ev of withHeartbeat(source(), 50)) {
-        events.push(ev);
-      }
+      const events = await collectEvents(source(), 50);
 
       expect(events).toHaveLength(1);
     });
@@ -89,14 +92,8 @@ describe("heartbeat", () => {
         yield { type: "log", content: "never" };
       }
 
-      const gen = withHeartbeat(source(), 50, ac.signal);
-
-      const events: AgentEvent[] = [];
       setTimeout(() => ac.abort(), 100);
-
-      for await (const ev of gen) {
-        events.push(ev);
-      }
+      const events = await collectEvents(source(), 50, ac.signal);
 
       expect(events.some((e) => e.content === "first")).toBe(true);
       expect(events.some((e) => e.content === "never")).toBe(false);
