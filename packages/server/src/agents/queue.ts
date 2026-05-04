@@ -92,7 +92,7 @@ export class TaskQueue {
       isFull: this.pending.length >= this.maxSize,
       percentFull: (this.pending.length / this.maxSize) * 100,
       // Oldest pending task age
-      oldestAgeMs: this.pending.length > 0 ? Date.now() - this.pending[0]!.addedAt : 0,
+      oldestAgeMs: this.pending.length > 0 ? Date.now() - this.pending[0]?.addedAt : 0,
     };
   }
 

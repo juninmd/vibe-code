@@ -126,7 +126,7 @@ export function createTemplatesRouter(_db: Db, skillsLoader: SkillsLoader) {
         "Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="${name}.json"`,
       });
-    } catch (err: any) {
+    } catch (_err: any) {
       return c.json({ error: "Template not found or error reading file" }, 404);
     }
   });
