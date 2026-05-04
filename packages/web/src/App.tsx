@@ -72,6 +72,7 @@ const ShortcutsModal = lazy(() =>
 const SkillsBrowser = lazy(() =>
   import("./components/SkillsBrowser").then((m) => ({ default: m.SkillsBrowser }))
 );
+import { WorkspaceSelector } from "./components/WorkspaceSelector";
 const StatsDialog = lazy(() =>
   import("./components/StatsDialog").then((m) => ({ default: m.StatsDialog }))
 );
@@ -1084,9 +1085,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-surface/20 backdrop-blur-xl z-30">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
-                  Workspace
-                </span>
+                <WorkspaceSelector />
                 <div className="h-4 w-px bg-white/10" />
                 <h2 className="text-sm font-bold text-primary truncate max-w-[200px]">
                   {selectedRepo ? selectedRepo.name : "All Projects"}

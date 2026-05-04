@@ -1,4 +1,5 @@
-@vibe-code/server dev: ◇ injected env (0) from ../.env // tip: ⌘ override existing { override: true }
+$ bun run --filter @vibe-code/server dev
+@vibe-code/server dev: ◇ injected env (0) from ../../.env // tip: ⌘ enable debugging { debug: true }
 @vibe-code/server dev: [startup] WARNING: LITELLM_MASTER_KEY not set. LiteLLM proxy features may not work.
 @vibe-code/server dev: [startup] Checking LiteLLM proxy at http://localhost:4000 ...
 @vibe-code/server dev: [startup] WARNING: LiteLLM proxy at http://localhost:4000 is not reachable. Engines will use native API keys. Start the proxy or disable LiteLLM in settings.
@@ -10,7 +11,7 @@
 @vibe-code/server dev: ║                                              ║
 @vibe-code/server dev: ║  API:  http://localhost:3000               ║
 @vibe-code/server dev: ║  WS:   ws://localhost:3000/ws              ║
-@vibe-code/server dev: ║  Data: /home/jules/.vibe-code
+@vibe-code/server dev: ║  Data: /app/tmp_test_db
 @vibe-code/server dev: ║  Max agents: 4                         ║
 @vibe-code/server dev: ╚══════════════════════════════════════════════╝
 @vibe-code/server dev:
@@ -28,12 +29,329 @@
 @vibe-code/server dev:   ✗ Kimi (kimi)
 @vibe-code/server dev:   ✗ Kiro CLI (kiro-cli)
 @vibe-code/server dev:
-@vibe-code/server dev: [API] Fetched workspaces {
-@vibe-code/server dev:   count: 1,
+@vibe-code/server dev:   ↻ Hygiene report updated pending=0 memories=0 blocked=0
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev:   ↻ Hygiene report updated pending=0 memories=0 blocked=0
+@vibe-code/server dev:   ↻ Hygiene report updated pending=0 memories=0 blocked=0
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/workspaces",
 @vibe-code/server dev: }
 @vibe-code/server dev: [API] Fetched workspaces {
 @vibe-code/server dev:   count: 1,
 @vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/workspaces",
+@vibe-code/server dev: }
 @vibe-code/server dev: [API] Fetched workspaces {
 @vibe-code/server dev:   count: 1,
 @vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/auth/me",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/workspaces",
+@vibe-code/server dev: }
+@vibe-code/server dev: [API] Fetched workspaces {
+@vibe-code/server dev:   count: 1,
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/engines",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] 📡 Skipping workspace validation for public route {
+@vibe-code/server dev:   path: "/api/tasks/poll",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/prompts",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos/github/list",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/repos",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev: [Middleware] ⚠️  Missing workspace_id for protected endpoint {
+@vibe-code/server dev:   path: "/api/tasks",
+@vibe-code/server dev:   method: "GET",
+@vibe-code/server dev: }
+@vibe-code/server dev:   ↻ Hygiene report updated pending=0 memories=0 blocked=0
