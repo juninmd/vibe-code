@@ -5,6 +5,7 @@ import type {
   TaskSchedule,
   TaskWithRun,
   UpdateTaskRequest,
+  WsClientMessage,
 } from "@vibe-code/shared";
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -13,7 +14,9 @@ import { api } from "../api/client";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import { formatDateTime, formatDuration } from "../utils/date";
 import { DiffViewer } from "./DiffViewer";
+import { ExecutionTimeline } from "./ExecutionTimeline";
 import { TaskTagsEditor } from "./TaskTags";
+import { TerminalSessionPanel } from "./TerminalSessionPanel";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -30,6 +33,14 @@ interface TaskDetailProps {
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
+  terminalLogs?: Array<{
+    id: number;
+    runId: string | null;
+    stream: "stdout" | "stderr";
+    chunk: string;
+    timestamp: string;
+  }>;
+  onWsSend?: (message: WsClientMessage) => void;
   onApprove?: (taskId: string) => Promise<void>;
   onReject?: (taskId: string) => Promise<void>;
   onClone?: (taskId: string) => Promise<void>;
@@ -480,6 +491,8 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
+  terminalLogs = [],
+  onWsSend,
   onApprove,
   onReject,
   onClone,
@@ -492,8 +505,6 @@ export function TaskDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
   const [notesValue, setNotesValue] = useState(task.notes ?? "");
-  const [goalValue, setGoalValue] = useState(task.goal ?? "");
-  const [outcomeValue, setOutcomeValue] = useState(task.desiredOutcome ?? "");
   const [notesSaved, setNotesSaved] = useState(false);
   const [matchedSkills, setMatchedSkills] = useState<string[]>([]);
   const [artifacts, setArtifacts] = useState<TaskArtifact[]>([]);
@@ -576,19 +587,27 @@ export function TaskDetail({
   type ActiveTab =
     | "info"
     | "terminal"
+    | "execution"
     | "diff"
     | "artifacts"
     | "skills"
     | "cost"
     | "memory"
     | "reviews";
-  const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "terminal" : "info");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "execution" : "info");
   const [sharedMemory, setSharedMemory] = useState<string>("");
   const [taskMemory, setTaskMemory] = useState<string>("");
   const [memorySaving, setMemorySaving] = useState(false);
   const [reviewRounds, setReviewRounds] = useState<any[]>([]);
   const [reviewIssues, setReviewIssues] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    console.info("[ui] INFO: task detail tab switched", {
+      taskId: task.id,
+      nextTab: activeTab,
+    });
+  }, [activeTab, task.id]);
 
   const skillCategoryLabel: Record<string, string> = {
     rule: "Rule",
@@ -630,12 +649,10 @@ export function TaskDetail({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when task.id changes
   useEffect(() => {
     setNotesValue(task.notes ?? "");
-    setGoalValue(task.goal ?? "");
-    setOutcomeValue(task.desiredOutcome ?? "");
     setMatchedSkills([]);
     setArtifacts([]);
     setActiveTab(
-      task.status === "in_progress" || task.latestRun?.status === "running" ? "terminal" : "info"
+      task.status === "in_progress" || task.latestRun?.status === "running" ? "execution" : "info"
     );
   }, [task.id]);
 
@@ -663,20 +680,6 @@ export function TaskDetail({
     if (!onUpdateTask) return;
     if (notesValue === (task.notes ?? "")) return;
     onUpdateTask(task.id, { notes: notesValue }).then(() => {
-      setNotesSaved(true);
-      setTimeout(() => setNotesSaved(false), 2000);
-    });
-  };
-
-  const _handleAlignmentBlur = () => {
-    if (!onUpdateTask) return;
-    const goal = goalValue.trim();
-    const desiredOutcome = outcomeValue.trim();
-    if (goal === (task.goal ?? "") && desiredOutcome === (task.desiredOutcome ?? "")) return;
-    onUpdateTask(task.id, {
-      goal: goal || null,
-      desiredOutcome: desiredOutcome || null,
-    }).then(() => {
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 2000);
     });
@@ -877,6 +880,48 @@ export function TaskDetail({
             )}
           </div>
 
+          <div className="mt-3 mb-1 rounded-lg border border-white/10 bg-black/25 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="text-dimmed uppercase tracking-widest">Cockpit</span>
+              <span className="text-secondary">
+                Goal: {task.goal?.trim() || "No explicit goal"}
+              </span>
+              <span
+                className={`font-semibold ${task.status === "failed" ? "text-danger" : task.status === "done" ? "text-success" : "text-info"}`}
+              >
+                Health:{" "}
+                {task.status === "failed"
+                  ? "degraded"
+                  : task.status === "done"
+                    ? "stable"
+                    : "active"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
+                onClick={() => setActiveTab("execution")}
+              >
+                Execution
+              </button>
+              <button
+                type="button"
+                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
+                onClick={() => setActiveTab("memory")}
+              >
+                Memory
+              </button>
+              <button
+                type="button"
+                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
+                onClick={() => setActiveTab("reviews")}
+              >
+                Reviews
+              </button>
+            </div>
+          </div>
+
           {/* Tab bar */}
           <div className="flex justify-center mt-6 border-b border-white/5 relative z-20">
             <div className="flex gap-1 overflow-x-auto no-scrollbar pb-px">
@@ -884,6 +929,7 @@ export function TaskDetail({
                 [
                   { id: "info" as const, label: "INFO" },
                   { id: "terminal" as const, label: "TERMINAL" },
+                  { id: "execution" as const, label: "EXECUTION" },
                   { id: "diff" as const, label: "DIFF" },
                   { id: "artifacts" as const, label: "ARTIFACTS" },
                   { id: "skills" as const, label: "SKILLS" },
@@ -1518,121 +1564,32 @@ export function TaskDetail({
             </div>
           )}
 
-          {/* ── Terminal Tab — Completely reimagined ── */}
-          <div
-            className="flex-1 min-h-0 flex"
-            style={{ display: activeTab === "terminal" ? "flex" : "none" }}
-          >
-            {/* Left: Step Sidebar */}
-            <div className="w-56 shrink-0 border-r border-white/5 flex flex-col bg-white/[0.02]">
-              <div className="px-3 py-2 border-b border-white/5">
-                <div className="text-[9px] font-semibold text-dimmed uppercase tracking-wider flex items-center justify-between">
-                  <span>STEPS</span>
-                  <span className="text-[8px] bg-surface px-1.5 py-0.5 rounded text-secondary">
-                    {liveLogs.length}
-                  </span>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {liveLogs.length === 0 ? (
-                  <div className="text-[10px] text-dimmed p-2 text-center">No steps yet</div>
-                ) : (
-                  liveLogs.slice(-20).map((log) => (
-                    <button
-                      key={log.id}
-                      type="button"
-                      className="w-full text-left px-2 py-1.5 rounded text-[10px] text-secondary hover:bg-white/5 hover:text-primary transition-colors"
-                    >
-                      <span className="truncate block">{log.content.slice(0, 40)}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-              {/* Running indicator */}
-              {isRunning && (
-                <div className="px-3 py-2 border-t border-white/5 bg-cyan-500/10">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                    <span className="text-[10px] text-cyan-300 font-medium truncate">
-                      {task.latestRun?.currentStatus || "Running"}
-                    </span>
-                  </div>
-                </div>
-              )}
+          {/* ── Terminal Tab (real terminal session channel) ── */}
+          {activeTab === "terminal" && (
+            <div className="flex-1 min-h-0">
+              <TerminalSessionPanel
+                taskId={task.id}
+                runId={task.latestRun?.id ?? null}
+                chunks={terminalLogs}
+                onWsSend={onWsSend}
+              />
             </div>
+          )}
 
-            {/* Right: Output Area */}
-            <div className="flex-1 min-h-0 flex flex-col">
-              {/* Output Toolbar */}
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5 shrink-0">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-medium text-primary">OUTPUT</span>
-                  <span className="text-[9px] text-dimmed font-mono">{liveLogs.length} lines</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {task.latestRun?.costStats && (
-                    <span className="text-[10px] font-mono text-warning bg-warning/10 px-2 py-0.5 rounded">
-                      ${((task.latestRun.costStats.input || 0) / 1_000_000).toFixed(2)}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    className="text-[9px] px-2 py-0.5 rounded hover:bg-white/5 text-dimmed"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              {/* Output Content */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-3 font-mono text-[10px] leading-relaxed">
-                {liveLogs.length === 0 ? (
-                  <div className="text-dimmed opacity-50">Waiting for output...</div>
-                ) : (
-                  <div className="space-y-0.5">
-                    {liveLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="flex gap-2 hover:bg-white/[0.02] py-0.5 -mx-2 px-2 rounded"
-                      >
-                        <span className="text-dimmed shrink-0 w-12 text-[9px]">
-                          {new Date(log.timestamp).toLocaleTimeString()}
-                        </span>
-                        <span
-                          className={
-                            log.stream === "stderr"
-                              ? "text-red-400"
-                              : log.stream === "system"
-                                ? "text-cyan-400"
-                                : "text-secondary"
-                          }
-                        >
-                          {log.content}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* Input Line */}
-              <div className="px-3 py-2 border-t border-white/5 shrink-0">
-                <div className="flex items-center gap-2 bg-white/[0.03] rounded px-3 py-1.5 border border-white/5">
-                  <span className="text-[10px] text-dimmed">›</span>
-                  <input
-                    type="text"
-                    placeholder="Send input..."
-                    className="flex-1 bg-transparent text-[11px] text-primary placeholder-dimmed focus:outline-none"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                        onSendInput(task.id, e.currentTarget.value);
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                    disabled={!isRunning}
-                  />
-                </div>
-              </div>
+          {/* ── Execution Tab (agent timeline/logs) ── */}
+          {activeTab === "execution" && (
+            <div className="flex-1 min-h-0">
+              <ExecutionTimeline
+                taskId={task.id}
+                runId={task.latestRun?.id ?? null}
+                logs={liveLogs}
+                isRunning={isRunning}
+                currentStatus={task.latestRun?.currentStatus ?? null}
+                costStats={task.latestRun?.costStats ?? null}
+                onSendInput={onSendInput}
+              />
             </div>
-          </div>
+          )}
 
           {/* ── Skills Tab ─────────────────────────────────── */}
           {activeTab === "skills" && (

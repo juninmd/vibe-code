@@ -21,8 +21,21 @@ export async function getWorkspaceContext(
     return null;
   }
 
-  // Extract workspace_id from request (priority: header > query)
-  const workspaceId = c.req.header("x-workspace-id") || c.req.query("workspace_id");
+  // Extract workspace_id from request or middleware context.
+  // Priority: middleware-set env > header > query > body.
+  const workspaceIdFromHeader = c.req.header("x-workspace-id");
+  const workspaceIdFromQuery = c.req.query("workspace_id");
+  const workspaceIdFromEnv = (c.env as any)?.workspaceId;
+  let workspaceId = workspaceIdFromEnv || workspaceIdFromHeader || workspaceIdFromQuery;
+
+  if (!workspaceId && c.req.method !== "GET") {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      workspaceId = body?.workspace_id;
+    } catch {
+      // ignore invalid JSON in non-GET requests
+    }
+  }
 
   if (!workspaceId) {
     console.warn("[workspace-context] ⚠️  Missing workspace_id for user", {

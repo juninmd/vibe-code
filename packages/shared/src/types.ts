@@ -604,13 +604,67 @@ export interface DiffSummary {
   totalDeletions: number;
 }
 
+export type ExecutionEventType =
+  | "log"
+  | "phase"
+  | "tool_use"
+  | "tool_result"
+  | "cost"
+  | "approval"
+  | "blocked"
+  | "status";
+
+export interface ExecutionTimelineEvent {
+  id: string;
+  runId: string;
+  taskId: string;
+  type: ExecutionEventType;
+  timestamp: string;
+  content?: string;
+  phase?: RunPhase | string;
+  toolName?: string;
+  toolId?: string;
+  toolStatus?: "success" | "error";
+  costStats?: AgentRun["costStats"];
+  metadata?: Record<string, unknown>;
+}
+
 // ─── WebSocket Protocol ──────────────────────────────────────────────────────
 
+export type WsProtocolVersion = "v1" | "v2";
+
+export type TerminalSignal = "sigint" | "sigterm" | "sighup";
+
 export type WsClientMessage =
-  | { type: "subscribe"; taskId: string }
-  | { type: "unsubscribe"; taskId: string }
-  | { type: "agent_input"; taskId: string; input: string }
-  | { type: "ping" };
+  | { type: "subscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "unsubscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "agent_input"; taskId: string; input: string; version?: WsProtocolVersion }
+  | { type: "execution_subscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "execution_unsubscribe"; taskId: string; version?: WsProtocolVersion }
+  | {
+      type: "terminal_open";
+      taskId: string;
+      runId?: string;
+      cols?: number;
+      rows?: number;
+      version?: WsProtocolVersion;
+    }
+  | { type: "terminal_close"; taskId: string; version?: WsProtocolVersion }
+  | { type: "terminal_input"; taskId: string; input: string; version?: WsProtocolVersion }
+  | {
+      type: "terminal_resize";
+      taskId: string;
+      cols: number;
+      rows: number;
+      version?: WsProtocolVersion;
+    }
+  | {
+      type: "terminal_signal";
+      taskId: string;
+      signal: TerminalSignal;
+      version?: WsProtocolVersion;
+    }
+  | { type: "ping"; version?: WsProtocolVersion };
 
 export type WsServerMessage =
   | { type: "task_created"; task: Task }
@@ -687,6 +741,34 @@ export type WsServerMessage =
       type: "approval_rejected";
       taskId: string;
       reason: string;
+    }
+  | {
+      type: "execution_event";
+      taskId: string;
+      runId: string;
+      event: ExecutionTimelineEvent;
+    }
+  | {
+      type: "terminal_opened";
+      taskId: string;
+      runId: string | null;
+      cols: number;
+      rows: number;
+    }
+  | {
+      type: "terminal_output";
+      taskId: string;
+      runId: string | null;
+      chunk: string;
+      stream: "stdout" | "stderr";
+      timestamp: string;
+    }
+  | {
+      type: "terminal_closed";
+      taskId: string;
+      runId: string | null;
+      exitCode: number | null;
+      timestamp: string;
     }
   | { type: "error"; message: string };
 
