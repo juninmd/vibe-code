@@ -27,14 +27,13 @@ import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
-import workspacesRouter from "./api/workspaces";
+import { createWorkspacesRouter } from "./api/workspaces";
 import { authMiddleware, createAuthRouter } from "./auth";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
 import { ProviderRegistry } from "./git/providers/registry";
-// NOTE: workspaceMiddleware removed - API is now public (no authentication)
-// import { workspaceMiddleware } from "./middleware/workspace.middleware";
+import { workspaceMiddleware } from "./middleware/workspace.middleware";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
 import { BroadcastHub } from "./ws/broadcast";
@@ -175,10 +174,11 @@ app.use(
 );
 app.use("/api/*", authMiddleware(db));
 app.use("/ws", authMiddleware(db));
+app.use("/api/*", workspaceMiddleware());
 
 // REST Routes
 app.route("/api/auth", createAuthRouter(db));
-app.route("/api/workspaces", workspacesRouter);
+app.route("/api/workspaces", createWorkspacesRouter(db));
 app.route("/api/repos", createReposRouter(db, git, hub));
 app.route("/api/tasks", createTasksRouter(db, orchestrator, git));
 app.route("/api/reviews", createReviewsRouter(db));

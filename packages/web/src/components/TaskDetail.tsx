@@ -1292,7 +1292,7 @@ export function TaskDetail({
                       <span className="text-[8px] bg-surface px-1 rounded">{task.tags.length}</span>
                     )}
                   </div>
-                  <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} compact />
+                  <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
                 </div>
                 <div className="bg-white/[0.01] rounded-lg p-2">
                   <div className="text-[9px] text-dimmed mb-1.5 flex items-center justify-between">
