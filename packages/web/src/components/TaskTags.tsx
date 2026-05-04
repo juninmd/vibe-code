@@ -83,16 +83,21 @@ export function TaskTagsEditor({ tags, onChange, compact }: TaskTagsEditorProps)
 
   return (
     <div
-      className={`flex flex-wrap gap-1 items-center bg-surface-hover border border-strong rounded-md px-2 py-1 focus-within:border-zinc-500 ${compact ? "min-h-[24px]" : "min-h-[28px]"}`}
+      className={`flex flex-wrap gap-1 items-center ${compact ? "min-h-[20px]" : "min-h-[28px]"} bg-surface-hover border border-strong rounded ${compact ? "px-1.5 py-0.5" : "px-2 py-1"} focus-within:border-zinc-500`}
     >
       {tags.map((tag) => (
-        <TagChip key={tag} tag={tag} onRemove={() => onChange(tags.filter((t) => t !== tag))} />
+        <TagChip
+          key={tag}
+          tag={tag}
+          onRemove={() => onChange(tags.filter((t) => t !== tag))}
+          small={compact}
+        />
       ))}
       <input
         type="text"
         onKeyDown={handleKeyDown}
-        placeholder={tags.length === 0 ? "Add tag, press Enter…" : ""}
-        className="flex-1 min-w-[80px] bg-transparent text-xs text-secondary placeholder-zinc-600 outline-none"
+        placeholder={tags.length === 0 ? (compact ? "+" : "Add tag...") : ""}
+        className={`flex-1 min-w-[60px] bg-transparent text-secondary placeholder-zinc-600 outline-none ${compact ? "text-[10px]" : "text-xs"}`}
       />
     </div>
   );
