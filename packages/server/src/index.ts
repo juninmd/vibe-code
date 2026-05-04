@@ -33,10 +33,16 @@ import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { PrPoller } from "./git/pr-poller";
 import { ProviderRegistry } from "./git/providers/registry";
+import {
+  asForbiddenResponse,
+  enforceTaskAccess,
+  resolveAccessContext,
+} from "./security/access-control";
 // NOTE: workspaceMiddleware removed - API is now public (no authentication)
 // import { workspaceMiddleware } from "./middleware/workspace.middleware";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
+import { TerminalSessionService } from "./terminal/session-service";
 import { BroadcastHub } from "./ws/broadcast";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -45,6 +51,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = process.env.VIBE_CODE_DATA_DIR || join(homedir(), ".vibe-code");
 const DB_PATH = join(DATA_DIR, "vibe-code.db");
 const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
+const TERMINAL_REAL_ENABLED = process.env.VIBE_CODE_TERMINAL_REAL_ENABLED === "true";
+const EXECUTION_TIMELINE_ENABLED = process.env.VIBE_CODE_EXECUTION_TIMELINE_ENABLED !== "false";
 
 // ─── Initialize Services ────────────────────────────────────────────────────
 
@@ -150,6 +158,43 @@ prPoller.start();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 scheduleRunner.start();
 
+const terminalSessions = new TerminalSessionService({
+  onOpened(taskId, runId, cols, rows) {
+    hub.broadcastToTask(taskId, {
+      type: "terminal_opened",
+      taskId,
+      runId,
+      cols,
+      rows,
+    });
+  },
+  onOutput(taskId, runId, stream, chunk) {
+    hub.broadcastToTask(taskId, {
+      type: "terminal_output",
+      taskId,
+      runId,
+      chunk,
+      stream,
+      timestamp: new Date().toISOString(),
+    });
+  },
+  onClosed(taskId, runId, exitCode) {
+    hub.broadcastToTask(taskId, {
+      type: "terminal_closed",
+      taskId,
+      runId,
+      exitCode,
+      timestamp: new Date().toISOString(),
+    });
+  },
+  onError(taskId, _runId, message) {
+    hub.broadcastToTask(taskId, {
+      type: "error",
+      message,
+    });
+  },
+});
+
 // ─── Hono App ────────────────────────────────────────────────────────────────
 
 const { upgradeWebSocket, websocket } = createBunWebSocket();
@@ -217,15 +262,36 @@ app.get("/*", serveStatic({ root: "../web/dist" }));
 app.get("*", serveStatic({ path: "../web/dist/index.html" }));
 
 // WebSocket
-const wsClients = new Map<unknown, ReturnType<BroadcastHub["addClient"]>>();
+const wsClients = new Map<
+  unknown,
+  {
+    client: ReturnType<BroadcastHub["addClient"]>;
+    context: { authEnabled: boolean; userId: string | null; workspaceId: string | null };
+  }
+>();
 
 app.get(
   "/ws",
-  upgradeWebSocket(() => ({
-    onOpen(_evt, ws) {
+  upgradeWebSocket((c) => ({
+    async onOpen(_evt, ws) {
+      const access = await resolveAccessContext(c, db);
+      if (!access.ok || !access.context) {
+        const decision = access.error;
+        if (decision) {
+          console.warn("[security] WARN: ws connection denied by ownership policy", {
+            status: decision.status,
+            code: decision.code,
+            path: "/ws",
+          });
+          ws.send(JSON.stringify({ type: "error", message: decision.message }));
+        }
+        ws.close(1008, "Forbidden");
+        return;
+      }
+
       const rawWs = (ws as any).raw;
       const client = hub.addClient(rawWs);
-      wsClients.set(ws, client);
+      wsClients.set(ws, { client, context: access.context });
     },
     onMessage(evt, ws) {
       try {
@@ -234,15 +300,143 @@ app.get(
             ? evt.data
             : new TextDecoder().decode(evt.data as ArrayBuffer)
         );
-        const client = wsClients.get(ws);
-        if (!client) return;
+        const state = wsClients.get(ws);
+        if (!state) return;
+
+        const { client, context } = state;
 
         if (msg.type === "subscribe") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            console.warn("[security] WARN: ws subscribe denied by ownership policy", {
+              userId: context.userId,
+              workspaceId: context.workspaceId,
+              taskId: msg.taskId,
+              code: decision.code,
+            });
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+
+          console.info("[security] INFO: ws subscribe accepted", {
+            userId: context.userId,
+            workspaceId: context.workspaceId,
+            taskId: msg.taskId,
+            messageType: msg.type,
+          });
+          hub.subscribe(client, msg.taskId);
+        } else if (msg.type === "execution_subscribe") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
           hub.subscribe(client, msg.taskId);
         } else if (msg.type === "unsubscribe") {
           hub.unsubscribe(client, msg.taskId);
+        } else if (msg.type === "execution_unsubscribe") {
+          hub.unsubscribe(client, msg.taskId);
         } else if (msg.type === "agent_input") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            console.warn("[security] WARN: ws input denied by ownership policy", {
+              userId: context.userId,
+              workspaceId: context.workspaceId,
+              taskId: msg.taskId,
+              code: decision.code,
+            });
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+
+          console.info("[security] INFO: ws input accepted", {
+            userId: context.userId,
+            workspaceId: context.workspaceId,
+            taskId: msg.taskId,
+            messageType: msg.type,
+          });
           orchestrator.sendInput(msg.taskId, msg.input);
+        } else if (msg.type === "terminal_open") {
+          if (!TERMINAL_REAL_ENABLED) {
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Terminal real is disabled by feature flag",
+              })
+            );
+            return;
+          }
+
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+
+          const task = db.tasks.getById(msg.taskId);
+          if (!task) {
+            ws.send(JSON.stringify({ type: "error", message: "Task not found" }));
+            return;
+          }
+
+          const repo = db.repos.getById(task.repoId);
+          const latestRun = db.runs.getLatestByTask(task.id);
+          const cwd = latestRun?.worktreePath ?? repo?.localPath ?? undefined;
+          const ok = terminalSessions.openSession({
+            taskId: msg.taskId,
+            runId: msg.runId ?? latestRun?.id ?? null,
+            cwd,
+            cols: msg.cols,
+            rows: msg.rows,
+          });
+          if (!ok) {
+            ws.send(JSON.stringify({ type: "error", message: "Failed to open terminal session" }));
+          }
+        } else if (msg.type === "terminal_input") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+
+          const result = terminalSessions.sendInput(msg.taskId, msg.input);
+          if (!result.ok) {
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: `Terminal input rejected: ${result.reason ?? "unknown"}`,
+              })
+            );
+          }
+        } else if (msg.type === "terminal_resize") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+          terminalSessions.resize(msg.taskId, msg.cols, msg.rows);
+        } else if (msg.type === "terminal_signal") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+          terminalSessions.signal(msg.taskId, msg.signal);
+        } else if (msg.type === "terminal_close") {
+          const decision = enforceTaskAccess(db, context, msg.taskId);
+          if (decision) {
+            const error = asForbiddenResponse(decision);
+            ws.send(JSON.stringify({ type: "error", message: error.message }));
+            return;
+          }
+          terminalSessions.closeSession(msg.taskId);
         } else if (msg.type === "ping") {
           // Liveness reply — no-op; any incoming frame resets client pong counter
         }
@@ -251,9 +445,9 @@ app.get(
       }
     },
     onClose(_evt, ws) {
-      const client = wsClients.get(ws);
-      if (client) {
-        hub.removeClient(client);
+      const state = wsClients.get(ws);
+      if (state) {
+        hub.removeClient(state.client);
         wsClients.delete(ws);
       }
     },
@@ -278,6 +472,9 @@ console.log(`
 ║  Max agents: ${MAX_AGENTS}                         ║
 ╚══════════════════════════════════════════════╝
 `);
+console.log(
+  `[startup] Features: terminal_real=${TERMINAL_REAL_ENABLED ? "enabled" : "disabled"}, execution_timeline=${EXECUTION_TIMELINE_ENABLED ? "enabled" : "disabled"}`
+);
 
 // List available engines on startup
 const engines = await registry.listEngines();
