@@ -239,7 +239,9 @@ export const api = {
       }),
     downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
     openEditor: (id: string) =>
-      request<{ ok: boolean }>(`/tasks/${id}/open-editor`, { method: "POST" }),
+      request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor`, { method: "POST" }),
+    getTaskPath: (id: string) =>
+      request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor?onlyPath=true`, { method: "POST" }),
     importFromIssues: (
       repoId: string,
       issues: {

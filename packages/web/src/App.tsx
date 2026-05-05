@@ -3,6 +3,7 @@ import type {
   AuthStatus,
   TaskStatus,
   TaskWithRun,
+  WsClientMessage,
   WsServerMessage,
 } from "@vibe-code/shared";
 import {
@@ -99,6 +100,14 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   const merged = [...existing, ...unique];
   if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
+}
+
+interface TerminalChunk {
+  id: number;
+  runId: string | null;
+  stream: "stdout" | "stderr";
+  chunk: string;
+  timestamp: string;
 }
 
 function LoginScreen({
@@ -307,6 +316,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     labelIds: [],
   });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
+  const [terminalLogs, setTerminalLogs] = useState<Record<string, TerminalChunk[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedLogCursorRef = useRef(0);
@@ -514,12 +524,95 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             });
           }
           break;
+        case "terminal_opened":
+          if (sel?.id === msg.taskId) {
+            startTransition(() => {
+              setTerminalLogs((prev) => ({ ...prev, [msg.taskId]: prev[msg.taskId] ?? [] }));
+            });
+          }
+          break;
+        case "terminal_output":
+          if (sel?.id === msg.taskId) {
+            const stream: "stdout" | "stderr" = msg.stream;
+            const runId = msg.runId;
+            const chunk = msg.chunk;
+            const timestamp = msg.timestamp;
+            startTransition(() => {
+              setTerminalLogs((prev) => {
+                const existing = prev[msg.taskId] ?? [];
+                const entry: TerminalChunk = {
+                  id: Date.now(),
+                  runId,
+                  stream,
+                  chunk,
+                  timestamp,
+                };
+                const next: TerminalChunk[] = [...existing, entry];
+                return {
+                  ...prev,
+                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
+                } as Record<string, TerminalChunk[]>;
+              });
+            });
+          }
+          break;
+        case "terminal_closed":
+          if (sel?.id === msg.taskId) {
+            const runId = msg.runId;
+            const timestamp = msg.timestamp;
+            const exitCode = msg.exitCode;
+            startTransition(() => {
+              setTerminalLogs((prev) => {
+                const existing = prev[msg.taskId] ?? [];
+                const entry: TerminalChunk = {
+                  id: Date.now(),
+                  runId,
+                  stream: "stderr",
+                  chunk: `\n[session closed: exit ${exitCode ?? "unknown"}]\n`,
+                  timestamp,
+                };
+                const next: TerminalChunk[] = [...existing, entry];
+                return {
+                  ...prev,
+                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
+                } as Record<string, TerminalChunk[]>;
+              });
+            });
+          }
+          break;
+        case "execution_event":
+          if (sel?.id === msg.taskId) {
+            startTransition(() => {
+              setLiveLogs((prev) => ({
+                ...prev,
+                [msg.taskId]: appendLogsLimited(prev[msg.taskId] ?? [], [
+                  {
+                    id: Date.now(),
+                    runId: msg.runId,
+                    stream: "system",
+                    content:
+                      msg.event.content ??
+                      (msg.event.phase ? `phase:${msg.event.phase}` : msg.event.type),
+                    timestamp: msg.event.timestamp,
+                  },
+                ]),
+              }));
+            });
+          }
+          break;
       }
     },
     [addOrUpdateRepo, notify, refreshEnginesThrottled, updateRunLocal, updateTaskLocal]
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
+
+  const sendWsMessage = useCallback(
+    (message: WsClientMessage) => {
+      send(message);
+    },
+    [send]
+  );
 
   const selectedRepo = useMemo(
     () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
@@ -1004,10 +1097,23 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         toast(`Task duplicada`, "info");
         return;
       }
-      // Ctrl+Shift+C — clear search
+      // Ctrl+Shift+C — copy path (if task selected) or clear search
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
         e.preventDefault();
-        setSearch("");
+        if (selectedTask && !isTyping) {
+          api.tasks.getTaskPath(selectedTask.id).then((res) => {
+            if (res.path) {
+              navigator.clipboard.writeText(res.path);
+              toast("Path copied to clipboard", "success");
+            } else {
+              toast("No worktree path found", "error");
+            }
+          }).catch(() => {
+            toast("Failed to get worktree path", "error");
+          });
+        } else {
+          setSearch("");
+        }
         return;
       }
     };
@@ -1287,6 +1393,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               onClose={handleCloseDetail}
               onLaunch={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await launchTask(id, engine, model);
                 toast("Agent started", "success");
               }}
@@ -1296,6 +1403,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               }}
               onRetry={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
+                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await retryTask(id, engine, model);
                 toast("Agent restarted", "success");
               }}
@@ -1338,6 +1446,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               onSendInput={(taskId, input) => {
                 send({ type: "agent_input", taskId, input });
               }}
+              terminalLogs={terminalLogs[selectedTask.id] ?? []}
+              onWsSend={sendWsMessage}
               onClone={async (id) => {
                 const cloned = await cloneTask(id);
                 toast(`"${cloned.title}" clonada`, "success");
