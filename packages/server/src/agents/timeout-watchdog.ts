@@ -6,8 +6,6 @@
  * On timeout: marks task as failed, cleans up worktree.
  */
 
-import type { AgentRun } from "@vibe-code/shared";
-
 export interface TimeoutConfig {
   defaultTimeoutMs?: number; // Default: 3600000 (1 hour)
   maxTimeoutMs?: number; // Safety cap: 86400000 (24 hours)
@@ -59,7 +57,7 @@ export class TimeoutWatchdog {
    * Cancel all active timeouts (e.g., on graceful shutdown)
    */
   cancelAll(): void {
-    for (const [taskId, timeout] of this.timeouts) {
+    for (const [_taskId, timeout] of this.timeouts) {
       clearTimeout(timeout);
     }
     this.timeouts.clear();

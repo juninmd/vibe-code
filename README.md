@@ -575,6 +575,12 @@ opencode --version
 └────────────────────────────────────────────┘
 ```
 
+Novidades operacionais do painel:
+
+- Aba `Execution`: timeline de execução com eventos de fase, progresso e logs do agente.
+- Aba `Terminal`: canal de sessão terminal para input interativo (quando habilitado por feature flag).
+- Fallback legado: quando o terminal real está desabilitado, o fluxo de execução continua funcionando com o canal de logs existente.
+
 ### Atalhos de Teclado
 
 | Atalho | Ação |

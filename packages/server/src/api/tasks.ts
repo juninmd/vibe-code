@@ -19,6 +19,14 @@ import {
 } from "../agents/orchestrator/task-plan";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import {
+  asForbiddenResponse,
+  enforceRepoAccess,
+  enforceTaskAccess,
+  resolveAccessContext,
+  sanitizeRunForExternal,
+  sanitizeTaskForExternal,
+} from "../security/access-control";
 
 function computeNextRun(expression: string): string | null {
   try {
@@ -113,10 +121,28 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }));
   }
 
-  router.get("/", (c) => {
+  router.get("/", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const accessContext = access.context;
+
     const repoId = c.req.query("repo_id");
     const status = c.req.query("status");
-    return c.json({ data: mapTasksWithRuns(repoId, status) });
+
+    if (repoId) {
+      const decision = enforceRepoAccess(db, accessContext, repoId);
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+    }
+
+    const data = mapTasksWithRuns(repoId, status)
+      .filter((task) => !enforceRepoAccess(db, accessContext, task.repoId))
+      .map((task) => sanitizeTaskForExternal(db, task));
+
+    return c.json({ data });
   });
 
   router.get("/schedules", (c) => {
@@ -131,17 +157,37 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return c.json({ data: scheduleData });
   });
 
-  router.get("/poll", (c) => {
+  router.get("/poll", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const accessContext = access.context;
+
     const repoId = c.req.query("repo_id");
     const focusedTaskId = c.req.query("focused_task_id") ?? undefined;
     const focusedLogsAfterIdRaw = c.req.query("focused_logs_after_id") ?? "0";
     const focusedLogsAfterId = Number.parseInt(focusedLogsAfterIdRaw, 10);
 
-    const tasks = mapTasksWithRuns(repoId);
+    if (repoId) {
+      const repoDecision = enforceRepoAccess(db, accessContext, repoId);
+      if (repoDecision) return c.json(asForbiddenResponse(repoDecision), repoDecision.status);
+    }
+
+    const tasks = mapTasksWithRuns(repoId)
+      .filter((task) => !enforceRepoAccess(db, accessContext, task.repoId))
+      .map((task) => sanitizeTaskForExternal(db, task));
     let focusedTask: TaskWithRun | null = null;
     let focusedLogs: ReturnType<typeof db.logs.listByRun> = [];
 
     if (focusedTaskId) {
+      const taskDecision = enforceTaskAccess(db, accessContext, focusedTaskId);
+      if (taskDecision && taskDecision.code !== "not_found") {
+        return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+      }
+
       focusedTask = tasks.find((task) => task.id === focusedTaskId) ?? null;
       if (focusedTask?.latestRun?.id) {
         focusedLogs = db.logs.listByRunAfter(
@@ -262,13 +308,28 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return c.json({ data: { created, count: created.length } }, 201);
   });
 
-  router.get("/:id", (c) => {
-    const task = db.tasks.getById(c.req.param("id"));
+  router.get("/:id", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const taskId = c.req.param("id");
+    const taskDecision = enforceTaskAccess(db, access.context, taskId);
+    if (taskDecision) return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+
+    const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     const latestRun = db.runs.getLatestByTask(task.id);
     const repo = db.repos.getById(task.repoId);
     return c.json({
-      data: { ...task, latestRun: latestRun ?? undefined, repo: repo ?? undefined },
+      data: sanitizeTaskForExternal(db, {
+        ...task,
+        latestRun: latestRun ?? undefined,
+        repo: repo ?? undefined,
+      }),
     });
   });
 
@@ -312,7 +373,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
   });
 
   router.post("/:id/launch", async (c) => {
-    const task = db.tasks.getById(c.req.param("id"));
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const taskId = c.req.param("id");
+    const taskDecision = enforceTaskAccess(db, access.context, taskId);
+    if (taskDecision) return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+
+    const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
     if (task.status !== "backlog" && task.status !== "failed") {
@@ -329,7 +401,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     try {
       const run = await orchestrator.launch(task, engineOverride, modelOverride);
-      return c.json({ data: run }, 202);
+      return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "launch_failed", message: msg }, 500);
@@ -559,7 +631,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
   });
 
   router.post("/:id/retry", async (c) => {
-    const task = db.tasks.getById(c.req.param("id"));
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const taskId = c.req.param("id");
+    const taskDecision = enforceTaskAccess(db, access.context, taskId);
+    if (taskDecision) return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+
+    const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
     if (task.status !== "failed") {
@@ -573,7 +656,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     try {
       const run = await orchestrator.launch(task, engineOverride, modelOverride);
-      return c.json({ data: run }, 202);
+      return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "retry_failed", message: msg }, 500);
@@ -600,8 +683,19 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }
   });
 
-  router.get("/:id/runs", (c) => {
-    const runs = db.runs.listByTask(c.req.param("id"));
+  router.get("/:id/runs", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const taskId = c.req.param("id");
+    const taskDecision = enforceTaskAccess(db, access.context, taskId);
+    if (taskDecision) return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+
+    const runs = db.runs.listByTask(taskId).map((run) => sanitizeRunForExternal(db, run));
     return c.json({ data: runs });
   });
 
@@ -675,7 +769,18 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
   });
 
   router.post("/:id/schedule/run-now", async (c) => {
-    const task = db.tasks.getById(c.req.param("id"));
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const taskId = c.req.param("id");
+    const taskDecision = enforceTaskAccess(db, access.context, taskId);
+    if (taskDecision) return c.json(asForbiddenResponse(taskDecision), taskDecision.status);
+
+    const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
     try {
@@ -688,7 +793,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
         db.schedules.updateAfterRun(task.id, next);
       }
 
-      return c.json({ data: run }, 202);
+      return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "run_now_failed", message: msg }, 500);
@@ -806,14 +911,19 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ error: "invalid_state", message: "No path available to open" }, 400);
     }
 
-    const editorCommand = process.env.EDITOR || "code";
+    const onlyPath = c.req.query("onlyPath") === "true";
+    if (onlyPath) {
+      return c.json({ data: { ok: true, path: targetPath } });
+    }
+
+    const editorCommand = process.env.VIBE_CODE_EDITOR || process.env.EDITOR || "code";
 
     try {
       Bun.spawn([editorCommand, targetPath], {
         detached: true,
         stdio: ["ignore", "ignore", "ignore"],
       }).unref();
-      return c.json({ data: { ok: true } });
+      return c.json({ data: { ok: true, path: targetPath } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "editor_failed", message: `Failed to open editor: ${msg}` }, 500);
