@@ -100,6 +100,24 @@ export function Board({
     [tasks, tasksByColumn, onTaskMove]
   );
 
+  const hiddenRails = useMemo(
+    () => [
+      {
+        id: "scheduled",
+        label: "Scheduled",
+        count: tasksByColumn.scheduled.length,
+        hint: "Template lane",
+      },
+      {
+        id: "failed",
+        label: "Failed",
+        count: tasksByColumn.failed.length,
+        hint: "Needs recovery",
+      },
+    ],
+    [tasksByColumn.failed.length, tasksByColumn.scheduled.length]
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -129,6 +147,27 @@ export function Board({
                 retryQueueMap={retryQueueMap}
                 fillWidth
               />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 shrink-0">
+          {hiddenRails.map((rail) => (
+            <div
+              key={rail.id}
+              className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-3 py-2 min-w-[180px]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-dimmed">
+                  {rail.label}
+                </span>
+                <span
+                  className={`text-[10px] font-bold ${rail.count > 0 ? "text-warning" : "text-dimmed"}`}
+                >
+                  {rail.count}
+                </span>
+              </div>
+              <p className="text-[10px] text-dimmed mt-1">{rail.hint}</p>
             </div>
           ))}
         </div>

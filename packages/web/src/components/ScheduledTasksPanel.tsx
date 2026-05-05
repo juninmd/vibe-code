@@ -103,7 +103,7 @@ export function ScheduledTasksPanel() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleToggleSchedule(schedule.id, schedule.enabled)}
+                  onClick={() => handleToggleSchedule(task.id, schedule.enabled)}
                   className={`w-12 h-7 rounded-full relative transition-all active-shrink ${schedule.enabled ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
                 >
                   <div
@@ -136,8 +136,8 @@ export function ScheduledTasksPanel() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleRunNow(schedule.id)}
-                    disabled={isExecutingTask === schedule.id}
+                    onClick={() => handleRunNow(task.id)}
+                    disabled={isExecutingTask === task.id}
                     className="flex-1 rounded-xl h-9 text-[10px] font-black uppercase tracking-widest border-white/5 hover:bg-white/5"
                   >
                     Run Now

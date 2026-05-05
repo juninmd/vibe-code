@@ -40,3 +40,11 @@ The root `bun run dev` script currently depends on `bash ./scripts/dev-safe.sh`.
 - Avoid claiming runtime capabilities that are not yet implemented.
 - When guidance becomes durable, move it into versioned docs or contracts.
 - When product behavior changes materially, update `README.md`, `CLAUDE.md`, and `CHANGELOG.md` accordingly.
+
+### Canary Checklist (terminal_real/execution_timeline)
+
+1. Start at 5% of eligible tasks with `terminal_real_enabled=true` and `execution_timeline_enabled=true`.
+2. Monitor WS deny/error events, terminal session close rates, and task failure deltas against baseline.
+3. Promote to 25% only if error and regression rates remain within normal bounds for one full observation window.
+4. Promote to 100% after the 25% phase stays stable and rollback drill is confirmed.
+5. Roll back immediately by disabling `terminal_real_enabled` first if incidents impact execution continuity.
