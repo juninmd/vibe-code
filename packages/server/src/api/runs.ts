@@ -1,11 +1,27 @@
 import { Hono } from "hono";
 import type { Db } from "../db";
+import {
+  asForbiddenResponse,
+  enforceRunAccess,
+  resolveAccessContext,
+} from "../security/access-control";
 
 export function createRunsRouter(db: Db) {
   const router = new Hono();
 
-  router.get("/:id/logs", (c) => {
-    const run = db.runs.getById(c.req.param("id"));
+  router.get("/:id/logs", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+
+    const runId = c.req.param("id");
+    const decision = enforceRunAccess(db, access.context, runId);
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+
+    const run = db.runs.getById(runId);
     if (!run) return c.json({ error: "not_found", message: "Run not found" }, 404);
 
     const afterParam = c.req.query("after");

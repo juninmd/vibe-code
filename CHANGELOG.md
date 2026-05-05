@@ -3,9 +3,15 @@
 ## [Unreleased]
 ### Added
 - **Repository Contracts**: Added `WORKFLOW.md`, `docs/repo-contract.md`, and `docs/glossary.md` to define the repository workflow contract, shared vocabulary, and migration path toward an autonomous control plane.
+- **Execution + Terminal Split**: Task detail now has dedicated `Execution` and `Terminal` tabs, with a new `ExecutionTimeline` surface and a `TerminalSessionPanel` for real terminal streaming.
+- **Terminal Session Channel**: Added WS terminal protocol support (`terminal_open`, `terminal_input`, `terminal_resize`, `terminal_signal`, `terminal_close`) and server-side session lifecycle module.
+- **Access Control Hardening**: Introduced centralized access-control enforcement for repo/task/run scope plus safe external serialization helpers for tasks/runs.
+- **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
 - **Product Positioning**: Updated `README.md`, `CLAUDE.md`, and `AGENTS.md` to describe the product as an autonomous code production control plane instead of a task-board-first manager.
+- **Task Poll Compatibility**: Preserved `GET /api/tasks/poll` legacy behavior for missing focused tasks (returns empty focused payload instead of hard failure) while keeping scope checks for valid resources.
+- **Task UI Reliability**: Scheduled task actions now use `task.id` for run/toggle endpoints; board now includes ghost rails for hidden status visibility.
 
 ### Added
 - **Semantic Task Priority**: Priority is now represented as named levels (`none`, `low`, `medium`, `high`, `urgent`) instead of integers. Shared `TASK_PRIORITY_META` provides label, icon, and color tokens for consistent UI rendering across the app.
