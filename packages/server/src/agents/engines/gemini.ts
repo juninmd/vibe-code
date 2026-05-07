@@ -1,13 +1,107 @@
-import { access, unlink, writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
-import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
+
+const NATIVE_GEMINI_CLI_MODELS = [
+  "auto-gemini-2.5",
+  "auto-gemini-3",
+  "auto",
+  "pro",
+  "flash",
+  "flash-lite",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-3-pro-preview",
+  "gemini-3.1-pro-preview",
+  "gemini-3.1-pro-preview-customtools",
+  "gemini-3-flash-preview",
+  "gemini-3.1-flash-lite-preview",
+  "gemma-4-31b-it",
+  "gemma-4-26b-a4b-it",
+];
+
+function parseGeminiLine(line: string): AgentEvent[] {
+  const trimmed = line.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const eventType = String(parsed.type ?? "");
+
+    if (eventType === "init") {
+      const sessionId = String(parsed.session_id ?? parsed.id ?? "");
+      return [
+        ...(sessionId ? [{ type: "session" as const, sessionId }] : []),
+        {
+          type: "log" as const,
+          stream: "system" as const,
+          content: `[gemini-init] ${trimmed.slice(0, 200)}`,
+        },
+      ];
+    }
+
+    if (eventType === "tool_use") {
+      return [
+        {
+          type: "tool_use",
+          toolUse: {
+            toolId: String(parsed.tool_id ?? ""),
+            toolName: String(parsed.tool_name ?? "unknown"),
+            parameters: (parsed.parameters ?? {}) as Record<string, unknown>,
+          },
+        },
+      ];
+    }
+
+    if (eventType === "tool_result") {
+      const status = String(parsed.status ?? "");
+      return [
+        {
+          type: "tool_result",
+          toolResult: {
+            toolId: String(parsed.tool_id ?? ""),
+            output: String(parsed.output ?? ""),
+            status: status === "success" ? "success" : "error",
+          },
+        },
+      ];
+    }
+
+    if (eventType === "message") {
+      const role = String(parsed.role ?? "");
+      const content = String(parsed.content ?? "");
+      if (role === "assistant" && content) {
+        return [{ type: "log", stream: "stdout", content }];
+      }
+    }
+
+    if (eventType === "result") {
+      const stats = parsed.stats as Record<string, unknown> | undefined;
+      if (stats) {
+        const costStats: Record<string, unknown> = { ...stats };
+        return [{ type: "cost", costStats: costStats as AgentEvent["costStats"] }];
+      }
+    }
+
+    if (eventType === "error") {
+      const msg = String(parsed.message ?? parsed.error ?? "Unknown error");
+      return [
+        { type: "log", stream: "stderr", content: msg },
+        { type: "error", content: msg },
+      ];
+    }
+
+    return [];
+  } catch {
+    return trimmed ? [{ type: "log", stream: "stdout", content: trimmed }] : [];
+  }
+}
 
 export class GeminiEngine implements AgentEngine {
   name = "gemini";
@@ -166,7 +260,7 @@ export class GeminiEngine implements AgentEngine {
 
     // Fallback if empty
     if (models.length === 0) {
-      models = ["auto", "pro", "flash", "flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"];
+      models = [...NATIVE_GEMINI_CLI_MODELS];
     }
 
     this.cachedModels = models.sort();
@@ -222,13 +316,10 @@ export class GeminiEngine implements AgentEngine {
       );
     }
 
-    const promptFile = `/tmp/vibe-gemini-prompt-${options.runId ?? Date.now()}.txt`;
-    await Bun.write(promptFile, prompt);
-
-    const args = [command, "acp"];
+    const args = [command, "--yolo", "--output-format", "stream-json"];
     if (options.model) args.push("-m", options.model);
     if (options.resumeSessionId) args.push("-r", options.resumeSessionId);
-    args.push("-p", `@${promptFile}`);
+    args.push("-p", prompt);
 
     let proc: Subprocess;
     try {
@@ -274,18 +365,10 @@ export class GeminiEngine implements AgentEngine {
     if (options.runId) this.processes.set(options.runId, proc);
 
     yield* withHeartbeat(
-      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
+      streamProcess(proc, (line) => parseGeminiLine(line), options.signal),
       getHeartbeatIntervalMs(),
       options.signal
     );
-
-    if (options.runId) this.processes.delete(options.runId);
-
-    try {
-      await unlink(promptFile);
-    } catch {
-      // ignore cleanup errors
-    }
   }
 
   abort(runId: string): void {

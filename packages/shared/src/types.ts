@@ -1206,3 +1206,130 @@ export interface Autopilot {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Codex CLI JSONL events and frontend view models ─────────────────────────
+
+export interface CodexDebugModelsResponse {
+  models?: Array<{
+    slug?: string;
+    id?: string;
+    display_name?: string;
+    description?: string;
+    default_reasoning_level?: string;
+    supported_reasoning_levels?: Array<{ effort: string; description?: string }>;
+    visibility?: string;
+    supported_in_api?: boolean;
+  }>;
+}
+
+export interface CodexExecUsage {
+  input_tokens?: number;
+  cached_input_tokens?: number;
+  output_tokens?: number;
+  reasoning_output_tokens?: number;
+}
+
+export interface CodexAgentMessageItem { id?: string; type: "agent_message"; text?: string }
+export interface CodexCommandExecutionItem { id?: string; type: "command_execution" | "commandExecution"; command?: string; aggregated_output?: string; output?: string; exit_code?: number | null; status?: "in_progress" | "completed" | "failed" | string }
+export interface CodexFileChangeItem { id?: string; type: "file_change" | "fileChange"; status?: string; path?: string; diff?: string }
+export interface CodexUnknownItem { id?: string; type?: string; [key: string]: unknown }
+export type CodexExecItem = CodexAgentMessageItem | CodexCommandExecutionItem | CodexFileChangeItem | CodexUnknownItem;
+
+export interface CodexThreadStartedEvent { type: "thread.started"; thread_id: string }
+export interface CodexTurnStartedEvent { type: "turn.started" }
+export interface CodexItemStartedEvent { type: "item.started"; item: CodexExecItem }
+export interface CodexItemCompletedEvent { type: "item.completed"; item: CodexExecItem }
+export interface CodexTurnCompletedEvent { type: "turn.completed"; usage: CodexExecUsage }
+export interface CodexErrorEvent { type: "error" | "turn.failed" | "turn.error"; error?: string | { message?: string }; message?: string }
+
+export type CodexExecEvent =
+  | CodexThreadStartedEvent
+  | CodexTurnStartedEvent
+  | CodexItemStartedEvent
+  | CodexItemCompletedEvent
+  | CodexTurnCompletedEvent
+  | CodexErrorEvent;
+
+export type CodexTimelineEvent =
+  | { kind: "session"; threadId: string; raw: CodexThreadStartedEvent }
+  | { kind: "status"; status: "running" | "completed" | "failed"; raw: CodexExecEvent }
+  | { kind: "message"; id: string; role: "assistant"; text: string; raw: CodexItemCompletedEvent }
+  | { kind: "tool_use"; id: string; toolName: "exec_command" | "patch_apply" | string; command?: string; raw: CodexItemStartedEvent }
+  | { kind: "tool_result"; id: string; output: string; status: "success" | "error"; exitCode?: number | null; raw: CodexItemCompletedEvent }
+  | { kind: "usage"; inputTokens: number; cachedInputTokens?: number; outputTokens: number; reasoningOutputTokens?: number; totalTokens: number; raw: CodexTurnCompletedEvent }
+  | { kind: "raw"; raw: CodexExecEvent };
+
+export interface CodexRunViewModel {
+  runId: string; engine: "codex"; model?: string; threadId?: string;
+  sandbox: "read-only" | "workspace-write" | "danger-full-access";
+  status: "starting" | "running" | "completed" | "failed";
+  messages: Array<{ id: string; role: "assistant"; text: string }>;
+  tools: Array<{ id: string; name: "exec_command" | "patch_apply" | string; command?: string; output?: string; status: "in_progress" | "success" | "error"; exitCode?: number | null }>;
+  usage?: { inputTokens: number; cachedInputTokens?: number; outputTokens: number; reasoningOutputTokens?: number; totalTokens: number };
+  timeline: CodexTimelineEvent[];
+  rawEvents: CodexExecEvent[];
+}
+
+// ─── Claude Code stream-json events and frontend view models ─────────────────
+
+export type ClaudeCodeContentBlock =
+  | { type: "text"; text: string }
+  | { type: "thinking"; thinking?: string; signature?: string }
+  | { type: "tool_use"; id: string; name: string; input?: Record<string, unknown>; caller?: Record<string, unknown> }
+  | { type: string; [key: string]: unknown };
+
+export interface ClaudeCodeMessageUsage { input_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number; output_tokens?: number; service_tier?: string }
+
+export interface ClaudeCodeSystemInitEvent { type: "system"; subtype: "init"; cwd?: string; session_id: string; tools?: string[]; mcp_servers?: Array<{ name: string; status: string }>; model?: string; permissionMode?: string; slash_commands?: string[]; apiKeySource?: string; claude_code_version?: string; agents?: string[]; skills?: string[]; plugins?: Array<{ name: string; path?: string; source?: string }>; memory_paths?: { auto?: string }; uuid?: string; output_style?: string; analytics_disabled?: boolean }
+
+export interface ClaudeCodeAssistantEvent {
+  type: "assistant";
+  message: { id?: string; model?: string; type?: "message"; role?: "assistant"; content?: ClaudeCodeContentBlock[]; stop_reason?: string | null; usage?: ClaudeCodeMessageUsage };
+  parent_tool_use_id?: string | null; session_id?: string; uuid?: string;
+}
+
+export interface ClaudeCodeUserToolResultEvent {
+  type: "user";
+  message: { role: "user"; content?: Array<{ type: "tool_result"; tool_use_id: string; content?: string; is_error?: boolean }> };
+  parent_tool_use_id?: string | null; session_id?: string; uuid?: string; timestamp?: string;
+  tool_use_result?: { stdout?: string; stderr?: string; interrupted?: boolean; isImage?: boolean; noOutputExpected?: boolean };
+}
+
+export interface ClaudeCodeResultEvent {
+  type: "result"; subtype: "success" | "error" | string; is_error?: boolean; duration_ms?: number; duration_api_ms?: number; num_turns?: number; result?: string; stop_reason?: string; session_id?: string; total_cost_usd?: number;
+  usage?: ClaudeCodeMessageUsage & { server_tool_use?: { web_search_requests?: number; web_fetch_requests?: number } };
+  modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; webSearchRequests?: number; costUSD?: number; contextWindow?: number; maxOutputTokens?: number }>;
+  permission_denials?: unknown[]; terminal_reason?: string;
+}
+
+export interface ClaudeCodeRateLimitEvent { type: "rate_limit_event"; rate_limit_info?: { status?: string; resetsAt?: number; rateLimitType?: string; utilization?: number; isUsingOverage?: boolean; surpassedThreshold?: number }; uuid?: string; session_id?: string }
+export interface ClaudeCodeErrorEvent { type: "error"; message?: string; error?: string | { message?: string } }
+
+export type ClaudeCodeExecEvent =
+  | ClaudeCodeSystemInitEvent
+  | ClaudeCodeAssistantEvent
+  | ClaudeCodeUserToolResultEvent
+  | ClaudeCodeResultEvent
+  | ClaudeCodeRateLimitEvent
+  | ClaudeCodeErrorEvent;
+
+export type ClaudeCodeTimelineEvent =
+  | { kind: "session"; sessionId: string; model?: string; raw: ClaudeCodeSystemInitEvent }
+  | { kind: "message"; id: string; role: "assistant"; text: string; raw: ClaudeCodeAssistantEvent }
+  | { kind: "tool_use"; id: string; toolName: string; input?: Record<string, unknown>; raw: ClaudeCodeAssistantEvent }
+  | { kind: "tool_result"; id: string; output: string; status: "success" | "error"; raw: ClaudeCodeUserToolResultEvent }
+  | { kind: "usage"; inputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number; outputTokens: number; totalTokens: number; totalCostUsd?: number; durationMs?: number; raw: ClaudeCodeResultEvent }
+  | { kind: "rate_limit"; utilization?: number; status?: string; raw: ClaudeCodeRateLimitEvent }
+  | { kind: "status"; status: "running" | "completed" | "failed"; raw: ClaudeCodeExecEvent }
+  | { kind: "raw"; raw: ClaudeCodeExecEvent };
+
+export interface ClaudeCodeRunViewModel {
+  runId: string; engine: "claude-code"; model?: string; sessionId?: string; permissionMode?: string;
+  status: "starting" | "running" | "completed" | "failed";
+  messages: Array<{ id: string; role: "assistant"; text: string }>;
+  tools: Array<{ id: string; name: string; input?: Record<string, unknown>; output?: string; status: "in_progress" | "success" | "error" }>;
+  usage?: { inputTokens: number; cacheCreationInputTokens?: number; cacheReadInputTokens?: number; outputTokens: number; totalTokens: number; totalCostUsd?: number; durationMs?: number };
+  rateLimit?: { utilization?: number; status?: string };
+  timeline: ClaudeCodeTimelineEvent[];
+  rawEvents: ClaudeCodeExecEvent[];
+}

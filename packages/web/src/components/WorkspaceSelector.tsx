@@ -24,7 +24,7 @@ export function WorkspaceSelector() {
         value={workspaceId || ""}
         onChange={(e) => switchWorkspace(e.target.value)}
         disabled={isLoading}
-        className="px-2 py-1 border border-transparent hover:border-[var(--border-default)] rounded-md bg-transparent hover:bg-[var(--bg-surface-hover)] text-[var(--text-primary)] text-sm font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--accent)] transition-all"
+        className="px-2 py-1 border border-transparent hover:border-default rounded-md bg-transparent hover:bg-surface-hover text-primary text-sm font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent transition-all truncate max-w-[150px] !bg-zinc-900"
         aria-label="Select workspace"
       >
         {workspaces.length === 0 ? (

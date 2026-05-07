@@ -13,6 +13,7 @@ import {
   createScheduleQueries,
   createSettingsQueries,
   createTaskQueries,
+  createWorkspaceQueries,
 } from "./queries";
 import { initDatabase } from "./schema";
 
@@ -21,6 +22,7 @@ export function createDb(dbPath: string) {
 
   return {
     raw: db,
+    workspaces: createWorkspaceQueries(db),
     repos: createRepoQueries(db),
     tasks: createTaskQueries(db),
     runs: createRunQueries(db),
