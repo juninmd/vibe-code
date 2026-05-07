@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-ARG BUN_VERSION=1.2
+ARG BUN_VERSION=1.3
 
 # ─── Stage 1: build ──────────────────────────────────────────────────────────
 FROM oven/bun:${BUN_VERSION}-debian AS builder
@@ -67,7 +67,7 @@ WORKDIR /app/packages/server
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS "http://localhost:${PORT}/api/health" || exit 1
+  CMD curl -fsS "http://localhost:${PORT}/health" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["bun", "run", "src/index.ts"]
