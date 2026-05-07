@@ -1,9 +1,9 @@
-import { describe, expect, it, mock, beforeEach, afterEach } from "bun:test";
-import { getCurrentUser, authStatus, authMiddleware, createAuthRouter } from "./auth";
-import { createDb } from "./db";
-import type { Context } from "hono";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { createHash } from "node:crypto";
+import type { Context } from "hono";
 import { Hono } from "hono";
+import { authMiddleware, authStatus, createAuthRouter, getCurrentUser } from "./auth";
+import { createDb } from "./db";
 
 function makeDb() {
   return createDb(":memory:");
@@ -14,7 +14,7 @@ function hashToken(token: string): string {
 }
 
 function makeContext(
-  cookies: Record<string, string> = {},
+  _cookies: Record<string, string> = {},
   url: string = "http://localhost/",
   headers: Record<string, string> = {}
 ): Context {
@@ -34,8 +34,8 @@ mock.module("hono/cookie", () => ({
     // Extract cookies from mock context if we set them, otherwise use a simulated cookie string
     const cookieHeader = c.req.header("cookie");
     if (cookieHeader) {
-        const match = cookieHeader.match(new RegExp(`(^| )${name}=([^;]+)`));
-        if (match) return match[2];
+      const match = cookieHeader.match(new RegExp(`(^| )${name}=([^;]+)`));
+      if (match) return match[2];
     }
     return (c as any).mockCookies?.[name];
   },
@@ -45,7 +45,7 @@ mock.module("hono/cookie", () => ({
   },
   deleteCookie: (c: Context, name: string) => {
     if ((c as any).mockCookies) delete (c as any).mockCookies[name];
-  }
+  },
 }));
 
 describe("auth", () => {
@@ -88,10 +88,20 @@ describe("auth", () => {
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
 
-      db.raw.prepare(
-        `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
+      db.raw
+        .prepare(
+          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(hashToken(token), "123", "testuser", "Test User", "http://avatar", "access-token", expiresAt);
+        )
+        .run(
+          hashToken(token),
+          "123",
+          "testuser",
+          "Test User",
+          "http://avatar",
+          "access-token",
+          expiresAt
+        );
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -112,10 +122,20 @@ describe("auth", () => {
       const token = "test-token";
       const expiresAt = new Date(Date.now() - 1000000).toISOString(); // expired
 
-      db.raw.prepare(
-        `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
+      db.raw
+        .prepare(
+          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(hashToken(token), "123", "testuser", "Test User", "http://avatar", "access-token", expiresAt);
+        )
+        .run(
+          hashToken(token),
+          "123",
+          "testuser",
+          "Test User",
+          "http://avatar",
+          "access-token",
+          expiresAt
+        );
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -158,10 +178,12 @@ describe("auth", () => {
       const db = makeDb();
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
-      db.raw.prepare(
-        `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
+      db.raw
+        .prepare(
+          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
+        )
+        .run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -183,7 +205,9 @@ describe("auth", () => {
       const middleware = authMiddleware(db);
 
       let nextCalled = false;
-      await middleware(c, async () => { nextCalled = true; });
+      await middleware(c, async () => {
+        nextCalled = true;
+      });
       expect(nextCalled).toBeTrue();
     });
 
@@ -196,7 +220,9 @@ describe("auth", () => {
       const middleware = authMiddleware(db);
 
       let nextCalled = false;
-      await middleware(c, async () => { nextCalled = true; });
+      await middleware(c, async () => {
+        nextCalled = true;
+      });
       expect(nextCalled).toBeTrue();
     });
 
@@ -209,7 +235,9 @@ describe("auth", () => {
       const middleware = authMiddleware(db);
 
       let nextCalled = false;
-      await middleware(c, async () => { nextCalled = true; });
+      await middleware(c, async () => {
+        nextCalled = true;
+      });
       expect(nextCalled).toBeTrue();
     });
 
@@ -222,11 +250,16 @@ describe("auth", () => {
       const middleware = authMiddleware(db);
 
       let nextCalled = false;
-      const result = await middleware(c, async () => { nextCalled = true; });
+      const result = await middleware(c, async () => {
+        nextCalled = true;
+      });
 
       expect(nextCalled).toBeFalse();
       expect((result as any).status).toBe(401);
-      expect((result as any).body).toEqual({ error: "unauthorized", message: "GitHub login required" });
+      expect((result as any).body).toEqual({
+        error: "unauthorized",
+        message: "GitHub login required",
+      });
     });
 
     it("calls next() and sets settings if valid session", async () => {
@@ -236,17 +269,21 @@ describe("auth", () => {
       const db = makeDb();
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
-      db.raw.prepare(
-        `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
+      db.raw
+        .prepare(
+          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
+        )
+        .run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
 
       const c = makeContext({}, "http://localhost/api/tasks");
       (c as any).mockCookies = { vibe_session: token };
       const middleware = authMiddleware(db);
 
       let nextCalled = false;
-      await middleware(c, async () => { nextCalled = true; });
+      await middleware(c, async () => {
+        nextCalled = true;
+      });
 
       expect(nextCalled).toBeTrue();
       expect(db.settings.get("github_token")).toBe("access-token");
@@ -255,10 +292,10 @@ describe("auth", () => {
   });
 
   describe("createAuthRouter", () => {
-      it("creates router with correct endpoints", () => {
-          const db = makeDb();
-          const router = createAuthRouter(db);
-          expect(router).toBeInstanceOf(Hono);
-      });
+    it("creates router with correct endpoints", () => {
+      const db = makeDb();
+      const router = createAuthRouter(db);
+      expect(router).toBeInstanceOf(Hono);
+    });
   });
 });

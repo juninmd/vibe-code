@@ -1,7 +1,7 @@
-import { describe, expect, it, mock } from "bun:test";
-import { getWorkspaceContext, requireWorkspaceContext } from "./workspace-context";
-import { createDb } from "../db";
+import { describe, expect, it } from "bun:test";
 import type { Context } from "hono";
+import { createDb } from "../db";
+import { getWorkspaceContext, requireWorkspaceContext } from "./workspace-context";
 
 function makeDb() {
   return createDb(":memory:");
@@ -83,7 +83,9 @@ describe("getWorkspaceContext", () => {
       header: () => undefined,
       query: () => undefined,
       method: "POST",
-      json: async () => { throw new Error("Invalid JSON"); }
+      json: async () => {
+        throw new Error("Invalid JSON");
+      },
     };
     const c = { req, env: {} } as unknown as Context;
     const user = { username: "testuser", githubId: "123" };
