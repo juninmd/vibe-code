@@ -21,12 +21,13 @@ import { TaskCard } from "./TaskCard";
 interface BoardProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
-  onTaskMove: (taskId: string, newStatus: TaskStatus, newOrder: number) => void;
+  onTaskMove: (taskId: string, newStatus: TaskStatus, newOrder: number) => void | Promise<void>;
   onRetryPR: (taskId: string) => void;
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
   retryQueueMap?: Map<string, RetryState>;
+  onNewTask?: () => void;
 }
 
 export function Board({
@@ -38,6 +39,7 @@ export function Board({
   onClearFailed,
   onRetryAllFailed,
   retryQueueMap,
+  onNewTask: _onNewTask,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
   const noopTaskClick = useCallback(() => {}, []);
