@@ -1300,7 +1300,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
           {/* Filter Bar Panel */}
           {showFilterBar && (
-            <div className="px-6 py-4 bg-surface/10 border-b border-white/5 animate-in slide-in-from-top duration-300 ease-out">
+            <div className="px-6 py-3 border-b border-white/5 bg-gradient-to-b from-white/3 to-transparent animate-in slide-in-from-top-2 duration-200 ease-out">
               <FilterBar
                 filters={filters}
                 onFilterChange={setFilters}
@@ -1606,6 +1606,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           <AddRepoDialog
             open={showAddRepo}
             onClose={() => setShowAddRepo(false)}
+            githubUsername={auth.user?.username ?? null}
             onSubmit={async (data) => {
               await addRepo(data);
               toast("Repository adicionado — clonando...", "success");
