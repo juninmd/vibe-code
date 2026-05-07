@@ -176,7 +176,8 @@ function ColumnComponent({
   onToggleCollapse,
   fillWidth = false,
   retryQueueMap,
-}: ColumnProps) {
+  headerAction,
+}: ColumnProps & { headerAction?: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
   const cfg = columnConfig[status];
@@ -208,6 +209,7 @@ function ColumnComponent({
 
           {/* Action buttons */}
           <div className="flex items-center gap-0.5">
+            {headerAction}
             {collapsible && onToggleCollapse && (
               <button
                 type="button"
