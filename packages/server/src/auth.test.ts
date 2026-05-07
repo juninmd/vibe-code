@@ -13,6 +13,24 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function insertMockSession(
+  db: ReturnType<typeof createDb>,
+  token: string,
+  githubId: string,
+  username: string,
+  displayName: string | null,
+  avatarUrl: string | null,
+  accessToken: string,
+  expiresAt: string
+) {
+  db.raw
+    .prepare(
+      `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(hashToken(token), githubId, username, displayName, avatarUrl, accessToken, expiresAt);
+}
+
 function makeContext(
   _cookies: Record<string, string> = {},
   url: string = "http://localhost/",
@@ -88,20 +106,7 @@ describe("auth", () => {
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
 
-      db.raw
-        .prepare(
-          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          hashToken(token),
-          "123",
-          "testuser",
-          "Test User",
-          "http://avatar",
-          "access-token",
-          expiresAt
-        );
+      insertMockSession(db, token, "123", "testuser", "Test User", "http://avatar", "access-token", expiresAt);
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -122,20 +127,7 @@ describe("auth", () => {
       const token = "test-token";
       const expiresAt = new Date(Date.now() - 1000000).toISOString(); // expired
 
-      db.raw
-        .prepare(
-          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          hashToken(token),
-          "123",
-          "testuser",
-          "Test User",
-          "http://avatar",
-          "access-token",
-          expiresAt
-        );
+      insertMockSession(db, token, "123", "testuser", "Test User", "http://avatar", "access-token", expiresAt);
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -178,12 +170,7 @@ describe("auth", () => {
       const db = makeDb();
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
-      db.raw
-        .prepare(
-          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
+      insertMockSession(db, token, "123", "testuser", null, null, "access-token", expiresAt);
 
       const c = makeContext();
       (c as any).mockCookies = { vibe_session: token };
@@ -269,12 +256,7 @@ describe("auth", () => {
       const db = makeDb();
       const token = "test-token";
       const expiresAt = new Date(Date.now() + 1000000).toISOString();
-      db.raw
-        .prepare(
-          `INSERT INTO auth_sessions (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(hashToken(token), "123", "testuser", null, null, "access-token", expiresAt);
+      insertMockSession(db, token, "123", "testuser", null, null, "access-token", expiresAt);
 
       const c = makeContext({}, "http://localhost/api/tasks");
       (c as any).mockCookies = { vibe_session: token };
