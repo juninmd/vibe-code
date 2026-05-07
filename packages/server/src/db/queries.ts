@@ -235,6 +235,108 @@ function mapArtifact(row: ArtifactRow): TaskArtifact {
 
 // ─── Repository Queries ──────────────────────────────────────────────────────
 
+// ─── Workspaces ──────────────────────────────────────────────────────────────
+
+export interface WorkspaceRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function mapWorkspace(row: WorkspaceRow): Workspace {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export interface CreateWorkspaceRequest {
+  id?: string;
+  name: string;
+  slug: string;
+  description?: string;
+}
+
+export function createWorkspaceQueries(db: Database) {
+  return {
+    list: (): Workspace[] => {
+      const rows = db
+        .prepare<WorkspaceRow, []>("SELECT * FROM workspaces ORDER BY created_at DESC")
+        .all();
+      return rows.map(mapWorkspace);
+    },
+    get: (id: string): Workspace | null => {
+      const row = db
+        .prepare<WorkspaceRow, [string]>("SELECT * FROM workspaces WHERE id = ?")
+        .get(id);
+      return row ? mapWorkspace(row) : null;
+    },
+    getBySlug: (slug: string): Workspace | null => {
+      const row = db
+        .prepare<WorkspaceRow, [string]>("SELECT * FROM workspaces WHERE slug = ?")
+        .get(slug);
+      return row ? mapWorkspace(row) : null;
+    },
+    create: (req: CreateWorkspaceRequest): Workspace => {
+      const id = req.id || `ws-${Date.now()}`;
+      const row = db
+        .prepare<WorkspaceRow, [string, string, string, string | null]>(
+          "INSERT INTO workspaces (id, name, slug, description) VALUES (?, ?, ?, ?) RETURNING *"
+        )
+        .get(id, req.name, req.slug, req.description || null);
+      if (!row) throw new Error("Failed to create workspace");
+      return mapWorkspace(row);
+    },
+    update: (id: string, updates: Partial<CreateWorkspaceRequest>): Workspace | null => {
+      const parts: string[] = [];
+      const vals: unknown[] = [];
+      if (updates.name !== undefined) {
+        parts.push("name = ?");
+        vals.push(updates.name);
+      }
+      if (updates.slug !== undefined) {
+        parts.push("slug = ?");
+        vals.push(updates.slug);
+      }
+      if (updates.description !== undefined) {
+        parts.push("description = ?");
+        vals.push(updates.description || null);
+      }
+
+      if (parts.length === 0) {
+        return createWorkspaceQueries(db).get(id);
+      }
+
+      parts.push("updated_at = datetime('now')");
+      vals.push(id);
+
+      const sql = `UPDATE workspaces SET ${parts.join(", ")} WHERE id = ? RETURNING *`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = db.prepare(sql).get(...(vals as any)) as WorkspaceRow | undefined;
+      return row ? mapWorkspace(row) : null;
+    },
+    remove: (id: string): void => {
+      db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
+    },
+  };
+}
+
 export function createRepoQueries(db: Database) {
   const stmts = {
     list: db.prepare<RepoRow, []>("SELECT * FROM repositories ORDER BY created_at DESC"),

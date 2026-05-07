@@ -8,6 +8,15 @@ export function initDatabase(dbPath: string): Database {
   db.exec("PRAGMA busy_timeout = 5000");
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS repositories (
       id             TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
       name           TEXT NOT NULL,

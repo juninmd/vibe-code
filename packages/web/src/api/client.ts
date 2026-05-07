@@ -29,6 +29,7 @@ import type {
   UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
+  Workspace,
 } from "@vibe-code/shared";
 
 const BASE = "/api";
@@ -61,7 +62,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  // NOTE: No longer adding workspace_id header - API is now public
+
+  const workspaceId = localStorage.getItem("vibe_workspace_id");
+  if (workspaceId) {
+    headers.set("x-workspace-id", workspaceId);
+  }
 
   try {
     const res = await fetch(`${BASE}${path}`, {
@@ -236,7 +241,9 @@ export const api = {
     openEditor: (id: string) =>
       request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor`, { method: "POST" }),
     getTaskPath: (id: string) =>
-      request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor?onlyPath=true`, { method: "POST" }),
+      request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor?onlyPath=true`, {
+        method: "POST",
+      }),
     importFromIssues: (
       repoId: string,
       issues: {
@@ -256,6 +263,13 @@ export const api = {
           body: JSON.stringify({ repoId, issues, autoLabel }),
         }
       ),
+  },
+
+  workspaces: {
+    list: () => request<Workspace[]>("/workspaces"),
+    get: (id: string) => request<Workspace>(`/workspaces/${id}`),
+    create: (data: { name: string; slug: string; description?: string }) =>
+      request<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(data) }),
   },
 
   reviews: {
