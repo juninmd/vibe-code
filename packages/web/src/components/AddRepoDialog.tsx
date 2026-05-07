@@ -10,9 +10,10 @@ interface AddRepoDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: { url: string }) => void;
+  githubUsername?: string | null;
 }
 
-export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
+export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRepoDialogProps) {
   const manualUrlInputId = useId();
   const [repos, setRepos] = useState<RemoteRepo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,7 +77,10 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
       setIsSearchResult(true);
       try {
         const searchFn = mode === "gitlab" ? api.repos.searchGitLab : api.repos.searchGitHub;
-        const results = await searchFn(q);
+        // Scope GitHub search to logged-in user when query has no explicit owner
+        const scopedQ =
+          mode === "github" && githubUsername && !q.includes("/") ? `${githubUsername}/${q}` : q;
+        const results = await searchFn(scopedQ);
         setRepos(results);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -89,7 +93,7 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, mode, fetchRecent]);
+  }, [search, mode, fetchRecent, githubUsername]);
 
   const handleSelect = (repo: RemoteRepo) => {
     onSubmit({ url: repo.url });
@@ -179,7 +183,11 @@ export function AddRepoDialog({ open, onClose, onSubmit }: AddRepoDialogProps) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${providerLabel} repositories...`}
+              placeholder={
+                mode === "github" && githubUsername
+                  ? `Search in ${githubUsername}/...`
+                  : `Search ${providerLabel} repositories...`
+              }
               className="pl-12 h-12 rounded-2xl bg-input/50 border-white/5 focus:border-accent/40"
               autoFocus
             />

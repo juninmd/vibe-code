@@ -612,10 +612,15 @@ export function SkillsBrowser({
 
   const selectedCat = selected
     ? ((selected as AnyEntry & { _category?: string })._category ??
-      (index?.rules.find((r) => r.name === selected.name) ? "rule" : null) ??
-      (index?.skills.find((s) => s.name === selected.name) ? "skill" : null) ??
-      (index?.agents.find((a) => a.name === selected.name) ? "agent" : null) ??
-      "workflow")
+      (index?.rules.find((r) => r.name === selected.name)
+        ? "rule"
+        : index?.skills.find((s) => s.name === selected.name)
+          ? "skill"
+          : index?.agents.find((a) => a.name === selected.name)
+            ? "agent"
+            : index?.workflows.find((w) => w.name === selected.name)
+              ? "workflow"
+              : "skill"))
     : "";
 
   const selectedMeta = categoryMeta[selectedCat] ?? categoryMeta.skill;
@@ -733,10 +738,26 @@ export function SkillsBrowser({
                 (selected as AnyEntry & { filePath?: string })?.filePath ===
                   (entry as AnyEntry & { filePath?: string }).filePath ||
                 selected?.name === entry.name;
+
+              // Infer _category from active tab when not already set
+              const tabCategoryMap: Partial<Record<Tab, string>> = {
+                rules: "rule",
+                skills: "skill",
+                agents: "agent",
+                workflows: "workflow",
+              };
+              const entryWithCategory = {
+                ...entry,
+                _category:
+                  (entry as AnyEntry & { _category?: string })._category ??
+                  tabCategoryMap[tab] ??
+                  "skill",
+              };
+
               return (
                 <SkillCard
                   key={(entry as AnyEntry & { filePath?: string }).filePath || entry.name}
-                  entry={entry as AnyEntry & { _category?: string }}
+                  entry={entryWithCategory}
                   isSelected={isSelected}
                   onSelect={() => handleSelect(entry as AnyEntry)}
                 />

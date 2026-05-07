@@ -37,16 +37,20 @@ export async function getWorkspaceContext(
     }
   }
 
-  if (!workspaceId) {
-    console.warn("[workspace-context] ⚠️  Missing workspace_id for user", {
-      username: user.username,
-    });
-    return null;
-  }
-
   // For now: store github_username → workspace_id mapping in settings
   // This is a temporary bridge until users table is fully integrated
   const key = `user_workspace:${user.username}`;
+
+  if (!workspaceId) {
+    // Auto-assign user's default workspace when no workspace_id provided
+    const existing = db.settings.get(key);
+    if (existing) {
+      workspaceId = existing;
+    } else {
+      workspaceId = `ws-${user.username}`;
+      db.settings.set(key, workspaceId);
+    }
+  }
   const authorizedWs = db.settings.get(key);
 
   // If no mapping exists, create default workspace for this user
