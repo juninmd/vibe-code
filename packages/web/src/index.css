@@ -185,6 +185,7 @@ body,
   --color-overlay: var(--bg-overlay);
 
   --color-text-primary: var(--text-primary);
+  --color-text-primary0: var(--text-dimmed);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
   --color-text-dimmed: var(--text-dimmed);

@@ -12,6 +12,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../api/client";
 import { useElapsedTime } from "../hooks/useElapsedTime";
+import { useToast } from "../hooks/useToast";
 import { formatDateTime, formatDuration } from "../utils/date";
 import { DiffViewer } from "./DiffViewer";
 import { ExecutionTimeline } from "./ExecutionTimeline";
@@ -501,6 +502,7 @@ export function TaskDetail({
   onSkillClick,
   allTasks = [],
 }: TaskDetailProps) {
+  const toast = useToast();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [prCopied, setPrCopied] = useState(false);
@@ -699,7 +701,12 @@ export function TaskDetail({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Detalhes da tarefa: ${task.title}`}
+    >
       {/* Backdrop */}
       <button
         type="button"
@@ -710,7 +717,7 @@ export function TaskDetail({
 
       {/* Modal */}
       <div
-        className="relative w-[1100px] h-[90vh] flex flex-col rounded-xl border overflow-hidden shadow-2xl shadow-black/60"
+        className="relative w-full max-w-[1100px] h-[90vh] max-h-[90vh] flex flex-col rounded-xl border overflow-hidden shadow-2xl shadow-black/60"
         style={{
           background: "var(--bg-surface)",
           backgroundImage: auraStyle[task.status] || auraStyle.default,
@@ -764,7 +771,7 @@ export function TaskDetail({
                         setLoadingAction("open-editor");
                         await api.tasks.openEditor(task.id);
                       } catch (err) {
-                        alert(err instanceof Error ? err.message : String(err));
+                        toast.toast(err instanceof Error ? err.message : String(err), "error");
                       } finally {
                         setLoadingAction(null);
                       }
@@ -1338,7 +1345,7 @@ export function TaskDetail({
                       <span className="text-[8px] bg-surface px-1 rounded">{task.tags.length}</span>
                     )}
                   </div>
-                  <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} compact />
+                  <TaskTagsEditor tags={task.tags ?? []} onChange={handleTagsChange} />
                 </div>
                 <div className="bg-white/[0.01] rounded-lg p-2">
                   <div className="text-[9px] text-dimmed mb-1.5 flex items-center justify-between">

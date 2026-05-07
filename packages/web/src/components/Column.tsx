@@ -88,6 +88,7 @@ interface ColumnProps {
   /** When true, the column stretches to fill available width instead of using fixed 272px */
   fillWidth?: boolean;
   retryQueueMap?: Map<string, RetryState>;
+  onNewTask?: () => void;
 }
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
@@ -176,6 +177,7 @@ function ColumnComponent({
   onToggleCollapse,
   fillWidth = false,
   retryQueueMap,
+  onNewTask,
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
@@ -357,6 +359,15 @@ function ColumnComponent({
                 <EmptyStateIcon icon={cfg.emptyIcon} />
               </span>
               <span className="text-[11px]">{cfg.emptyText}</span>
+              {status === "backlog" && onNewTask && (
+                <button
+                  type="button"
+                  onClick={onNewTask}
+                  className="mt-2 text-[11px] px-3 py-1.5 rounded-md bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors cursor-pointer font-medium"
+                >
+                  + Create task
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -387,6 +398,7 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.collapsible === next.collapsible &&
     prev.collapsed === next.collapsed &&
     prev.onToggleCollapse === next.onToggleCollapse &&
-    prev.retryQueueMap === next.retryQueueMap
+    prev.retryQueueMap === next.retryQueueMap &&
+    prev.onNewTask === next.onNewTask
   );
 });
