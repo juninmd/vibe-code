@@ -27,6 +27,7 @@ interface BoardProps {
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
   retryQueueMap?: Map<string, RetryState>;
+  onNewTask?: () => void;
 }
 
 export function Board({
@@ -38,6 +39,7 @@ export function Board({
   onClearFailed,
   onRetryAllFailed,
   retryQueueMap,
+  onNewTask,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
   const noopTaskClick = useCallback(() => {}, []);
