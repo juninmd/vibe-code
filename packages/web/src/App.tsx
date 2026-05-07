@@ -73,6 +73,9 @@ const ShortcutsModal = lazy(() =>
 const SkillsBrowser = lazy(() =>
   import("./components/SkillsBrowser").then((m) => ({ default: m.SkillsBrowser }))
 );
+
+import { WorkspaceSelector } from "./components/WorkspaceSelector";
+
 const StatsDialog = lazy(() =>
   import("./components/StatsDialog").then((m) => ({ default: m.StatsDialog }))
 );
@@ -1065,7 +1068,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         e.preventDefault();
         if (selectedTask) {
           api.tasks.openEditor(selectedTask.id).catch((err) => {
-            alert(err instanceof Error ? err.message : String(err));
+            toast(err instanceof Error ? err.message : String(err), "error");
           });
         }
         return;
@@ -1100,16 +1103,19 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "C" || e.key === "c")) {
         e.preventDefault();
         if (selectedTask && !isTyping) {
-          api.tasks.getTaskPath(selectedTask.id).then((res) => {
-            if (res.path) {
-              navigator.clipboard.writeText(res.path);
-              toast("Path copied to clipboard", "success");
-            } else {
-              toast("No worktree path found", "error");
-            }
-          }).catch(() => {
-            toast("Failed to get worktree path", "error");
-          });
+          api.tasks
+            .getTaskPath(selectedTask.id)
+            .then((res) => {
+              if (res.path) {
+                navigator.clipboard.writeText(res.path);
+                toast("Path copied to clipboard", "success");
+              } else {
+                toast("No worktree path found", "error");
+              }
+            })
+            .catch(() => {
+              toast("Failed to get worktree path", "error");
+            });
         } else {
           setSearch("");
         }
@@ -1190,9 +1196,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-surface/20 backdrop-blur-xl z-30">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
-                  Workspace
-                </span>
+                <WorkspaceSelector />
                 <div className="h-4 w-px bg-white/10" />
                 <h2 className="text-sm font-bold text-primary truncate max-w-[200px]">
                   {selectedRepo ? selectedRepo.name : "All Projects"}
@@ -1377,6 +1381,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                       }
                     }}
                     retryQueueMap={retryQueueMap}
+                    onNewTask={() => setShowNewTask(true)}
                   />
                 </div>
               </ErrorBoundary>
