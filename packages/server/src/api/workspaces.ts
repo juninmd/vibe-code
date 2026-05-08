@@ -1,4 +1,3 @@
-import type { Workspace } from "@vibe-code/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
