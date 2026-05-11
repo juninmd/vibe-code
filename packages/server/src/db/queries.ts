@@ -95,6 +95,11 @@ interface TaskRow {
   depends_on: string | null;
   pending_approval: number;
   max_cost: number | null;
+  loop_enabled: number;
+  loop_max_attempts: number;
+  loop_timeout_minutes: number;
+  loop_current_attempt: number;
+  loop_feedback: string | null;
 
   created_at: string;
   updated_at: string;
@@ -183,6 +188,15 @@ function mapTask(row: TaskRow): Task {
     dependsOn: JSON.parse(row.depends_on || "[]") as string[],
     pendingApproval: Boolean(row.pending_approval),
     maxCost: row.max_cost ?? undefined,
+    loopConfig: row.loop_enabled
+      ? {
+          enabled: Boolean(row.loop_enabled),
+          maxAttempts: row.loop_max_attempts,
+          timeoutMinutes: row.loop_timeout_minutes,
+          feedback: row.loop_feedback ?? undefined,
+          currentAttempt: row.loop_current_attempt,
+        }
+      : undefined,
 
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -441,7 +455,7 @@ export function createTaskQueries(db: Database) {
 
         return db
           .prepare(
-            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
             req.title,
@@ -463,7 +477,11 @@ export function createTaskQueries(db: Database) {
             req.issueUrl ?? null,
             req.goal ?? null,
             req.desiredOutcome ?? null,
-            issueNum
+            issueNum,
+            req.loopConfig?.enabled ? 1 : 0,
+            req.loopConfig?.maxAttempts ?? 3,
+            req.loopConfig?.timeoutMinutes ?? 60,
+            req.loopConfig?.feedback ?? null
           ) as TaskRow | null;
       })();
 
@@ -586,6 +604,11 @@ export function createTaskQueries(db: Database) {
         "DELETE FROM tasks WHERE status = 'archived' AND updated_at < datetime('now', '-' || ? || ' days')";
       const info = db.prepare(sql).run(days);
       return getChanges(info);
+    },
+    incrementLoopAttempt: (id: string): void => {
+      db.prepare(
+        "UPDATE tasks SET loop_current_attempt = loop_current_attempt + 1, updated_at = datetime('now') WHERE id = ?"
+      ).run(id);
     },
   };
 }

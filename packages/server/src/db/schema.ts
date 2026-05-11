@@ -183,6 +183,15 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE tasks ADD COLUMN desired_outcome TEXT");
   }
 
+  // Migration: Ralph Loop Mode columns
+  if (!taskColNames.includes("loop_enabled")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN loop_enabled INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE tasks ADD COLUMN loop_max_attempts INTEGER NOT NULL DEFAULT 3");
+    db.exec("ALTER TABLE tasks ADD COLUMN loop_timeout_minutes INTEGER NOT NULL DEFAULT 60");
+    db.exec("ALTER TABLE tasks ADD COLUMN loop_current_attempt INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE tasks ADD COLUMN loop_feedback TEXT");
+  }
+
   // Migration: add provider column to repositories
   const repoCols = db.query("PRAGMA table_info(repositories)").all() as { name: string }[];
   const repoColNames = repoCols.map((c) => c.name);

@@ -17,6 +17,7 @@ function makeDb(): Db {
 
 function makeGit(overrides: Partial<GitService> = {}): GitService {
   return {
+    isRepoSource: async (url: string) => url !== "not-a-url",
     detectDefaultBranch: async () => "main",
     cloneRepo: async (_url: string, name: string) => `/tmp/${name}.git`,
     listGitHubRepos: async () => [],
@@ -83,6 +84,19 @@ describe("POST /api/repos", () => {
       body: JSON.stringify({ url: "not-a-url" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("accepts a local Git path as a repository source", async () => {
+    const res = await buildApp(makeDb()).request("/api/repos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "D:\\Solutions\\project" }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.name).toBe("project");
+    expect(body.data.provider).toBe("manual");
   });
 
   it("returns 400 when url field is missing", async () => {

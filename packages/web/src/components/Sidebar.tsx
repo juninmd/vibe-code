@@ -44,6 +44,7 @@ interface SidebarProps {
   onOpenEngines?: () => void;
   onOpenSchedules?: () => void;
   connected: boolean;
+  apiOk?: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
 }
 
@@ -65,6 +66,7 @@ export function Sidebar({
   onOpenEngines,
   onOpenSchedules,
   connected,
+  apiOk = true,
   repoStats,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
@@ -163,12 +165,23 @@ export function Sidebar({
                   <h1 className="text-sm font-black tracking-tight text-primary leading-none">
                     Vibe Code
                   </h1>
-                  <div className="flex items-center gap-1.5 mt-1.5">
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {/* API status dot */}
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-zinc-600"}`}
+                      className={`w-1.5 h-1.5 rounded-full ${apiOk ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"}`}
+                      title={apiOk ? "API: connected" : "API: unreachable"}
                     />
                     <span className="text-[9px] font-bold text-muted uppercase tracking-widest leading-none">
-                      {connected ? "Connected" : "Offline"}
+                      API
+                    </span>
+                    <span className="text-[9px] text-white/10">·</span>
+                    {/* WS status dot */}
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]" : "bg-zinc-600"}`}
+                      title={connected ? "WebSocket: connected" : "WebSocket: disconnected"}
+                    />
+                    <span className="text-[9px] font-bold text-muted uppercase tracking-widest leading-none">
+                      WS
                     </span>
                   </div>
                 </div>
@@ -207,6 +220,20 @@ export function Sidebar({
               )}
             </button>
           </div>
+
+          {/* Collapsed dual-status dots — always visible */}
+          {collapsed && (
+            <div className="flex flex-col items-center gap-1.5 py-1">
+              <span
+                className={`w-2 h-2 rounded-full ${apiOk ? "bg-emerald-500" : "bg-rose-500"}`}
+                title={apiOk ? "API: connected" : "API: unreachable"}
+              />
+              <span
+                className={`w-2 h-2 rounded-full ${connected ? "bg-sky-400" : "bg-zinc-600"}`}
+                title={connected ? "WebSocket: connected" : "WebSocket: disconnected"}
+              />
+            </div>
+          )}
 
           {!collapsed && (
             <div className="relative group">

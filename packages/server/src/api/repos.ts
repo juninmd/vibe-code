@@ -7,7 +7,7 @@ import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
 const createRepoSchema = z.object({
-  url: z.string().url("Must be a valid URL").min(1),
+  url: z.string().trim().min(1, "Repository URL or path is required"),
 });
 
 const createRemoteRepoSchema = z.object({
@@ -35,6 +35,17 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
       return c.json({ error: "validation", message: parsed.error.message }, 400);
     }
     try {
+      const isRepoSource = await git.isRepoSource(parsed.data.url);
+      if (!isRepoSource) {
+        return c.json(
+          {
+            error: "validation",
+            message: "Repository source must be a reachable Git URL or an existing local Git path",
+          },
+          400
+        );
+      }
+
       // Auto-detect default branch
       const defaultBranch = await git.detectDefaultBranch(parsed.data.url);
       const repo = db.repos.create({ url: parsed.data.url, defaultBranch });

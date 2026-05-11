@@ -20,11 +20,13 @@ import {
 import { api } from "./api/client";
 import { Board } from "./components/Board";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ExportImportMenu } from "./components/ExportImportMenu";
 import { FilterBar, type Filters } from "./components/FilterBar";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
+import { useApiHealth } from "./hooks/useApiHealth";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
 import { useRepos } from "./hooks/useRepos";
@@ -608,6 +610,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   );
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
+  const apiOk = useApiHealth();
 
   const sendWsMessage = useCallback(
     (message: WsClientMessage) => {
@@ -1189,6 +1192,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           onOpenEngines={() => setShowEnginesPanel(true)}
           onOpenSchedules={() => setShowSchedulesPanel(true)}
           connected={connected}
+          apiOk={apiOk}
         />
 
         <div className="flex-1 flex flex-col min-w-0 bg-app overflow-hidden">
@@ -1233,7 +1237,13 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
             <div className="flex items-center gap-3 ml-4 shrink-0">
               <div className="hidden lg:flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default shadow-inner">
-                <HeaderAction icon="download" label="Export" onClick={exportBoard} />
+                <ExportImportMenu
+                  selectedRepoId={selectedRepoId}
+                  onExport={exportBoard}
+                  onImportIssues={() => setShowIssueImporter(true)}
+                  onImportSuccess={(msg) => toast(msg, "success")}
+                  onImportError={(msg) => toast(msg, "error")}
+                />
                 <HeaderAction
                   icon="history"
                   label="Changelog"
@@ -1254,14 +1264,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   onClick={() => setShowNewTask(true)}
                   variant="primary"
                 />
-                {selectedRepo &&
-                  (selectedRepo.provider === "github" || selectedRepo.provider === "gitlab") && (
-                    <HeaderAction
-                      icon="import"
-                      label="Issues"
-                      onClick={() => setShowIssueImporter(true)}
-                    />
-                  )}
                 <HeaderAction
                   icon="filter"
                   label={showFilterBar ? "Hide" : "Filter"}
@@ -1508,7 +1510,11 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
 
           {/* Changelog Modal */}
-          {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
+          {showChangelog && (
+            <Suspense fallback={null}>
+              <ChangelogModal onClose={() => setShowChangelog(false)} />
+            </Suspense>
+          )}
 
           {/* Command Palette */}
           {showCommandPalette && (
@@ -1576,6 +1582,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               tags,
               agentId,
               workflowId,
+              loopConfig,
               ...data
             }) => {
               const task = await createTask({
@@ -1585,6 +1592,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                 model,
                 agentId,
                 workflowId,
+                loopConfig,
               });
               if (!task) return;
 

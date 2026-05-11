@@ -193,6 +193,11 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
             />
           </div>
 
+          <p className="px-2 text-[11px] text-muted">
+            This searches remote {providerLabel} repositories. Use the URL tab to add an existing
+            local clone.
+          </p>
+
           {!search.trim() && !loading && repos.length > 0 && (
             <div className="flex items-center gap-2 px-2">
               <div className="h-px flex-1 bg-white/5" />
@@ -497,7 +502,7 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
               id={manualUrlInputId}
               value={manualUrl}
               onChange={(e) => setManualUrl(e.target.value)}
-              placeholder="https://github.com/user/repo"
+              placeholder="https://github.com/user/repo or D:\\Solutions\\project"
               className="h-12 rounded-2xl bg-input/40 border-white/5 text-sm font-bold"
               required
               autoFocus

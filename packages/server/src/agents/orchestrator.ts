@@ -246,6 +246,7 @@ export class Orchestrator {
         (c) => this.sysLog(run.id, task.id, c),
         () => {
           this.activeRuns.delete(task.id);
+          this.checkLoopAndRelaunch(task.id, engineOverride, modelOverride);
           this.maybeScheduleRetry(task.id, engineOverride, modelOverride);
         },
         model,
@@ -369,6 +370,47 @@ export class Orchestrator {
       }
     }
     return blocked;
+  }
+
+  private checkLoopAndRelaunch(
+    taskId: string,
+    engineOverride?: string,
+    modelOverride?: string
+  ): void {
+    const task = this.db.tasks.getById(taskId);
+    if (!task?.loopConfig?.enabled) return;
+
+    const currentAttempt = task.loopConfig?.currentAttempt ?? 0;
+    const maxAttempts = task.loopConfig?.maxAttempts ?? 3;
+
+    const terminalStatuses = ["error", "cancelled", "failed"];
+    // Only relaunch if terminal and under max attempts
+    if (!terminalStatuses.includes(task.status)) return;
+    if (currentAttempt >= maxAttempts) {
+      logOrchestratorEvent(
+        `[ralph-loop] Task [${taskId.slice(0, 8)}] exhausted ${maxAttempts} attempts — stopping loop`
+      );
+      return;
+    }
+
+    this.db.tasks.incrementLoopAttempt(taskId);
+
+    const delay = 2000;
+    setTimeout(async () => {
+      const t = this.db.tasks.getById(taskId);
+      if (!t) return;
+      logOrchestratorEvent(
+        `[ralph-loop] Relaunching task [${taskId.slice(0, 8)}] ` +
+          `(attempt ${currentAttempt + 1}/${maxAttempts})`
+      );
+      const updated = this.db.tasks.update(taskId, { status: "backlog" });
+      if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+      try {
+        await this.launch({ ...t, status: "backlog" }, engineOverride, modelOverride);
+      } catch (err) {
+        console.error(`[ralph-loop] Relaunch failed for task ${taskId}:`, err);
+      }
+    }, delay);
   }
 
   private maybeScheduleRetry(

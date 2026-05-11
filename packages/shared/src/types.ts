@@ -273,6 +273,7 @@ export interface Task {
   maxCost?: number;
   taskType?: TaskType | null;
   taskComplexity?: TaskComplexity | null;
+  loopConfig?: LoopConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -387,6 +388,14 @@ export interface UpsertScheduleRequest {
 
 // ─── API Request Types ───────────────────────────────────────────────────────
 
+export interface LoopConfig {
+  enabled: boolean;
+  maxAttempts: number;
+  timeoutMinutes: number;
+  feedback?: string;
+  currentAttempt?: number;
+}
+
 export interface CreateRepoRequest {
   url: string;
   defaultBranch?: string;
@@ -409,6 +418,7 @@ export interface CreateTaskRequest {
   issueUrl?: string;
   goal?: string;
   desiredOutcome?: string;
+  loopConfig?: LoopConfig;
 }
 
 export interface UpdateTaskRequest {

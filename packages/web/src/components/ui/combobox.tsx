@@ -4,6 +4,7 @@ interface ComboboxOption {
   value: string;
   label: string;
   sublabel?: string;
+  searchText?: string;
   disabled?: boolean;
 }
 
@@ -36,7 +37,14 @@ export function Combobox({
   const selectedOption = options.find((o) => o.value === value);
 
   const filtered = search
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter((o) => {
+        const q = search.toLowerCase();
+        return (
+          o.label.toLowerCase().includes(q) ||
+          (o.searchText?.toLowerCase().includes(q) ?? false) ||
+          (o.sublabel?.toLowerCase().includes(q) ?? false)
+        );
+      })
     : options;
 
   useEffect(() => {

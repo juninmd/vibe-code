@@ -294,6 +294,14 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
               Scheduled
             </Badge>
           )}
+          {task.loopConfig?.enabled && (
+            <Badge variant="info" className="text-[8px] py-0.5 px-2 font-medium">
+              Loop
+              {task.loopConfig.currentAttempt
+                ? ` ${task.loopConfig.currentAttempt}/${task.loopConfig.maxAttempts}`
+                : ""}
+            </Badge>
+          )}
           {retryEntry && isFailed && (
             <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />
           )}
