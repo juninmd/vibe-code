@@ -66,6 +66,15 @@ export class GitService {
     return "main";
   }
 
+  async isRepoSource(source: string): Promise<boolean> {
+    try {
+      await this.exec(["git", "ls-remote", source, "HEAD"]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async cloneRepo(url: string, name: string): Promise<string> {
     const barePath = join(this.reposDir, `${name}.git`);
     await this.exec(["git", "clone", "--bare", url, barePath]);

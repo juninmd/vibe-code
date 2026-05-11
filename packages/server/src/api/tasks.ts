@@ -52,6 +52,14 @@ const createTaskSchema = z.object({
   maxCost: z.number().positive().optional(),
   goal: z.string().optional(),
   desiredOutcome: z.string().optional(),
+  loopConfig: z
+    .object({
+      enabled: z.boolean(),
+      maxAttempts: z.number().int().min(1).max(20),
+      timeoutMinutes: z.number().int().min(5).max(480),
+      feedback: z.string().optional(),
+    })
+    .optional(),
 });
 
 const updateTaskSchema = z.object({

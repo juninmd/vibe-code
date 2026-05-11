@@ -397,6 +397,8 @@ export const api = {
     get: () => request<{ content: string }>("/changelog"),
   },
 
+  health: () => request<{ ok: boolean; version: string }>("/health"),
+
   templates: {
     list: () => request<string[]>("/templates"),
     export: (name: string) =>

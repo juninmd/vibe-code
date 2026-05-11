@@ -294,6 +294,14 @@ describe("Git integration operations", () => {
     expect(defBranch).toBe("main");
   });
 
+  it("isRepoSource() accepts a local Git repository path", async () => {
+    expect(await git.isRepoSource(seedDir)).toBe(true);
+  });
+
+  it("isRepoSource() rejects a non-repository source", async () => {
+    expect(await git.isRepoSource("invalid-repo-url-that-doesnt-exist")).toBe(false);
+  });
+
   it("detectDefaultBranch() falls back to main on failure", async () => {
     const defBranch = await git.detectDefaultBranch("invalid-repo-url-that-doesnt-exist");
     expect(defBranch).toBe("main");

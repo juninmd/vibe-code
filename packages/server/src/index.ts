@@ -89,14 +89,24 @@ api.route("/labels", createLabelsRouter(db));
 api.route("/prompts", createPromptsRouter(db));
 
 api.get("/changelog", async (c) => {
-  try {
-    const path = resolve(import.meta.dir, "../../../CHANGELOG.md");
-    const content = await readFile(path, "utf-8");
-    return c.json({ content });
-  } catch {
-    return c.json({ content: "No changelog available." });
+  // Try cwd-relative first (works in Docker/production), fallback to dev path
+  const candidates = [
+    resolve(process.cwd(), "CHANGELOG.md"),
+    resolve(import.meta.dir, "../../../CHANGELOG.md"),
+  ];
+  for (const filePath of candidates) {
+    try {
+      const content = await readFile(filePath, "utf-8");
+      return c.json({ content });
+    } catch {
+      // try next candidate
+    }
   }
+  console.warn("[changelog] CHANGELOG.md not found in any candidate path");
+  return c.json({ content: "No changelog available." });
 });
+
+api.get("/health", (c) => c.json({ ok: true, version: process.env.npm_package_version ?? "dev" }));
 
 app.route("/api", api);
 

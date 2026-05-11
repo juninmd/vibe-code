@@ -52,6 +52,12 @@ interface NewTaskDialogProps {
     schedule?: {
       cronExpression: string;
     };
+    loopConfig?: {
+      enabled: boolean;
+      maxAttempts: number;
+      timeoutMinutes: number;
+      feedback?: string;
+    };
   }) => Promise<void> | void;
 }
 
@@ -213,6 +219,11 @@ export function NewTaskDialog({
   const [guidedMode, setGuidedMode] = useState(false);
   const [taskSpec, setTaskSpec] = useState<TaskSpec>(EMPTY_TASK_SPEC);
 
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [loopMaxAttempts, setLoopMaxAttempts] = useState(3);
+  const [loopTimeoutMinutes, setLoopTimeoutMinutes] = useState(60);
+  const [loopFeedback, setLoopFeedback] = useState("");
+
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
 
   useEffect(() => {
@@ -273,6 +284,14 @@ export function NewTaskDialog({
         agentId: agentId || undefined,
         autoLaunch: isScheduled ? false : autoLaunch,
         schedule: isScheduled ? { cronExpression } : undefined,
+        loopConfig: loopEnabled
+          ? {
+              enabled: true,
+              maxAttempts: loopMaxAttempts,
+              timeoutMinutes: loopTimeoutMinutes,
+              feedback: loopFeedback.trim() || undefined,
+            }
+          : undefined,
       });
       setTitle("");
       setDescription("");
@@ -287,6 +306,10 @@ export function NewTaskDialog({
       setPriority("none");
       setAgentId("");
       setIsScheduled(false);
+      setLoopEnabled(false);
+      setLoopMaxAttempts(3);
+      setLoopTimeoutMinutes(60);
+      setLoopFeedback("");
       onClose();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : String(err));
@@ -373,7 +396,7 @@ export function NewTaskDialog({
                               .map((repo) => {
                                 const sublabel =
                                   repo.status === "ready"
-                                    ? undefined
+                                    ? repo.url
                                     : repo.status === "cloning"
                                       ? "cloning…"
                                       : repo.status === "pending"
@@ -383,6 +406,7 @@ export function NewTaskDialog({
                                   value: repo.id,
                                   label: repo.name,
                                   sublabel,
+                                  searchText: repo.url,
                                   disabled: repo.status !== "ready",
                                 };
                               })}
@@ -687,6 +711,97 @@ export function NewTaskDialog({
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Ralph Loop Section */}
+              <div className="rounded-2xl border border-white/5 bg-surface/20 p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-primary">Ralph Loop</p>
+                    <p className="text-xs text-muted mt-0.5">
+                      Auto-relaunch on failure until success or max attempts
+                    </p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={loopEnabled}
+                      onChange={(e) => setLoopEnabled(e.target.checked)}
+                    />
+                    <div
+                      className={`w-12 h-7 rounded-full transition-colors duration-200 relative ${
+                        loopEnabled ? "bg-accent" : "bg-white/10"
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                          loopEnabled ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
+                    </div>
+                  </label>
+                </div>
+                {loopEnabled && (
+                  <div className="pt-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label
+                          htmlFor="loop-max-attempts"
+                          className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
+                        >
+                          Max Attempts
+                        </label>
+                        <Input
+                          id="loop-max-attempts"
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={loopMaxAttempts}
+                          onChange={(e) => setLoopMaxAttempts(Number(e.target.value))}
+                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="loop-timeout"
+                          className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
+                        >
+                          Timeout (min)
+                        </label>
+                        <Select
+                          id="loop-timeout"
+                          value={loopTimeoutMinutes}
+                          onChange={(e) => setLoopTimeoutMinutes(Number(e.target.value))}
+                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-bold"
+                        >
+                          <option value={15}>15 min</option>
+                          <option value={30}>30 min</option>
+                          <option value={60}>60 min</option>
+                          <option value={120}>2 hours</option>
+                          <option value={240}>4 hours</option>
+                          <option value={480}>8 hours</option>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="loop-feedback"
+                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
+                      >
+                        Loop Feedback (optional)
+                      </label>
+                      <textarea
+                        id="loop-feedback"
+                        rows={2}
+                        placeholder="Instructions to include on each retry attempt..."
+                        value={loopFeedback}
+                        onChange={(e) => setLoopFeedback(e.target.value)}
+                        className="w-full rounded-xl bg-input/50 border border-white/10 px-3 py-2 text-xs text-primary placeholder:text-muted/50 resize-none focus:outline-none focus:border-accent/40"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
