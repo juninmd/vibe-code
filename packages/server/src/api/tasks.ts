@@ -21,6 +21,7 @@ import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import {
   asForbiddenResponse,
+  claimUnmappedRepoForWorkspace,
   enforceRepoAccess,
   enforceTaskAccess,
   resolveAccessContext,
@@ -143,7 +144,12 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     if (repoId) {
       const decision = enforceRepoAccess(db, accessContext, repoId);
-      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      if (decision) {
+        const repo = db.repos.getById(repoId);
+        if (!repo || !claimUnmappedRepoForWorkspace(db, accessContext, repoId)) {
+          return c.json(asForbiddenResponse(decision), decision.status);
+        }
+      }
     }
 
     const data = mapTasksWithRuns(repoId, status)
@@ -181,7 +187,12 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     if (repoId) {
       const repoDecision = enforceRepoAccess(db, accessContext, repoId);
-      if (repoDecision) return c.json(asForbiddenResponse(repoDecision), repoDecision.status);
+      if (repoDecision) {
+        const repo = db.repos.getById(repoId);
+        if (!repo || !claimUnmappedRepoForWorkspace(db, accessContext, repoId)) {
+          return c.json(asForbiddenResponse(repoDecision), repoDecision.status);
+        }
+      }
     }
 
     const tasks = mapTasksWithRuns(repoId)

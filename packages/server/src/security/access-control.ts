@@ -50,6 +50,23 @@ function bindRepoToWorkspace(db: Db, repoId: string, workspaceId: string): void 
   db.settings.set(repoWorkspaceKey(repoId), workspaceId);
 }
 
+export function claimUnmappedRepoForWorkspace(
+  db: Db,
+  context: AccessContext,
+  repoId: string
+): boolean {
+  if (!context.authEnabled || !context.workspaceId) return true;
+  if (db.settings.get(repoWorkspaceKey(repoId))) return false;
+
+  bindRepoToWorkspace(db, repoId, context.workspaceId);
+  console.info("[security] Mapped previously unowned repo to workspace", {
+    repoId,
+    workspaceId: context.workspaceId,
+    userId: context.userId,
+  });
+  return true;
+}
+
 export async function resolveAccessContext(c: Context, db: Db): Promise<ResolveAccessResult> {
   const authEnabled = isAuthEnabled(db);
   if (!authEnabled) {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { createDb } from "../db";
 import {
   type AccessContext,
+  claimUnmappedRepoForWorkspace,
   enforceRepoAccess,
   enforceRunAccess,
   enforceTaskAccess,
@@ -47,6 +48,19 @@ describe("access-control", () => {
     db.settings.set(`repo_workspace:${repoId}`, "ws-1");
     const decision = enforceRepoAccess(db, context, repoId);
     expect(decision).toBeNull();
+  });
+
+  it("claims an unmapped legacy repo for the current workspace", () => {
+    expect(claimUnmappedRepoForWorkspace(db, context, repoId)).toBe(true);
+    expect(db.settings.get(`repo_workspace:${repoId}`)).toBe("ws-1");
+    expect(enforceRepoAccess(db, context, repoId)).toBeNull();
+  });
+
+  it("does not claim a repo already mapped to another workspace", () => {
+    db.settings.set(`repo_workspace:${repoId}`, "ws-2");
+    expect(claimUnmappedRepoForWorkspace(db, context, repoId)).toBe(false);
+    const decision = enforceRepoAccess(db, context, repoId);
+    expect(decision?.code).toBe("repo_forbidden");
   });
 
   it("enforces task and run ownership via repo mapping", () => {
