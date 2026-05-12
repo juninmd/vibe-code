@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import { claimUnmappedRepoForWorkspace, resolveAccessContext } from "../security/access-control";
 import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
@@ -49,6 +50,10 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
       // Auto-detect default branch
       const defaultBranch = await git.detectDefaultBranch(parsed.data.url);
       const repo = db.repos.create({ url: parsed.data.url, defaultBranch });
+      const access = await resolveAccessContext(c, db);
+      if (access.ok && access.context) {
+        claimUnmappedRepoForWorkspace(db, access.context, repo.id);
+      }
 
       // Clone in background — respond immediately, update status async
       (async () => {

@@ -34,6 +34,8 @@ interface NewTaskDialogProps {
   onClose: () => void;
   repos: Repository[];
   reposLoading?: boolean;
+  initialRepoId?: string | null;
+  onLoadRepos?: () => Promise<void> | void;
   engines: EngineInfo[];
   enginesLoading?: boolean;
   enginesError?: string | null;
@@ -188,6 +190,8 @@ export function NewTaskDialog({
   onClose,
   repos,
   reposLoading,
+  initialRepoId,
+  onLoadRepos,
   engines,
   enginesLoading,
   onSubmit,
@@ -225,6 +229,22 @@ export function NewTaskDialog({
   const [loopFeedback, setLoopFeedback] = useState("");
 
   const { templates, addTemplate, removeTemplate } = usePromptTemplates();
+
+  useEffect(() => {
+    if (!open) return;
+    onLoadRepos?.();
+  }, [onLoadRepos, open]);
+
+  useEffect(() => {
+    if (!open || repoId) return;
+
+    const selectableRepos = repos.filter((repo) => repo.status !== "error");
+    const initialRepo = selectableRepos.find((repo) => repo.id === initialRepoId);
+    const fallbackRepo = selectableRepos.length === 1 ? selectableRepos[0] : null;
+    const nextRepoId = initialRepo?.id ?? fallbackRepo?.id;
+
+    if (nextRepoId) setRepoId(nextRepoId);
+  }, [initialRepoId, open, repoId, repos]);
 
   useEffect(() => {
     if (!open) return;
@@ -407,7 +427,6 @@ export function NewTaskDialog({
                                   label: repo.name,
                                   sublabel,
                                   searchText: repo.url,
-                                  disabled: repo.status !== "ready",
                                 };
                               })}
                           />

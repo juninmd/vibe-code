@@ -25,6 +25,8 @@
 - **GitHub OAuth Login**: Public deployments can require GitHub social login with HttpOnly sessions instead of exposing a GitHub token in the browser.
 
 ### Fixed
+- Fixed the new task dialog so opening it explicitly refreshes repositories, Target Repository is prefilled from the selected repository or the sole available repository, and pending/cloning repositories remain selectable.
+- Fixed task loading for authenticated workspaces by mapping previously unowned repositories to the current workspace instead of returning `Repository access denied`.
 - Fixed manual repository import so existing local Git clone paths are accepted instead of being rejected by URL-only validation, and clarified that GitHub/GitLab search only searches remote provider repositories.
 - Corrigido `OpenCodeEngine` para criar o diretório `.vibe-code/prompts` antes de gravar prompts temporários.
 - Corrigidas falhas de typecheck/lint no web em toasts, dependências de skills, badges, diff viewer e componentes de repositório.

@@ -333,6 +333,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     repos,
     loading: reposLoading,
     addRepo,
+    refresh: refreshRepos,
     removeRepo,
     deleteLocalClone,
     purgeLocalClones,
@@ -1571,6 +1572,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             onClose={() => setShowNewTask(false)}
             repos={repos}
             reposLoading={reposLoading}
+            initialRepoId={selectedRepoId}
+            onLoadRepos={refreshRepos}
             engines={engines}
             enginesLoading={enginesLoading}
             enginesError={enginesError}
