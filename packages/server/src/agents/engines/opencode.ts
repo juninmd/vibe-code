@@ -420,16 +420,18 @@ export class OpenCodeEngine implements AgentEngine {
     // stdout pipe handle. After OpenCode exits its children may still hold the pipe
     // open, so the reader never reaches EOF. Cancel the reader after the process
     // exits + a short grace period so any final bytes are flushed first.
-    proc.exited.then(async () => {
-      await new Promise((r) => setTimeout(r, 1500));
-      if (!stdoutDone && stdoutReader) {
-        try {
-          await stdoutReader.cancel();
-        } catch {
-          /* ignore */
+    proc.exited
+      .then(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!stdoutDone && stdoutReader) {
+          try {
+            await stdoutReader.cancel();
+          } catch {
+            /* ignore */
+          }
         }
-      }
-    });
+      })
+      .catch(() => {});
 
     // ─── Task 2: stream stderr ─────────────────────────────────────────────
     let stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
@@ -466,16 +468,18 @@ export class OpenCodeEngine implements AgentEngine {
     })();
 
     // Same cancellation guard for stderr (child processes may hold it open on Windows).
-    proc.exited.then(async () => {
-      await new Promise((r) => setTimeout(r, 1500));
-      if (!stderrDone && stderrReader) {
-        try {
-          await stderrReader.cancel();
-        } catch {
-          /* ignore */
+    proc.exited
+      .then(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!stderrDone && stderrReader) {
+          try {
+            await stderrReader.cancel();
+          } catch {
+            /* ignore */
+          }
         }
-      }
-    });
+      })
+      .catch(() => {});
 
     // ─── Task 3: heartbeat ─────────────────────────────────────────────────
     // Emits a "still running" log every heartbeatIntervalMs.

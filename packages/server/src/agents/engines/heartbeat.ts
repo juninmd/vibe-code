@@ -88,7 +88,9 @@ export async function* withHeartbeat(
     }
   }
 
-  await drainTask.catch(() => {});
+  await drainTask.catch((err) => {
+    console.error("[heartbeat] drainTask failed", err);
+  });
 }
 
 /** Read `VIBE_CODE_HEARTBEAT_MS` with default 30 s. */

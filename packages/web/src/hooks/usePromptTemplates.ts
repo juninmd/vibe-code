@@ -10,7 +10,7 @@ export function usePromptTemplates() {
     api.prompts
       .list()
       .then(setTemplates)
-      .catch(console.error)
+      .catch((e) => console.error(e))
       .finally(() => setLoading(false));
   }, []);
 

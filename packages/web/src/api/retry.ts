@@ -21,12 +21,12 @@ export async function withRetry<T>(fn: () => Promise<T>, config: RetryConfig = {
     try {
       return await fn();
     } catch (err) {
-      const error = err as any;
-      lastError = err as Error;
+      const apiErr = err as { status?: number; message?: string };
+      lastError = err instanceof Error ? err : new Error(String(err));
 
       // Only retry on 503 (Service Unavailable / backpressure)
       // ApiError has .status property
-      if (error?.status !== 503) {
+      if (apiErr?.status !== 503) {
         throw err;
       }
 
@@ -34,7 +34,7 @@ export async function withRetry<T>(fn: () => Promise<T>, config: RetryConfig = {
       if (attempt >= maxRetries) {
         console.warn(
           `⚠️ WARN: All retries exhausted (${maxRetries + 1} attempts) [BACKPRESSURE_EXHAUSTED]`,
-          { error: error.message }
+          { error: apiErr.message }
         );
         throw err;
       }
@@ -46,10 +46,10 @@ export async function withRetry<T>(fn: () => Promise<T>, config: RetryConfig = {
 
       console.debug(
         `🔄 DEBUG: Retrying after 503 backpressure (attempt ${attempt + 1}/${maxRetries + 1}, backoff ${backoffMs.toFixed(0)}ms) [RETRY]`,
-        { attempt, backoffMs, error: error.message }
+        { attempt, backoffMs, error: apiErr.message }
       );
 
-      onRetry?.(attempt + 1, backoffMs, error);
+      onRetry?.(attempt + 1, backoffMs, lastError);
 
       // Sleep before retry
       await new Promise((resolve) => setTimeout(resolve, backoffMs));
@@ -75,9 +75,14 @@ export async function retryFetch<T>(
 
     if (!res.ok) {
       const errorBody = await res.text();
-      const error = new Error(`HTTP ${res.status}: ${errorBody || res.statusText}`) as any;
-      error.status = res.status;
-      throw error;
+      class ApiError extends Error {
+        status: number;
+        constructor(status: number, message: string) {
+          super(message);
+          this.status = status;
+        }
+      }
+      throw new ApiError(res.status, `HTTP ${res.status}: ${errorBody || res.statusText}`);
     }
 
     return (await res.json()) as T;

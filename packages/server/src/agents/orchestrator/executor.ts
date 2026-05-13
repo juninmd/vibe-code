@@ -1000,6 +1000,7 @@ export async function executeAgent(
       sysLog("Changes committed ✓");
     }
 
+    if (!wtPath) throw new Error("Workspace path not set before commit check");
     if (!(await git.hasCommitsAhead(wtPath, baseBranch))) throw new Error("Agent made no changes");
 
     setRunPhase("validating", { message: "Pre-review deterministic validation" });
@@ -1451,7 +1452,9 @@ export async function executeAgent(
 
       try {
         await git.removeWorktree(barePath, wtPath);
-      } catch {}
+      } catch (e) {
+        logOrchestratorEvent(`Failed to remove worktree: ${e}`, "warn");
+      }
     }
     onFinish();
   }

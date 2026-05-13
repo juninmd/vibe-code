@@ -536,7 +536,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       });
     } finally {
       if (cleanupWorktreePath) {
-        await git.removeWorktree(barePath, cleanupWorktreePath).catch(() => {});
+        await git.removeWorktree(barePath, cleanupWorktreePath).catch((e) => {
+          console.warn("[tasks] Failed to remove worktree", e);
+        });
       }
     }
   });
@@ -986,7 +988,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       c.header("Content-Length", String(buffer.byteLength));
       return c.body(buffer);
     } finally {
-      unlink(tmpPath).catch(() => {});
+      unlink(tmpPath).catch((e) => {
+        console.warn("[tasks] Failed to cleanup temp file", e);
+      });
     }
   });
 

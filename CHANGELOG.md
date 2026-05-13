@@ -1,6 +1,19 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+- **executor.ts**: Added null guard for `wtPath` before `hasCommitsAhead` call to prevent `TypeError` crash.
+- **useApiHealth.ts**: Replaced recursive `setTimeout` with `setInterval` to eliminate race condition on health polling.
+- **useToast.ts**: Added `useEffect` cleanup for toast dismiss timers to prevent `setState` on unmounted component.
+- **useWebSocket.ts**: Improved `missedPongs` reset reliability on any message receipt.
+- **opencode.ts**: Added `.catch()` to `proc.exited` handlers and heartbeat fire-and-forget to prevent unhandled rejections.
+- **heartbeat.ts**: Added error logging to `drainTask` catch instead of silent swallow.
+- **tasks.ts**: Added warning logs to silent catch blocks (`removeWorktree`, `unlink`).
+- **useRetryQueue.ts**: Added error logging to poll catch instead of silent swallow.
+- **usePromptTemplates.ts**: Fixed `console.error` context binding.
+- **retry.ts**: Replaced `as any` pattern with proper `ApiError` class for type-safe error handling.
+- **All packages**: Applied Biome formatter to standardize line endings and code style across 25 files.
+
 ### Added
 - **Repository Contracts**: Added `WORKFLOW.md`, `docs/repo-contract.md`, and `docs/glossary.md` to define the repository workflow contract, shared vocabulary, and migration path toward an autonomous control plane.
 - **Execution + Terminal Split**: Task detail now has dedicated `Execution` and `Terminal` tabs, with a new `ExecutionTimeline` surface and a `TerminalSessionPanel` for real terminal streaming.
