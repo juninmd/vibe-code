@@ -6,7 +6,9 @@ import { createRunsRouter } from "./runs";
 type Db = ReturnType<typeof createDb>;
 
 function makeDb(): Db {
-  return createDb(":memory:");
+  const db = createDb(":memory:");
+  db.settings.set("auth_enabled", "false");
+  return db;
 }
 
 function seedRunWithLogs(db: Db) {
