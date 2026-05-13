@@ -1,0 +1,9 @@
+{
+  "serverUrl": "http://localhost:3000",
+  "intervalMinutes": 60,
+  "provider": "openrouter",
+  "model": "google/gemini-2.0-flash-lite-001",
+  "repos": [
+    { "url": "https://github.com/your-user/your-repo.git", "enabled": false }
+  ]
+}
