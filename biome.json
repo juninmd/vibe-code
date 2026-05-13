@@ -10,6 +10,7 @@
     "includes": [
       "packages/**/*.ts",
       "packages/**/*.tsx",
+      "scripts/**/*.ts",
       "!**/~/**",
       "!**/dist/**",
       "!**/node_modules/**"
