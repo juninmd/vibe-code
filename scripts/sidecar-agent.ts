@@ -1,6 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, stepCountIs } from "ai";
-import { createOllama } from "ollama-ai-provider";
 import type { SidecarConfig } from "./sidecar";
 import type { SidecarDb } from "./sidecar-db";
 import { buildTools } from "./sidecar-tools";
@@ -31,8 +31,9 @@ function buildUserPrompt(repoUrls: string[]): string {
 
 function resolveModel(config: SidecarConfig) {
   if (config.provider === "ollama") {
-    const ollama = createOllama({ baseURL: config.ollamaBaseUrl ?? "http://localhost:11434" });
-    return ollama(config.model ?? "llama3.2");
+    const baseURL = `${config.ollamaBaseUrl ?? "http://localhost:11434"}/v1`;
+    const ollama = createOpenAI({ baseURL, apiKey: "ollama" });
+    return ollama.chat(config.model ?? "gemma4:e4b");
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
