@@ -35,7 +35,7 @@ export function useRetryQueue(enabled: boolean): Map<string, RetryState> {
           }
           setQueue(next);
         })
-        .catch(() => {});
+        .catch((e) => console.warn("[retry-queue] poll failed", e));
     }
 
     poll();

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
@@ -43,12 +43,27 @@ export function useToastState(): ToastContextValue {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
   const recentMessages = useRef<Map<string, number>>(new Map());
+  const timeoutRefs = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    return () => {
+      for (const t of timeoutRefs.current.values()) clearTimeout(t);
+      timeoutRefs.current.clear();
+    };
+  }, []);
 
   const dismiss = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    const t = timeoutRefs.current.get(id);
+    if (t) {
+      clearTimeout(t);
+      timeoutRefs.current.delete(id);
+    }
   }, []);
 
   const dismissAll = useCallback(() => {
+    for (const t of timeoutRefs.current.values()) clearTimeout(t);
+    timeoutRefs.current.clear();
     setToasts([]);
   }, []);
 
@@ -73,7 +88,11 @@ export function useToastState(): ToastContextValue {
         return [...next, { id, message, type, action }];
       });
 
-      setTimeout(() => dismiss(id), type === "error" ? 6000 : action ? 5000 : 3500);
+      const delay = type === "error" ? 6000 : action ? 5000 : 3500;
+      timeoutRefs.current.set(
+        id,
+        setTimeout(() => dismiss(id), delay)
+      );
 
       for (const [key, ts] of recentMessages.current.entries()) {
         if (now - ts > TOAST_DEDUP_INTERVAL * 2) {

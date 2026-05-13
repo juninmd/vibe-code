@@ -6,7 +6,7 @@ const POLL_INTERVAL_MS = 15_000;
 /** Returns `true` when the REST API backend is reachable. */
 export function useApiHealth(): boolean {
   const [apiOk, setApiOk] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const check = useCallback(async () => {
     try {
@@ -19,17 +19,9 @@ export function useApiHealth(): boolean {
 
   useEffect(() => {
     check();
-
-    const schedule = () => {
-      timerRef.current = setTimeout(async () => {
-        await check();
-        schedule();
-      }, POLL_INTERVAL_MS);
-    };
-    schedule();
-
+    intervalRef.current = setInterval(check, POLL_INTERVAL_MS);
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [check]);
 
