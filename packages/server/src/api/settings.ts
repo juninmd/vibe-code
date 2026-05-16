@@ -22,7 +22,7 @@ const updateSettingsSchema = z.object({
   openaiApiKey: z.string().optional(),
   skillsPath: z.string().optional(),
   theme: z.string().optional(),
-  maxAgents: z.number().int().min(1).max(10).optional(),
+  maxAgents: z.number().int().min(1).max(50).optional(),
 });
 
 export function createSettingsRouter(
@@ -150,7 +150,7 @@ export function createSettingsRouter(
       db.settings.set("theme", parsed.data.theme);
     }
     if (parsed.data.maxAgents !== undefined) {
-      const clamped = Math.max(1, Math.min(10, parsed.data.maxAgents));
+      const clamped = Math.max(1, Math.min(50, parsed.data.maxAgents));
       db.settings.set("max_agents", String(clamped));
       orchestrator?.setMaxConcurrent(clamped);
     }

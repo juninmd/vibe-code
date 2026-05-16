@@ -864,7 +864,7 @@ function GeneralTab() {
   }, []);
 
   const handleMaxAgentsChange = async (value: number) => {
-    const clamped = Math.max(1, Math.min(10, value));
+    const clamped = Math.max(1, Math.min(50, value));
     setMaxAgents(clamped);
     setSaving(true);
     try {
@@ -972,7 +972,7 @@ function GeneralTab() {
               <button
                 type="button"
                 onClick={() => handleMaxAgentsChange(maxAgents + 1)}
-                disabled={maxAgents >= 10 || saving}
+                disabled={maxAgents >= 50 || saving}
                 className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-primary font-black hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 +
@@ -982,7 +982,7 @@ function GeneralTab() {
           <input
             type="range"
             min={1}
-            max={10}
+            max={50}
             value={maxAgents}
             onChange={(e) => handleMaxAgentsChange(Number(e.target.value))}
             className="w-full accent-[var(--color-accent)] cursor-pointer"
