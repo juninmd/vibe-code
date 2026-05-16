@@ -10,10 +10,16 @@ export interface VibeTask {
   latestRun?: { id: string } | null;
 }
 
+function authHeaders(): Record<string, string> {
+  const token = process.env.VIBE_SESSION_TOKEN;
+  if (token) return { Cookie: `vibe_session=${token}` };
+  return {};
+}
+
 async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers ?? {}) },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");

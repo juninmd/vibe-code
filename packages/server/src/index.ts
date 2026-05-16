@@ -118,6 +118,7 @@ const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 
 const server = Bun.serve({
   port: PORT,
+  reusePort: true,
   fetch: app.fetch,
   websocket: {
     open(ws) {
