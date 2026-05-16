@@ -1,7 +1,10 @@
 export interface VibeRepo {
   id: string;
+  name: string;
   url: string;
   status: string;
+  updatedAt: string;
+  createdAt: string;
 }
 
 export interface VibeTask {
@@ -31,6 +34,14 @@ async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
 export async function listRepos(serverUrl: string): Promise<VibeRepo[]> {
   const data = (await apiFetch(`${serverUrl}/api/repos`)) as { data: VibeRepo[] };
   return data.data;
+}
+
+export async function listStalestRepos(serverUrl: string, limit = 15): Promise<VibeRepo[]> {
+  const repos = await listRepos(serverUrl);
+  return repos
+    .filter((r) => r.url && r.url.startsWith("http"))
+    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+    .slice(0, limit);
 }
 
 export async function ensureRepo(serverUrl: string, url: string): Promise<string> {

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { runAgentCycle } from "./sidecar-agent";
+import { listStalestRepos } from "./sidecar-client";
 import { initSidecarDb } from "./sidecar-db";
 
 export interface SidecarConfig {
@@ -10,6 +11,7 @@ export interface SidecarConfig {
   provider: "openrouter" | "ollama";
   model?: string;
   ollamaBaseUrl?: string;
+  stalestRepoLimit?: number;
   repos: Array<{ url: string; enabled: boolean }>;
 }
 
@@ -24,10 +26,7 @@ function readConfig(path?: string): SidecarConfig {
   if (process.env.SIDECAR_PROVIDER) base.provider = process.env.SIDECAR_PROVIDER as SidecarConfig["provider"];
   if (process.env.SIDECAR_MODEL) base.model = process.env.SIDECAR_MODEL;
   if (process.env.OLLAMA_BASE_URL) base.ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
-  // SIDECAR_REPOS: comma-separated URLs to override repo list
-  if (process.env.SIDECAR_REPOS) {
-    base.repos = process.env.SIDECAR_REPOS.split(",").map((u) => ({ url: u.trim(), enabled: true }));
-  }
+  if (process.env.SIDECAR_STALEST_LIMIT) base.stalestRepoLimit = Number(process.env.SIDECAR_STALEST_LIMIT);
 
   return base;
 }
@@ -36,7 +35,16 @@ async function runCycle(
   config: SidecarConfig,
   db: ReturnType<typeof initSidecarDb>
 ): Promise<void> {
-  const repoUrls = config.repos.filter((r) => r.enabled).map((r) => r.url);
+  const limit = config.stalestRepoLimit ?? 15;
+  let repoUrls: string[];
+  try {
+    const repos = await listStalestRepos(config.serverUrl, limit);
+    repoUrls = repos.map((r) => r.url);
+    console.log(`[sidecar] Targeting ${repoUrls.length} stalest repos:`, repoUrls.map((u) => u.split("/").pop()).join(", "));
+  } catch (err) {
+    console.error("[sidecar] Failed to fetch repos from server:", err instanceof Error ? err.message : err);
+    return;
+  }
   try {
     await runAgentCycle(config, db, repoUrls);
   } catch (err) {

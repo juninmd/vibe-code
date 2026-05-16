@@ -1,14 +1,9 @@
 {
   "serverUrl": "http://localhost:3002",
   "intervalMinutes": 20,
-  "provider": "openrouter",
-  "model": "deepseek/deepseek-chat-v3-0324:free",
-  "repos": [
-    { "url": "https://github.com/juninmd/mika", "enabled": true },
-    { "url": "https://github.com/juninmd/pac-memory", "enabled": true },
-    { "url": "https://github.com/juninmd/star-wars-api", "enabled": true },
-    { "url": "https://github.com/juninmd/telegram-gemini", "enabled": true },
-    { "url": "https://github.com/juninmd/shorts-generator", "enabled": true },
-    { "url": "https://github.com/juninmd/nestjs-starter", "enabled": true }
-  ]
+  "provider": "ollama",
+  "model": "qwen3:1.7b",
+  "ollamaBaseUrl": "http://localhost:11434",
+  "stalestRepoLimit": 15,
+  "repos": []
 }
