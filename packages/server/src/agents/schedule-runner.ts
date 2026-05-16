@@ -1,17 +1,21 @@
 import { Cron } from "croner";
 import type { Db } from "../db";
 import type { SkillRegistryService } from "../skills/registry";
+import { ConflictResolver } from "./conflict-resolver";
 import type { Orchestrator } from "./orchestrator";
 
 export class ScheduleRunner {
   private cron: Cron | null = null;
   private lastHygieneAt = 0;
+  private conflictResolver: ConflictResolver;
 
   constructor(
     private db: Db,
     private orchestrator: Orchestrator,
     private skillRegistry?: SkillRegistryService
-  ) {}
+  ) {
+    this.conflictResolver = new ConflictResolver(db, orchestrator);
+  }
 
   start(): void {
     this.cron = new Cron("* * * * *", { protect: true }, () => this.tick());
@@ -46,6 +50,14 @@ export class ScheduleRunner {
 
     // 2. Continuous Autonomy / Heartbeat: Sweep backlog for work stealing
     await this.orchestrator.sweepBacklog();
+
+    // 3. Check for conflicting PRs and auto-create resolution tasks
+    try {
+      await this.conflictResolver.check();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`  ✗ Conflict resolver error: ${msg}`);
+    }
 
     const HYGIENE_INTERVAL_MS = 15 * 60 * 1000;
     if (this.skillRegistry && Date.now() - this.lastHygieneAt >= HYGIENE_INTERVAL_MS) {
