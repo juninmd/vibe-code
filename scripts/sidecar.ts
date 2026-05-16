@@ -16,7 +16,20 @@ export interface SidecarConfig {
 function readConfig(path?: string): SidecarConfig {
   const configPath = path ?? join(import.meta.dir, "sidecar.config.json");
   const raw = readFileSync(configPath, "utf-8");
-  return JSON.parse(raw) as SidecarConfig;
+  const base = JSON.parse(raw) as SidecarConfig;
+
+  // Env vars override file config — allows cluster/Docker deployment without rebuilding image
+  if (process.env.VIBE_SERVER_URL) base.serverUrl = process.env.VIBE_SERVER_URL;
+  if (process.env.SIDECAR_INTERVAL_MINUTES) base.intervalMinutes = Number(process.env.SIDECAR_INTERVAL_MINUTES);
+  if (process.env.SIDECAR_PROVIDER) base.provider = process.env.SIDECAR_PROVIDER as SidecarConfig["provider"];
+  if (process.env.SIDECAR_MODEL) base.model = process.env.SIDECAR_MODEL;
+  if (process.env.OLLAMA_BASE_URL) base.ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
+  // SIDECAR_REPOS: comma-separated URLs to override repo list
+  if (process.env.SIDECAR_REPOS) {
+    base.repos = process.env.SIDECAR_REPOS.split(",").map((u) => ({ url: u.trim(), enabled: true }));
+  }
+
+  return base;
 }
 
 async function runCycle(
