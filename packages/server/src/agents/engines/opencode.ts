@@ -167,9 +167,9 @@ export class OpenCodeEngine implements AgentEngine {
         plan_exit: "allow",
       },
       tools: {
-        file_write: { "max-size-kb": 2048 },
-        bash: { "timeout-sec": 600, "allowed-commands": ["*"] },
-        web_fetch: { "timeout-sec": 30 },
+        file_write: true,
+        bash: true,
+        web_fetch: true,
       },
       model: {
         fallback: ["anthropic/claude-sonnet-4-5", "opencode/minimax-m2.7"],
@@ -261,9 +261,9 @@ export class OpenCodeEngine implements AgentEngine {
         plan_exit: "allow",
       },
       tools: {
-        file_write: { "max-size-kb": 2048 },
-        bash: { "timeout-sec": 600, "allowed-commands": ["*"] },
-        web_fetch: { "timeout-sec": 30 },
+        file_write: true,
+        bash: true,
+        web_fetch: true,
       },
     };
 
