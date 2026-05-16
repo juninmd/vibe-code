@@ -39,8 +39,9 @@ export function useWebSocket(onMessage: MessageHandler) {
     function connect() {
       if (destroyed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const apiPort = import.meta.env.VITE_API_PORT || "3000";
       const wsUrl = import.meta.env.DEV
-        ? `${protocol}//${window.location.hostname}:3000/ws`
+        ? `${protocol}//${window.location.hostname}:${apiPort}/ws`
         : `${protocol}//${window.location.host}/ws`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

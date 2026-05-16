@@ -5,7 +5,7 @@
 
 SESSION="5dYb6a1SDEaGUFzjkaHbrm8MqFkp3nmp8jrH5pPGKDM"
 REPO_ID="6bbf832056430a25"
-BASE_URL="http://localhost:3000"
+BASE_URL="http://localhost:3001"
 INTERVAL=1200  # 20 minutes
 MAX_AGENTS=4
 

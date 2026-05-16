@@ -848,6 +848,7 @@ export interface SettingsResponse {
   };
   skillsPath: string;
   theme: string;
+  maxAgents?: number;
 }
 
 export interface UpdateSettingsRequest {
@@ -860,6 +861,7 @@ export interface UpdateSettingsRequest {
   anthropicApiKey?: string;
   openaiApiKey?: string;
   theme?: string;
+  maxAgents?: number;
 }
 
 export interface TestConnectionResult {

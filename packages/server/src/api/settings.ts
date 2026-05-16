@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "../agents/litellm-client";
+import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
 import type { SkillsLoader } from "../skills/loader";
@@ -21,12 +22,14 @@ const updateSettingsSchema = z.object({
   openaiApiKey: z.string().optional(),
   skillsPath: z.string().optional(),
   theme: z.string().optional(),
+  maxAgents: z.number().int().min(1).max(10).optional(),
 });
 
 export function createSettingsRouter(
   db: Db,
   providerRegistry?: ProviderRegistry,
-  skillsLoader?: SkillsLoader
+  skillsLoader?: SkillsLoader,
+  orchestrator?: Orchestrator
 ) {
   const app = new Hono();
 
@@ -39,6 +42,9 @@ export function createSettingsRouter(
     const litellmBaseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
     const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
     const skillsPath = db.settings.get("skills_path") || "~/.agents";
+    const maxAgents =
+      orchestrator?.maxConcurrentAgents ??
+      Number(db.settings.get("max_agents") || process.env.VIBE_CODE_MAX_AGENTS || 4);
     const geminiApiKey = db.settings.get("gemini_api_key");
     const anthropicApiKey = db.settings.get("anthropic_api_key");
     const openaiApiKey = db.settings.get("openai_api_key");
@@ -67,6 +73,7 @@ export function createSettingsRouter(
         },
         skillsPath,
         theme,
+        maxAgents,
         // Legacy compat
         githubToken: maskToken(ghToken),
         githubTokenSet: !!ghToken,
@@ -141,6 +148,11 @@ export function createSettingsRouter(
     }
     if (parsed.data.theme !== undefined) {
       db.settings.set("theme", parsed.data.theme);
+    }
+    if (parsed.data.maxAgents !== undefined) {
+      const clamped = Math.max(1, Math.min(10, parsed.data.maxAgents));
+      db.settings.set("max_agents", String(clamped));
+      orchestrator?.setMaxConcurrent(clamped);
     }
     return c.json({ data: { ok: true } });
   });

@@ -851,9 +851,154 @@ function ApiKeysTab() {
   );
 }
 
+function GeneralTab() {
+  const { themeName, setTheme } = useTheme();
+  const [maxAgents, setMaxAgents] = useState(4);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.settings
+      .get()
+      .then((s) => setMaxAgents(s.maxAgents ?? 4))
+      .catch(() => {});
+  }, []);
+
+  const handleMaxAgentsChange = async (value: number) => {
+    const clamped = Math.max(1, Math.min(10, value));
+    setMaxAgents(clamped);
+    setSaving(true);
+    try {
+      await api.settings.update({ maxAgents: clamped });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <SettingsSection title="Appearance & Experience">
+        <div>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.values(themes).map((t) => (
+              <button
+                key={t.name}
+                type="button"
+                onClick={() => {
+                  setTheme(t.name);
+                  api.settings.update({ theme: t.name }).catch(() => {});
+                }}
+                className={`relative p-5 rounded-[1.5rem] border-2 transition-all active-shrink cursor-pointer text-left group overflow-hidden ${
+                  themeName === t.name
+                    ? "border-accent bg-accent/5 shadow-lg shadow-accent/10"
+                    : "border-white/5 bg-surface/30 hover:border-white/10 hover:bg-surface/50"
+                }`}
+              >
+                <div className="relative z-10 flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 rounded-full" style={{ background: t.colors.accent }} />
+                    <span className="text-sm font-black tracking-tight text-primary">
+                      {t.label}
+                    </span>
+                  </div>
+                  {themeName === t.name && (
+                    <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shadow-lg animate-in zoom-in duration-200">
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        className="text-white"
+                        aria-hidden="true"
+                      >
+                        <title>Selected</title>
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                <div className="relative z-10 flex gap-1.5">
+                  <div
+                    className="h-1.5 flex-1 rounded-full opacity-60"
+                    style={{ background: t.colors.success }}
+                  />
+                  <div
+                    className="h-1.5 flex-1 rounded-full opacity-60"
+                    style={{ background: t.colors.warning }}
+                  />
+                  <div
+                    className="h-1.5 flex-1 rounded-full opacity-60"
+                    style={{ background: t.colors.danger }}
+                  />
+                  <div
+                    className="h-1.5 flex-1 rounded-full opacity-60"
+                    style={{ background: t.colors.info }}
+                  />
+                </div>
+                <div
+                  className="absolute inset-0 opacity-10 group-hover:opacity-20 transition-opacity"
+                  style={{
+                    background: `radial-gradient(circle at top right, ${t.colors.accent}, transparent)`,
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Agent Concurrency">
+        <div className="p-5 rounded-[1.5rem] bg-white/[0.02] border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-black tracking-tight text-primary">Max Parallel Agents</p>
+              <p className="text-[10px] text-dimmed mt-0.5">
+                How many agents can run simultaneously (1–10)
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleMaxAgentsChange(maxAgents - 1)}
+                disabled={maxAgents <= 1 || saving}
+                className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-primary font-black hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                −
+              </button>
+              <span className="text-2xl font-black text-accent w-8 text-center tabular-nums">
+                {maxAgents}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleMaxAgentsChange(maxAgents + 1)}
+                disabled={maxAgents >= 10 || saving}
+                className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 text-primary font-black hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <input
+            type="range"
+            min={1}
+            max={10}
+            value={maxAgents}
+            onChange={(e) => handleMaxAgentsChange(Number(e.target.value))}
+            className="w-full accent-[var(--color-accent)] cursor-pointer"
+          />
+          <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-dimmed">
+            <span>1 agent</span>
+            <span>10 agents</span>
+          </div>
+        </div>
+      </SettingsSection>
+    </div>
+  );
+}
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [tab, setTab] = useState<Tab>("github");
-  const { themeName, setTheme } = useTheme();
 
   return (
     <Dialog open={open} onClose={onClose} title="System Configuration" size="2xl">
@@ -891,84 +1036,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
         {tab === "apikeys" && <ApiKeysTab />}
 
-        {tab === "general" && (
-          <SettingsSection title="Appearance & Experience">
-            <div>
-              <div className="grid grid-cols-2 gap-3">
-                {Object.values(themes).map((t) => (
-                  <button
-                    key={t.name}
-                    type="button"
-                    onClick={() => {
-                      setTheme(t.name);
-                      api.settings.update({ theme: t.name }).catch(() => {});
-                    }}
-                    className={`relative p-5 rounded-[1.5rem] border-2 transition-all active-shrink cursor-pointer text-left group overflow-hidden ${
-                      themeName === t.name
-                        ? "border-accent bg-accent/5 shadow-lg shadow-accent/10"
-                        : "border-white/5 bg-surface/30 hover:border-white/10 hover:bg-surface/50"
-                    }`}
-                  >
-                    <div className="relative z-10 flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-4 h-4 rounded-full"
-                          style={{ background: t.colors.accent }}
-                        />
-                        <span className="text-sm font-black tracking-tight text-primary">
-                          {t.label}
-                        </span>
-                      </div>
-                      {themeName === t.name && (
-                        <div className="w-5 h-5 rounded-full bg-accent flex items-center justify-center shadow-lg animate-in zoom-in duration-200">
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            className="text-white"
-                            aria-hidden="true"
-                          >
-                            <title>Selected</title>
-                            <path d="M20 6L9 17l-5-5" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative z-10 flex gap-1.5">
-                      <div
-                        className="h-1.5 flex-1 rounded-full opacity-60"
-                        style={{ background: t.colors.success }}
-                      />
-                      <div
-                        className="h-1.5 flex-1 rounded-full opacity-60"
-                        style={{ background: t.colors.warning }}
-                      />
-                      <div
-                        className="h-1.5 flex-1 rounded-full opacity-60"
-                        style={{ background: t.colors.danger }}
-                      />
-                      <div
-                        className="h-1.5 flex-1 rounded-full opacity-60"
-                        style={{ background: t.colors.info }}
-                      />
-                    </div>
-
-                    {/* Background visual flair */}
-                    <div
-                      className="absolute inset-0 opacity-10 group-hover:opacity-20 transition-opacity"
-                      style={{
-                        background: `radial-gradient(circle at top right, ${t.colors.accent}, transparent)`,
-                      }}
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </SettingsSection>
-        )}
+        {tab === "general" && <GeneralTab />}
       </div>
 
       <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
