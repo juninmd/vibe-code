@@ -400,6 +400,32 @@ export class GitService {
     return join(this.reposDir, `${repoName}.git`);
   }
 
+  /**
+   * Syncs the worktree branch with the remote base branch via rebase.
+   * Call before starting agent work and before creating a PR to avoid conflicts.
+   * Returns true if sync succeeded, false if rebase had conflicts (caller should handle).
+   */
+  async syncWithBase(
+    wtPath: string,
+    baseBranch: string
+  ): Promise<{ ok: boolean; message: string }> {
+    try {
+      // Fetch latest from origin
+      await this.exec(["git", "fetch", "origin"], { cwd: wtPath });
+      // Rebase onto base branch
+      const result = await this.exec(["git", "rebase", `origin/${baseBranch}`], { cwd: wtPath });
+      if (result.exitCode !== 0) {
+        // Abort the failed rebase to leave worktree clean
+        await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+        return { ok: false, message: result.stderr.trim() || "Rebase failed" };
+      }
+      return { ok: true, message: `Synced with origin/${baseBranch}` };
+    } catch (err) {
+      await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   private async exec(
     cmd: string[],
     options?: { cwd?: string }

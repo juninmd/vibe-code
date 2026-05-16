@@ -576,6 +576,13 @@ export async function executeAgent(
         !resumeExistingBranch
       );
       sysLog(`Workspace ready at ${wtPath}`);
+      // Sync with base branch before agent starts to avoid future conflicts
+      const syncResult = await git.syncWithBase(wtPath, task.baseBranch || repo.defaultBranch);
+      if (syncResult.ok) {
+        sysLog(`Branch synced with origin/${task.baseBranch || repo.defaultBranch} ✓`);
+      } else {
+        sysLog(`Branch sync skipped (new branch or no divergence): ${syncResult.message}`);
+      }
       recordTaskArtifact(db, task, run, {
         kind: "worktree",
         title: "Execution workspace",
@@ -1206,6 +1213,14 @@ export async function executeAgent(
 
     try {
       setRunPhase("pr_creating");
+      // Sync with base before push to avoid opening a PR with conflicts
+      sysLog(`Syncing with origin/${baseBranch} before PR...`);
+      const preSyncResult = await git.syncWithBase(wtPath, baseBranch);
+      if (preSyncResult.ok) {
+        sysLog(`Pre-PR sync with origin/${baseBranch} ✓`);
+      } else {
+        sysLog(`Pre-PR sync warning: ${preSyncResult.message} — pushing anyway`);
+      }
       sysLog("Pushing branch to origin...");
       await git.push(wtPath, branch);
       recordTaskArtifact(db, task, run, {
