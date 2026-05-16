@@ -2,7 +2,7 @@
   "serverUrl": "http://localhost:3002",
   "intervalMinutes": 20,
   "provider": "ollama",
-  "model": "qwen3:1.7b",
+  "model": "qwen2.5:1.5b",
   "ollamaBaseUrl": "http://localhost:11434",
   "stalestRepoLimit": 15,
   "repos": []
