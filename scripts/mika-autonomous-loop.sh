@@ -5,7 +5,7 @@
 
 SESSION="***REMOVED-SESSION-TOKEN***"
 REPO_ID="6bbf832056430a25"
-BASE_URL="http://localhost:3000"
+BASE_URL="http://localhost:3001"
 INTERVAL=1200  # 20 minutes
 MAX_AGENTS=4
 

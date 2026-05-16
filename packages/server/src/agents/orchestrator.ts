@@ -76,6 +76,14 @@ export class Orchestrator {
     return this.activeRuns.size;
   }
 
+  get maxConcurrentAgents(): number {
+    return this.maxConcurrent;
+  }
+
+  setMaxConcurrent(n: number): void {
+    this.maxConcurrent = Math.max(1, Math.min(10, n));
+  }
+
   getActiveRunEngines(): Map<string, string> {
     const result = new Map<string, string>();
     for (const [taskId, active] of this.activeRuns) {
