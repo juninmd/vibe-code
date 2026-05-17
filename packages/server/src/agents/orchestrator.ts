@@ -261,7 +261,8 @@ export class Orchestrator {
         },
         model,
         this.skillsLoader,
-        this
+        this,
+        this.registry
       ).catch((err) => {
         this.activeRuns.delete(task.id);
         console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
