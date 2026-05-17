@@ -53,6 +53,9 @@ const skillRegistry = new SkillRegistryService();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
 scheduleRunner.start();
+orchestrator.recoverInProgressTasks().catch((err) => {
+  console.warn("[startup] recoverInProgressTasks failed:", err);
+});
 
 const app = new Hono();
 

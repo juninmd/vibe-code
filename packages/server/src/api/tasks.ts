@@ -427,6 +427,21 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     }
   });
 
+  router.post("/:id/unblock", async (c) => {
+    const task = db.tasks.getById(c.req.param("id"));
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    if (task.status !== "blocked") {
+      return c.json({ error: "not_blocked", message: "Task is not blocked" }, 400);
+    }
+    try {
+      await orchestrator.unblockTask(task.id);
+      return c.json({ data: { ok: true } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: "unblock_failed", message: msg }, 500);
+    }
+  });
+
   router.post("/:id/cancel", async (c) => {
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);

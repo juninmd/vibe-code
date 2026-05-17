@@ -4,6 +4,7 @@ export type TaskStatus =
   | "scheduled"
   | "backlog"
   | "in_progress"
+  | "blocked"
   | "review"
   | "done"
   | "failed"
@@ -205,12 +206,20 @@ export type RunPhase =
   | "timed_out";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
 
-export const TASK_COLUMNS: TaskStatus[] = ["scheduled", "backlog", "in_progress", "review", "done"];
+export const TASK_COLUMNS: TaskStatus[] = [
+  "scheduled",
+  "backlog",
+  "in_progress",
+  "blocked",
+  "review",
+  "done",
+];
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   scheduled: "Agendadas",
   backlog: "Backlog",
   in_progress: "In Progress",
+  blocked: "Blocked",
   review: "Review",
   done: "Done",
   failed: "Failed",

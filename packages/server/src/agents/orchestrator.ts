@@ -72,8 +72,10 @@ export class Orchestrator {
     this.maxAgentsByStatus = parseMaxAgentsByStatus();
   }
 
+  /** In-memory tracked runs + DB in_progress tasks not yet in activeRuns (e.g. after restart) */
   get activeCount(): number {
-    return this.activeRuns.size;
+    const dbInProgress = this.db.tasks.list(undefined, "in_progress").length;
+    return Math.max(this.activeRuns.size, dbInProgress);
   }
 
   get maxConcurrentAgents(): number {
@@ -81,7 +83,7 @@ export class Orchestrator {
   }
 
   setMaxConcurrent(n: number): void {
-    this.maxConcurrent = Math.max(1, Math.min(10, n));
+    this.maxConcurrent = Math.max(1, Math.min(50, n));
   }
 
   getActiveRunEngines(): Map<string, string> {
@@ -115,7 +117,7 @@ export class Orchestrator {
   }
 
   async sweepBacklog(): Promise<void> {
-    if (this.activeRuns.size >= this.maxConcurrent) return;
+    if (this.activeCount >= this.maxConcurrent) return;
 
     const PRIORITY_ORDER: Record<string, number> = {
       urgent: 4,
@@ -131,7 +133,7 @@ export class Orchestrator {
       .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
 
     for (const task of backlog) {
-      if (this.activeRuns.size >= this.maxConcurrent) break;
+      if (this.activeCount >= this.maxConcurrent) break;
       if (this.activeRuns.has(task.id)) continue;
 
       // Check if blocked by dependencies
@@ -163,7 +165,7 @@ export class Orchestrator {
   }
 
   async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
-    if (this.activeRuns.size >= this.maxConcurrent) {
+    if (this.activeCount >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
       throw new Error("Max concurrent agents reached.");
     }
@@ -311,7 +313,7 @@ export class Orchestrator {
     const template = this.db.tasks.getById(templateTaskId);
     if (!template || template.status !== "scheduled") throw new Error("Invalid template task");
 
-    if (this.activeRuns.size >= this.maxConcurrent) {
+    if (this.activeCount >= this.maxConcurrent) {
       throw new Error("Max concurrent agents reached — skipping scheduled trigger");
     }
 
@@ -523,6 +525,42 @@ export class Orchestrator {
       content,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  async recoverInProgressTasks(): Promise<void> {
+    const PRIORITY_ORDER: Record<string, number> = {
+      urgent: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+      none: 0,
+    };
+    const orphans = this.db.tasks
+      .list(undefined, "in_progress")
+      .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
+    if (orphans.length === 0) return;
+    // Block ALL — no subprocesses at startup
+    for (const task of orphans) {
+      this.db.tasks.update(task.id, { status: "blocked" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "blocked" } });
+    }
+    // Promote top-N to backlog for sweepBacklog to pick up respecting the limit
+    const toResume = orphans.slice(0, this.maxConcurrent);
+    for (const task of toResume) {
+      this.db.tasks.update(task.id, { status: "backlog" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    }
+    logOrchestratorEvent(
+      `Recovered ${orphans.length} orphaned tasks: ${toResume.length} promoted to backlog, ${orphans.length - toResume.length} remain blocked`
+    );
+  }
+
+  async unblockTask(taskId: string): Promise<void> {
+    const task = this.db.tasks.getById(taskId);
+    if (!task || task.status !== "blocked") return;
+    this.db.tasks.update(taskId, { status: "backlog" });
+    this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    await this.sweepBacklog();
   }
 
   private async cloneRepo(

@@ -196,6 +196,21 @@ export function useTasks(repoFilter?: string) {
     [tasks, updateTaskLocal]
   );
 
+  const unblockTask = useCallback(
+    async (id: string) => {
+      // Optimistic: move to backlog so it disappears from Blocked column immediately
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "backlog" as const } : t)));
+      try {
+        await api.tasks.unblock(id);
+      } catch (err) {
+        console.error("Failed to unblock task:", err);
+        refresh();
+        throw err;
+      }
+    },
+    [refresh]
+  );
+
   const retryPR = useCallback(async (id: string) => {
     try {
       const result = await api.tasks.retryPR(id);
@@ -254,6 +269,7 @@ export function useTasks(repoFilter?: string) {
     cancelTask,
     retryTask,
     retryPR,
+    unblockTask,
     approveTask,
     rejectTask,
     updateTaskLocal,

@@ -23,6 +23,7 @@ interface BoardProps {
   onTaskClick: (task: TaskWithRun) => void;
   onTaskMove: (taskId: string, newStatus: TaskStatus, newOrder: number) => void | Promise<void>;
   onRetryPR: (taskId: string) => void;
+  onUnblock?: (taskId: string) => void;
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
@@ -35,6 +36,7 @@ export function Board({
   onTaskClick,
   onTaskMove,
   onRetryPR,
+  onUnblock,
   onArchiveDone,
   onClearFailed,
   onRetryAllFailed,
@@ -143,6 +145,7 @@ export function Board({
                 tasks={tasksByColumn[status]}
                 onTaskClick={onTaskClick}
                 onRetryPR={onRetryPR}
+                onUnblock={onUnblock}
                 onArchiveDone={onArchiveDone}
                 onClearFailed={onClearFailed}
                 onRetryAllFailed={onRetryAllFailed}
