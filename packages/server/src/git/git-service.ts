@@ -459,7 +459,8 @@ export class GitService {
     const exitCode = await proc.exited;
 
     if (exitCode !== 0) {
-      throw new Error(`Command failed (exit ${exitCode}): ${cmd.join(" ")}\n${stderr}`);
+      const sanitized = cmd.map((s) => s.replace(/https?:\/\/[^@]+@/g, "https://***@")).join(" ");
+      throw new Error(`Command failed (exit ${exitCode}): ${sanitized}\n${stderr}`);
     }
 
     return { stdout, stderr, exitCode };
