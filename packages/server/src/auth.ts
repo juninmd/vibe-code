@@ -30,7 +30,22 @@ interface SessionRow {
 }
 
 function isAuthEnabled(): boolean {
-  return Boolean(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET);
+  return Boolean(
+    (process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET) ||
+      process.env.VIBE_CODE_API_KEY
+  );
+}
+
+function checkApiKey(c: Context): boolean {
+  const key = process.env.VIBE_CODE_API_KEY;
+  if (!key) return false;
+  const header = c.req.header("authorization") ?? "";
+  const query = new URL(c.req.url).searchParams.get("api_key") ?? "";
+  const provided = header.startsWith("Bearer ") ? header.slice(7) : query;
+  if (!provided) return false;
+  const a = Buffer.from(key);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function isSecureCookie(c: Context): boolean {
@@ -173,6 +188,15 @@ export function authMiddleware(db: Db): MiddlewareHandler {
 
     const path = new URL(c.req.url).pathname;
     if (path.startsWith("/api/auth/") || path === "/api/health") return next();
+
+    // API key auth (active when VIBE_CODE_API_KEY is set, regardless of OAuth)
+    if (process.env.VIBE_CODE_API_KEY) {
+      if (checkApiKey(c)) return next();
+      // Fall through to session auth if OAuth is also configured
+      if (!process.env.GITHUB_OAUTH_CLIENT_ID) {
+        return c.json({ error: "unauthorized", message: "Valid API key required" }, 401);
+      }
+    }
 
     const row = getSession(db, getCookie(c, SESSION_COOKIE));
     if (!row) return c.json({ error: "unauthorized", message: "GitHub login required" }, 401);
