@@ -10,6 +10,7 @@ import type {
 } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
 import type { SkillsLoader } from "../../skills/loader";
 import type { BroadcastHub } from "../../ws/broadcast";
@@ -1308,6 +1309,23 @@ export async function executeAgent(
       hub.broadcastAll({ type: "run_updated", run: sanitizeRunForExternal(db, completedRun) });
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
+
+    // Telegram: notify when a conflict-resolution task completes successfully
+    if (task.tags?.includes("conflict-resolution")) {
+      const telegram = createTelegramNotifier(db);
+      if (telegram.isConfigured()) {
+        const repo = db.repos.getById(task.repoId);
+        telegram
+          .send(
+            `✅ <b>Merge conflicts resolved!</b>\n\n` +
+              `<b>Task:</b> ${task.title.slice(0, 80)}\n` +
+              `<b>Repo:</b> ${repo?.name ?? task.repoId}\n` +
+              `<b>Branch:</b> <code>${task.branchName ?? "?"}</code>\n` +
+              (prUrl ? `<b>PR:</b> <a href="${prUrl}">${prUrl}</a>` : "")
+          )
+          .catch((e) => console.warn("[telegram] notify failed:", e));
+      }
+    }
 
     // Unblock any tasks that were waiting for this task to complete
     orchestrator?.unblockDependents(task.id);

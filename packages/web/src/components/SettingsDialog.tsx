@@ -12,7 +12,7 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general";
+type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general" | "telegram";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -997,6 +997,183 @@ function GeneralTab() {
   );
 }
 
+function TelegramTab() {
+  const [botToken, setBotToken] = useState("");
+  const [chatId, setChatId] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const id = useId();
+
+  useEffect(() => {
+    api.settings
+      .get()
+      .then((s) => {
+        if (s.telegram) {
+          setBotToken(s.telegram.botToken ?? "");
+          setChatId(s.telegram.chatId ?? "");
+          setEnabled(s.telegram.enabled ?? true);
+        }
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setTestResult(null);
+    try {
+      await api.settings.update({
+        telegramBotToken: botToken,
+        telegramChatId: chatId,
+        telegramEnabled: enabled,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/settings/test/telegram", { method: "POST" });
+      const json = (await res.json()) as { data: { ok: boolean; error?: string } };
+      setTestResult(json.data);
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  if (!loaded) return <div className="text-sm text-muted py-8 text-center">Loading...</div>;
+
+  return (
+    <div className="space-y-8">
+      <SettingsSection title="Telegram Notifications">
+        <div className="space-y-4">
+          <p className="text-[11px] text-muted leading-relaxed">
+            Receive notifications when merge conflicts are resolved, CI failures are detected, and
+            more. Create a bot via <span className="text-accent font-mono">@BotFather</span> and get
+            your Chat ID via <span className="text-accent font-mono">@userinfobot</span>.
+          </p>
+
+          <div className="flex items-center justify-between p-3 rounded-xl bg-input/30 border border-white/5">
+            <div>
+              <p className="text-xs font-semibold text-primary">Enable Telegram notifications</p>
+              <p className="text-[10px] text-muted mt-0.5">Send alerts when events occur</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEnabled((v) => !v)}
+              className={`relative w-10 h-5.5 rounded-full transition-colors cursor-pointer ${enabled ? "bg-accent" : "bg-input"}`}
+            >
+              <span
+                className={`absolute top-0.5 w-4.5 h-4.5 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-[22px]" : "translate-x-0.5"}`}
+              />
+            </button>
+          </div>
+
+          <div>
+            <label
+              htmlFor={`${id}-token`}
+              className="text-[10px] font-bold uppercase tracking-widest text-muted block mb-2"
+            >
+              Bot Token
+            </label>
+            <Input
+              id={`${id}-token`}
+              type="password"
+              value={botToken}
+              onChange={(e) => setBotToken(e.target.value)}
+              placeholder="1234567890:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              className="font-mono text-xs"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor={`${id}-chat`}
+              className="text-[10px] font-bold uppercase tracking-widest text-muted block mb-2"
+            >
+              Chat ID
+            </label>
+            <Input
+              id={`${id}-chat`}
+              value={chatId}
+              onChange={(e) => setChatId(e.target.value)}
+              placeholder="-1001234567890 or 123456789"
+              className="font-mono text-xs"
+            />
+            <p className="text-[10px] text-muted mt-1.5">
+              Group/channel IDs start with <span className="font-mono">-100</span>. For personal
+              chats, use your numeric user ID.
+            </p>
+          </div>
+
+          {testResult && (
+            <div
+              className={`p-3 rounded-xl text-xs font-medium ${testResult.ok ? "bg-success/10 text-success border border-success/20" : "bg-danger/10 text-danger border border-danger/20"}`}
+            >
+              {testResult.ok ? "✅ Test message sent successfully!" : `❌ ${testResult.error}`}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={handleTest}
+              disabled={testing || !botToken || !chatId}
+              className="flex-1 h-9 text-xs"
+            >
+              {testing ? "Sending..." : "Send Test Message"}
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 h-9 text-xs"
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Notification Events">
+        <div className="space-y-2">
+          {[
+            {
+              label: "Merge conflict detected",
+              desc: "When a PR has conflicts and auto-resolution starts",
+            },
+            {
+              label: "Merge conflict resolved",
+              desc: "When conflicts are fixed and pushed successfully",
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center gap-3 p-3 rounded-xl bg-input/20 border border-white/5"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-primary">{item.label}</p>
+                <p className="text-[10px] text-muted">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SettingsSection>
+    </div>
+  );
+}
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [tab, setTab] = useState<Tab>("github");
 
@@ -1004,7 +1181,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     <Dialog open={open} onClose={onClose} title="System Configuration" size="2xl">
       {/* Modern High-End Tabs */}
       <div className="flex gap-2 mb-8 p-1.5 rounded-[1.25rem] bg-input/40 border border-white/5 backdrop-blur-md">
-        {(["github", "gitlab", "litellm", "apikeys", "general"] as Tab[]).map((t) => (
+        {(["github", "gitlab", "litellm", "apikeys", "general", "telegram"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -1037,6 +1214,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         {tab === "apikeys" && <ApiKeysTab />}
 
         {tab === "general" && <GeneralTab />}
+
+        {tab === "telegram" && <TelegramTab />}
       </div>
 
       <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">

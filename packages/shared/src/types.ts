@@ -846,10 +846,18 @@ export interface ApiKeyEntry {
   token: string;
 }
 
+export interface TelegramSettings {
+  botToken: string;
+  botTokenSet: boolean;
+  chatId: string;
+  enabled: boolean;
+}
+
 export interface SettingsResponse {
   github: ProviderSettings;
   gitlab: ProviderSettings;
   litellm: LiteLLMSettings;
+  telegram: TelegramSettings;
   apiKeys: {
     gemini: ApiKeyEntry;
     anthropic: ApiKeyEntry;
@@ -871,6 +879,9 @@ export interface UpdateSettingsRequest {
   openaiApiKey?: string;
   theme?: string;
   maxAgents?: number;
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  telegramEnabled?: boolean;
 }
 
 export interface TestConnectionResult {
