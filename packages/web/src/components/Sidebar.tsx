@@ -345,14 +345,38 @@ export function Sidebar({
                   </div>
                   {!collapsed && (
                     <>
-                      <span className="flex-1 text-left truncate">{repo.name}</span>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <span className="text-left truncate">{repo.name}</span>
+                        {stats && stats.total > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-0.5 rounded-full bg-white/10 overflow-hidden flex">
+                              {stats.running > 0 && (
+                                <div
+                                  className="h-full bg-sky-400 animate-pulse"
+                                  style={{ width: `${(stats.running / stats.total) * 100}%` }}
+                                />
+                              )}
+                              {stats.done > 0 && (
+                                <div
+                                  className="h-full bg-emerald-500"
+                                  style={{ width: `${(stats.done / stats.total) * 100}%` }}
+                                />
+                              )}
+                              {stats.failed > 0 && (
+                                <div
+                                  className="h-full bg-red-500"
+                                  style={{ width: `${(stats.failed / stats.total) * 100}%` }}
+                                />
+                              )}
+                            </div>
+                            <span className="text-[9px] tabular-nums shrink-0 opacity-40 font-mono">
+                              {stats.done}/{stats.total}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                       {stats && stats.running > 0 && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-info animate-pulse shadow-[0_0_10px_var(--info)]" />
-                      )}
-                      {stats && stats.total > 0 && !stats.running && (
-                        <span className="text-[10px] tabular-nums opacity-40 font-mono">
-                          {stats.done}/{stats.total}
-                        </span>
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-info animate-pulse shadow-[0_0_10px_var(--info)]" />
                       )}
                     </>
                   )}
