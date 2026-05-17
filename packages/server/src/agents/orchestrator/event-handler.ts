@@ -34,13 +34,13 @@ export async function handleAgentEvent(
     });
   };
 
-  if (
-    (event.type === "log" ||
-      event.type === "error" ||
-      event.type === "status" ||
-      event.type === "cost") &&
-    event.content
-  ) {
+  // Only count real agent output as activity — system/heartbeat logs must not reset the inactivity watchdog
+  const isRealAgentOutput =
+    (event.type === "log" && event.stream !== "system") ||
+    event.type === "error" ||
+    event.type === "status" ||
+    event.type === "cost";
+  if (isRealAgentOutput && event.content) {
     onActivity?.();
   }
 
