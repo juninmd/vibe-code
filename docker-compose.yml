@@ -59,7 +59,6 @@ services:
       NODE_ENV: production
       PORT: 3000
       VIBE_CODE_PUBLIC_URL: ${VIBE_CODE_PUBLIC_URL:-https://vibe.antonio-code.duckdns.org}
-      DATABASE_URL: postgresql://vibeuser:${POSTGRES_PASSWORD:-vibepassword}@postgres:5432/vibedb
       VIBE_CODE_DATA_DIR: /app/data
       VIBE_CODE_MAX_AGENTS: 4
       LITELLM_BASE_URL: http://litellm:4000
@@ -67,8 +66,6 @@ services:
     volumes:
       - vibe_data:/app/data
     depends_on:
-      postgres:
-        condition: service_healthy
       litellm:
         condition: service_healthy
     healthcheck:
