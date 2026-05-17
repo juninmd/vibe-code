@@ -23,6 +23,9 @@ const updateSettingsSchema = z.object({
   skillsPath: z.string().optional(),
   theme: z.string().optional(),
   maxAgents: z.number().int().min(1).max(50).optional(),
+  telegramBotToken: z.string().optional(),
+  telegramChatId: z.string().optional(),
+  telegramEnabled: z.boolean().optional(),
 });
 
 export function createSettingsRouter(
@@ -48,6 +51,9 @@ export function createSettingsRouter(
     const geminiApiKey = db.settings.get("gemini_api_key");
     const anthropicApiKey = db.settings.get("anthropic_api_key");
     const openaiApiKey = db.settings.get("openai_api_key");
+    const telegramBotToken = db.settings.get("telegram_bot_token");
+    const telegramChatId = db.settings.get("telegram_chat_id") || "";
+    const telegramEnabled = db.settings.get("telegram_enabled") !== "false";
 
     return c.json({
       data: {
@@ -74,6 +80,12 @@ export function createSettingsRouter(
         skillsPath,
         theme,
         maxAgents,
+        telegram: {
+          botToken: maskToken(telegramBotToken),
+          botTokenSet: !!telegramBotToken,
+          chatId: telegramChatId,
+          enabled: telegramEnabled,
+        },
         // Legacy compat
         githubToken: maskToken(ghToken),
         githubTokenSet: !!ghToken,
@@ -154,7 +166,45 @@ export function createSettingsRouter(
       db.settings.set("max_agents", String(clamped));
       orchestrator?.setMaxConcurrent(clamped);
     }
+    if (parsed.data.telegramBotToken !== undefined) {
+      db.settings.set("telegram_bot_token", parsed.data.telegramBotToken.trim());
+    }
+    if (parsed.data.telegramChatId !== undefined) {
+      db.settings.set("telegram_chat_id", parsed.data.telegramChatId.trim());
+    }
+    if (parsed.data.telegramEnabled !== undefined) {
+      db.settings.set("telegram_enabled", parsed.data.telegramEnabled ? "true" : "false");
+    }
     return c.json({ data: { ok: true } });
+  });
+
+  // POST /api/settings/test/telegram — send a test message
+  app.post("/test/telegram", async (c) => {
+    const token = db.settings.get("telegram_bot_token");
+    const chatId = db.settings.get("telegram_chat_id");
+    if (!token || !chatId) {
+      return c.json({ data: { ok: false, error: "Bot token and Chat ID are required" } });
+    }
+    try {
+      const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "✅ <b>vibe-code</b> — Telegram integration is working!",
+          parse_mode: "HTML",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        return c.json({ data: { ok: false, error: `Telegram API error ${res.status}: ${body}` } });
+      }
+      return c.json({ data: { ok: true } });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ data: { ok: false, error: msg } });
+    }
   });
 
   // POST /api/settings/test/:provider — test connection for a provider

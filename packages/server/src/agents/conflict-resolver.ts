@@ -4,6 +4,7 @@
  */
 import type { Task } from "@vibe-code/shared";
 import type { Db } from "../db";
+import { createTelegramNotifier } from "../notifications/telegram";
 import type { Orchestrator } from "./orchestrator";
 
 const CONFLICT_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
@@ -157,6 +158,22 @@ CRITICAL RULES:
       `[conflict-resolver] Created conflict task ${conflictTask.id} for parent ${parentTask.id}`
     );
 
+    // Notify via Telegram
+    const telegram = createTelegramNotifier(this.db);
+    if (telegram.isConfigured()) {
+      const repoName = repo.name;
+      telegram
+        .send(
+          `🔀 <b>Merge conflict detected</b>\n\n` +
+            `<b>Task:</b> ${parentTask.title.slice(0, 80)}\n` +
+            `<b>Repo:</b> ${repoName}\n` +
+            `<b>Branch:</b> <code>${branch}</code>\n` +
+            `<b>PR:</b> <a href="${parentTask.prUrl}">${parentTask.prUrl}</a>\n\n` +
+            `⚙️ Auto-resolution task created and queued.`
+        )
+        .catch((e) => console.warn("[conflict-resolver] Telegram notify failed:", e));
+    }
+
     try {
       await this.orchestrator.launch(conflictTask);
       console.log(`[conflict-resolver] Launched conflict task ${conflictTask.id}`);
@@ -165,5 +182,20 @@ CRITICAL RULES:
       const msg = err instanceof Error ? err.message : String(err);
       console.log(`[conflict-resolver] Task queued (no slots): ${msg}`);
     }
+  }
+
+  async notifyConflictResolved(task: Task): Promise<void> {
+    const repo = this.db.repos.getById(task.repoId);
+    const telegram = createTelegramNotifier(this.db);
+    if (!telegram.isConfigured()) return;
+    await telegram
+      .send(
+        `✅ <b>Merge conflicts resolved!</b>\n\n` +
+          `<b>Task:</b> ${task.title.slice(0, 80)}\n` +
+          `<b>Repo:</b> ${repo?.name ?? task.repoId}\n` +
+          `<b>Branch:</b> <code>${task.branchName ?? "?"}</code>\n` +
+          (task.prUrl ? `<b>PR:</b> <a href="${task.prUrl}">${task.prUrl}</a>` : "")
+      )
+      .catch((e) => console.warn("[conflict-resolver] Telegram notify failed:", e));
   }
 }
