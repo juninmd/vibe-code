@@ -56,7 +56,13 @@ export class GitService {
 
   async detectDefaultBranch(url: string): Promise<string> {
     try {
-      const result = await this.exec(["git", "ls-remote", "--symref", url, "HEAD"]);
+      const result = await this.exec([
+        "git",
+        "ls-remote",
+        "--symref",
+        this.injectToken(url),
+        "HEAD",
+      ]);
       // Output like: ref: refs/heads/main	HEAD
       const match = result.stdout.match(/ref: refs\/heads\/(\S+)\s+HEAD/);
       if (match) return match[1];
@@ -66,9 +72,17 @@ export class GitService {
     return "main";
   }
 
+  private injectToken(url: string): string {
+    const token = process.env.GIT_TOKEN;
+    if (token && url.startsWith("https://github.com/")) {
+      return url.replace("https://", `https://${token}@`);
+    }
+    return url;
+  }
+
   async isRepoSource(source: string): Promise<boolean> {
     try {
-      await this.exec(["git", "ls-remote", source, "HEAD"]);
+      await this.exec(["git", "ls-remote", this.injectToken(source), "HEAD"]);
       return true;
     } catch {
       return false;
@@ -77,7 +91,7 @@ export class GitService {
 
   async cloneRepo(url: string, name: string): Promise<string> {
     const barePath = join(this.reposDir, `${name}.git`);
-    await this.exec(["git", "clone", "--bare", url, barePath]);
+    await this.exec(["git", "clone", "--bare", this.injectToken(url), barePath]);
     return barePath;
   }
 
