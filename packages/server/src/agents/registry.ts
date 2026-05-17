@@ -51,9 +51,17 @@ export class EngineRegistry {
   async listEngines(activeRuns?: Map<string, string>): Promise<EngineInfo[]> {
     const results = await Promise.all(
       Array.from(this.engines.values()).map(async (engine) => {
-        const available = await engine.isAvailable().catch(() => false);
+        const timeout = <T>(p: Promise<T>, fallback: T, ms = 3000): Promise<T> =>
+          Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
+        const available = await timeout(
+          engine.isAvailable().catch(() => false),
+          false
+        );
         const setupIssue = engine.getSetupIssue
-          ? await engine.getSetupIssue().catch(() => null)
+          ? await timeout(
+              engine.getSetupIssue().catch(() => null),
+              null
+            )
           : null;
         let version: string | null = null;
         if (engine.getVersion) {
