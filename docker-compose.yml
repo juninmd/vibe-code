@@ -55,10 +55,10 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-      - "5173:5173"
     environment:
       NODE_ENV: production
       PORT: 3000
+      VIBE_CODE_PUBLIC_URL: ${VIBE_CODE_PUBLIC_URL:-https://vibe.antonio-code.duckdns.org}
       DATABASE_URL: postgresql://vibeuser:${POSTGRES_PASSWORD:-vibepassword}@postgres:5432/vibedb
       VIBE_CODE_DATA_DIR: /app/data
       VIBE_CODE_MAX_AGENTS: 4
@@ -66,9 +66,6 @@ services:
       LITELLM_API_KEY: ${LITELLM_MASTER_KEY:-sk-vibe-test-key}
     volumes:
       - vibe_data:/app/data
-      - ./packages/shared/src:/app/packages/shared/src:ro
-      - ./packages/server/src:/app/packages/server/src:ro
-      - ./packages/web/src:/app/packages/web/src:ro
     depends_on:
       postgres:
         condition: service_healthy
