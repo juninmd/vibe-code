@@ -314,7 +314,9 @@ export class Orchestrator {
     if (!template || template.status !== "scheduled") throw new Error("Invalid template task");
 
     if (this.activeCount >= this.maxConcurrent) {
-      throw new Error("Max concurrent agents reached — skipping scheduled trigger");
+      const err = new Error("Max concurrent agents reached — skipping scheduled trigger");
+      (err as any).capacityExceeded = true;
+      throw err;
     }
 
     const alreadyRunning =

@@ -35,16 +35,26 @@ export class ScheduleRunner {
     for (const schedule of due) {
       try {
         await this.orchestrator.triggerScheduled(schedule.taskId);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`  ✗ Schedule trigger failed for task ${schedule.taskId}: ${msg}`);
-      } finally {
-        // Always advance next_run_at to avoid hammering a broken/busy task
+        // Advance next_run_at only on success
         const next = new Cron(schedule.cronExpression).nextRun();
         this.db.schedules.updateAfterRun(schedule.taskId, next ? next.toISOString() : null);
         console.log(
           `  ↻ Scheduled task ${schedule.taskId} triggered, next: ${next?.toISOString() ?? "none"}`
         );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isCapacity = (err as any).capacityExceeded === true;
+        if (isCapacity) {
+          // Do NOT advance next_run_at — retry on next tick (1 min) when a slot frees up
+          console.warn(
+            `  ⏸ Schedule for task ${schedule.taskId} deferred — no agent slots available (will retry next tick)`
+          );
+        } else {
+          // Real error: advance to avoid hammering a broken task
+          const next = new Cron(schedule.cronExpression).nextRun();
+          this.db.schedules.updateAfterRun(schedule.taskId, next ? next.toISOString() : null);
+          console.error(`  ✗ Schedule trigger failed for task ${schedule.taskId}: ${msg}`);
+        }
       }
     }
 
