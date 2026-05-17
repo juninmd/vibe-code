@@ -15,6 +15,17 @@ Este arquivo é um índice curto. O contrato operacional do repositório está d
 1. **Changelog obrigatório**: toda alteração preparada para push ou release deve ser refletida em `CHANGELOG.md`.
 2. **Não trate o board como a identidade do produto**: ele é uma superfície operacional; o alvo do sistema é produção autônoma de código com evidências e handoffs previsíveis.
 3. **Prefira contratos versionados a instruções soltas**: novas regras duráveis devem ir para `WORKFLOW.md` ou `docs/`, não crescer indefinidamente aqui.
+4. **AGENTS.md obrigatório em todo repositório modificado**: ao modificar qualquer repositório externo, verifique se existe `AGENTS.md` na raiz. Se não existir, crie um com os aprendizados relevantes ao LLM sobre aquele repositório (stack, convenções, armadilhas, comandos, env vars). Nunca commite sem o arquivo presente.
+5. **Resolução de conflitos e CI via sessão única do agente da task**: ao resolver merge conflicts ou falhas em GitHub Actions jobs, use sempre a mesma sessão do agente que executou a task — não abra sessões paralelas para o mesmo problema. Use o engine da task (opencode, gemini, claude-code, etc.) com o session_id registrado nos logs. Fluxo obrigatório:
+   ```
+   # 1. Atualizar a branch (espera-se que conflito apareça)
+   git fetch origin && git merge origin/main   # ou rebase
+   # 2. Se conflito ou job falhou, passar para o agente na mesma sessão
+   <engine> -s '<session_id>' \
+     --prompt 'Resolver conflitos de merge em <arquivo(s)>. Contexto: <descrição do problema>'
+   # 3. Nunca abrir nova sessão — usar o session_id da sessão atual para manter contexto acumulado
+   ```
+   O `session_id` fica visível nos logs da task no vibe-code. Isso garante contexto completo e evita análises repetidas.
 
 ## Aprendizados operacionais
 
