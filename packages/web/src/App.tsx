@@ -312,12 +312,20 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showIssueImporter, setShowIssueImporter] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [selectedTaskLoadedSkills, setSelectedTaskLoadedSkills] = useState<string[]>([]);
-  const [filters, setFilters] = useState<Filters>({
-    engine: null,
-    priority: null,
-    hasPR: false,
-    tags: [],
-    labelIds: [],
+  const [filters, setFilters] = useState<Filters>(() => {
+    try {
+      const stored = localStorage.getItem("vibe-code-filters");
+      if (stored)
+        return {
+          engine: null,
+          priority: null,
+          hasPR: false,
+          tags: [],
+          labelIds: [],
+          ...JSON.parse(stored),
+        };
+    } catch {}
+    return { engine: null, priority: null, hasPR: false, tags: [], labelIds: [] };
   });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
   const [terminalLogs, setTerminalLogs] = useState<Record<string, TerminalChunk[]>>({});
@@ -354,6 +362,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     cancelTask,
     retryTask,
     retryPR,
+    unblockTask,
     approveTask,
     rejectTask,
     updateTaskLocal,
@@ -1306,7 +1315,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             <div className="px-6 py-3 border-b border-white/5 bg-gradient-to-b from-white/3 to-transparent animate-in slide-in-from-top-2 duration-200 ease-out">
               <FilterBar
                 filters={filters}
-                onFilterChange={setFilters}
+                onFilterChange={(f) => {
+                  setFilters(f);
+                  try {
+                    localStorage.setItem("vibe-code-filters", JSON.stringify(f));
+                  } catch {}
+                }}
                 availableEngines={engines.filter((e) => e.available).map((e) => e.name)}
                 availableTags={availableTags}
                 search={search}
@@ -1359,6 +1373,14 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     onTaskClick={handleTaskClick}
                     onTaskMove={handleTaskMove}
                     onRetryPR={retryPR}
+                    onUnblock={async (id) => {
+                      try {
+                        await unblockTask(id);
+                        toast("Task unblocked", "info");
+                      } catch {
+                        toast("Failed to unblock task", "error");
+                      }
+                    }}
                     onArchiveDone={async () => {
                       try {
                         await archiveDone();

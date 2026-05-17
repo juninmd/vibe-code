@@ -14,10 +14,21 @@ import { Button } from "./ui/button";
 import { getEngineMeta } from "./ui/engine-icons";
 import { getProviderFromUrl } from "./ui/git-icons";
 
+function formatRelativeTime(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
 interface TaskCardProps {
   task: TaskWithRun;
   onClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
+  onUnblock?: (taskId: string) => void;
   retryEntry?: RetryState;
 }
 
@@ -99,9 +110,14 @@ const statusColor: Record<string, { bg: string; border: string; glow: string }> 
     glow: "shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]",
   },
   backlog: { bg: "from-zinc-500/10 to-neutral-500/10", border: "border-zinc-500/20", glow: "" },
+  blocked: {
+    bg: "from-orange-500/15 to-amber-500/10",
+    border: "border-orange-500/40",
+    glow: "shadow-[0_0_20px_-5px_rgba(249,115,22,0.3)]",
+  },
 };
 
-function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardProps) {
+function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: TaskCardProps) {
   const colors = statusColor[task.status] || statusColor.backlog;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -140,6 +156,7 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
   const isFailed = task.status === "failed";
   const isReview = task.status === "review";
   const isScheduled = task.status === "scheduled";
+  const isBlocked = task.status === "blocked";
   const isDone = task.status === "done";
   const hasPR = !!task.prUrl;
   const hasMetadata = !!(
@@ -269,6 +286,13 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
                 <span className="text-[10px] font-mono text-warning/80 bg-warning/10 px-1.5 py-0.5 rounded">
                   ${((task.latestRun.costStats.input || 0) / 1_000_000).toFixed(2)}
                 </span>
+              ) : isDone && task.latestRun?.finishedAt ? (
+                <span
+                  className="text-[10px] text-emerald-400/70"
+                  title={new Date(task.latestRun.finishedAt).toLocaleString()}
+                >
+                  {formatRelativeTime(task.latestRun.finishedAt)}
+                </span>
               ) : isDone ? (
                 <span className="text-[10px] text-emerald-400">done</span>
               ) : null}
@@ -277,7 +301,7 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
         </div>
 
         <div
-          className={`p-2.5 flex items-center gap-2 ${isFailed ? "bg-danger/10" : isReview ? "bg-purple-500/10" : "bg-white/[0.02]"}`}
+          className={`p-2.5 flex items-center gap-2 ${isFailed ? "bg-danger/10" : isReview ? "bg-purple-500/10" : isBlocked ? "bg-orange-500/10" : "bg-white/[0.02]"}`}
         >
           {hasPR && (
             <Badge variant="success" className="text-[8px] py-0.5 px-2 font-medium">
@@ -301,6 +325,27 @@ function TaskCardComponent({ task, onClick, onRetryPR, retryEntry }: TaskCardPro
                 ? ` ${task.loopConfig.currentAttempt}/${task.loopConfig.maxAttempts}`
                 : ""}
             </Badge>
+          )}
+          {isBlocked && (
+            <>
+              <Badge variant="warning" className="text-[8px] py-0.5 px-2 font-medium">
+                🔒 Blocked
+              </Badge>
+              {onUnblock && (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="h-5 text-[8px] px-2 ml-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnblock(task.id);
+                  }}
+                >
+                  Resume
+                </Button>
+              )}
+            </>
           )}
           {retryEntry && isFailed && (
             <RetryCountdown dueAt={retryEntry.dueAt} attempt={retryEntry.attempt} />

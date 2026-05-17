@@ -43,6 +43,13 @@ const columnConfig: Record<
     emptyIcon: "play",
     emptyText: "No agents running",
   },
+  blocked: {
+    dot: "bg-orange-400",
+    countBg: "bg-orange-500/15 border-orange-500/30",
+    countText: "text-orange-400",
+    emptyIcon: "x",
+    emptyText: "No blocked tasks",
+  },
   review: {
     dot: "bg-violet-400",
     countBg: "bg-accent-muted border-accent/30",
@@ -78,6 +85,7 @@ interface ColumnProps {
   tasks: TaskWithRun[];
   onTaskClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
+  onUnblock?: (taskId: string) => void;
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
@@ -167,6 +175,7 @@ function ColumnComponent({
   tasks,
   onTaskClick,
   onRetryPR,
+  onUnblock,
   onArchiveDone,
   onClearFailed,
   onRetryAllFailed,
@@ -180,6 +189,8 @@ function ColumnComponent({
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
   const cfg = columnConfig[status];
+  const runningCount =
+    status === "in_progress" ? tasks.filter((t) => t.latestRun?.status === "running").length : 0;
 
   return (
     <div
@@ -204,6 +215,12 @@ function ColumnComponent({
             >
               {tasks.length}
             </span>
+            {runningCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-cyan-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_6px_rgba(34,211,238,0.6)]" />
+                {runningCount} running
+              </span>
+            )}
           </div>
 
           {/* Action buttons */}
@@ -341,6 +358,7 @@ function ColumnComponent({
                     task={task}
                     onClick={onTaskClick}
                     onRetryPR={onRetryPR}
+                    onUnblock={onUnblock}
                     retryEntry={retryQueueMap?.get(task.id)}
                   />
                 </div>
@@ -381,6 +399,7 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.tasks === next.tasks &&
     prev.onTaskClick === next.onTaskClick &&
     prev.onRetryPR === next.onRetryPR &&
+    prev.onUnblock === next.onUnblock &&
     prev.onArchiveDone === next.onArchiveDone &&
     prev.onClearFailed === next.onClearFailed &&
     prev.onRetryAllFailed === next.onRetryAllFailed &&
