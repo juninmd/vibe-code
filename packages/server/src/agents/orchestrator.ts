@@ -322,7 +322,9 @@ export class Orchestrator {
     const alreadyRunning =
       this.activeRuns.has(templateTaskId) ||
       Array.from(this.activeRuns.values()).some(
-        (r) => this.db.tasks.getById(r.taskId)?.parentTaskId === templateTaskId
+        (r) =>
+          r.taskId === templateTaskId ||
+          this.db.tasks.getById(r.taskId)?.parentTaskId === templateTaskId
       );
     if (alreadyRunning) throw new Error("A derived task from this template is already running");
 
@@ -333,6 +335,8 @@ export class Orchestrator {
       parentTaskId: template.id,
     } as any);
     this.hub.broadcastAll({ type: "task_updated", task: derived });
+    // launch() reserves a slot in activeRuns synchronously before any await,
+    // preventing concurrent triggers from double-launching the same template.
     return this.launch(derived);
   }
 

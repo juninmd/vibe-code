@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { config } from "dotenv";
@@ -174,7 +174,9 @@ const server = Bun.serve({
       if (!client) return;
       try {
         const msg = JSON.parse(message as string);
-        if (msg.type === "subscribe" && msg.taskId) {
+        if (msg.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+        } else if (msg.type === "subscribe" && msg.taskId) {
           hub.subscribe(client, msg.taskId);
         } else if (msg.type === "unsubscribe" && msg.taskId) {
           hub.unsubscribe(client, msg.taskId);

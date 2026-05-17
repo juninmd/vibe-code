@@ -359,6 +359,7 @@ export function initDatabase(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_tasks_repo_status ON tasks(repo_id, status);
     CREATE INDEX IF NOT EXISTS idx_agent_logs_run_timestamp ON agent_logs(run_id, timestamp);
     CREATE INDEX IF NOT EXISTS idx_agent_runs_task_status ON agent_runs(task_id, status);
+    CREATE INDEX IF NOT EXISTS idx_task_schedules_next_run ON task_schedules(enabled, next_run_at);
   `);
 
   // Seed built-in prompt templates (INSERT OR IGNORE keeps them stable across restarts)
