@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv } from "vitest/config";
+import { loadEnv } from "vite";
+import { defineConfig } from "vitest/config";
 
 function isExpectedNetworkError(err: unknown): boolean {
   const code = (err as { code?: string } | undefined)?.code;

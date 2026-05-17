@@ -212,6 +212,7 @@ export const api = {
         body: JSON.stringify(data ?? {}),
       }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
+    unblock: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/unblock`, { method: "POST" }),
     retry: (id: string, data?: LaunchTaskRequest) =>
       request<AgentRun>(`/tasks/${id}/retry`, {
         method: "POST",

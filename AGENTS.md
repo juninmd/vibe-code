@@ -58,6 +58,47 @@ Este arquivo é um índice curto. O contrato operacional do repositório está d
 - O campo `maxAgents` foi adicionado a `SettingsResponse` e `UpdateSettingsRequest` em `packages/shared/src/types.ts` — ao adicionar campos na API, atualizar sempre os tipos compartilhados.
 - **Limite seguro: máximo 10 agentes simultâneos** — acima disso o Windows começa a se engasgar com RAM/CPU dado que cada opencode process consome memória significativa.
 
+### BUG CRÍTICO: concorrência não respeitada após reinício (CORRIGIDO)
+
+- **Causa raiz**: `Orchestrator.activeRuns` é in-memory. Após reinício do servidor, `activeRuns.size = 0` mesmo que o DB tenha 40 tasks com `status='in_progress'`. O guard `activeRuns.size >= maxConcurrent` era sempre falso no startup — o sweepBacklog lançava TODOS os agentes de uma vez, ignorando o limite.
+- **Fix**: `activeCount` agora usa `Math.max(activeRuns.size, db.tasks.list(undefined, "in_progress").length)` — conta tasks no DB que ainda não estão em memória.
+- **Fix 2**: `setMaxConcurrent()` tinha cap hardcoded em 10 — aumentado para 50 para permitir configurar via UI.
+- **Fix 3**: `recoverInProgressTasks()` é chamado no startup (index.ts) — move TODOS os in_progress para `blocked`, depois promove os top-N (por prioridade) de volta ao `backlog` para o sweepBacklog pegar gradualmente.
+- **Regra**: nunca usar `activeRuns.size` diretamente para guardar concorrência — sempre usar `activeCount`.
+
+### Status "blocked" (concorrência excedida)
+
+- `"blocked"` foi adicionado ao `TaskStatus` em `packages/shared/src/types.ts` — sem isso os guards do TypeScript recusam o valor em assignments.
+- Tasks bloqueadas aparecem em coluna laranja no Board com badge `🔒 Blocked` e botão `Resume`.
+- `POST /api/tasks/:id/unblock` → `orchestrator.unblockTask()` → move para backlog e dispara `sweepBacklog()`.
+- O cliente web tem `api.tasks.unblock(id)` e `useTasks.unblockTask()`.
+- Testes: `packages/server/src/agents/orchestrator/recover-blocked.test.ts` — 5 smoke tests, todos passam.
+
+### Gemini CLI — sessão e integração
+
+- O engine `gemini.ts` usa `parseAcpMessage` do `acp-parser.ts` — suporte a `session/started` e `session/resumed` já está implementado no parser, então a session_id é salva automaticamente se o gemini CLI emitir essas mensagens JSON-RPC.
+- O gemini suporta `resumeSessionId` via flag `-r <id>` no CLI.
+- Para homologar sessão gemini: verificar nos logs se aparece `[session] <id>` após iniciar uma task — significa que o parser capturou o session ID.
+
+### Restore de sessão — enviar "continue" após resume (TODOS OS ENGINES)
+
+- Quando um processo é encerrado e a sessão é retomada (`resumeSessionId` presente), o CLI já tem todo o contexto salvo internamente.
+- **Problema**: enviar o prompt completo novamente ao retomar confunde o CLI (contexto duplicado, comportamento imprevisível).
+- **Fix** (`executor.ts`): `effectivePrompt = activeSessionId ? "continue" : promptWithContext`
+  - Se há `activeSessionId` (resume mode), envia apenas `"continue"` como stdin para o CLI retomar de onde parou.
+  - Aplica-se a **todos os engines** (opencode, gemini, claude-code, codex, copilot) pois o executor é o ponto único de chamada.
+- Log visível nos eventos da task: `[resume] Sending "continue" to session <id> (engineName)`
+- Os sub-prompts de repair/improvement/autofix (linhas 889+) **não** são afetados — são novos prompts dentro da mesma execução, não retomadas de sessão anterior.
+
+### Fluxo de reinício seguro (ATUALIZADO)
+
+1. Matar todos os processos: `Get-Process | Where-Object { $_.Name -match 'bun|opencode|gemini' } | Stop-Process -Force`
+2. **NÃO é mais necessário resetar o DB manualmente** — `recoverInProgressTasks()` bloqueia os órfãos no startup automaticamente.
+3. Iniciar server: `bun run dev:server`
+4. O startup chama `recoverInProgressTasks()`: move todos `in_progress` para `blocked`, promove top-N para `backlog`
+5. `sweepBacklog()` lança até `maxConcurrent` agentes (default 10 no DB)
+6. Tasks restantes ficam `blocked` e aparecem visualmente no Board com badge laranja
+
 ### Banco de dados (SQLite)
 
 - O DB de produção está em `~/.vibe-code/vibe.db` (não `vibe-code.db`). O caminho é construído em `packages/server/src/index.ts` como `join(DATA_DIR, "vibe.db")`.
@@ -89,10 +130,9 @@ Este arquivo é um índice curto. O contrato operacional do repositório está d
 - Quando o server é reiniciado, todos os processos opencode em flight morrem com exit 143 (SIGTERM). Os runs ficam presos como `running` no DB. Sempre resetar o DB antes de reiniciar.
 - `opencode run --session <id>` teóricamente permite resumir sessões interrompidas, mas ainda **não foi homologado** — o engine atual não implementa retomada automática por sessionId.
 
-### Fluxo de reinício seguro (checklist)
+### Fluxo de reinício seguro (checklist legado — ver seção atualizada abaixo)
 
 1. Matar todos os processos: `Get-Process | Where-Object { $_.Name -match 'bun|opencode' } | Stop-Process -Force`
-2. Resetar DB órfão (queries acima)
-3. Iniciar server: `Start-Process bun -ArgumentList 'run dev:server' -WorkingDirectory ... -WindowStyle Hidden -PassThru`
-4. Aguardar `/api/health` retornar `{"ok":true}`
-5. O schedule runner sweeps o backlog automaticamente a cada minuto
+2. O reset manual do DB não é mais necessário — `recoverInProgressTasks()` trata isso no startup
+3. Iniciar server: `bun run dev:server`
+4. O startup bloqueia automaticamente todos os `in_progress` e promove top-10 para backlog

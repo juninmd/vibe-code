@@ -21,6 +21,7 @@ interface RepoCardProps {
 
 const STATUS_ORDER: TaskStatus[] = [
   "in_progress",
+  "blocked",
   "review",
   "backlog",
   "scheduled",
@@ -30,6 +31,7 @@ const STATUS_ORDER: TaskStatus[] = [
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   in_progress: "var(--info)",
+  blocked: "#f97316",
   review: "#a855f7",
   backlog: "#71717a",
   scheduled: "var(--warning)",
@@ -40,6 +42,7 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   in_progress: "Em progresso",
+  blocked: "Bloqueadas",
   review: "Em review",
   backlog: "Backlog",
   scheduled: "Agendadas",

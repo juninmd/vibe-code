@@ -792,7 +792,13 @@ export async function executeAgent(
     }
 
     setRunPhase("generating");
-    for await (const event of engine.execute(promptWithContext, wtPath, {
+    // When resuming a session, the CLI already has the full context stored.
+    // Sending the full prompt again would confuse it — just say "continue".
+    const effectivePrompt = activeSessionId ? "continue" : promptWithContext;
+    if (activeSessionId) {
+      sysLog(`[resume] Sending "continue" to session ${activeSessionId} (${engine.name})`);
+    }
+    for await (const event of engine.execute(effectivePrompt, wtPath, {
       runId: run.id,
       signal: abort.signal,
       model,

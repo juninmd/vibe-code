@@ -94,17 +94,48 @@ export class ConflictResolver {
     const description = `
 This is an automatic conflict resolution task for PR: ${parentTask.prUrl}
 
-The branch \`${branch}\` has merge conflicts with \`${baseBranch}\`. Your job:
+Branch \`${branch}\` has merge conflicts with \`${baseBranch}\`. Follow these steps EXACTLY:
 
-1. Run: git fetch origin && git rebase origin/${baseBranch}
-2. Resolve ALL merge conflicts in any conflicting files
-3. Stage resolved files: git add .
-4. Continue rebase: git rebase --continue (or git commit if not rebasing)
-5. Force-push the branch: git push --force-with-lease origin ${branch}
+STEP 1 — Fetch and start rebase:
+\`\`\`
+git fetch origin
+git rebase origin/${baseBranch}
+\`\`\`
 
-The PR will then be automatically updated. Do NOT create a new PR.
-Focus only on resolving conflicts — do not add new features.
-After pushing successfully, confirm the push succeeded.
+STEP 2 — Check which files have conflicts:
+\`\`\`
+git diff --name-only --diff-filter=U
+\`\`\`
+
+STEP 3 — For each conflicting file: open it, remove ALL conflict markers (<<<<<<<, =======, >>>>>>>), keep the correct merged content.
+
+STEP 4 — Stage ALL resolved files (REQUIRED before continuing):
+\`\`\`
+git add -A
+\`\`\`
+
+STEP 5 — Verify NO unmerged files remain before continuing:
+\`\`\`
+git diff --name-only --diff-filter=U
+\`\`\`
+If this command shows any files, go back to STEP 3 for those files.
+
+STEP 6 — Continue the rebase (DO NOT run git commit — use rebase --continue):
+\`\`\`
+GIT_EDITOR=true git rebase --continue
+\`\`\`
+
+STEP 7 — Force-push:
+\`\`\`
+git push --force-with-lease origin ${branch}
+\`\`\`
+
+CRITICAL RULES:
+- NEVER run \`git commit\` during a rebase — always use \`git rebase --continue\`
+- If rebase was not started (branch was already up to date), just push: \`git push origin ${branch}\`
+- If \`git rebase --continue\` asks for a commit message, use: \`GIT_EDITOR=true git rebase --continue\` to accept the default
+- Do NOT create a new PR — the existing PR (${parentTask.prUrl}) updates automatically on push
+- Do NOT add new features — only resolve conflicts
 `.trim();
 
     const conflictTask = this.db.tasks.create({
