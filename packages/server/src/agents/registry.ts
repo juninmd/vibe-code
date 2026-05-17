@@ -117,4 +117,16 @@ export class EngineRegistry {
     if (!engine) return [];
     return engine.listModels();
   }
+
+  /** Returns the first free model available for an engine (models ending in "-free" or containing "free"). */
+  async getDefaultFreeModel(engineName: string): Promise<string | null> {
+    const engine = this.engines.get(engineName);
+    if (!engine) return null;
+    try {
+      const models = await engine.listModels();
+      return models.find((m) => m.toLowerCase().includes("free")) ?? null;
+    } catch {
+      return null;
+    }
+  }
 }

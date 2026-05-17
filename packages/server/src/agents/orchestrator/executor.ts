@@ -368,7 +368,8 @@ export async function executeAgent(
   onFinish: () => void,
   model?: string,
   skillsLoader?: SkillsLoader,
-  orchestrator?: import("../orchestrator").Orchestrator
+  orchestrator?: import("../orchestrator").Orchestrator,
+  registry?: import("../registry").EngineRegistry
 ): Promise<void> {
   const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
   const slugTitle = task.title
@@ -384,7 +385,12 @@ export async function executeAgent(
   let stalledDueToInactivity = false;
   let lastActivity = Date.now();
 
-  const effectiveModel = model ?? "opencode/minimax-m2.5-free";
+  // Auto-detect a free model when none is explicitly set
+  let effectiveModel = model;
+  if (!effectiveModel && registry) {
+    effectiveModel = (await registry.getDefaultFreeModel(engine.name)) ?? undefined;
+  }
+  effectiveModel = effectiveModel ?? "opencode/deepseek-v4-flash-free";
   logAgentStart(task.id, engine.name, effectiveModel, repo.name);
 
   const timeoutId = setTimeout(() => {

@@ -51,6 +51,11 @@ COPY --from=builder --chown=vibe:vibe /app/package.json /app/bun.lock /app/tscon
 # Pre-built web assets served by the server in production
 COPY --from=builder --chown=vibe:vibe /app/packages/web/dist ./packages/web/dist
 
+# OpenCode default config — use free models, no external API key required
+RUN mkdir -p /home/vibe/.config/opencode \
+ && echo '{"model":"opencode/deepseek-v4-flash-free","autoshare":false,"autoapprove":true,"providers":[]}' \
+      > /home/vibe/.config/opencode/config.json
+
 # Mount points expected by the operator
 RUN mkdir -p /data /home/vibe/.agents \
  && chown -R vibe:vibe /data /home/vibe
