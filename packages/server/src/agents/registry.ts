@@ -51,25 +51,26 @@ export class EngineRegistry {
   async listEngines(activeRuns?: Map<string, string>): Promise<EngineInfo[]> {
     const results = await Promise.all(
       Array.from(this.engines.values()).map(async (engine) => {
-        const timeout = <T>(p: Promise<T>, fallback: T, ms = 15000): Promise<T> =>
+        const withTimeout = <T>(p: Promise<T>, fallback: T, ms = 15000): Promise<T> =>
           Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
-        const available = await timeout(
-          engine.isAvailable().catch(() => false),
-          false
-        );
-        const setupIssue = engine.getSetupIssue
-          ? await timeout(
-              engine.getSetupIssue().catch(() => null),
-              null
-            )
-          : null;
-        let version: string | null = null;
-        if (engine.getVersion) {
-          version = await Promise.race<string | null>([
-            engine.getVersion().catch(() => null),
-            new Promise<null>((res) => setTimeout(() => res(null), 15000)),
-          ]);
-        }
+        const [available, setupIssue, version] = await Promise.all([
+          withTimeout(
+            engine.isAvailable().catch(() => false),
+            false
+          ),
+          engine.getSetupIssue
+            ? withTimeout(
+                engine.getSetupIssue().catch(() => null),
+                null
+              )
+            : Promise.resolve(null),
+          engine.getVersion
+            ? withTimeout(
+                engine.getVersion().catch(() => null),
+                null
+              )
+            : Promise.resolve(null),
+        ]);
         let runCount = 0;
         if (activeRuns) {
           for (const eng of activeRuns.values()) {
