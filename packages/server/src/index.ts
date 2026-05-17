@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { config } from "dotenv";
@@ -74,8 +74,49 @@ app.route("/api/auth", authRouter);
 // all other /api/* routes require authentication
 app.use("/api/*", authMiddleware(db));
 
-// redirect root to frontend
-app.get("/", (c) => c.redirect("http://localhost:5173"));
+// Serve web/dist in production; redirect to Vite dev server in development
+const WEB_DIST = resolve(import.meta.dir, "../../web/dist");
+const isProduction = process.env.NODE_ENV === "production";
+
+async function serveStatic(c: import("hono").Context, filePath: string): Promise<Response> {
+  try {
+    const content = await readFile(filePath);
+    const ext = filePath.split(".").pop() ?? "";
+    const mime: Record<string, string> = {
+      html: "text/html; charset=utf-8",
+      js: "application/javascript",
+      css: "text/css",
+      svg: "image/svg+xml",
+      png: "image/png",
+      ico: "image/x-icon",
+      json: "application/json",
+      woff2: "font/woff2",
+      woff: "font/woff",
+    };
+    return new Response(content, {
+      headers: { "Content-Type": mime[ext] ?? "application/octet-stream" },
+    });
+  } catch {
+    // file not found — fall through to index.html (SPA routing)
+    const index = await readFile(join(WEB_DIST, "index.html"));
+    return new Response(index, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+}
+
+if (isProduction) {
+  // Serve static assets
+  app.get("/assets/*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
+  app.get("/favicon.*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
+  // SPA catch-all: serve index.html for all non-API routes
+  app.get("*", async (c) => {
+    // skip if this was already handled by /api or /ws
+    if (c.req.path.startsWith("/api") || c.req.path.startsWith("/ws")) return c.notFound();
+    return serveStatic(c, join(WEB_DIST, "index.html"));
+  });
+} else {
+  const devFrontend = process.env.VITE_DEV_URL || "http://localhost:5173";
+  app.get("/", (c) => c.redirect(devFrontend));
+}
 
 const api = new Hono();
 api.route("/repos", createReposRouter(db, git, hub));

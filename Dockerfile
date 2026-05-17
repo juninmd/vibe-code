@@ -48,6 +48,8 @@ COPY --from=builder --chown=vibe:vibe /app/node_modules ./node_modules
 COPY --from=builder --chown=vibe:vibe /app/packages ./packages
 COPY --from=builder --chown=vibe:vibe /app/migrations ./migrations
 COPY --from=builder --chown=vibe:vibe /app/package.json /app/bun.lock /app/tsconfig.json ./
+# Pre-built web assets served by the server in production
+COPY --from=builder --chown=vibe:vibe /app/packages/web/dist ./packages/web/dist
 
 # Mount points expected by the operator
 RUN mkdir -p /data /home/vibe/.agents \
