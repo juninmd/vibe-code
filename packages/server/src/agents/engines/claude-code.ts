@@ -9,6 +9,7 @@ import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 export class ClaudeCodeEngine implements AgentEngine {
   name = "claude-code";
   displayName = "Claude Code";
+  binaryName = "claude";
   private processes = new Map<string, Subprocess>();
 
   async isAvailable(): Promise<boolean> {

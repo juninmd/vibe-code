@@ -143,6 +143,7 @@ export const DEFAULT_OPENCODE_MODEL = "anthropic/claude-sonnet-4-5";
 
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
+  binaryName = "opencode";
   displayName = "OpenCode";
   private processes = new Map<string, Subprocess>();
 
