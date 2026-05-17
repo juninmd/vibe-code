@@ -103,21 +103,6 @@ async function serveStatic(c: import("hono").Context, filePath: string): Promise
   }
 }
 
-if (isProduction) {
-  // Serve static assets
-  app.get("/assets/*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
-  app.get("/favicon.*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
-  // SPA catch-all: serve index.html for all non-API routes
-  app.get("*", async (c) => {
-    // skip if this was already handled by /api or /ws
-    if (c.req.path.startsWith("/api") || c.req.path.startsWith("/ws")) return c.notFound();
-    return serveStatic(c, join(WEB_DIST, "index.html"));
-  });
-} else {
-  const devFrontend = process.env.VITE_DEV_URL || "http://localhost:5173";
-  app.get("/", (c) => c.redirect(devFrontend));
-}
-
 const api = new Hono();
 api.route("/repos", createReposRouter(db, git, hub));
 api.route("/tasks", createTasksRouter(db, orchestrator, git));
@@ -157,6 +142,17 @@ api.get("/health", (c) => c.json({ ok: true, version: process.env.npm_package_ve
 app.route("/api", api);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+if (isProduction) {
+  // Serve static assets
+  app.get("/assets/*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
+  app.get("/favicon.*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
+  // SPA catch-all: must be registered AFTER all API routes
+  app.get("*", (c) => serveStatic(c, join(WEB_DIST, "index.html")));
+} else {
+  const devFrontend = process.env.VITE_DEV_URL || "http://localhost:5173";
+  app.get("/", (c) => c.redirect(devFrontend));
+}
 
 const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 
