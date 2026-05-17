@@ -66,6 +66,13 @@ export interface AgentEngine {
   /** Human-readable label */
   displayName: string;
 
+  /**
+   * Primary binary name used by the engine (e.g. "claude", "opencode").
+   * When provided, the registry uses Bun.which() for fast availability checks
+   * instead of spawning the process, avoiding CPU exhaustion in constrained envs.
+   */
+  binaryName?: string;
+
   /** Check if the CLI tool is installed and accessible */
   isAvailable(): Promise<boolean>;
 
