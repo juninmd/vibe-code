@@ -436,7 +436,7 @@ describe("Orchestrator — launch guards", () => {
       getFirstAvailable: async () => undefined,
       listEngines: async () => [],
       register: () => {},
-    getDefaultFreeModel: async () => null,
+      getDefaultFreeModel: async () => null,
     } as unknown as EngineRegistry;
 
     const orch = new Orchestrator(db, makeGit(), emptyRegistry, makeHub());

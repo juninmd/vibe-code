@@ -6,7 +6,7 @@
  * 2. unblockTask() moves a blocked task back to backlog and triggers sweepBacklog
  * 3. Session IDs are preserved so the relaunched agent can resume its session
  */
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
 // ─── Minimal mock types ───────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ describe("recoverInProgressTasks", () => {
     ];
 
     const updatedStatuses: Record<string, string> = {};
-    const launchedTaskIds: string[] = [];
+    const _launchedTaskIds: string[] = [];
     const broadcastedEvents: unknown[] = [];
 
     const mockDb = {
@@ -99,9 +99,9 @@ describe("recoverInProgressTasks", () => {
     await orch.recoverInProgressTasks();
 
     // t3 (low priority) must remain blocked; t1 and t2 should be backlog
-    expect(updatedStatuses["t3"]).toBe("blocked");
-    expect(updatedStatuses["t1"]).toBe("backlog");
-    expect(updatedStatuses["t2"]).toBe("backlog");
+    expect(updatedStatuses.t3).toBe("blocked");
+    expect(updatedStatuses.t1).toBe("backlog");
+    expect(updatedStatuses.t2).toBe("backlog");
 
     // At least one blocked broadcast must exist
     const blockedBroadcasts = broadcastedEvents.filter(

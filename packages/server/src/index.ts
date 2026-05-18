@@ -93,7 +93,7 @@ app.use("/api/*", authMiddleware(db));
 const WEB_DIST = resolve(import.meta.dir, "../../web/dist");
 const isProduction = process.env.NODE_ENV === "production";
 
-async function serveStatic(c: import("hono").Context, filePath: string): Promise<Response> {
+async function serveStatic(_c: import("hono").Context, filePath: string): Promise<Response> {
   try {
     const content = await readFile(filePath);
     const ext = filePath.split(".").pop() ?? "";
