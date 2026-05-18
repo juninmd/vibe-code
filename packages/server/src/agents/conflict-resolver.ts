@@ -130,17 +130,19 @@ STEP 6 — Continue the rebase (DO NOT run git commit — use rebase --continue)
 GIT_EDITOR=true git rebase --continue
 \`\`\`
 
-STEP 7 — Force-push:
+STEP 7 — Verify the rebase completed successfully:
 \`\`\`
-git push --force-with-lease origin ${branch}
+git log --oneline -5
+git status
 \`\`\`
 
 CRITICAL RULES:
 - NEVER run \`git commit\` during a rebase — always use \`git rebase --continue\`
-- If rebase was not started (branch was already up to date), just push: \`git push origin ${branch}\`
+- NEVER run \`git push\` — do NOT push anything, the team will review and push manually
 - If \`git rebase --continue\` asks for a commit message, use: \`GIT_EDITOR=true git rebase --continue\` to accept the default
-- Do NOT create a new PR — the existing PR (${parentTask.prUrl}) updates automatically on push
+- Do NOT create a new PR — the existing PR is ${parentTask.prUrl}
 - Do NOT add new features — only resolve conflicts
+- After the rebase is complete locally, your task is DONE — report what was resolved and stop
 `.trim();
 
     const conflictTask = this.db.tasks.create({
