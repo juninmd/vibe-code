@@ -359,9 +359,23 @@ export class OpenCodeEngine implements AgentEngine {
       };
     }
 
-    if (options.runId) this.processes.set(options.runId, proc);
+    if (options.runId) {
+      // Kill any stale process for this runId before registering the new one
+      const stale = this.processes.get(options.runId);
+      if (stale) {
+        try {
+          stale.kill();
+        } catch {
+          /* best effort */
+        }
+      }
+      this.processes.set(options.runId, proc);
+    }
     if (options.signal) {
-      options.signal.addEventListener("abort", () => proc.kill());
+      options.signal.addEventListener("abort", () => {
+        proc.kill();
+        if (options.runId) this.processes.delete(options.runId);
+      });
     }
 
     // ─── Shared event queue ────────────────────────────────────────────────

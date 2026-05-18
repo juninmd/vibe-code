@@ -120,7 +120,17 @@ export class CopilotEngine implements AgentEngine {
       env: this.buildChildEnv(options.nativeApiKeys?.openai),
     });
 
-    if (options.runId) this.processes.set(options.runId, proc);
+    if (options.runId) {
+      const stale = this.processes.get(options.runId);
+      if (stale) {
+        try {
+          stale.kill();
+        } catch {
+          /* best effort */
+        }
+      }
+      this.processes.set(options.runId, proc);
+    }
 
     yield* withHeartbeat(
       streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
