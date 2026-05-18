@@ -64,7 +64,11 @@ export function TerminalSessionPanel({
         ref={outputRef}
         className="flex-1 min-h-0 overflow-y-auto p-3 font-mono text-[11px] bg-black text-green-300 whitespace-pre-wrap break-words"
       >
-        {mergedOutput || "Terminal aguardando sessao..."}
+        {mergedOutput || (
+          <span className="text-green-700 text-[10px]">
+            Terminal inativo. O agente abrirá uma sessão interativa quando necessário.
+          </span>
+        )}
       </div>
 
       <form

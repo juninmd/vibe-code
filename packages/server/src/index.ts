@@ -53,6 +53,21 @@ const skillRegistry = new SkillRegistryService();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
 scheduleRunner.start();
+
+// Mark orphaned runs (stuck in 'running' after pod restart) as cancelled
+try {
+  const orphanedRunsResult = db.raw
+    .query(
+      "UPDATE agent_runs SET status = 'cancelled', finished_at = datetime('now'), error_message = 'Process interrupted by server restart' WHERE status = 'running'"
+    )
+    .run() as { changes: number };
+  if (orphanedRunsResult.changes > 0) {
+    console.log(`[startup] Marked ${orphanedRunsResult.changes} orphaned runs as cancelled`);
+  }
+} catch (err) {
+  console.warn("[startup] Failed to cleanup orphaned runs:", err);
+}
+
 orchestrator.recoverInProgressTasks().catch((err) => {
   console.warn("[startup] recoverInProgressTasks failed:", err);
 });
