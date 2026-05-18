@@ -1080,6 +1080,20 @@ export function createFindingsQueries(db: Database) {
       content: string;
       filePath?: string;
     }): ReviewFinding => {
+      // Skip duplicate findings (same content for same repo within 30 days)
+      const existing = db
+        .prepare<{ id: string }, [string, string]>(
+          "SELECT id FROM review_findings WHERE repo_id = ? AND content = ? AND resolved = 0 AND created_at >= datetime('now', '-30 days') LIMIT 1"
+        )
+        .get(params.repoId, params.content);
+      if (existing) {
+        return mapFinding(
+          db
+            .prepare<FindingRow, [string]>("SELECT * FROM review_findings WHERE id = ?")
+            .get(existing.id)!
+        );
+      }
+
       const row = db
         .prepare<FindingRow, [string, string, string, string, string, string, string | null]>(
           "INSERT INTO review_findings (run_id, task_id, repo_id, persona, severity, content, file_path) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *"
@@ -1102,6 +1116,7 @@ export function createFindingsQueries(db: Database) {
           `SELECT * FROM review_findings
            WHERE repo_id = ? AND resolved = 0
              AND created_at >= datetime('now', '-30 days')
+           GROUP BY content
            ORDER BY created_at DESC LIMIT ?`
         )
         .all(repoId, limit);
