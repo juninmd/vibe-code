@@ -88,7 +88,7 @@ describe("recoverInProgressTasks", () => {
 
     const mockRegistry = {
       get: mock().mockReturnValue(null),
-      getFirstAvailable: mock().mockRejectedValue(new Error("no engine")),
+      getFirstAvailable: mock().mockImplementation(() => Promise.reject(new Error("no engine"))),
     };
 
     // Orchestrator with maxConcurrent=2: all 3 orphans are parked as blocked,
@@ -139,7 +139,7 @@ describe("unblockTask", () => {
 
     const mockRegistry = {
       get: mock().mockReturnValue(null),
-      getFirstAvailable: mock().mockRejectedValue(new Error("no engine")),
+      getFirstAvailable: mock().mockImplementation(() => Promise.reject(new Error("no engine"))),
     };
 
     const { Orchestrator } = await import("../orchestrator");
@@ -176,7 +176,7 @@ describe("unblockTask", () => {
     const mockHub = { broadcastAll: mock(), broadcastToTask: mock() };
     const mockRegistry = {
       get: mock().mockReturnValue(null),
-      getFirstAvailable: mock().mockRejectedValue(new Error("no engine")),
+      getFirstAvailable: mock().mockImplementation(() => Promise.reject(new Error("no engine"))),
     };
 
     const { Orchestrator } = await import("../orchestrator");
