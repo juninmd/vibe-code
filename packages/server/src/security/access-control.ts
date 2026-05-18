@@ -1,6 +1,6 @@
 import type { AgentRun, TaskWithRun } from "@vibe-code/shared";
 import type { Context } from "hono";
-import { getCurrentUser } from "../auth";
+import { checkApiKey, getCurrentUser } from "../auth";
 import type { Db } from "../db";
 import { requireWorkspaceContext } from "../utils/workspace-context";
 
@@ -77,8 +77,8 @@ export async function resolveAccessContext(c: Context, db: Db): Promise<ResolveA
     };
   }
 
-  // API key auth: already validated by authMiddleware, grant global access without workspace isolation
-  if (process.env.VIBE_CODE_API_KEY && !process.env.GITHUB_OAUTH_CLIENT_ID) {
+  // API key auth: grant global access when a valid API key is presented
+  if (checkApiKey(c)) {
     return {
       ok: true,
       context: { authEnabled: false, userId: null, workspaceId: null },

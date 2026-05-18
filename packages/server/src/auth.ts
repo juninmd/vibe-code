@@ -36,7 +36,7 @@ function isAuthEnabled(): boolean {
   );
 }
 
-function checkApiKey(c: Context): boolean {
+export function checkApiKey(c: Context): boolean {
   const key = process.env.VIBE_CODE_API_KEY;
   if (!key) return false;
   const header = c.req.header("authorization") ?? "";
