@@ -609,6 +609,20 @@ export function TaskDetail({
     });
   }, [activeTab, task.id]);
 
+  useEffect(() => {
+    if (activeTab !== "reviews") return;
+    setReviewsLoading(true);
+    api.reviews
+      .listRounds(task.id)
+      .then(({ rounds }) => {
+        setReviewRounds(rounds || []);
+        return api.reviews.listIssues(task.id);
+      })
+      .then(({ issues }) => setReviewIssues(issues || []))
+      .catch(() => {})
+      .finally(() => setReviewsLoading(false));
+  }, [activeTab, task.id]);
+
   const skillCategoryLabel: Record<string, string> = {
     rule: "Rule",
     skill: "Skill",
