@@ -31,7 +31,9 @@ describe("Orchestrator coverage", () => {
     const launched: string[] = [];
     const mockDb = {
       tasks: {
-        list: mock().mockImplementation((_repoId: unknown, status: string) => status === "in_progress" ? [] : tasks),
+        list: mock().mockImplementation((_repoId: unknown, status: string) =>
+          status === "in_progress" ? [] : tasks
+        ),
         getById: mock().mockImplementation((id: string) => tasks.find((t) => t.id === id)),
         update: mock(),
       },
@@ -63,8 +65,13 @@ describe("Orchestrator coverage", () => {
 
     // We override launch to just record the launched tasks instead of running full executeAgent
     orch.launch = mock().mockImplementation(async (task) => {
-        launched.push(task.id);
-        orch["activeRuns"].set(task.id, { runId: "r", taskId: task.id, engineName: "e", abort: new AbortController() });
+      launched.push(task.id);
+      orch.activeRuns.set(task.id, {
+        runId: "r",
+        taskId: task.id,
+        engineName: "e",
+        abort: new AbortController(),
+      });
     });
 
     await orch.sweepBacklog();
@@ -79,7 +86,12 @@ describe("Orchestrator coverage", () => {
     const orch = new Orchestrator({} as any, {} as any, {} as any, {} as any, 2);
 
     // Populate retry queue
-    orch["retryQueue"].set("t1", { attempt: 2, dueAt: Date.now() + 5000, reason: "failed", timer: setTimeout(() => {}, 5000) });
+    orch.retryQueue.set("t1", {
+      attempt: 2,
+      dueAt: Date.now() + 5000,
+      reason: "failed",
+      timer: setTimeout(() => {}, 5000),
+    });
 
     const snapshot = orch.getRetryQueueSnapshot();
     expect(snapshot).toHaveLength(1);
@@ -89,7 +101,7 @@ describe("Orchestrator coverage", () => {
     expect(snapshot[0].reason).toBe("failed");
 
     // Cleanup timer
-    orch["cancelRetry"]("t1");
+    orch.cancelRetry("t1");
   });
 
   test("recoverInProgressTasks correctly parks tasks according to limits", async () => {
@@ -104,7 +116,9 @@ describe("Orchestrator coverage", () => {
     const updatedStatuses: Record<string, string> = {};
     const mockDb = {
       tasks: {
-        list: mock().mockImplementation((_repoId: unknown, status: string) => status === "in_progress" ? tasks : []),
+        list: mock().mockImplementation((_repoId: unknown, status: string) =>
+          status === "in_progress" ? tasks : []
+        ),
         update: mock().mockImplementation((id: string, data: { status: string }) => {
           updatedStatuses[id] = data.status;
         }),
@@ -123,10 +137,10 @@ describe("Orchestrator coverage", () => {
 
     // Priority order: urgent (t4), high (t3), medium (t5), low (t2), none (t1)
     // First 2 should be 'backlog', rest 'blocked'
-    expect(updatedStatuses["t4"]).toBe("backlog");
-    expect(updatedStatuses["t3"]).toBe("backlog");
-    expect(updatedStatuses["t5"]).toBe("blocked");
-    expect(updatedStatuses["t2"]).toBe("blocked");
-    expect(updatedStatuses["t1"]).toBe("blocked");
+    expect(updatedStatuses.t4).toBe("backlog");
+    expect(updatedStatuses.t3).toBe("backlog");
+    expect(updatedStatuses.t5).toBe("blocked");
+    expect(updatedStatuses.t2).toBe("blocked");
+    expect(updatedStatuses.t1).toBe("blocked");
   });
 });
