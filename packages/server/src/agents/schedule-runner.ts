@@ -59,7 +59,13 @@ export class ScheduleRunner {
     }
 
     // 2. Continuous Autonomy / Heartbeat: Sweep backlog for work stealing
-    await this.orchestrator.sweepBacklog();
+    // Disable via VIBE_CODE_AUTO_SWEEP=false env var or autoSweep=false in settings.
+    const autoSweepEnabled =
+      process.env.VIBE_CODE_AUTO_SWEEP !== "false" &&
+      this.db.settings.get("auto_sweep") !== "false";
+    if (autoSweepEnabled) {
+      await this.orchestrator.sweepBacklog();
+    }
 
     // 3. Check for conflicting PRs and auto-create resolution tasks
     try {

@@ -23,6 +23,7 @@ const updateSettingsSchema = z.object({
   skillsPath: z.string().optional(),
   theme: z.string().optional(),
   maxAgents: z.number().int().min(1).max(50).optional(),
+  autoSweep: z.boolean().optional(),
   telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
   telegramEnabled: z.boolean().optional(),
@@ -80,6 +81,8 @@ export function createSettingsRouter(
         skillsPath,
         theme,
         maxAgents,
+        autoSweep:
+          db.settings.get("auto_sweep") !== "false" && process.env.VIBE_CODE_AUTO_SWEEP !== "false",
         telegram: {
           botToken: maskToken(telegramBotToken),
           botTokenSet: !!telegramBotToken,
@@ -165,6 +168,9 @@ export function createSettingsRouter(
       const clamped = Math.max(1, Math.min(50, parsed.data.maxAgents));
       db.settings.set("max_agents", String(clamped));
       orchestrator?.setMaxConcurrent(clamped);
+    }
+    if (parsed.data.autoSweep !== undefined) {
+      db.settings.set("auto_sweep", parsed.data.autoSweep ? "true" : "false");
     }
     if (parsed.data.telegramBotToken !== undefined) {
       db.settings.set("telegram_bot_token", parsed.data.telegramBotToken.trim());
