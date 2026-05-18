@@ -81,6 +81,7 @@ const auraStyle: Record<string, string> = {
   review: "radial-gradient(ellipse at top right, rgba(139, 92, 246, 0.15), transparent 50%)",
   done: "radial-gradient(ellipse at top right, rgba(16, 185, 129, 0.1), transparent 50%)",
   failed: "radial-gradient(ellipse at top right, rgba(239, 68, 68, 0.15), transparent 50%)",
+  conflict: "radial-gradient(ellipse at top right, rgba(244, 63, 94, 0.18), transparent 50%)",
 };
 
 const statusLabel: Record<string, string> = {
@@ -729,7 +730,10 @@ export function TaskDetail({
         className="relative w-[1100px] h-[90vh] flex flex-col rounded-xl border overflow-hidden shadow-2xl shadow-black/60"
         style={{
           background: "var(--bg-surface)",
-          backgroundImage: auraStyle[task.status] || auraStyle.default,
+          backgroundImage:
+            (task.tags?.includes("conflict-resolution") ? auraStyle.conflict : null) ||
+            auraStyle[task.status] ||
+            auraStyle.backlog,
           borderColor: "var(--glass-border)",
         }}
       >
@@ -747,7 +751,25 @@ export function TaskDetail({
                 </div>
               )}
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {task.tags?.includes("conflict-resolution") && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 shrink-0">
+                      <svg
+                        aria-hidden="true"
+                        width="10"
+                        height="10"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 3h4v4H3zM9 9h4v4H9zM7 5h2M7 11h2M11 7v2M5 7v2" />
+                      </svg>
+                      Merge Conflict
+                    </span>
+                  )}
                   <h2 className="text-xl font-bold leading-tight text-primary">{task.title}</h2>
                   {task.status === "failed" && task.latestRun?.errorMessage && (
                     <span className="text-[10px] text-danger/60 italic ml-2 truncate max-w-xs">

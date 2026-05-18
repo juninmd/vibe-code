@@ -136,13 +136,18 @@ git log --oneline -5
 git status
 \`\`\`
 
+STEP 8 — Push the rebased branch to update the PR (preserves history):
+\`\`\`
+git push --force-with-lease origin ${branch}
+\`\`\`
+
 CRITICAL RULES:
 - NEVER run \`git commit\` during a rebase — always use \`git rebase --continue\`
-- NEVER run \`git push\` — do NOT push anything, the team will review and push manually
+- NEVER use the \`--force\` flag with git push — it destroys remote history. Only \`--force-with-lease\` is allowed
 - If \`git rebase --continue\` asks for a commit message, use: \`GIT_EDITOR=true git rebase --continue\` to accept the default
 - Do NOT create a new PR — the existing PR is ${parentTask.prUrl}
 - Do NOT add new features — only resolve conflicts
-- After the rebase is complete locally, your task is DONE — report what was resolved and stop
+- After \`git push --force-with-lease\` succeeds, your task is DONE — report what was resolved and stop
 `.trim();
 
     const conflictTask = this.db.tasks.create({
@@ -200,7 +205,8 @@ CRITICAL RULES:
           `<b>Task:</b> ${task.title.slice(0, 80)}\n` +
           `<b>Repo:</b> ${repo?.name ?? task.repoId}\n` +
           `<b>Branch:</b> <code>${task.branchName ?? "?"}</code>\n` +
-          (task.prUrl ? `<b>PR:</b> <a href="${task.prUrl}">${task.prUrl}</a>` : "")
+          (task.prUrl ? `<b>PR:</b> <a href="${task.prUrl}">${task.prUrl}</a>\n` : "") +
+          `⬆️ Branch pushed with <code>--force-with-lease</code> (history preserved)`
       )
       .catch((e) => console.warn("[conflict-resolver] Telegram notify failed:", e));
   }

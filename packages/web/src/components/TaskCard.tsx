@@ -117,8 +117,17 @@ const statusColor: Record<string, { bg: string; border: string; glow: string }> 
   },
 };
 
+const conflictColor = {
+  bg: "from-rose-500/20 to-orange-500/15",
+  border: "border-rose-500/50",
+  glow: "shadow-[0_0_24px_-4px_rgba(244,63,94,0.4)]",
+};
+
 function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: TaskCardProps) {
-  const colors = statusColor[task.status] || statusColor.backlog;
+  const isConflictResolution = task.tags?.includes("conflict-resolution") ?? false;
+  const colors = isConflictResolution
+    ? conflictColor
+    : statusColor[task.status] || statusColor.backlog;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
@@ -190,7 +199,9 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
 
       {isRunning && (
         <div className="absolute inset-0 animate-[pulse_2s_ease-in-out_infinite]">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent -translate-x-full animate-[shimmer_2s_ease-in-out_infinite]" />
+          <div
+            className={`absolute inset-0 bg-gradient-to-r from-transparent ${isConflictResolution ? "via-rose-400/30" : "via-cyan-400/30"} to-transparent -translate-x-full animate-[shimmer_2s_ease-in-out_infinite]`}
+          />
         </div>
       )}
 
@@ -301,12 +312,41 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
         </div>
 
         <div
-          className={`p-2.5 flex items-center gap-2 ${isFailed ? "bg-danger/10" : isReview ? "bg-purple-500/10" : isBlocked ? "bg-orange-500/10" : "bg-white/[0.02]"}`}
+          className={`p-2.5 flex items-center gap-2 ${isConflictResolution ? "bg-rose-500/10" : isFailed ? "bg-danger/10" : isReview ? "bg-purple-500/10" : isBlocked ? "bg-orange-500/10" : "bg-white/[0.02]"}`}
         >
-          {hasPR && (
+          {isConflictResolution && (
+            <span className="inline-flex items-center gap-1 text-[8px] font-semibold px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-rose-300">
+              <svg
+                aria-hidden="true"
+                width="8"
+                height="8"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 3h4v4H3zM9 9h4v4H9zM7 5h2M7 11h2M11 7v2M5 7v2" />
+              </svg>
+              Merge Conflict
+            </span>
+          )}
+          {hasPR && !isConflictResolution && (
             <Badge variant="success" className="text-[8px] py-0.5 px-2 font-medium">
               PR
             </Badge>
+          )}
+          {hasPR && isConflictResolution && (
+            <a
+              href={task.prUrl ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[8px] font-medium px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 transition-colors"
+            >
+              PR
+            </a>
           )}
           {isFailed && (
             <Badge variant="danger" className="text-[8px] py-0.5 px-2 font-medium">
