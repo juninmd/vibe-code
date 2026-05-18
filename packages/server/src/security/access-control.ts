@@ -28,7 +28,8 @@ function isAuthEnabled(db: Db): boolean {
   if (status === "false") return false;
   const hasClientId = Boolean(process.env.GITHUB_OAUTH_CLIENT_ID);
   const hasClientSecret = Boolean(process.env.GITHUB_OAUTH_CLIENT_SECRET);
-  return hasClientId && hasClientSecret;
+  const hasApiKey = Boolean(process.env.VIBE_CODE_API_KEY);
+  return (hasClientId && hasClientSecret) || hasApiKey;
 }
 
 function isLegacyFallbackEnabled(db: Db): boolean {
@@ -70,6 +71,14 @@ export function claimUnmappedRepoForWorkspace(
 export async function resolveAccessContext(c: Context, db: Db): Promise<ResolveAccessResult> {
   const authEnabled = isAuthEnabled(db);
   if (!authEnabled) {
+    return {
+      ok: true,
+      context: { authEnabled: false, userId: null, workspaceId: null },
+    };
+  }
+
+  // API key auth: already validated by authMiddleware, grant global access without workspace isolation
+  if (process.env.VIBE_CODE_API_KEY && !process.env.GITHUB_OAUTH_CLIENT_ID) {
     return {
       ok: true,
       context: { authEnabled: false, userId: null, workspaceId: null },
