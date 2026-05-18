@@ -173,11 +173,12 @@ export function getCurrentUser(db: Db, c: Context): AuthUser | null {
 
 export function authStatus(db: Db, c: Context): AuthStatus {
   const enabled = isAuthEnabled();
-  const user = enabled ? getCurrentUser(db, c) : null;
+  const apiKeyAuth = enabled && checkApiKey(c);
+  const user = enabled && !apiKeyAuth ? getCurrentUser(db, c) : null;
   return {
     enabled,
-    authenticated: !enabled || Boolean(user),
-    user,
+    authenticated: !enabled || apiKeyAuth || Boolean(user),
+    user: apiKeyAuth ? { githubId: "api-key", username: "api-key", displayName: "API Key" } : user,
     loginUrl: "/api/auth/github/start",
   };
 }

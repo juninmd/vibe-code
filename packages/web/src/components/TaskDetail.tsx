@@ -47,6 +47,7 @@ interface TaskDetailProps {
   onUpdateTask?: (taskId: string, data: UpdateTaskRequest) => Promise<void>;
   onTaskRefresh?: () => void;
   onSkillClick?: (skillName: string) => void;
+  onTaskSelect?: (task: TaskWithRun) => void;
   allTasks?: TaskWithRun[];
 }
 
@@ -499,6 +500,7 @@ export function TaskDetail({
   onUpdateTask,
   onTaskRefresh,
   onSkillClick,
+  onTaskSelect,
   allTasks = [],
 }: TaskDetailProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -1131,12 +1133,46 @@ export function TaskDetail({
               {/* Status Card */}
               <div className="bg-white/[0.03] rounded-lg p-3 col-span-1">
                 <div className="text-[10px] text-dimmed mb-1">STATUS</div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant={statusVariant[task.status]} className="text-[10px]">
                     {statusLabel[task.status]}
                   </Badge>
                   {isRunning && <span className="text-[10px] text-info">{elapsed}</span>}
+                  {task.priority && task.priority !== "none" && (
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
+                        task.priority === "urgent"
+                          ? "bg-red-500/20 text-red-400"
+                          : task.priority === "high"
+                            ? "bg-orange-500/20 text-orange-400"
+                            : task.priority === "medium"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : "bg-surface text-dimmed"
+                      }`}
+                    >
+                      {task.priority}
+                    </span>
+                  )}
                 </div>
+                {(task.issueNumber || task.issueUrl) && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <span className="text-[9px] text-dimmed">Issue</span>
+                    {task.issueUrl ? (
+                      <a
+                        href={task.issueUrl}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-[9px] text-accent-text hover:underline font-mono"
+                      >
+                        #{task.issueNumber}
+                      </a>
+                    ) : (
+                      <span className="text-[9px] text-secondary font-mono">
+                        #{task.issueNumber}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* PR Card */}
@@ -1306,6 +1342,41 @@ export function TaskDetail({
                     >
                       {task.description}
                     </ReactMarkdown>
+                  </div>
+                </div>
+              )}
+
+              {/* Desired Outcome */}
+              {task.desiredOutcome && (
+                <div className="col-span-3 bg-white/[0.02] rounded-lg p-3 border border-white/5">
+                  <div className="text-[9px] text-dimmed mb-2 flex items-center gap-2">
+                    <span>RESULTADO ESPERADO</span>
+                  </div>
+                  <p className="text-[11px] text-secondary leading-relaxed">
+                    {task.desiredOutcome}
+                  </p>
+                </div>
+              )}
+
+              {/* Dependencies */}
+              {task.dependsOn && task.dependsOn.length > 0 && (
+                <div className="col-span-3 bg-white/[0.02] rounded-lg p-3 border border-white/5">
+                  <div className="text-[9px] text-dimmed mb-2">DEPENDE DE</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {task.dependsOn.map((depId) => {
+                      const dep = allTasks.find((t) => t.id === depId);
+                      return (
+                        <button
+                          key={depId}
+                          type="button"
+                          onClick={() => dep && onTaskSelect?.(dep)}
+                          className="text-[9px] font-mono px-2 py-0.5 rounded bg-surface hover:bg-surface-hover border border-white/10 text-secondary truncate max-w-[200px]"
+                          title={dep?.title ?? depId}
+                        >
+                          {dep ? dep.title.slice(0, 40) : depId.slice(0, 8)}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1558,10 +1629,20 @@ export function TaskDetail({
               {/* Parent task link */}
               {task.parentTaskId && (
                 <div className="text-xs text-primary0">
-                  ↳ Derivada do template{" "}
-                  <code className="text-secondary bg-surface px-1 py-0.5 rounded font-mono">
-                    {task.parentTaskId.slice(0, 8)}
-                  </code>
+                  ↳ Sub-task de{" "}
+                  {parentTask ? (
+                    <button
+                      type="button"
+                      onClick={() => onTaskSelect?.(parentTask)}
+                      className="text-accent-text hover:underline font-medium"
+                    >
+                      {parentTask.title.slice(0, 60)}
+                    </button>
+                  ) : (
+                    <code className="text-secondary bg-surface px-1 py-0.5 rounded font-mono">
+                      {task.parentTaskId.slice(0, 8)}
+                    </code>
+                  )}
                 </div>
               )}
 

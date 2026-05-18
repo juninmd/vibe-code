@@ -38,7 +38,7 @@ export function createSettingsRouter(
 
   // GET /api/settings — return current settings (tokens masked)
   app.get("/", (c) => {
-    const ghToken = db.settings.get("github_token");
+    const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN || "";
     const glToken = db.settings.get("gitlab_token");
     const glBaseUrl = db.settings.get("gitlab_base_url") || "https://gitlab.com";
     const theme = db.settings.get("theme") || "dark";
