@@ -203,7 +203,10 @@ export async function buildContextAsync(
       const MAX_LESSONS_CHARS = 2000;
       let chars = 0;
       const lines: string[] = [];
+      const seenContents = new Set<string>();
       for (const f of findings) {
+        if (seenContents.has(f.content)) continue;
+        seenContents.add(f.content);
         const line = `- [${f.persona}/${f.severity}] ${f.content}`;
         if (chars + line.length > MAX_LESSONS_CHARS) break;
         chars += line.length;

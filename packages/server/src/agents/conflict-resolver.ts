@@ -22,8 +22,12 @@ export class ConflictResolver {
     if (Date.now() - this.lastCheckAt < CONFLICT_CHECK_INTERVAL_MS) return;
     this.lastCheckAt = Date.now();
 
-    const reviewTasks = this.db.tasks.list(undefined, "review");
-    const candidates: Task[] = reviewTasks.filter(
+    const allActive = [
+      ...this.db.tasks.list(undefined, "review"),
+      ...this.db.tasks.list(undefined, "in_progress"),
+      ...this.db.tasks.list(undefined, "backlog"),
+    ];
+    const candidates: Task[] = allActive.filter(
       (t) => t.prUrl && !this.hasActiveConflictChild(t.id)
     );
 
