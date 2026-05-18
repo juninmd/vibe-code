@@ -83,13 +83,15 @@ export class KiroCliEngine implements AgentEngine {
       this.processes.set(options.runId, proc);
     }
 
-    yield* withHeartbeat(
-      streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
-      getHeartbeatIntervalMs(),
-      options.signal
-    );
-
-    if (options.runId) this.processes.delete(options.runId);
+    try {
+      yield* withHeartbeat(
+        streamProcess(proc, (line) => parseAcpMessage(line), options.signal),
+        getHeartbeatIntervalMs(),
+        options.signal
+      );
+    } finally {
+      if (options.runId) this.processes.delete(options.runId);
+    }
 
     try {
       await unlink(promptFile);
