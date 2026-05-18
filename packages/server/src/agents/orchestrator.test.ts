@@ -66,6 +66,7 @@ function makeRegistry(engine: AgentEngine): EngineRegistry {
     getFirstAvailable: async () => engine,
     listEngines: async () => [],
     register: () => {},
+    getDefaultFreeModel: async () => null,
   } as unknown as EngineRegistry;
 }
 
@@ -86,6 +87,7 @@ function makeGit(
       if (failPush) throw new Error("Network error: push failed");
     },
     createPR: async () => prUrl,
+    syncWithBase: async () => ({ ok: true }),
     createWorktree: async () => {
       const worktree = await mkdtemp(join(tmpdir(), "vibe-orch-test-"));
       tempWorktrees.push(worktree);
@@ -434,6 +436,7 @@ describe("Orchestrator — launch guards", () => {
       getFirstAvailable: async () => undefined,
       listEngines: async () => [],
       register: () => {},
+    getDefaultFreeModel: async () => null,
     } as unknown as EngineRegistry;
 
     const orch = new Orchestrator(db, makeGit(), emptyRegistry, makeHub());
