@@ -96,11 +96,11 @@ const auraStyle: Record<string, string> = {
 };
 
 const statusLabel: Record<string, string> = {
-  scheduled: "⏰ Agendada",
+  scheduled: "Agendada",
   backlog: "Backlog",
-  in_progress: "Em Execução",
-  review: "Em Revisão",
-  done: "Concluída",
+  in_progress: "Em execucao",
+  review: "Em revisao",
+  done: "Concluida",
   failed: "Falha",
 };
 
@@ -188,6 +188,39 @@ function SummaryTile({
     <div className={`min-w-0 rounded-lg border px-3 py-3 ${toneClass}`}>
       <div className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-75">{label}</div>
       <div className="mt-1 truncate text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ReadinessItem({
+  label,
+  detail,
+  state,
+}: {
+  label: string;
+  detail: string;
+  state: "ready" | "attention" | "pending";
+}) {
+  const stateClass = {
+    ready: "border-success/20 bg-success/10 text-success",
+    attention: "border-warning/25 bg-warning/10 text-warning",
+    pending: "border-white/10 bg-white/[0.025] text-dimmed",
+  }[state];
+  const marker = { ready: "Ready", attention: "Attention", pending: "Pending" }[state];
+
+  return (
+    <div className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-semibold text-primary">{label}</div>
+          <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-dimmed">{detail}</div>
+        </div>
+        <span
+          className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${stateClass}`}
+        >
+          {marker}
+        </span>
+      </div>
     </div>
   );
 }
@@ -592,6 +625,52 @@ export function TaskDetail({
         ? "Waiting for PR"
         : "No output yet";
   const runState = task.latestRun?.status ?? "No run yet";
+  const readinessItems = [
+    {
+      label: "Repository context",
+      detail: task.repo
+        ? `${task.repo.name} on ${task.baseBranch ?? task.repo.defaultBranch ?? "unknown base"}`
+        : "Repository metadata is not loaded for this task.",
+      state: task.repo ? "ready" : "attention",
+    },
+    {
+      label: "Execution configuration",
+      detail: `${task.latestRun?.engine ?? task.engine ?? "No engine selected"} / ${
+        task.model ?? "engine default model"
+      }`,
+      state: task.latestRun || task.engine ? "ready" : "pending",
+    },
+    {
+      label: "Delivery output",
+      detail: task.prUrl
+        ? `Pull request ${task.prUrl.split("/").pop() ?? "created"}`
+        : runBranch
+          ? `Branch ${runBranch} is available`
+          : "No branch or pull request recorded yet.",
+      state: task.prUrl || runBranch ? "ready" : task.status === "failed" ? "attention" : "pending",
+    },
+    {
+      label: "Evidence package",
+      detail:
+        artifacts.length > 0
+          ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"} attached`
+          : "No persisted artifacts are attached to this task.",
+      state: artifacts.length > 0 ? "ready" : "pending",
+    },
+    {
+      label: "Governance",
+      detail: task.pendingApproval
+        ? "Agent is waiting for explicit approval."
+        : task.status === "failed"
+          ? "Failed task needs operator review."
+          : "No approval gate is currently pending.",
+      state: task.pendingApproval || task.status === "failed" ? "attention" : "ready",
+    },
+  ] satisfies Array<{
+    label: string;
+    detail: string;
+    state: "ready" | "attention" | "pending";
+  }>;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "execution" : "info");
   const [sharedMemory, setSharedMemory] = useState<string>("");
@@ -1184,6 +1263,28 @@ export function TaskDetail({
                       tone={artifacts.length > 0 ? "success" : "default"}
                     />
                   </div>
+                </div>
+              </section>
+
+              <section className="col-span-1 rounded-lg border border-white/5 bg-white/[0.03] p-3 lg:col-span-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary0">
+                    Presentation readiness
+                  </h3>
+                  <span className="text-[10px] text-dimmed">
+                    {readinessItems.filter((item) => item.state === "ready").length}/
+                    {readinessItems.length} ready
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+                  {readinessItems.map((item) => (
+                    <ReadinessItem
+                      key={item.label}
+                      label={item.label}
+                      detail={item.detail}
+                      state={item.state}
+                    />
+                  ))}
                 </div>
               </section>
 
