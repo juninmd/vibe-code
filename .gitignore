@@ -7,5 +7,7 @@ dist/
 .env
 .env.local
 coverage/
-packages/server/~/.vibe-code/**tmp_test_db/
+tmp_test_db/
+packages/server/tmp_test_db/
+homologacao/.chrome-profile/
 *.log

@@ -7,9 +7,11 @@ config({ path: resolve(import.meta.dir, "../../../.env") });
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { AgentTemplateRegistry } from "./agents/agent-templates";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
+import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
 import { createLabelsRouter } from "./api/labels";
@@ -48,6 +50,7 @@ const registry = new EngineRegistry();
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
 const orchestrator = new Orchestrator(db, git, registry, hub, storedMaxAgents || MAX_AGENTS);
+const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
 const skillRegistry = new SkillRegistryService();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
@@ -130,6 +133,7 @@ api.route("/stats", createStatsRouter(db));
 api.route("/reviews", createReviewsRouter(db));
 api.route("/runtimes", createRuntimesRouter(db, registry, orchestrator, DATA_DIR, MAX_AGENTS));
 api.route("/templates", createTemplatesRouter(db, skillsLoader));
+api.route("/agent-templates", createAgentTemplatesRouter(agentTemplates));
 api.route("/inbox", createInboxRouter(db, registry, orchestrator));
 api.route("/labels", createLabelsRouter(db));
 api.route("/prompts", createPromptsRouter(db));

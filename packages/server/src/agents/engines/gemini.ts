@@ -43,6 +43,15 @@ export class GeminiEngine implements AgentEngine {
     keysToDelete.forEach((key) => {
       delete env[key];
     });
+    // Why: when `security.folderTrust.enabled` is set in ~/.gemini/settings.json,
+    // gemini fails headless invocations in untrusted worktrees with exit 55
+    // (FatalUntrustedWorkspaceError) — no interactive prompt available, run
+    // dies after ~10s with no useful output. Documented escape hatch (multica
+    // server/pkg/agent/gemini.go::buildGeminiEnv). Caller env wins so the
+    // check can still be opted into.
+    if (env.GEMINI_CLI_TRUST_WORKSPACE === undefined) {
+      env.GEMINI_CLI_TRUST_WORKSPACE = "true";
+    }
     // When LiteLLM is enabled, route through the proxy.
     // Otherwise, prefer the DB-stored native key, then fall back to process.env.
     if (litellmKey) {

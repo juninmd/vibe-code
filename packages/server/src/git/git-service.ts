@@ -6,6 +6,32 @@ import type { ProviderRegistry } from "./providers/registry";
 export class GitService {
   private basePath: string;
   private _providers: ProviderRegistry | null = null;
+  // Why: git's own lockfiles (packed-refs.lock, config.lock, worktree admin
+  // dirs) don't tolerate parallel mutations on the same bare repo. Two tasks
+  // sharing a repo can collide on clone/fetch + worktree-add. Lock per-bare.
+  // Ported from multica server/internal/daemon/repocache/cache.go.
+  private static repoLocks = new Map<string, Promise<unknown>>();
+
+  private static async withRepoLock<T>(barePath: string, fn: () => Promise<T>): Promise<T> {
+    const prev = GitService.repoLocks.get(barePath) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const next = new Promise<void>((r) => {
+      release = r;
+    });
+    GitService.repoLocks.set(
+      barePath,
+      prev.then(() => next)
+    );
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      release();
+      if (GitService.repoLocks.get(barePath) === prev.then(() => next)) {
+        GitService.repoLocks.delete(barePath);
+      }
+    }
+  }
 
   static gitEnv(): Record<string, string | undefined> {
     const base = process.env;
@@ -91,12 +117,16 @@ export class GitService {
 
   async cloneRepo(url: string, name: string): Promise<string> {
     const barePath = join(this.reposDir, `${name}.git`);
-    await this.exec(["git", "clone", "--bare", this.injectToken(url), barePath]);
+    await GitService.withRepoLock(barePath, () =>
+      this.exec(["git", "clone", "--bare", this.injectToken(url), barePath])
+    );
     return barePath;
   }
 
   async fetchRepo(barePath: string): Promise<void> {
-    await this.exec(["git", "--git-dir", barePath, "fetch", "origin", "--prune"]);
+    await GitService.withRepoLock(barePath, () =>
+      this.exec(["git", "--git-dir", barePath, "fetch", "origin", "--prune"])
+    );
   }
 
   async createWorktree(
@@ -110,18 +140,17 @@ export class GitService {
     const wtPath = join(this.workspacesDir, repoName, runId);
     await mkdir(join(this.workspacesDir, repoName), { recursive: true });
 
-    // Fetch latest
-    await this.fetchRepo(barePath);
-
-    // Create worktree
-    const args = ["git", "--git-dir", barePath, "worktree", "add"];
-    if (isNewBranch) {
-      args.push("-b", branch, wtPath, base);
-    } else {
-      args.push(wtPath, branch);
-    }
-
-    await this.exec(args);
+    await GitService.withRepoLock(barePath, async () => {
+      // Fetch + worktree-add must be atomic vs other tasks on the same bare.
+      await this.exec(["git", "--git-dir", barePath, "fetch", "origin", "--prune"]);
+      const args = ["git", "--git-dir", barePath, "worktree", "add"];
+      if (isNewBranch) {
+        args.push("-b", branch, wtPath, base);
+      } else {
+        args.push(wtPath, branch);
+      }
+      await this.exec(args);
+    });
 
     // Ensure git identity is set in the worktree so commits never fail.
     // Only set locally if not already configured globally.
@@ -138,18 +167,19 @@ export class GitService {
   }
 
   async removeWorktree(barePath: string, wtPath: string): Promise<void> {
-    try {
-      await this.exec(["git", "--git-dir", barePath, "worktree", "remove", "--force", wtPath]);
-    } catch {
-      // If worktree remove fails, try manual cleanup
+    await GitService.withRepoLock(barePath, async () => {
       try {
-        const { rm } = await import("node:fs/promises");
-        await rm(wtPath, { recursive: true, force: true });
-        await this.exec(["git", "--git-dir", barePath, "worktree", "prune"]);
+        await this.exec(["git", "--git-dir", barePath, "worktree", "remove", "--force", wtPath]);
       } catch {
-        // Best effort cleanup
+        try {
+          const { rm } = await import("node:fs/promises");
+          await rm(wtPath, { recursive: true, force: true });
+          await this.exec(["git", "--git-dir", barePath, "worktree", "prune"]);
+        } catch {
+          // Best effort cleanup
+        }
       }
-    }
+    });
   }
 
   async deleteLocalRepo(barePath: string, repoName: string): Promise<void> {

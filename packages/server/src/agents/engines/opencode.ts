@@ -1,9 +1,11 @@
+import { existsSync, type Stats, statSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, extname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
+import { type BlockedArgs, filterCustomArgs } from "./blocked-args";
 import { getHeartbeatIntervalMs } from "./heartbeat";
 
 // Maps raw tool names to readable labels and extracts the most useful arg
@@ -141,6 +143,78 @@ export function humanizeStderr(line: string): string | null {
  */
 export const DEFAULT_OPENCODE_MODEL = "anthropic/claude-sonnet-4-5";
 
+// Why: Windows batch `%*` argv forwarding does not preserve newlines, so the
+// `opencode.cmd` npm shim truncates multi-line prompts at the first \n before
+// dispatching to the JS entrypoint. Spawning the bundled native opencode.exe
+// directly skips cmd.exe entirely and lets full argv (incl. newlines) through.
+function opencodeWindowsPackageCandidates(arch: NodeJS.Architecture): string[] {
+  if (arch === "arm64")
+    return ["opencode-windows-arm64", "opencode-windows-x64", "opencode-windows-x64-baseline"];
+  return ["opencode-windows-x64", "opencode-windows-x64-baseline", "opencode-windows-arm64"];
+}
+
+type StatFn = (p: string) => Stats | null;
+const defaultStat: StatFn = (p) => {
+  try {
+    return statSync(p);
+  } catch {
+    return null;
+  }
+};
+
+export function resolveOpencodeNativeFromShim(
+  shimPath: string,
+  arch: NodeJS.Architecture = process.arch,
+  stat: StatFn = defaultStat
+): string | null {
+  if (extname(shimPath).toLowerCase() !== ".cmd") return null;
+  const prefix = dirname(shimPath);
+  for (const pkg of opencodeWindowsPackageCandidates(arch)) {
+    const candidate = join(
+      prefix,
+      "node_modules",
+      "opencode-ai",
+      "node_modules",
+      pkg,
+      "bin",
+      "opencode.exe"
+    );
+    if (stat(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findOnPath(executable: string): string | null {
+  const pathVar = process.env.PATH || process.env.Path || "";
+  const exts =
+    process.platform === "win32" ? (process.env.PATHEXT || ".CMD;.EXE;.BAT").split(";") : [""];
+  for (const dir of pathVar.split(delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = join(dir, executable + ext);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+// Flags whose presence in user-supplied extra args would break daemon↔opencode
+// communication or override required workdir/session pinning.
+export const OPENCODE_BLOCKED_ARGS: BlockedArgs = {
+  "--format": "with-value",
+  "--dir": "with-value",
+  "--session": "with-value",
+  "--model": "with-value",
+};
+
+export function resolveOpencodeBinary(): string {
+  if (process.platform !== "win32") return "opencode";
+  const shim = findOnPath("opencode");
+  if (!shim) return "opencode";
+  const native = resolveOpencodeNativeFromShim(shim);
+  return native ?? shim;
+}
+
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
   binaryName = "opencode";
@@ -195,10 +269,23 @@ export class OpenCodeEngine implements AgentEngine {
    * Prompt is sent via stdin to avoid Windows command-line length limits.
    */
   protected buildCommandArgs(model: string, workdir: string, resumeSessionId?: string): string[] {
-    const args = ["opencode", "run", "--format", "json"];
+    const args = [resolveOpencodeBinary(), "run", "--format", "json"];
     if (model) args.push("--model", model);
     args.push("--dir", workdir);
     if (resumeSessionId) args.push("--session", resumeSessionId);
+    // Operator escape hatch: extra flags via env, with protocol-critical
+    // flags filtered out (ported from multica's filterCustomArgs).
+    const extra = (process.env.VIBE_OPENCODE_EXTRA_ARGS || "")
+      .split(/\s+/)
+      .filter((s) => s.length > 0);
+    if (extra.length) {
+      const safe = filterCustomArgs(extra, OPENCODE_BLOCKED_ARGS, (flag) =>
+        console.warn(
+          `[opencode] dropping protocol-critical flag from VIBE_OPENCODE_EXTRA_ARGS: ${flag}`
+        )
+      );
+      args.push(...safe);
+    }
     return args;
   }
 
@@ -329,7 +416,13 @@ export class OpenCodeEngine implements AgentEngine {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ...options.env },
+      env: {
+        ...process.env,
+        // Belt-and-suspenders auto-allow (complements opencode.json) — ported
+        // from multica's daemon: this works even if opencode.json is missing.
+        OPENCODE_PERMISSION: '{"*":"allow"}',
+        ...options.env,
+      },
     });
 
     // Send prompt via stdin, then close it to signal end of input
@@ -833,12 +926,40 @@ export class OpenCodeEngine implements AgentEngine {
           eventType === "step-finish" ||
           part.type === "step_finish"
         ) {
-          const tokens = (part.tokens ?? part.usage ?? raw) as Record<string, number>;
-          if (tokens?.total) {
+          // OpenCode emits per-step token usage with cache breakdown:
+          //   { tokens: { input, output, cache: { read, write } } }
+          // Multica accumulates these into a single TokenUsage; here we emit
+          // a `cost` event per step so the orchestrator can sum across the run
+          // and surface cache hit rates (the most actionable cost lever).
+          const tokens = (part.tokens ?? part.usage ?? raw) as {
+            input?: number;
+            output?: number;
+            total?: number;
+            cache?: { read?: number; write?: number };
+          };
+          const input = Number(tokens?.input ?? 0);
+          const output = Number(tokens?.output ?? 0);
+          const cacheRead = Number(tokens?.cache?.read ?? 0);
+          const cacheWrite = Number(tokens?.cache?.write ?? 0);
+          const total = Number(tokens?.total ?? input + output);
+          if (input || output || cacheRead || cacheWrite || total) {
+            results.push({
+              type: "cost",
+              costStats: {
+                total_tokens: total,
+                input_tokens: input,
+                output_tokens: output,
+                cached: cacheRead || undefined,
+              },
+            });
+            const cacheNote =
+              cacheRead || cacheWrite
+                ? `  (cache r:${cacheRead.toLocaleString()} w:${cacheWrite.toLocaleString()})`
+                : "";
             results.push({
               type: "log",
               stream: "system",
-              content: `  tokens: ${tokens.total.toLocaleString()}`,
+              content: `  tokens in:${input.toLocaleString()} out:${output.toLocaleString()}${cacheNote}`,
             });
           }
           continue;

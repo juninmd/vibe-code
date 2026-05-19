@@ -51,6 +51,17 @@ interface TaskDetailProps {
   allTasks?: TaskWithRun[];
 }
 
+type ActiveTab =
+  | "info"
+  | "terminal"
+  | "execution"
+  | "diff"
+  | "artifacts"
+  | "skills"
+  | "cost"
+  | "memory"
+  | "reviews";
+
 function groupModelsByProvider(models: string[]): { provider: string; models: string[] }[] {
   const groups = new Map<string, string[]>();
   for (const m of models) {
@@ -100,6 +111,27 @@ const CRON_PRESETS = [
   { label: "Semanalmente (seg 9h)", value: "0 9 * * 1" },
   { label: "Customizado...", value: "custom" },
 ];
+
+const cleanStatusLabel: Record<string, string> = {
+  scheduled: "Agendada",
+  backlog: "Backlog",
+  in_progress: "Em execucao",
+  review: "Em revisao",
+  done: "Concluida",
+  failed: "Falha",
+};
+
+const headerTabs = [
+  { id: "info", label: "Info" },
+  { id: "terminal", label: "Terminal" },
+  { id: "execution", label: "Execution" },
+  { id: "diff", label: "Diff" },
+  { id: "artifacts", label: "Artifacts" },
+  { id: "skills", label: "Skills" },
+  { id: "cost", label: "Telemetry" },
+  { id: "memory", label: "Memory" },
+  { id: "reviews", label: "Reviews" },
+] satisfies { id: ActiveTab; label: string }[];
 
 // Pipeline step for PR creation flow
 type PipelineStep = "running" | "review" | "pushing" | "pr_created";
@@ -587,16 +619,6 @@ export function TaskDetail({
     task.latestRun?.finishedAt ?? null
   );
 
-  type ActiveTab =
-    | "info"
-    | "terminal"
-    | "execution"
-    | "diff"
-    | "artifacts"
-    | "skills"
-    | "cost"
-    | "memory"
-    | "reviews";
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "execution" : "info");
   const [sharedMemory, setSharedMemory] = useState<string>("");
   const [taskMemory, setTaskMemory] = useState<string>("");
@@ -727,7 +749,7 @@ export function TaskDetail({
 
       {/* Modal */}
       <div
-        className="relative w-[1100px] h-[90vh] flex flex-col rounded-xl border overflow-hidden shadow-2xl shadow-black/60"
+        className="relative flex h-[92vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-xl border shadow-2xl shadow-black/60"
         style={{
           background: "var(--bg-surface)",
           backgroundImage:
@@ -741,16 +763,16 @@ export function TaskDetail({
         <div className="absolute inset-0 rounded-2xl pointer-events-none border border-white/5" />
 
         {/* ── Modal Header ────────────────────────────────── */}
-        <div className="shrink-0 px-6 pt-5 pb-0 relative z-10">
+        <div className="relative z-10 shrink-0 border-b border-white/5 bg-black/10 px-4 pt-4 sm:px-6">
           {/* Title row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2.5 min-w-0">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
               {ProviderIcon && (
                 <div className={`mt-1 shrink-0 ${provider?.color}`}>
                   <ProviderIcon size={18} />
                 </div>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   {task.tags?.includes("conflict-resolution") && (
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 shrink-0">
@@ -770,7 +792,9 @@ export function TaskDetail({
                       Merge Conflict
                     </span>
                   )}
-                  <h2 className="text-xl font-bold leading-tight text-primary">{task.title}</h2>
+                  <h2 className="min-w-0 text-lg font-bold leading-snug text-primary sm:text-xl">
+                    {task.title}
+                  </h2>
                   {task.status === "failed" && task.latestRun?.errorMessage && (
                     <span className="text-[10px] text-danger/60 italic ml-2 truncate max-w-xs">
                       Error: {task.latestRun.errorMessage}
@@ -782,7 +806,7 @@ export function TaskDetail({
                     href={task.repo.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-primary0 hover:text-secondary transition-colors truncate block mt-0.5"
+                    className="mt-1 block truncate text-[11px] text-primary0 transition-colors hover:text-secondary"
                   >
                     {task.repo.name}
                   </a>
@@ -791,7 +815,7 @@ export function TaskDetail({
             </div>
 
             {/* Header actions */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
               {task.branchName && (
                 <>
                   <button
@@ -807,16 +831,16 @@ export function TaskDetail({
                         setLoadingAction(null);
                       }
                     }}
-                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs font-medium"
+                    className="inline-flex h-8 items-center rounded-md border border-white/10 px-2.5 text-[11px] font-medium text-primary0 transition-colors hover:bg-surface-hover hover:text-secondary disabled:opacity-50"
                     disabled={loadingAction === "open-editor"}
                   >
-                    {loadingAction === "open-editor" ? "..." : "<>"}
+                    {loadingAction === "open-editor" ? "Opening..." : "Open"}
                   </button>
                   <a
                     href={api.tasks.downloadUrl(task.id)}
                     download
                     title="Baixar código (ZIP)"
-                    className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-sm"
+                    className="inline-flex h-8 items-center rounded-md border border-white/10 px-2.5 text-[11px] font-medium text-primary0 transition-colors hover:bg-surface-hover hover:text-secondary"
                   >
                     ↓
                   </a>
@@ -836,7 +860,7 @@ export function TaskDetail({
                   }}
                   disabled={!!loadingAction}
                   title="Clonar tarefa"
-                  className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
+                  className="inline-flex h-8 items-center rounded-md border border-white/10 px-2.5 text-[11px] font-medium text-primary0 transition-colors hover:bg-surface-hover hover:text-secondary disabled:opacity-50"
                 >
                   ⎘
                 </button>
@@ -854,14 +878,15 @@ export function TaskDetail({
                 }}
                 disabled={loadingAction === "preview-prompt"}
                 title="Preview prompt do agente"
-                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-xs"
+                className="inline-flex h-8 items-center rounded-md border border-white/10 px-2.5 text-[11px] font-medium text-primary0 transition-colors hover:bg-surface-hover hover:text-secondary disabled:opacity-50"
               >
                 {loadingAction === "preview-prompt" ? "..." : "👁"}
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="text-primary0 hover:text-secondary cursor-pointer shrink-0 p-1 rounded hover:bg-surface-hover transition-colors"
+                aria-label="Fechar modal"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 text-primary0 transition-colors hover:bg-surface-hover hover:text-secondary"
               >
                 ✕
               </button>
@@ -871,7 +896,7 @@ export function TaskDetail({
           {/* Status badges row */}
           <div className="flex flex-wrap gap-2 items-center mt-3">
             <Badge variant={statusVariant[task.status] ?? "default"}>
-              {statusLabel[task.status] ?? task.status}
+              {cleanStatusLabel[task.status] ?? statusLabel[task.status] ?? task.status}
             </Badge>
 
             {task.agentId && (
@@ -918,64 +943,57 @@ export function TaskDetail({
             )}
           </div>
 
-          <div className="mt-3 mb-1 rounded-lg border border-white/10 bg-black/25 px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3 text-[10px]">
-              <span className="text-dimmed uppercase tracking-widest">Cockpit</span>
-              <span className="text-secondary">
-                Goal: {task.goal?.trim() || "No explicit goal"}
-              </span>
-              <span
-                className={`font-semibold ${task.status === "failed" ? "text-danger" : task.status === "done" ? "text-success" : "text-info"}`}
-              >
-                Health:{" "}
-                {task.status === "failed"
-                  ? "degraded"
-                  : task.status === "done"
-                    ? "stable"
-                    : "active"}
-              </span>
+          <div className="mt-4 grid gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-3 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
+                <span className="text-dimmed">Goal</span>
+                <span
+                  className={`font-semibold ${task.status === "failed" ? "text-danger" : task.status === "done" ? "text-success" : "text-info"}`}
+                >
+                  {task.status === "failed"
+                    ? "degraded"
+                    : task.status === "done"
+                      ? "stable"
+                      : "active"}
+                </span>
+              </div>
+              <p className="truncate text-xs text-secondary">
+                {task.goal?.trim() || "No explicit goal"}
+              </p>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
-                onClick={() => setActiveTab("execution")}
-              >
-                Execution
-              </button>
-              <button
-                type="button"
-                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
-                onClick={() => setActiveTab("memory")}
-              >
-                Memory
-              </button>
-              <button
-                type="button"
-                className="text-[10px] px-2 py-1 rounded border border-white/10 text-primary0 hover:text-primary hover:bg-white/10"
-                onClick={() => setActiveTab("reviews")}
-              >
-                Reviews
-              </button>
+            <div className="flex items-center gap-2">
+              <span className="hidden text-[10px] uppercase tracking-widest text-dimmed sm:inline">
+                Jump to
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                  onClick={() => setActiveTab("execution")}
+                >
+                  Execution
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                  onClick={() => setActiveTab("memory")}
+                >
+                  Memory
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                  onClick={() => setActiveTab("reviews")}
+                >
+                  Reviews
+                </button>
+              </div>
             </div>
           </div>
-
           {/* Tab bar */}
-          <div className="flex justify-center mt-6 border-b border-white/5 relative z-20">
-            <div className="flex gap-1 overflow-x-auto no-scrollbar pb-px">
-              {(
-                [
-                  { id: "info" as const, label: "INFO" },
-                  { id: "terminal" as const, label: "TERMINAL" },
-                  { id: "execution" as const, label: "EXECUTION" },
-                  { id: "diff" as const, label: "DIFF" },
-                  { id: "artifacts" as const, label: "ARTIFACTS" },
-                  { id: "skills" as const, label: "SKILLS" },
-                  { id: "cost" as const, label: "TELEMETRY" },
-                  { id: "memory" as const, label: "MEMORY" },
-                  { id: "reviews" as const, label: "REVIEWS" },
-                ] satisfies { id: ActiveTab; label: string }[]
-              ).map(({ id, label }) => {
+          <div className="relative z-20 mt-4 overflow-x-auto no-scrollbar">
+            <div className="flex min-w-max gap-1 pb-2">
+              {headerTabs.map(({ id, label }) => {
                 if (id === "skills" && matchedSkills.length === 0) return null;
                 const isActive = activeTab === id;
                 return (
@@ -983,7 +1001,11 @@ export function TaskDetail({
                     key={id}
                     type="button"
                     onClick={() => setActiveTab(id)}
-                    className={`px-4 py-2.5 text-[10px] font-black tracking-[0.15em] transition-all relative group ${isActive ? "text-primary" : "text-muted hover:text-secondary"}`}
+                    className={`relative rounded-t-lg border border-b-0 px-3 py-2 text-[10px] font-semibold tracking-[0.08em] transition-colors ${
+                      isActive
+                        ? "border-white/10 bg-black/25 text-primary"
+                        : "border-transparent text-muted hover:bg-white/5 hover:text-secondary"
+                    }`}
                   >
                     <div className="flex items-center gap-2">
                       {label}
@@ -1008,10 +1030,7 @@ export function TaskDetail({
                         </span>
                       )}
                     </div>
-                    {/* Active Indicator */}
-                    {isActive && (
-                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent" />
-                    )}
+                    {isActive && <div className="absolute inset-x-2 bottom-0 h-0.5 bg-accent" />}
                   </button>
                 );
               })}
