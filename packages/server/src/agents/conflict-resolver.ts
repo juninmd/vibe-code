@@ -41,11 +41,11 @@ export class ConflictResolver {
 
     for (const task of candidates) {
       try {
-        const conflicting = await this.isPRConflicting(task.prUrl!, token);
+        const prUrl = task.prUrl;
+        if (!prUrl) continue;
+        const conflicting = await this.isPRConflicting(prUrl, token);
         if (conflicting) {
-          console.log(
-            `[conflict-resolver] PR conflict detected for task ${task.id}: ${task.prUrl}`
-          );
+          console.log(`[conflict-resolver] PR conflict detected for task ${task.id}: ${prUrl}`);
           await this.createConflictResolutionTask(task);
         }
       } catch (err) {
@@ -164,6 +164,10 @@ CRITICAL RULES:
 
     // Set branch so executor reuses the existing PR branch instead of creating a new one
     this.db.tasks.updateField(conflictTask.id, "branch_name", branch);
+    const launchTask = this.db.tasks.getById(conflictTask.id) ?? {
+      ...conflictTask,
+      branchName: branch,
+    };
 
     console.log(
       `[conflict-resolver] Created conflict task ${conflictTask.id} for parent ${parentTask.id}`
@@ -186,7 +190,7 @@ CRITICAL RULES:
     }
 
     try {
-      await this.orchestrator.launch(conflictTask);
+      await this.orchestrator.launch(launchTask);
       console.log(`[conflict-resolver] Launched conflict task ${conflictTask.id}`);
     } catch (err) {
       // No slots available — stays in backlog, sweepBacklog will pick it up

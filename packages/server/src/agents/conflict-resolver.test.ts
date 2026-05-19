@@ -2,7 +2,7 @@
  * Integration tests for ConflictResolver — end-to-end flow:
  *   conflict detected → child task created → prompt has --force-with-lease → no --force
  */
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createDb } from "../db";
 import type { BroadcastHub } from "../ws/broadcast";
 import { ConflictResolver } from "./conflict-resolver";
@@ -228,6 +228,32 @@ describe("ConflictResolver", () => {
       const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
       expect(conflictTask!.title).toContain("fix(conflicts):");
       expect(conflictTask!.title).toContain("implement payment gateway");
+    });
+
+    it("launches conflict task with the persisted PR branch", async () => {
+      const launch = mock(async () => undefined);
+      resolver = new ConflictResolver(db, { launch } as any);
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: launch branch test",
+        status: "review",
+        engine: "claude-code",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/12");
+      db.tasks.updateField(parent.id, "branch_name", "feat/launch-branch");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: false }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+      fetchSpy.mockRestore();
+
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect(launch.mock.calls[0]?.[0].branchName).toBe("feat/launch-branch");
     });
   });
 

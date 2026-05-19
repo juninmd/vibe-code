@@ -9,6 +9,8 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Conflict Resolution Flow**: Conflict-resolution tasks now reuse the existing PR branch and preserve the conflicted rebase state so the agent can resolve real merge conflicts instead of showing an inactive terminal against a clean workspace.
+- **Task Execution Telemetry**: Restored visible token/cost telemetry with an execution summary header and an explicit Cost tab empty state when engines have not emitted usage data yet.
 - **Task Detail Readiness Review**: Added a real-data presentation readiness section that surfaces repository context, execution configuration, delivery output, artifacts, and governance state without synthetic progress claims.
 - **Task Detail Presentation Polish**: Refined modal actions, approval copy, destructive-action wording, and removed a hidden legacy info block so the task detail surface is cleaner for executive demos.
 - **Task Detail Executive Summary**: Added a presentation-grade summary band for objective, status, run state, output, and evidence so the task modal reads as an operational control surface.

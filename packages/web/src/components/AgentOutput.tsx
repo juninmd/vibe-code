@@ -404,6 +404,8 @@ interface AgentOutputProps {
     output_tokens: number;
     cached?: number;
     input?: number;
+    output?: number;
+    total?: number;
   } | null;
 }
 
