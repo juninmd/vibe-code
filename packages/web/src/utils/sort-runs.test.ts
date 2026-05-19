@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { partitionRuns, sortPastRuns } from "./sort-runs";
 
 const r = (id: string, status: string, finishedAt = "2026-05-19T00:00:00Z") => ({
