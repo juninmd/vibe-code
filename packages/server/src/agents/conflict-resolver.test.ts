@@ -113,10 +113,10 @@ describe("ConflictResolver", () => {
       expect(conflictTask).toBeDefined();
 
       // Prompt must contain --force-with-lease
-      expect(conflictTask!.description).toContain("--force-with-lease");
+      expect(conflictTask?.description).toContain("--force-with-lease");
 
       // Prompt must NOT contain bare --force (without --lease)
-      const descLines = conflictTask!.description!.split("\n");
+      const descLines = conflictTask?.description?.split("\n");
       const hasBareForcePush = descLines.some((line) => {
         // Match `git push --force` but not `git push --force-with-lease`
         return /git push .*--force(?!-with-lease)/.test(line);
@@ -199,10 +199,10 @@ describe("ConflictResolver", () => {
       const children = db.tasks.listChildren(parent.id);
       const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
       expect(conflictTask).toBeDefined();
-      expect(conflictTask!.engine).toBe("claude-code");
-      expect(conflictTask!.model).toBe("claude-sonnet-4-6");
-      expect(conflictTask!.branchName).toBe("feat/branch-reuse");
-      expect(conflictTask!.parentTaskId).toBe(parent.id);
+      expect(conflictTask?.engine).toBe("claude-code");
+      expect(conflictTask?.model).toBe("claude-sonnet-4-6");
+      expect(conflictTask?.branchName).toBe("feat/branch-reuse");
+      expect(conflictTask?.parentTaskId).toBe(parent.id);
     });
 
     it("child task title references parent title", async () => {
@@ -226,8 +226,8 @@ describe("ConflictResolver", () => {
 
       const children = db.tasks.listChildren(parent.id);
       const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
-      expect(conflictTask!.title).toContain("fix(conflicts):");
-      expect(conflictTask!.title).toContain("implement payment gateway");
+      expect(conflictTask?.title).toContain("fix(conflicts):");
+      expect(conflictTask?.title).toContain("implement payment gateway");
     });
 
     it("launches conflict task with the persisted PR branch", async () => {
