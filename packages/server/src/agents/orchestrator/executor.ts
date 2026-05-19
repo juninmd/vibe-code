@@ -433,6 +433,7 @@ export async function executeAgent(
   let validationRecordCount = 0;
   let latestVerification: WorktreeVerificationResult | null = null;
   const memoryService = new MemoryService(db);
+  const isConflictResolutionTask = task.tags?.includes("conflict-resolution") ?? false;
 
   const setRunPhase = (
     phase: RunPhase,
@@ -533,15 +534,19 @@ export async function executeAgent(
   try {
     let reusableWorkspacePath: string | null = null;
 
-    if (task.status === "failed" && task.branchName) {
+    if ((task.status === "failed" || isConflictResolutionTask) && task.branchName) {
+      await git.fetchRepo(barePath);
       const exists = await git.branchExists(barePath, task.branchName);
       if (exists) {
         branch = task.branchName;
         resumeExistingBranch = true;
 
-        const previousRun = db.runs
-          .listByTask(task.id)
-          .find((r) => r.id !== run.id && r.status === "failed" && !!r.worktreePath);
+        const previousRun =
+          task.status === "failed"
+            ? db.runs
+                .listByTask(task.id)
+                .find((r) => r.id !== run.id && r.status === "failed" && !!r.worktreePath)
+            : null;
 
         resumeSessionId = previousRun?.sessionId ?? undefined;
         activeSessionId = resumeSessionId;
@@ -583,10 +588,18 @@ export async function executeAgent(
         !resumeExistingBranch
       );
       sysLog(`Workspace ready at ${wtPath}`);
-      // Sync with base branch before agent starts to avoid future conflicts
-      const syncResult = await git.syncWithBase(wtPath, task.baseBranch || repo.defaultBranch);
+      // Sync with base branch before agent starts to avoid future conflicts.
+      // Conflict-resolution tasks intentionally keep the rebase conflict state
+      // so the agent can inspect and resolve the real files instead of seeing a clean tree.
+      const syncResult = await git.syncWithBase(wtPath, task.baseBranch || repo.defaultBranch, {
+        preserveConflict: isConflictResolutionTask,
+      });
       if (syncResult.ok) {
-        sysLog(`Branch synced with origin/${task.baseBranch || repo.defaultBranch} ✓`);
+        sysLog(`Branch synced with origin/${task.baseBranch || repo.defaultBranch}`);
+      } else if (isConflictResolutionTask) {
+        sysLog(
+          `Merge conflict prepared against origin/${task.baseBranch || repo.defaultBranch}; workspace kept in rebase state for the agent to resolve.`
+        );
       } else {
         sysLog(`Branch sync skipped (new branch or no divergence): ${syncResult.message}`);
       }

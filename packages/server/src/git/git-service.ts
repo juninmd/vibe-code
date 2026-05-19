@@ -451,7 +451,8 @@ export class GitService {
    */
   async syncWithBase(
     wtPath: string,
-    baseBranch: string
+    baseBranch: string,
+    options: { preserveConflict?: boolean } = {}
   ): Promise<{ ok: boolean; message: string }> {
     try {
       // Fetch latest from origin
@@ -459,13 +460,17 @@ export class GitService {
       // Rebase onto base branch
       const result = await this.exec(["git", "rebase", `origin/${baseBranch}`], { cwd: wtPath });
       if (result.exitCode !== 0) {
-        // Abort the failed rebase to leave worktree clean
-        await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+        if (!options.preserveConflict) {
+          // Abort the failed rebase to leave worktree clean.
+          await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+        }
         return { ok: false, message: result.stderr.trim() || "Rebase failed" };
       }
       return { ok: true, message: `Synced with origin/${baseBranch}` };
     } catch (err) {
-      await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+      if (!options.preserveConflict) {
+        await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+      }
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
   }

@@ -607,6 +607,7 @@ export function TaskDetail({
   const inputCost = formatCurrencyMicros(costStats?.input);
   const outputCost = formatCurrencyMicros(costStats?.output);
   const totalCost = formatCurrencyMicros(costStats?.total);
+  const totalTokens = costStats?.total_tokens ?? 0;
   const statusTone =
     task.status === "failed"
       ? "danger"
@@ -1058,6 +1059,13 @@ export function TaskDetail({
                       {label}
                       {id === "terminal" && isRunning && (
                         <span className="w-1.5 h-1.5 rounded-full bg-info shadow-[0_0_8px_var(--info)] animate-pulse" />
+                      )}
+                      {id === "cost" && totalTokens > 0 && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-sm font-bold ${isActive ? "bg-warning/20 text-warning" : "bg-white/5 text-muted"}`}
+                        >
+                          {totalTokens.toLocaleString()}
+                        </span>
                       )}
                       {id === "diff" && task.branchName && !isActive && (
                         <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
@@ -2057,69 +2065,28 @@ export function TaskDetail({
           )}
 
           {/* ── Cost Tab (Neuromorphic Grid) ───────────────────────────────────── */}
-          {activeTab === "cost" && task.latestRun?.costStats && (
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/20">
-              <div className="flex items-center justify-between">
-                <h2
-                  className="text-sm font-black tracking-widest uppercase"
-                  style={{ color: "var(--text-primary)" }}
-                >
-                  System Telemetry
-                </h2>
-                {task.maxCost !== undefined && (
-                  <span
-                    className="text-[10px] font-mono px-2.5 py-1 rounded border border-white/10"
-                    style={{ background: "rgba(0,0,0,0.4)", color: "var(--text-muted)" }}
-                  >
-                    BUDGET: ${task.maxCost.toFixed(2)}
-                  </span>
-                )}
-              </div>
-
-              {/* Primary Metrics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div
-                  className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
-                  style={{
-                    background: "rgba(20,20,20,0.6)",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-                  <div
-                    className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
-                    style={{ color: "var(--text-dimmed)" }}
-                  >
-                    Total Tokens
-                  </div>
-                  <div
-                    className="text-2xl font-black font-mono tracking-tight relative z-10"
+          {activeTab === "cost" &&
+            (costStats ? (
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/20">
+                <div className="flex items-center justify-between">
+                  <h2
+                    className="text-sm font-black tracking-widest uppercase"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    {(task.latestRun.costStats.total_tokens || 0).toLocaleString()}
-                  </div>
+                    System Telemetry
+                  </h2>
+                  {task.maxCost !== undefined && (
+                    <span
+                      className="text-[10px] font-mono px-2.5 py-1 rounded border border-white/10"
+                      style={{ background: "rgba(0,0,0,0.4)", color: "var(--text-muted)" }}
+                    >
+                      BUDGET: ${task.maxCost.toFixed(2)}
+                    </span>
+                  )}
                 </div>
 
-                <div
-                  className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
-                  style={{
-                    background: "rgba(20,20,20,0.6)",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
-                  <div
-                    className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
-                    style={{ color: "var(--text-dimmed)" }}
-                  >
-                    Op Cost
-                  </div>
-                  <div className="text-2xl font-black font-mono tracking-tight relative z-10 text-emerald-400">
-                    ${((task.latestRun.costStats.input || 0) / 1000000).toFixed(6)}
-                  </div>
-                </div>
-
-                {task.latestRun.costStats.duration_ms && (
+                {/* Primary Metrics Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div
                     className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
                     style={{
@@ -2127,23 +2094,21 @@ export function TaskDetail({
                       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
                     }}
                   >
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
                     <div
                       className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
                       style={{ color: "var(--text-dimmed)" }}
                     >
-                      Latency
+                      Total Tokens
                     </div>
                     <div
                       className="text-2xl font-black font-mono tracking-tight relative z-10"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      {(task.latestRun.costStats.duration_ms / 1000).toFixed(1)}s
+                      {(costStats.total_tokens || 0).toLocaleString()}
                     </div>
                   </div>
-                )}
 
-                {task.latestRun.costStats.tool_calls !== undefined && (
                   <div
                     className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
                     style={{
@@ -2151,62 +2116,105 @@ export function TaskDetail({
                       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
                     }}
                   >
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
                     <div
                       className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
                       style={{ color: "var(--text-dimmed)" }}
                     >
-                      Tool Invocations
+                      Op Cost
                     </div>
-                    <div
-                      className="text-2xl font-black font-mono tracking-tight relative z-10"
-                      style={{ color: "var(--text-primary)" }}
-                    >
-                      {task.latestRun.costStats.tool_calls}
+                    <div className="text-2xl font-black font-mono tracking-tight relative z-10 text-emerald-400">
+                      ${((costStats.input || 0) / 1000000).toFixed(6)}
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Detailed Breakdown */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div
-                  className="rounded-xl p-5 border border-white/5"
-                  style={{ background: "rgba(10,10,10,0.8)" }}
-                >
-                  <h3
-                    className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    <span className="w-2 h-2 rounded-sm bg-blue-500/50" />
-                    Token Flux
-                  </h3>
-                  <div className="space-y-4 font-mono text-xs">
-                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                      <span className="text-dimmed">Input Stream</span>
-                      <span className="text-blue-400 font-bold">
-                        ↓{(task.latestRun.costStats.input_tokens || 0).toLocaleString()}
-                      </span>
+                  {costStats.duration_ms && (
+                    <div
+                      className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                      style={{
+                        background: "rgba(20,20,20,0.6)",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                      <div
+                        className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                        style={{ color: "var(--text-dimmed)" }}
+                      >
+                        Latency
+                      </div>
+                      <div
+                        className="text-2xl font-black font-mono tracking-tight relative z-10"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {(costStats.duration_ms / 1000).toFixed(1)}s
+                      </div>
                     </div>
-                    {task.latestRun.costStats.cached && task.latestRun.costStats.cached > 0 && (
+                  )}
+
+                  {costStats.tool_calls !== undefined && (
+                    <div
+                      className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
+                      style={{
+                        background: "rgba(20,20,20,0.6)",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110" />
+                      <div
+                        className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
+                        style={{ color: "var(--text-dimmed)" }}
+                      >
+                        Tool Invocations
+                      </div>
+                      <div
+                        className="text-2xl font-black font-mono tracking-tight relative z-10"
+                        style={{ color: "var(--text-primary)" }}
+                      >
+                        {costStats.tool_calls}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Detailed Breakdown */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div
+                    className="rounded-xl p-5 border border-white/5"
+                    style={{ background: "rgba(10,10,10,0.8)" }}
+                  >
+                    <h3
+                      className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      <span className="w-2 h-2 rounded-sm bg-blue-500/50" />
+                      Token Flux
+                    </h3>
+                    <div className="space-y-4 font-mono text-xs">
                       <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                        <span className="text-dimmed">Cache Hit</span>
-                        <span className="text-emerald-400 font-bold">
-                          +{(task.latestRun.costStats.cached || 0).toLocaleString()}
+                        <span className="text-dimmed">Input Stream</span>
+                        <span className="text-blue-400 font-bold">
+                          ↓{(costStats.input_tokens || 0).toLocaleString()}
                         </span>
                       </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-dimmed">Output Stream</span>
-                      <span className="text-purple-400 font-bold">
-                        ↑{(task.latestRun.costStats.output_tokens || 0).toLocaleString()}
-                      </span>
+                      {costStats.cached && costStats.cached > 0 && (
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span className="text-dimmed">Cache Hit</span>
+                          <span className="text-emerald-400 font-bold">
+                            +{(costStats.cached || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-dimmed">Output Stream</span>
+                        <span className="text-purple-400 font-bold">
+                          ↑{(costStats.output_tokens || 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {task.latestRun.costStats.models &&
-                  Object.keys(task.latestRun.costStats.models).length > 0 && (
+                  {costStats.models && Object.keys(costStats.models).length > 0 && (
                     <div
                       className="rounded-xl p-5 border border-white/5"
                       style={{ background: "rgba(10,10,10,0.8)" }}
@@ -2219,7 +2227,7 @@ export function TaskDetail({
                         Model Utilization
                       </h3>
                       <div className="space-y-3">
-                        {Object.entries(task.latestRun.costStats.models).map(([model, stats]) => (
+                        {Object.entries(costStats.models).map(([model, stats]) => (
                           <div
                             key={model}
                             className="flex items-center justify-between p-2.5 rounded-lg border border-white/5"
@@ -2253,9 +2261,30 @@ export function TaskDetail({
                       </div>
                     </div>
                   )}
+                </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="flex-1 overflow-y-auto bg-black/20 p-6">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+                  <h2 className="text-sm font-semibold text-primary">Token usage</h2>
+                  <p className="mt-2 text-xs leading-relaxed text-dimmed">
+                    No token or cost telemetry has been recorded for this task yet. It will appear
+                    here as soon as the engine emits cost events for the latest run.
+                  </p>
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <DetailField
+                      label="Run status"
+                      value={task.latestRun?.status ?? "No run yet"}
+                    />
+                    <DetailField
+                      label="Engine"
+                      value={task.latestRun?.engine ?? task.engine ?? "Not selected"}
+                    />
+                    <DetailField label="Model" value={task.model ?? "Engine default"} />
+                  </div>
+                </div>
+              </div>
+            ))}
 
           {/* ── M3.4: Memory Tab ──────────────────────────────────── */}
           {activeTab === "memory" && (
