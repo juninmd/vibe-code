@@ -27,6 +27,20 @@ Este arquivo é um índice curto. O contrato operacional do repositório está d
    ```
    O `session_id` fica visível nos logs da task no vibe-code. Isso garante contexto completo e evita análises repetidas.
 
+## Catálogo de Agent Templates (portado do multica)
+
+Templates de personas curadas para bootstrap de novos agentes — pares `instructions` + skill refs.
+
+- **Local**: `packages/server/src/agents/templates/*.json` (25 templates: bug-fixer, code-reviewer, brainstormer, adr-writer, pr-description, release-notes, summarizer, translator-zh-en, etc.).
+- **Loader**: `packages/server/src/agents/agent-templates.ts` — `AgentTemplateRegistry` carrega sincronamente no startup, valida slug kebab-case, slug=filename, campos obrigatórios (`name`, `instructions`) e `skills[i].source_url`. Duplicatas e malformados abortam o boot.
+- **API**:
+  - `GET /api/agent-templates` → `{ data: AgentTemplate[] }` (ordem determinística).
+  - `GET /api/agent-templates/:slug` → `{ data: AgentTemplate }` ou 404.
+- **Auth**: rotas atrás de `authMiddleware`. Em scripts/CI use `Authorization: Bearer $VIBE_CODE_API_KEY`.
+- **Adicionar template novo**: criar `<slug>.json` no diretório com `{slug, name, description, category, icon, accent, instructions, skills:[{source_url,cached_name,cached_description}]}`. Nome do arquivo **deve** ser `<slug>.json`. Restart do server valida; falha de validação é fail-fast no boot — desejado.
+- **Smoke test**: `bun test packages/server/src/agents/agent-templates.test.ts` (6 testes: load, validação de campos, get por slug, GET /, GET /:slug, 404).
+- **Homologação ponta a ponta validada (2026-05-18)**: server em PORT=3099 retornou `count: 25`, `code-reviewer` com 1 skill e instructions de 1389 chars, 404 para slug inexistente.
+
 ## Aprendizados operacionais
 
 ### API do vibe-code
@@ -134,7 +148,76 @@ Este arquivo é um índice curto. O contrato operacional do repositório está d
   ```
 - `VIBE_CODE_INACTIVITY_MS=600000` (10min) é o valor correto com esse fix. Sem o fix, aumentar esse valor só escondia o problema.
 
-### Processo opencode no Windows
+### EventDedup + PropRow + sort-runs (portado do multica — deep explore #5)
+
+- **EventDedup** (`packages/server/src/ws/event-dedup.ts`): ring buffer bounded (default 128) por cliente WS, `markSeen(id)` retorna `true` se primeira ocorrência, `false` se dup. Empty/undefined id = always-deliver (compat com eventos legados sem id). Ports de `daemonws/hub.go::markSeen`. Pronto para wiring quando o protocolo WS ganhar `id` em mensagens.
+- **PropRow** (`packages/web/src/components/PropRow.tsx`): linha label/valor com CSS subgrid (`grid-cols-subgrid`) para que labels do mesmo container alinhem na largura do mais largo automaticamente. Substituir `w-16` mágicos no `TaskDetail` sidebar.
+- **sort-runs utils** (`packages/web/src/utils/sort-runs.ts`): `partitionRuns(runs)` separa active vs past; `sortPastRuns(runs)` ordena failed → cancelled → completed, newest first dentro de cada grupo. Permite seção "Past runs" ordenada por urgência (failed primeiro precisa atenção).
+
+### Homologação ponta a ponta (2026-05-19)
+
+Subi o servidor em `PORT=3098`, criei repo local em `D:/tmp/vibe-homolog-repo` (auto-clone com per-repo lock OK), executei tasks reais:
+
+- **Shim resolver (opencode)** ✅: server log mostra `running: ...\opencode-ai\node_modules\opencode-windows-x64\bin\opencode.exe run --format json --model anthropic/claude-sonnet-4-5 --dir ...` — binário **nativo** invocado, `.cmd` shim pulado. Task chegou a `phase=generating` em <3s.
+- **GEMINI_CLI_TRUST_WORKSPACE=true** ✅: `gemini -p "What is 2+2?"` em worktree não-listada com env injetado retornou `4` sem `FatalUntrustedWorkspaceError`. Fix bloqueia exit 55 quando `security.folderTrust.enabled=true`.
+- **Per-repo lock** ✅: `cloneRepo` finalizado sem colisão de lockfile, repo ficou `status: ready` em <4s.
+
+### GEMINI_CLI_TRUST_WORKSPACE fix + stderr-tail + event-summary utils (portado do multica)
+
+- **Gemini folder-trust bypass** (`packages/server/src/agents/engines/gemini.ts::buildGeminiChildEnv`): injeta `GEMINI_CLI_TRUST_WORKSPACE=true` quando não definido. Caller env wins. **Por que vale**: com `security.folderTrust.enabled` ligado em `~/.gemini/settings.json`, gemini headless em worktrees não-listadas dá exit 55 (`FatalUntrustedWorkspaceError`) sem output útil, run morre após ~10s. Documented escape hatch do próprio CLI (multica gemini.go::buildGeminiEnv).
+- **StderrTail util** (`packages/server/src/agents/engines/stderr-tail.ts`): ring buffer bounded (default 2KB) que forward para handler + retém tail. `withAgentStderr(msg, label, tail)` compõe "exit N; codex stderr: …". Pronto para wiring no codex/gemini quando CLI falha antes do handshake JSON-RPC.
+- **shortenPath + summarizeToolInput** (`packages/web/src/utils/event-summary.ts`): paths longos viram `.../parent/file.ts`; resumo de tool input segue fallback chain do multica (`query → pattern → path → description → command(120) → prompt(120) → skill → url → first short string`). Pronto para uso em transcript/timeline.
+- **MetadataChip** (`packages/web/src/components/MetadataChip.tsx`): pílula reutilizável com 5 tones (default/info/warning/success/danger) — disponível para refactor do toolbar do `AgentOutput`.
+
+### Semantic StatusPill + ToolFilter dropdown (portado do multica)
+
+- **TaskStatusPill** (`packages/web/src/components/TaskStatusPill.tsx`): pill no toolbar do `AgentOutput` que mostra **o que o agente está fazendo agora**, inferido do último log significativo — `Thinking`, `Reading files`, `Running command`, `Searching code`, `Making edits`, `Fetching web`, `Git operation`, `Replying`, ou `Queued`/`Starting up`. Skip de heartbeats e stderr para o label não piscar.
+- **Anchor monotônico de tempo** (padrão multica): `useRef` trava o timestamp inicial; nunca é reatribuído, então o timer nunca "salta para trás" quando `startedAt` opcional chega depois do mount.
+- **pickTaskStage util** (`packages/web/src/utils/task-stage.ts`): pura, testável, mapeia (status, logs) → stage. 10 testes Bun cobrindo cada heurística.
+- **formatElapsedSecs/Ms** (`packages/web/src/utils/elapsed.ts`): drops "0s" em round-minutes (`3m`, não `3m 0s`). 4 testes Bun.
+- **ToolFilterDropdown** (`packages/web/src/components/ToolFilterDropdown.tsx`): multi-select por tool/icon detectado nos `stepGroups`. Click fora ou ESC fecha. `count` por opção. Aplicado a `filteredStepGroups` que alimenta tanto a `AgentTimelineBar` quanto o accordion — filtra ambas em lockstep. Botão "Clear filters" aparece quando há seleção.
+
+### Timeline bar + redactSecrets na UI (portado do multica)
+
+- **Timeline bar** (`packages/web/src/components/AgentTimelineBar.tsx`): barra horizontal de segmentos coloridos sobre o accordion de steps em `AgentOutput`. Cada segmento = step group, largura proporcional ao log count, cor herda de `detectToolColor`, vermelho se houver stderr. Hover mostra tool/log count; click expande o step e faz `scrollIntoView` no container.
+- **Por que vale**: scan visual da execução completa cabe em <50px de altura. Detecta visualmente concentrações de errros, steps longos e padrões repetidos sem precisar abrir os accordions.
+- **redactSecrets** (`packages/web/src/utils/redact.ts`): safety-net no display layer — passa por logs antes de `convertAnsi`/`dangerouslySetInnerHTML`. Cobre: AWS keys, GitHub/GitLab PATs, OpenAI sk-*, Slack xox*, JWTs, Bearer tokens, connection strings, env vars (`API_KEY=`, `TOKEN=`, etc.).
+- **Por que vale**: defesa em profundidade. Se um agente vazar segredo em log, o servidor não viu e a UI redacta antes de renderizar.
+- **Smoke tests**:
+  - `packages/web/src/utils/redact.test.ts` (9 testes Bun) — cobre cada padrão.
+  - `packages/web/src/components/AgentTimelineBar.test.tsx` (5 testes Vitest) — render, click, empty, error tint, min width. **Nota**: vitest está bloqueado por timeout de worker no ambiente local (pré-existente, atinge TaskCard.test.tsx também). Testes Bun rodam normalmente.
+
+### Per-repo lock no GitService (portado do multica)
+
+- **Problema**: git mantém lockfiles globais por bare-repo (`packed-refs.lock`, `config.lock`, dirs admin de worktree). Clone/fetch/worktree-add concorrentes na mesma bare colidem e abortam (visto principalmente quando duas tasks compartilham o mesmo repo).
+- **Fix**: `GitService.withRepoLock(barePath, fn)` serializa mutações por bare path; bares diferentes rodam em paralelo. Aplicado a `cloneRepo`, `fetchRepo`, `createWorktree` (fetch + worktree-add atômicos) e `removeWorktree`.
+- **Smoke test**: `packages/server/src/git/git-service.lock.test.ts` (2 testes — serializa same-path, paraleliza diff-path).
+
+### filterCustomArgs + VIBE_OPENCODE_EXTRA_ARGS (portado do multica)
+
+- Operadores podem passar flags extras ao opencode via `VIBE_OPENCODE_EXTRA_ARGS` (separadas por espaço).
+- `filterCustomArgs` (em `agents/engines/blocked-args.ts`) descarta flags protocol-critical: `--format`, `--dir`, `--session`, `--model`. Cada drop loga warning.
+- Útil para passar `--print-logs`, `--verbose` etc. sem rebuildar binário e sem risco de quebrar o protocolo JSON.
+- Smoke test: `packages/server/src/agents/engines/blocked-args.test.ts` (6 testes — inline `=value`, standalone, with-value, callback).
+
+### step_finish: cost event com cache tokens (portado do multica)
+
+- O parser do opencode agora emite um `cost` event a cada `step_finish` com `input_tokens`, `output_tokens`, `total_tokens` e `cached` (mapeado de `tokens.cache.read`).
+- Log system mostra `tokens in:N out:M (cache r:X w:Y)` — taxa de cache hit é a alavanca mais acionável de custo.
+- Smoke test: `packages/server/src/agents/engines/opencode.cache-tokens.test.ts` (3 testes).
+
+### Fix: opencode.cmd shim trunca prompts multiline (portado do multica)
+
+- **Causa raiz**: `npm install -g opencode-ai` instala um `opencode.cmd` shim do Windows. O encaminhamento `%*` do batch **não preserva newlines** — prompts multilinha são truncados na primeira `\n` antes de chegar ao JS entrypoint, fazendo o agente ver apenas a primeira linha (= zero output útil).
+- **Fix** (`packages/server/src/agents/engines/opencode.ts`):
+  - `resolveOpencodeNativeFromShim()` localiza o `opencode.exe` nativo dentro de `node_modules/opencode-ai/node_modules/opencode-windows-{x64,x64-baseline,arm64}/bin/`.
+  - `resolveOpencodeBinary()` é chamado em `buildCommandArgs()` — no Windows usa o nativo; nas demais plataformas devolve `"opencode"`.
+  - Ordem de candidatos respeita `process.arch`; baseline serve CPUs antigas sem AVX2.
+- **Belt-and-suspenders**: `OPENCODE_PERMISSION={"*":"allow"}` agora também é injetado via env no `Bun.spawn`, complementando `opencode.json`. Se o arquivo falhar ao gravar, o env var ainda autoriza tools.
+- **Smoke test**: `bun test packages/server/src/agents/engines/opencode.shim-resolver.test.ts` (5 testes com mock `statFn`, cobrem x64, x64-baseline, arm64 e fallback).
+- Resultado esperado: prompts multilinha agora chegam íntegros ao agente no Windows, eliminando a causa documentada de "zero output real em muitos cenários".
+
+### Processo opencode no Windows (legado — ver fix acima)
 
 - O opencode com `--format json` e stdin fechado produz zero output real em muitos cenários no Windows. O watchdog de inatividade é a única salvaguarda — ele deve disparar e marcar a task como `failed` após `INACTIVITY_MS`.
 - Tasks marcadas como `failed` pelo watchdog **devem** voltar ao backlog manualmente ou via requeue — o orquestrador não faz isso automaticamente.

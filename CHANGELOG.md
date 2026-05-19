@@ -9,6 +9,7 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Task Detail Modal Polish**: Reworked the task detail modal header, action controls, goal strip, and tab navigation for clearer hierarchy, better responsive behavior, and less visual clutter.
 - **Product Positioning**: Updated `README.md`, `CLAUDE.md`, and `AGENTS.md` to describe the product as an autonomous code production control plane instead of a task-board-first manager.
 - **Task Poll Compatibility**: Preserved `GET /api/tasks/poll` legacy behavior for missing focused tasks (returns empty focused payload instead of hard failure) while keeping scope checks for valid resources.
 - **Task UI Reliability**: Scheduled task actions now use `task.id` for run/toggle endpoints; board now includes ghost rails for hidden status visibility.

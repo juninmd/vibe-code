@@ -3,6 +3,10 @@ import AnsiToHtml from "ansi-to-html";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { formatTime } from "../utils/date";
+import { redactSecrets } from "../utils/redact";
+import { AgentTimelineBar, type TimelineSegment } from "./AgentTimelineBar";
+import { TaskStatusPill } from "./TaskStatusPill";
+import { ToolFilterDropdown, type ToolFilterOption } from "./ToolFilterDropdown";
 
 const ansiConverter = new AnsiToHtml({
   fg: "#e4e4e7",
@@ -340,7 +344,8 @@ function StepAccordion({
                     ? "#34d399"
                     : "";
 
-            const html = convertAnsi(log.content);
+            // Safety-net redaction at the display layer (ported from multica).
+            const html = convertAnsi(redactSecrets(log.content));
             // biome-ignore lint/security/noDangerouslySetInnerHtml: ansi-to-html with escapeXML:true
             const inner = <span dangerouslySetInnerHTML={{ __html: html }} />;
 
@@ -388,6 +393,10 @@ interface AgentOutputProps {
   fullHeight?: boolean;
   /** Latest status from the agent (from run.currentStatus) */
   currentStatus?: string | null;
+  /** Task-level status (queued / dispatched / in_progress / done / failed). */
+  taskStatus?: string | null;
+  /** ISO timestamp the task started — anchors the status-pill timer. */
+  taskStartedAt?: string | null;
   /** Cost statistics from the latest run */
   costStats?: {
     total_tokens: number;
@@ -488,6 +497,8 @@ export function AgentOutput({
   onSendInput,
   fullHeight = false,
   currentStatus,
+  taskStatus,
+  taskStartedAt,
   costStats,
 }: AgentOutputProps) {
   const [historicLogs, setHistoricLogs] = useState<AgentLog[]>([]);
@@ -502,6 +513,7 @@ export function AgentOutput({
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const [showTimestamps, setShowTimestamps] = useState(false);
   const [splitMode, setSplitMode] = useState<"none" | "right" | "down">("none");
+  const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -664,6 +676,46 @@ export function AgentOutput({
 
   const stepGroups = useMemo(() => buildStepGroups(allLogs), [allLogs]);
 
+  // Tool filter options derived from stepGroups — key on icon+label combo so
+  // distinct tool families (Read vs Write) stay separate but instances of
+  // the same tool ("Reading a.ts" + "Reading b.ts") collapse into one entry.
+  const toolFilterOptions = useMemo<ToolFilterOption[]>(() => {
+    const tally = new Map<string, ToolFilterOption>();
+    for (const g of stepGroups) {
+      const label = g.toolName
+        .replace(/^(Reading|Writing|Editing|Running:|Listing|Searching|Fetching|Git:)\s*/, "$1")
+        .split("\n")[0]
+        .slice(0, 40);
+      const key = `${g.toolIcon}:${label.split(" ")[0]}`;
+      const existing = tally.get(key);
+      if (existing) existing.count++;
+      else tally.set(key, { key, label, icon: g.toolIcon, count: 1 });
+    }
+    return Array.from(tally.values()).sort((a, b) => b.count - a.count);
+  }, [stepGroups]);
+
+  const filteredStepGroups = useMemo(() => {
+    if (selectedTools.size === 0) return stepGroups;
+    return stepGroups.filter((g) => {
+      const label = g.toolName
+        .replace(/^(Reading|Writing|Editing|Running:|Listing|Searching|Fetching|Git:)\s*/, "$1")
+        .split("\n")[0]
+        .slice(0, 40);
+      const key = `${g.toolIcon}:${label.split(" ")[0]}`;
+      return selectedTools.has(key);
+    });
+  }, [stepGroups, selectedTools]);
+
+  const toggleToolFilter = useCallback((key: string) => {
+    setSelectedTools((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const clearToolFilters = useCallback(() => setSelectedTools(new Set()), []);
+
   const toggleStep = useCallback((id: number) => {
     setExpandedSteps((prev) => {
       const next = new Set(prev);
@@ -696,8 +748,16 @@ export function AgentOutput({
     <>
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-input border-b border-default flex-wrap">
+        {/* Semantic status pill — shows what the agent is doing this second */}
+        {isRunning && (
+          <TaskStatusPill
+            taskStatus={taskStatus ?? "in_progress"}
+            logs={allLogs}
+            startedAt={taskStartedAt ?? null}
+          />
+        )}
         <span className="text-[10px] text-dimmed font-mono shrink-0">
-          {allLogs.length} linhas{isRunning ? " · rodando" : ""}
+          {allLogs.length} linhas{!isRunning ? "" : ""}
         </span>
 
         {/* Token counter */}
@@ -744,6 +804,14 @@ export function AgentOutput({
         )}
 
         <div className="flex-1" />
+
+        {/* Tool filter — multi-select by detected step group */}
+        <ToolFilterDropdown
+          options={toolFilterOptions}
+          selected={selectedTools}
+          onToggle={toggleToolFilter}
+          onClear={clearToolFilters}
+        />
 
         {/* Search toggle */}
         <button
@@ -912,6 +980,28 @@ export function AgentOutput({
         )}
       </div>
 
+      {/* Timeline bar — visual overview of step groups, click to jump */}
+      <AgentTimelineBar
+        segments={
+          filteredStepGroups.map((g) => ({
+            id: g.id,
+            toolName: g.toolName,
+            toolIcon: g.toolIcon,
+            accentColor: g.accentColor,
+            logCount: g.logs.length,
+            hasError: g.logs.some((sl) => sl.log.stream === "stderr"),
+          })) satisfies TimelineSegment[]
+        }
+        activeId={expandedSteps.size > 0 ? Math.max(...Array.from(expandedSteps)) : null}
+        onSegmentClick={(id) => {
+          setExpandedSteps((prev) => new Set([...prev, id]));
+          requestAnimationFrame(() => {
+            const el = scrollRef.current?.querySelector(`[data-step-id="${id}"]`);
+            el?.scrollIntoView({ behavior: "smooth", block: "start" });
+          });
+        }}
+      />
+
       {/* Step accordion output */}
       <div
         ref={scrollRef}
@@ -920,13 +1010,13 @@ export function AgentOutput({
           isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
         }`}
       >
-        {stepGroups.map((group, idx) => (
+        {filteredStepGroups.map((group, idx) => (
           <StepAccordion
             key={group.id}
             group={group}
             isExpanded={expandedSteps.has(group.id)}
             onToggle={() => toggleStep(group.id)}
-            isLast={idx === stepGroups.length - 1}
+            isLast={idx === filteredStepGroups.length - 1}
             isRunning={isRunning}
             showTimestamps={showTimestamps}
             streamFilter={streamFilter}

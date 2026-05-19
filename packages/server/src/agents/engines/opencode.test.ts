@@ -236,7 +236,7 @@ describe("OpenCodeEngine.parseLine", () => {
         part: { tokens: { total: 12345 } },
       })
     );
-    expect(events[0].content).toMatch(/tokens: 12[.,]345/);
+    expect(events.find((e) => e.type === "cost")?.costStats?.total_tokens).toBe(12345);
   });
   it("humanizes various tool calls correctly", () => {
     const testTools = [
@@ -310,7 +310,7 @@ describe("OpenCodeEngine.parseLine", () => {
       part: { type: "step-finish", tokens: { total: 14570 } },
     });
     const events = engine.parseLine(line);
-    expect(events.find((e) => e.content?.match(/tokens: 14[.,]570/))).toBeDefined();
+    expect(events.find((e) => e.type === "cost")?.costStats?.total_tokens).toBe(14570);
   });
 
   it("parses interactive question events correctly", () => {
@@ -329,8 +329,9 @@ describe("OpenCodeEngine.buildCommand", () => {
     const engine = new CommandInspectingOpenCodeEngine();
     const command = engine.getCommand("opencode/minimax-m2.5-free", "/tmp/workdir");
 
-    expect(command).toEqual([
-      "opencode",
+    // command[0] may be "opencode" on POSIX or the resolved native exe on Windows
+    expect(command[0]).toMatch(/opencode(\.exe|\.cmd)?$/i);
+    expect(command.slice(1)).toEqual([
       "run",
       "--format",
       "json",
