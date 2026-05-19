@@ -9,6 +9,9 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Task Detail Presentation Polish**: Refined modal actions, approval copy, destructive-action wording, and removed a hidden legacy info block so the task detail surface is cleaner for executive demos.
+- **Task Detail Executive Summary**: Added a presentation-grade summary band for objective, status, run state, output, and evidence so the task modal reads as an operational control surface.
+- **Task Detail Data Audit**: Reworked the task detail info tab to show only backend-backed task, repository, run, and usage fields, with explicit empty states instead of inferred health/progress labels.
 - **Task Detail Modal Polish**: Reworked the task detail modal header, action controls, goal strip, and tab navigation for clearer hierarchy, better responsive behavior, and less visual clutter.
 - **Product Positioning**: Updated `README.md`, `CLAUDE.md`, and `AGENTS.md` to describe the product as an autonomous code production control plane instead of a task-board-first manager.
 - **Task Poll Compatibility**: Preserved `GET /api/tasks/poll` legacy behavior for missing focused tasks (returns empty focused payload instead of hard failure) while keeping scope checks for valid resources.
