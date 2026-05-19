@@ -104,4 +104,31 @@ describe("TaskDetail tabs", () => {
     await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
     expect(screen.getByText("terminal-session-mock")).toBeInTheDocument();
   });
+
+  it("shows real-data presentation readiness on the info tab", async () => {
+    renderDetail({
+      ...baseTask,
+      status: "review",
+      branchName: "task/task-1-execution-split",
+      repo: {
+        id: "repo-1",
+        provider: "github",
+        name: "vibe-code",
+        url: "https://github.com/juninmd/vibe-code",
+        defaultBranch: "main",
+        localPath: null,
+        status: "ready",
+        errorMessage: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Info" }));
+
+    expect(screen.getByText("Presentation readiness")).toBeInTheDocument();
+    expect(screen.getByText("Repository context")).toBeInTheDocument();
+    expect(screen.getByText("Delivery output")).toBeInTheDocument();
+    expect(screen.getByText("Branch task/task-1-execution-split is available")).toBeInTheDocument();
+  });
 });

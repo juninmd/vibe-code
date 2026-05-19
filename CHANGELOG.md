@@ -9,6 +9,7 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Task Detail Readiness Review**: Added a real-data presentation readiness section that surfaces repository context, execution configuration, delivery output, artifacts, and governance state without synthetic progress claims.
 - **Task Detail Presentation Polish**: Refined modal actions, approval copy, destructive-action wording, and removed a hidden legacy info block so the task detail surface is cleaner for executive demos.
 - **Task Detail Executive Summary**: Added a presentation-grade summary band for objective, status, run state, output, and evidence so the task modal reads as an operational control surface.
 - **Task Detail Data Audit**: Reworked the task detail info tab to show only backend-backed task, repository, run, and usage fields, with explicit empty states instead of inferred health/progress labels.
