@@ -101,7 +101,7 @@ describe("TaskDetail tabs", () => {
 
   it("switches to terminal tab when terminal tab is clicked", async () => {
     renderDetail();
-    await userEvent.click(screen.getByRole("button", { name: "TERMINAL" }));
+    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
     expect(screen.getByText("terminal-session-mock")).toBeInTheDocument();
   });
 });
