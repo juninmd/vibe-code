@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { AgentLog } from "@vibe-code/shared";
+import { describe, expect, it } from "vitest";
 import { pickTaskStage } from "./task-stage";
 
 const mkLog = (content: string, stream: AgentLog["stream"] = "stdout"): AgentLog => ({
