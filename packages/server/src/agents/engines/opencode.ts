@@ -46,14 +46,14 @@ function humanizeToolResult(tool: string, output: unknown): string | null {
   const preview = text.slice(0, 120).replace(/\n/g, " ").trim();
 
   if (t === "bash" || t.includes("run_command") || t.includes("execute")) {
-    if (!text.trim()) return "    Done (no output)";
-    return `    ${preview}${text.length > 120 ? ` … (${lines} lines)` : ""}`;
+    if (!text.trim()) return "    Command completed with no output";
+    return `    Command output: ${preview}${text.length > 120 ? ` ... (${lines} lines)` : ""}`;
   }
   if (t.includes("read") || t === "view_file") {
-    return `    ${lines} line${lines !== 1 ? "s" : ""} read`;
+    return `    Read ${lines} non-empty line${lines !== 1 ? "s" : ""}`;
   }
   if (t.includes("search") || t.includes("grep") || t.includes("glob")) {
-    return `    ${lines} match${lines !== 1 ? "es" : ""}`;
+    return `    Found ${lines} match${lines !== 1 ? "es" : ""}`;
   }
   if (
     t.includes("write") ||
@@ -61,10 +61,10 @@ function humanizeToolResult(tool: string, output: unknown): string | null {
     t.includes("create") ||
     t.includes("str_replace")
   ) {
-    return "    Saved";
+    return "    File saved";
   }
   if (t.includes("web") || t.includes("fetch")) {
-    return `    ${lines} line${lines !== 1 ? "s" : ""} fetched`;
+    return `    Fetched ${lines} non-empty line${lines !== 1 ? "s" : ""}`;
   }
   if (text.length <= 80) return `    ${preview}`;
   return null;
@@ -873,8 +873,10 @@ export class OpenCodeEngine implements AgentEngine {
           } else if (status === "completed" || status === "success" || status === "done") {
             const metadata = (state.metadata ?? part.metadata ?? {}) as Record<string, unknown>;
             const exitCode = metadata.exitCode ?? metadata.exit ?? metadata.code;
+            const callLabel = humanizeToolCall(toolName, input as Record<string, unknown>);
             const label = humanizeToolResult(toolName, output);
 
+            results.push({ type: "log", stream: "stdout", content: callLabel });
             results.push({
               type: "tool_result",
               toolResult: {
