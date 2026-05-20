@@ -92,16 +92,20 @@ describe("E2E Homologation — full task lifecycle", () => {
     hub = makeHub(wsEvents);
 
     const engineEvents: AgentEvent[] = [
-      { type: "system", message: "Starting task", phase: "setup" },
-      { type: "output", content: "Analyzing codebase...", stream: "stdout" },
-      { type: "output", content: "Adding a small doc improvement to README.", stream: "stdout" },
+      { type: "status", content: "Starting task" },
+      { type: "log", content: "Analyzing codebase...", stream: "stdout" },
+      { type: "log", content: "Adding a small doc improvement to README.", stream: "stdout" },
       {
         type: "tool_use",
-        tool: "write_file",
-        input: { path: "HOMOLOG.md", content: "# Homologation\nE2E test passed." },
+
+        toolUse: {
+          toolId: "1",
+          toolName: "write_file",
+          parameters: { path: "HOMOLOG.md", content: "# Homologation\nE2E test passed." },
+        },
       },
-      { type: "output", content: "File written. Task complete.", stream: "stdout" },
-      { type: "done", exitCode: 0 },
+      { type: "log", content: "File written. Task complete.", stream: "stdout" },
+      { type: "complete", exitCode: 0 },
     ];
 
     const engine = makeEngine(engineEvents);
@@ -111,7 +115,6 @@ describe("E2E Homologation — full task lifecycle", () => {
     orchestrator = new Orchestrator(db, git, registry, hub, 2);
 
     const repo = db.repos.create({
-      name: "vibe-code",
       url: "https://github.com/juninmd/vibe-code",
       defaultBranch: "main",
     });
@@ -210,7 +213,7 @@ describe("E2E Homologation — full task lifecycle", () => {
 
     // No bare --force in prompt
     const lines = conflictTask?.description?.split("\n");
-    const bareForce = lines.filter((l) => /git push .*--force(?!-with-lease)/.test(l));
+    const bareForce = lines?.filter((l) => /git push .*--force(?!-with-lease)/.test(l));
     expect(bareForce).toHaveLength(0);
     console.log(`[STEP 5] Prompt safety verified: --force-with-lease ✓, no bare --force ✓`);
   });
