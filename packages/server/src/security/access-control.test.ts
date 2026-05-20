@@ -22,6 +22,15 @@ describe("access-control", () => {
     db.raw.exec("DELETE FROM tasks");
     db.raw.exec("DELETE FROM repositories");
     db.raw.exec("DELETE FROM settings");
+    db.raw.exec("DELETE FROM workspaces");
+
+    // Seed workspaces to satisfy foreign key constraints
+    db.raw
+      .prepare("INSERT INTO workspaces (id, name, slug) VALUES (?, ?, ?)")
+      .run("ws-1", "Workspace 1", "workspace-1");
+    db.raw
+      .prepare("INSERT INTO workspaces (id, name, slug) VALUES (?, ?, ?)")
+      .run("ws-2", "Workspace 2", "workspace-2");
 
     const repo = db.repos.create({ url: `https://github.com/org/repo-${Date.now()}.git` });
     repoId = repo.id;
@@ -45,19 +54,20 @@ describe("access-control", () => {
   });
 
   it("allows access when repo is mapped to workspace", () => {
-    db.settings.set(`repo_workspace:${repoId}`, "ws-1");
+    db.raw.prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?").run("ws-1", repoId);
     const decision = enforceRepoAccess(db, context, repoId);
     expect(decision).toBeNull();
   });
 
   it("claims an unmapped legacy repo for the current workspace", () => {
     expect(claimUnmappedRepoForWorkspace(db, context, repoId)).toBe(true);
-    expect(db.settings.get(`repo_workspace:${repoId}`)).toBe("ws-1");
+    const repo = db.repos.getById(repoId);
+    expect(repo?.workspaceId).toBe("ws-1");
     expect(enforceRepoAccess(db, context, repoId)).toBeNull();
   });
 
   it("does not claim a repo already mapped to another workspace", () => {
-    db.settings.set(`repo_workspace:${repoId}`, "ws-2");
+    db.raw.prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?").run("ws-2", repoId);
     expect(claimUnmappedRepoForWorkspace(db, context, repoId)).toBe(false);
     const decision = enforceRepoAccess(db, context, repoId);
     expect(decision?.code).toBe("repo_forbidden");
@@ -69,13 +79,13 @@ describe("access-control", () => {
     expect(deniedTask?.code).toBe("repo_forbidden");
     expect(deniedRun?.code).toBe("repo_forbidden");
 
-    db.settings.set(`repo_workspace:${repoId}`, "ws-1");
+    db.raw.prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?").run("ws-1", repoId);
     expect(enforceTaskAccess(db, context, taskId)).toBeNull();
     expect(enforceRunAccess(db, context, runId)).toBeNull();
   });
 
   it("redacts worktree path from external run serialization by default", () => {
-    db.settings.set(`repo_workspace:${repoId}`, "ws-1");
+    db.raw.prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?").run("ws-1", repoId);
     const run = db.runs.getById(runId);
     expect(run).not.toBeNull();
     if (!run) return;

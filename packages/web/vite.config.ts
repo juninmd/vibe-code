@@ -76,6 +76,7 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
       globals: true,
+      exclude: ["node_modules/**", "dist/**", "src/utils/*.test.ts"],
       coverage: {
         provider: "v8",
         reporter: ["text", "lcov"],

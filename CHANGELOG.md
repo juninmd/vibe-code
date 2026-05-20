@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 ### Added
+- **Process Tree Reaping**: Created process-tree execution safety utility for cross-platform recursive child-process termination during agent abort signals.
+- **Graceful Shutdown**: Added signal handling (`SIGINT`/`SIGTERM`) to the server orchestrator to cancel active runs and release locks safely on server exit.
+- **Validation Loop Detection**: Hashing signature mechanism added to the deterministic validation loop in the execution manager to identify and abort repeating/stalled retry loops.
 - **Repository Contracts**: Added `WORKFLOW.md`, `docs/repo-contract.md`, and `docs/glossary.md` to define the repository workflow contract, shared vocabulary, and migration path toward an autonomous control plane.
 - **Execution + Terminal Split**: Task detail now has dedicated `Execution` and `Terminal` tabs, with a new `ExecutionTimeline` surface and a `TerminalSessionPanel` for real terminal streaming.
 - **Terminal Session Channel**: Added WS terminal protocol support (`terminal_open`, `terminal_input`, `terminal_resize`, `terminal_signal`, `terminal_close`) and server-side session lifecycle module.
@@ -9,6 +12,7 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Workspace Isolation**: Refactored the control plane database schema and Hono API endpoints to native `workspace_id` referencing workspace records, completely separating repository contexts.
 - **Conflict Resolution Flow**: Conflict-resolution tasks now reuse the existing PR branch and preserve the conflicted rebase state so the agent can resolve real merge conflicts instead of showing an inactive terminal against a clean workspace.
 - **Task Execution Telemetry**: Restored visible token/cost telemetry with an execution summary header and an explicit Cost tab empty state when engines have not emitted usage data yet.
 - **Task Detail Readiness Review**: Added a real-data presentation readiness section that surfaces repository context, execution configuration, delivery output, artifacts, and governance state without synthetic progress claims.

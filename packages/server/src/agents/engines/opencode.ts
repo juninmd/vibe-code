@@ -637,15 +637,15 @@ export class OpenCodeEngine implements AgentEngine {
     }
     yield { type: "complete", exitCode: exitCode ?? 0 };
   }
-
   abort(runId: string): void {
     const proc = this.processes.get(runId);
     if (proc) {
-      proc.kill();
+      import("../../utils/process-tree").then(({ killProcessTree }) => {
+        killProcessTree(proc.pid);
+      });
       this.processes.delete(runId);
     }
   }
-
   sendInput(runId: string, input: string): boolean {
     const proc = this.processes.get(runId);
     if (!proc?.stdin || typeof proc.stdin === "number") return false;

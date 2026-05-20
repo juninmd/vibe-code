@@ -159,7 +159,7 @@ describe("E2E Homologation — full task lifecycle", () => {
   });
 
   it("STEP 3: WS broadcast events were emitted during execution", () => {
-    const taskEvents = wsEvents.filter(
+    const _taskEvents = wsEvents.filter(
       (e) => e.taskId === taskId || e.type?.includes("task") || e.type?.includes("run")
     );
     console.log(`[STEP 3] WS events emitted: ${wsEvents.length} total`);
@@ -204,12 +204,12 @@ describe("E2E Homologation — full task lifecycle", () => {
 
     console.log(`[STEP 5] Conflict task created: ${conflictTask?.id}`);
     expect(conflictTask).toBeDefined();
-    expect(conflictTask!.tags).toContain("conflict-resolution");
-    expect(conflictTask!.description).toContain("--force-with-lease");
-    expect(conflictTask!.branchName).toBe("feat/conflicting");
+    expect(conflictTask?.tags).toContain("conflict-resolution");
+    expect(conflictTask?.description).toContain("--force-with-lease");
+    expect(conflictTask?.branchName).toBe("feat/conflicting");
 
     // No bare --force in prompt
-    const lines = conflictTask!.description!.split("\n");
+    const lines = conflictTask?.description?.split("\n");
     const bareForce = lines.filter((l) => /git push .*--force(?!-with-lease)/.test(l));
     expect(bareForce).toHaveLength(0);
     console.log(`[STEP 5] Prompt safety verified: --force-with-lease ✓, no bare --force ✓`);

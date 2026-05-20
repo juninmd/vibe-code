@@ -37,18 +37,15 @@ function isLegacyFallbackEnabled(db: Db): boolean {
   return db.settings.get("security_legacy_workspace_fallback") === "true";
 }
 
-function repoWorkspaceKey(repoId: string): string {
-  return `repo_workspace:${repoId}`;
-}
-
 function canAccessRepoInWorkspace(db: Db, repoId: string, workspaceId: string): boolean {
-  const mappedWorkspace = db.settings.get(repoWorkspaceKey(repoId));
-  if (!mappedWorkspace) return false;
-  return mappedWorkspace === workspaceId;
+  const repo = db.repos.getById(repoId);
+  return repo?.workspaceId === workspaceId;
 }
 
 function bindRepoToWorkspace(db: Db, repoId: string, workspaceId: string): void {
-  db.settings.set(repoWorkspaceKey(repoId), workspaceId);
+  db.raw
+    .prepare("UPDATE repositories SET workspace_id = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(workspaceId, repoId);
 }
 
 export function claimUnmappedRepoForWorkspace(
@@ -57,7 +54,9 @@ export function claimUnmappedRepoForWorkspace(
   repoId: string
 ): boolean {
   if (!context.authEnabled || !context.workspaceId) return true;
-  if (db.settings.get(repoWorkspaceKey(repoId))) return false;
+  const repo = db.repos.getById(repoId);
+  if (!repo) return false;
+  if (repo.workspaceId) return false;
 
   bindRepoToWorkspace(db, repoId, context.workspaceId);
   console.info("[security] Mapped previously unowned repo to workspace", {
