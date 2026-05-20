@@ -57,6 +57,7 @@ function priorityToInt(p: TaskPriority | undefined | null): number {
 
 interface RepoRow {
   id: string;
+  workspace_id: string | null;
   name: string;
   url: string;
   default_branch: string;
@@ -148,6 +149,7 @@ interface ArtifactRow {
 function mapRepo(row: RepoRow): Repository {
   return {
     id: row.id,
+    workspaceId: row.workspace_id ?? undefined,
     name: row.name,
     url: row.url,
     defaultBranch: row.default_branch,
@@ -354,10 +356,13 @@ export function createWorkspaceQueries(db: Database) {
 export function createRepoQueries(db: Database) {
   const stmts = {
     list: db.prepare<RepoRow, []>("SELECT * FROM repositories ORDER BY created_at DESC"),
+    listByWorkspace: db.prepare<RepoRow, [string]>(
+      "SELECT * FROM repositories WHERE workspace_id = ? ORDER BY created_at DESC"
+    ),
     getById: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE id = ?"),
     getByUrl: db.prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE url = ?"),
-    insert: db.prepare<RepoRow, [string, string, string, string]>(
-      "INSERT INTO repositories (name, url, default_branch, provider) VALUES (?, ?, ?, ?) RETURNING *"
+    insert: db.prepare<RepoRow, [string, string, string, string, string | null]>(
+      "INSERT INTO repositories (name, url, default_branch, provider, workspace_id) VALUES (?, ?, ?, ?, ?) RETURNING *"
     ),
     updateStatus: db.prepare<RepoRow, [string, string | null, string | null, string]>(
       "UPDATE repositories SET status = ?, local_path = ?, error_message = ?, updated_at = datetime('now') WHERE id = ? RETURNING *"
@@ -366,7 +371,10 @@ export function createRepoQueries(db: Database) {
   };
 
   return {
-    list: (): Repository[] => stmts.list.all().map(mapRepo),
+    list: (workspaceId?: string): Repository[] => {
+      if (workspaceId) return stmts.listByWorkspace.all(workspaceId).map(mapRepo);
+      return stmts.list.all().map(mapRepo);
+    },
     getById: (id: string): Repository | null => {
       const row = stmts.getById.get(id);
       return row ? mapRepo(row) : null;
@@ -379,10 +387,18 @@ export function createRepoQueries(db: Database) {
         .all(...ids) as RepoRow[];
       return rows.map(mapRepo);
     },
-    create: (req: CreateRepoRequest & { provider?: GitProvider }): Repository => {
+    create: (
+      req: CreateRepoRequest & { provider?: GitProvider; workspaceId?: string }
+    ): Repository => {
       const name = extractRepoName(req.url);
       const provider = req.provider ?? detectProviderFromUrl(req.url);
-      const row = stmts.insert.get(name, req.url, req.defaultBranch ?? "main", provider);
+      const row = stmts.insert.get(
+        name,
+        req.url,
+        req.defaultBranch ?? "main",
+        provider,
+        req.workspaceId ?? null
+      );
       if (!row) throw new Error("Failed to create repository");
       return mapRepo(row);
     },

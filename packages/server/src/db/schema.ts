@@ -19,6 +19,7 @@ export function initDatabase(dbPath: string): Database {
 
     CREATE TABLE IF NOT EXISTS repositories (
       id             TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      workspace_id   TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
       name           TEXT NOT NULL,
       url            TEXT NOT NULL UNIQUE,
       default_branch TEXT NOT NULL DEFAULT 'main',
@@ -197,6 +198,28 @@ export function initDatabase(dbPath: string): Database {
   const repoColNames = repoCols.map((c) => c.name);
   if (!repoColNames.includes("provider")) {
     db.exec("ALTER TABLE repositories ADD COLUMN provider TEXT NOT NULL DEFAULT 'github'");
+  }
+  if (!repoColNames.includes("workspace_id")) {
+    db.exec(
+      "ALTER TABLE repositories ADD COLUMN workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE"
+    );
+    try {
+      const settings = db
+        .query("SELECT key, value FROM settings WHERE key LIKE 'repo_workspace:%'")
+        .all() as { key: string; value: string }[];
+      for (const entry of settings) {
+        const repoId = entry.key.replace("repo_workspace:", "");
+        db.prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?").run(
+          entry.value,
+          repoId
+        );
+      }
+    } catch (err) {
+      console.error(
+        "[schema] Failed to backfill repository workspace_ids from settings table:",
+        err
+      );
+    }
   }
 
   // Migration: matched_skills column on agent_runs (M7.2)

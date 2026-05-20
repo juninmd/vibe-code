@@ -312,7 +312,9 @@ export class GeminiEngine implements AgentEngine {
   abort(runId: string): void {
     const proc = this.processes.get(runId);
     if (proc) {
-      proc.kill();
+      import("../../utils/process-tree").then(({ killProcessTree }) => {
+        killProcessTree(proc.pid);
+      });
       this.processes.delete(runId);
     }
   }
