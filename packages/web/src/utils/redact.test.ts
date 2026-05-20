@@ -3,16 +3,16 @@ import { redactSecrets } from "./redact";
 
 describe("redactSecrets", () => {
   it("redacts GitHub PAT in free text", () => {
-    expect(redactSecrets("see commit ghp_" + "a".repeat(40))).toContain("[REDACTED GITHUB TOKEN]");
+    expect(redactSecrets(`see commit ghp_${"a".repeat(40)}`)).toContain("[REDACTED GITHUB TOKEN]");
   });
   it("redacts OpenAI/Anthropic style sk- keys", () => {
-    expect(redactSecrets("sk-" + "x".repeat(40))).toContain("[REDACTED API KEY]");
+    expect(redactSecrets(`sk-${"x".repeat(40)}`)).toContain("[REDACTED API KEY]");
   });
   it("redacts AWS access key id", () => {
-    expect(redactSecrets("AKIA" + "A".repeat(16))).toContain("[REDACTED AWS KEY]");
+    expect(redactSecrets(`AKIA${"A".repeat(16)}`)).toContain("[REDACTED AWS KEY]");
   });
   it("redacts JWT", () => {
-    const jwt = "ey" + "a".repeat(15) + "." + "b".repeat(15) + "." + "c".repeat(15);
+    const jwt = `ey${"a".repeat(15)}.${"b".repeat(15)}.${"c".repeat(15)}`;
     expect(redactSecrets(jwt)).toContain("[REDACTED JWT]");
   });
   it("redacts Bearer auth", () => {

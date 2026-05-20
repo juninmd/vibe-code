@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
-import { claimUnmappedRepoForWorkspace, resolveAccessContext } from "../security/access-control";
+import { resolveAccessContext } from "../security/access-control";
 import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
@@ -24,8 +24,11 @@ const purgeLocalClonesSchema = z.object({
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
-  router.get("/", (c) => {
-    const repos = db.repos.list();
+  router.get("/", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    const workspaceId =
+      access.ok && access.context?.workspaceId ? access.context.workspaceId : undefined;
+    const repos = db.repos.list(workspaceId);
     return c.json({ data: repos });
   });
 
@@ -47,13 +50,13 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
         );
       }
 
+      const access = await resolveAccessContext(c, db);
+      const workspaceId =
+        access.ok && access.context?.workspaceId ? access.context.workspaceId : undefined;
+
       // Auto-detect default branch
       const defaultBranch = await git.detectDefaultBranch(parsed.data.url);
-      const repo = db.repos.create({ url: parsed.data.url, defaultBranch });
-      const access = await resolveAccessContext(c, db);
-      if (access.ok && access.context) {
-        claimUnmappedRepoForWorkspace(db, access.context, repo.id);
-      }
+      const repo = db.repos.create({ url: parsed.data.url, defaultBranch, workspaceId });
 
       // Clone in background — respond immediately, update status async
       (async () => {

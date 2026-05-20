@@ -230,6 +230,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 
 export interface Repository {
   id: string;
+  workspaceId?: string;
   name: string;
   url: string;
   defaultBranch: string;
