@@ -317,6 +317,17 @@ export interface AgentRun {
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
   stateSnapshot?: string | null;
+  tokenUsage?: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }
+  >;
   costStats?: {
     total_tokens: number;
     input_tokens: number;
