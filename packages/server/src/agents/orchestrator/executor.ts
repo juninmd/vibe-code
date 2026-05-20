@@ -869,6 +869,7 @@ export async function executeAgent(
     setRunPhase("validating");
     let validatorPassed = false;
     const repairHistory: string[] = [];
+    const failureSignatures = new Set<string>();
 
     for (let attempt = 1; attempt <= FINAL_VALIDATOR_MAX_ATTEMPTS; attempt += 1) {
       validatorAttempts = attempt;
@@ -889,6 +890,20 @@ export async function executeAgent(
         sysLog(`Deterministic validation passed on attempt ${attempt} ✓`);
         break;
       }
+
+      const failedResult = latestVerification.results.find((r) => !r.passed);
+      const failureSignature = failedResult
+        ? `${failedResult.command}\n${failedResult.exitCode}\n${failedResult.stdout.trim()}\n${failedResult.stderr.trim()}`
+        : "unknown";
+
+      if (failureSignatures.has(failureSignature)) {
+        sysLog(
+          `[LOOP DETECTED] Validation failed with the exact same output as a previous attempt. Aborting to prevent infinite retry cycle.`
+        );
+        db.runs.updateStateSnapshot(run.id, "stalled");
+        break;
+      }
+      failureSignatures.add(failureSignature);
 
       if (attempt < FINAL_VALIDATOR_MAX_ATTEMPTS) {
         const failedResult = latestVerification.results.find((r) => !r.passed);

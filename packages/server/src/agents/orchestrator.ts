@@ -70,6 +70,28 @@ export class Orchestrator {
   ) {
     this.maxConcurrent = maxConcurrent;
     this.maxAgentsByStatus = parseMaxAgentsByStatus();
+
+    // Ensure all active process trees are killed when the orchestrator shuts down
+    const shutdown = async () => {
+      console.log(
+        "[orchestrator] Shutdown signal received. Terminating all active process trees..."
+      );
+      for (const [taskId] of this.activeRuns) {
+        try {
+          await this.cancel(taskId);
+        } catch (err) {
+          console.error(`[orchestrator] Error terminating task ${taskId}:`, err);
+        }
+      }
+    };
+    process.on("SIGINT", async () => {
+      await shutdown();
+      process.exit(0);
+    });
+    process.on("SIGTERM", async () => {
+      await shutdown();
+      process.exit(0);
+    });
   }
 
   /** In-memory tracked runs + DB in_progress tasks not yet in activeRuns (e.g. after restart) */
