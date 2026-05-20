@@ -312,10 +312,10 @@ bun run typecheck
 # Ambos server e web (recomendado)
 bun run dev
 
-# Ou apenas o servidor (port 3000)
+# Apenas o servidor/API (sem frontend dev)
 bun run dev:server
 
-# Ou apenas o web (Vite dev server, port 5173)
+# Apenas o Vite frontend dev server
 bun run dev:web
 ```
 
@@ -335,7 +335,20 @@ Press h to show help
 
 ### 3️⃣ Acesse a Interface Web
 
-Abra seu navegador em **http://localhost:5173**
+Abra seu navegador em **http://localhost:3000**
+
+No desenvolvimento local, `3000` é a entrada única do sistema:
+- `/` renderiza o frontend via Vite, usando `VITE_DEV_URL`.
+- `/api/*` é a API do backend.
+- `/ws` é o WebSocket da aplicação.
+
+O endereço `http://localhost:5173` é apenas o servidor interno do Vite. Use-o só para depurar o frontend isoladamente.
+
+Para GitHub OAuth local, use a mesma origem canônica:
+- `VIBE_CODE_PUBLIC_URL=http://localhost:3000`
+- GitHub OAuth callback: `http://localhost:3000/api/auth/github/callback`
+
+Em produção, a mesma regra vale com o domínio público: abra o sistema pelo domínio definido em `VIBE_CODE_PUBLIC_URL`, e cadastre o callback `<VIBE_CODE_PUBLIC_URL>/api/auth/github/callback`.
 
 Você verá:
 - 📋 **Board View** — Uma visão operacional do pipeline (não a única superfície do produto)

@@ -24,10 +24,19 @@ const purgeLocalClonesSchema = z.object({
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
+  function adoptLegacyRepos(workspaceId: string): void {
+    db.raw
+      .prepare(
+        "UPDATE repositories SET workspace_id = ?, updated_at = datetime('now') WHERE workspace_id IS NULL"
+      )
+      .run(workspaceId);
+  }
+
   router.get("/", async (c) => {
     const access = await resolveAccessContext(c, db);
     const workspaceId =
       access.ok && access.context?.workspaceId ? access.context.workspaceId : undefined;
+    if (workspaceId) adoptLegacyRepos(workspaceId);
     const repos = db.repos.list(workspaceId);
     return c.json({ data: repos });
   });
