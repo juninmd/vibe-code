@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -464,7 +465,11 @@ export class GitService {
   getBarePath(repoName: string, url?: string): string {
     if (url) {
       const safeName = this.getCollisionSafeName(url, repoName);
-      return join(this.reposDir, `${safeName}.git`);
+      const collisionSafePath = join(this.reposDir, `${safeName}.git`);
+      const legacyPath = join(this.reposDir, `${repoName}.git`);
+      if (existsSync(collisionSafePath)) return collisionSafePath;
+      if (existsSync(legacyPath)) return legacyPath;
+      return collisionSafePath;
     }
     return join(this.reposDir, `${repoName}.git`);
   }
