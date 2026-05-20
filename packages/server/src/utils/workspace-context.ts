@@ -7,6 +7,27 @@ import type { AuthUser } from "@vibe-code/shared";
 import type { Context } from "hono";
 import type { Db } from "../db";
 
+function slugifyWorkspacePart(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "personal";
+}
+
+function ensureWorkspaceExists(db: Db, workspaceId: string, user: AuthUser): void {
+  if (db.workspaces.get(workspaceId)) return;
+
+  const baseSlug = slugifyWorkspacePart(user.username);
+  const slug = db.workspaces.getBySlug(baseSlug) ? `${baseSlug}-${workspaceId}` : baseSlug;
+  db.workspaces.create({
+    id: workspaceId,
+    name: user.displayName || user.username,
+    slug,
+    description: "Default GitHub workspace",
+  });
+}
+
 /**
  * Get workspace ID from request context (header or query param)
  * Validates against user's authorized workspaces
@@ -75,6 +96,8 @@ export async function getWorkspaceContext(
     username: user.username,
     workspaceId,
   });
+
+  ensureWorkspaceExists(db, workspaceId, user);
 
   return {
     workspaceId,

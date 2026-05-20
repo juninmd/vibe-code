@@ -98,9 +98,20 @@ app.route("/api/auth", authRouter);
 // all other /api/* routes require authentication
 app.use("/api/*", authMiddleware(db));
 
-// Serve web/dist in production; redirect to Vite dev server in development
+// Serve web/dist in production; proxy to Vite dev server in development
 const WEB_DIST = resolve(import.meta.dir, "../../web/dist");
 const isProduction = process.env.NODE_ENV === "production";
+
+async function proxyDevFrontend(c: import("hono").Context, devFrontend: string): Promise<Response> {
+  const requestUrl = new URL(c.req.url);
+  const targetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devFrontend);
+  return fetch(targetUrl, {
+    method: c.req.raw.method,
+    headers: c.req.raw.headers,
+    body: c.req.raw.body,
+    redirect: "manual",
+  });
+}
 
 async function serveStatic(_c: import("hono").Context, filePath: string): Promise<Response> {
   try {
@@ -175,8 +186,10 @@ if (isProduction) {
   // SPA catch-all: must be registered AFTER all API routes
   app.get("*", (c) => serveStatic(c, join(WEB_DIST, "index.html")));
 } else {
-  const devFrontend = process.env.VITE_DEV_URL || "http://localhost:5173";
-  app.get("/", (c) => c.redirect(devFrontend));
+  if (process.env.VITE_DEV_URL) {
+    const devFrontend = process.env.VITE_DEV_URL;
+    app.all("*", (c) => proxyDevFrontend(c, devFrontend));
+  }
 }
 
 const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
