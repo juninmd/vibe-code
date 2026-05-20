@@ -71,7 +71,15 @@ function humanizeToolResult(tool: string, output: unknown): string | null {
 }
 
 function str(v: unknown): string {
-  return v != null ? String(v) : "";
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Error) return v.message;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
 }
 
 // Filter/humanize stderr — return null to suppress, or a string to show.
@@ -83,7 +91,7 @@ export function humanizeStderr(line: string): string | null {
   try {
     const obj = JSON.parse(trimmed) as Record<string, unknown>;
     const level = str(obj.level ?? obj.severity ?? "").toLowerCase();
-    const msg = str(obj.message ?? obj.msg ?? obj.text ?? "");
+    const msg = str(obj.message ?? obj.msg ?? obj.text ?? obj.error ?? obj);
     if (level === "debug" || level === "trace" || level === "verbose") return null;
     if (
       msg.includes("session") ||

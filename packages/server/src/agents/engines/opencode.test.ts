@@ -106,6 +106,14 @@ describe("humanizeStderr", () => {
       "disk full"
     );
   });
+
+  it("serializes object-shaped stderr messages instead of [object Object]", () => {
+    expect(
+      humanizeStderr(
+        JSON.stringify({ level: "error", message: { code: "auth", text: "missing key" } })
+      )
+    ).toBe(JSON.stringify({ code: "auth", text: "missing key" }));
+  });
 });
 
 // ─── parseLine ────────────────────────────────────────────────────────────────
