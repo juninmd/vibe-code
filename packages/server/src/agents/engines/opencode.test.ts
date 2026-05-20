@@ -269,9 +269,9 @@ describe("OpenCodeEngine.parseLine", () => {
 
   it("humanizes tool results correctly", () => {
     const testResults = [
-      { name: "read_file", output: "line1\nline2", expected: "2 lines read" },
+      { name: "read_file", output: "line1\nline2", expected: "Read 2 non-empty lines" },
       { name: "bash", output: "Success output", expected: "Success output" },
-      { name: "write_file", output: "saved", expected: "Saved" },
+      { name: "write_file", output: "saved", expected: "File saved" },
     ];
 
     for (const res of testResults) {
@@ -281,9 +281,26 @@ describe("OpenCodeEngine.parseLine", () => {
           part: { name: res.name, state: { status: "completed", output: res.output } },
         })
       );
-      const log = events.find((e) => e.type === "log" && e.stream === "stdout")?.content;
+      const log = events.find(
+        (e) => e.type === "log" && e.stream === "stdout" && e.content?.includes(res.expected)
+      )?.content;
       expect(log).toContain(res.expected);
     }
+  });
+
+  it("emits a tool label before completed tool output", () => {
+    const events = engine.parseLine(
+      JSON.stringify({
+        type: "tool_use",
+        part: {
+          name: "read_file",
+          state: { status: "completed", input: { path: "src/plugin.ts" }, output: "line1\nline2" },
+        },
+      })
+    );
+    expect(events.map((e) => e.content).filter(Boolean)).toEqual(
+      expect.arrayContaining(["  Reading src/plugin.ts", "    Read 2 non-empty lines"])
+    );
   });
 
   it("parses real 'text' event correctly (contract snapshot)", () => {

@@ -117,16 +117,40 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
     return t.charAt(0).toUpperCase() + t.slice(1);
   };
 
+  const classifySummaryLog = (
+    log: AgentLog
+  ): { name: string; icon: string; color: string } | null => {
+    const c = log.content.trim();
+    if (/^\d+\s+lines?\s+read$/i.test(c) || /^read\s+\d+\s+non-empty\s+lines?$/i.test(c)) {
+      return { name: "Reading file", icon: "R", color: detectToolColor("read_file") };
+    }
+    if (/^\d+\s+matches?$/i.test(c) || /^found\s+\d+\s+matches?$/i.test(c)) {
+      return { name: "Searching", icon: "S", color: detectToolColor("search") };
+    }
+    if (/^saved$/i.test(c) || /^file saved$/i.test(c)) {
+      return { name: "Writing file", icon: "W", color: detectToolColor("write_file") };
+    }
+    if (/^command exited with code \d+/i.test(c) || /^command output:/i.test(c)) {
+      return { name: "Command failed", icon: "!", color: detectToolColor("bash") };
+    }
+    if (log.stream === "stderr") {
+      return { name: "Error", icon: "!", color: "#f87171" };
+    }
+    return null;
+  };
+
   for (const log of logs) {
+    const trimmedContent = log.content.trim();
     // Pattern 1: OpenCode humanized tool labels ("Reading...", "Writing...", etc.)
-    const humanizedMatch = log.content.match(
+    const humanizedMatch = trimmedContent.match(
       /^(Reading|Writing|Editing|Deleting|Moving|Running:|Listing|Searching|Fetching|Git:|⚙️)/
     );
 
     // Pattern 2: Gemini-style "[tool] tool_name" system logs
-    const geminiToolMatch = log.content.match(/^\[tool\]\s*(.+)/);
+    const geminiToolMatch = trimmedContent.match(/^\[tool\]\s*(.+)/);
+    const summaryMatch = !humanizedMatch && !geminiToolMatch ? classifySummaryLog(log) : null;
 
-    if (humanizedMatch || geminiToolMatch) {
+    if (humanizedMatch || geminiToolMatch || summaryMatch) {
       if (currentGroup) {
         currentGroup.isComplete = true;
         currentGroup.finishedAt = prevTimestamp;
@@ -134,13 +158,15 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
       }
       stepId++;
       const toolLabel = humanizedMatch
-        ? log.content.split(" ")[0].trim()
-        : normalizeToolName(geminiToolMatch?.[1] ?? log.content);
+        ? trimmedContent.split(" ")[0].trim()
+        : summaryMatch
+          ? summaryMatch.name
+          : normalizeToolName(geminiToolMatch?.[1] ?? trimmedContent);
       currentGroup = {
         id: stepId,
-        toolName: log.content,
-        toolIcon: detectToolIcon(toolLabel || log.content),
-        accentColor: detectToolColor(toolLabel || log.content),
+        toolName: summaryMatch?.name ?? trimmedContent,
+        toolIcon: summaryMatch?.icon ?? detectToolIcon(toolLabel || trimmedContent),
+        accentColor: summaryMatch?.color ?? detectToolColor(toolLabel || trimmedContent),
         logs: [],
         thinkingContent: null,
         isComplete: false,
@@ -1008,8 +1034,8 @@ export function AgentOutput({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`bg-app overflow-y-auto cursor-text ${
-          isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
+        className={`bg-app overflow-y-auto overscroll-contain cursor-text ${
+          isFullscreen || fullHeight ? "min-h-0 flex-1" : "max-h-[480px] min-h-[140px]"
         }`}
       >
         {filteredStepGroups.map((group, idx) => (
