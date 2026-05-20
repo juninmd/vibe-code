@@ -115,8 +115,29 @@ export class GitService {
     }
   }
 
+  private getCollisionSafeName(url: string, defaultName: string): string {
+    try {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        const u = new URL(url);
+        const host = u.hostname;
+        const ownerAndName = u.pathname.replace(/^\//, "").replace(/\.git$/, "");
+        const pathSlug = ownerAndName.replace(/\//g, "+");
+        return `${host}+${pathSlug}`;
+      }
+      const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^.]+)(?:\.git)?$/);
+      if (sshMatch) {
+        const [, host, owner, name] = sshMatch;
+        return `${host}+${owner}+${name}`;
+      }
+    } catch {
+      // ignore, fallback to defaultName
+    }
+    return defaultName;
+  }
+
   async cloneRepo(url: string, name: string): Promise<string> {
-    const barePath = join(this.reposDir, `${name}.git`);
+    const safeName = this.getCollisionSafeName(url, name);
+    const barePath = join(this.reposDir, `${safeName}.git`);
     await GitService.withRepoLock(barePath, () =>
       this.exec(["git", "clone", "--bare", this.injectToken(url), barePath])
     );
@@ -440,7 +461,11 @@ export class GitService {
     }
   }
 
-  getBarePath(repoName: string): string {
+  getBarePath(repoName: string, url?: string): string {
+    if (url) {
+      const safeName = this.getCollisionSafeName(url, repoName);
+      return join(this.reposDir, `${safeName}.git`);
+    }
     return join(this.reposDir, `${repoName}.git`);
   }
 

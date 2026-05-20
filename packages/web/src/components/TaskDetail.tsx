@@ -604,10 +604,37 @@ export function TaskDetail({
   const worktreePath = task.latestRun?.worktreePath ?? runSnapshot?.worktreePath ?? null;
   const sessionId = task.latestRun?.sessionId ?? runSnapshot?.sessionId ?? null;
   const costStats = task.latestRun?.costStats;
+  const tokenUsage = task.latestRun?.tokenUsage;
+
+  // Calculate aggregated stats from tokenUsage if available
+  let displayTotalTokens = costStats?.total_tokens ?? 0;
+  let displayInputCost = costStats?.input !== undefined ? costStats.input / 1000000 : 0;
+  let displayInputTokens = costStats?.input_tokens ?? 0;
+  let displayOutputTokens = costStats?.output_tokens ?? 0;
+
+  if (tokenUsage && Object.keys(tokenUsage).length > 0) {
+    let sumTotalTokens = 0;
+    let sumInputTokens = 0;
+    let sumOutputTokens = 0;
+    let sumTotalCost = 0;
+    for (const [, stats] of Object.entries(tokenUsage) as Array<
+      [string, NonNullable<typeof tokenUsage>[string]]
+    >) {
+      sumTotalTokens += stats.total_tokens || 0;
+      sumInputTokens += stats.input_tokens || 0;
+      sumOutputTokens += stats.output_tokens || 0;
+      sumTotalCost += stats.total_cost || (stats.input_cost || 0) + (stats.output_cost || 0);
+    }
+    displayTotalTokens = sumTotalTokens;
+    displayInputTokens = sumInputTokens;
+    displayOutputTokens = sumOutputTokens;
+    displayInputCost = sumTotalCost;
+  }
+
   const inputCost = formatCurrencyMicros(costStats?.input);
   const outputCost = formatCurrencyMicros(costStats?.output);
   const totalCost = formatCurrencyMicros(costStats?.total);
-  const totalTokens = costStats?.total_tokens ?? 0;
+  const totalTokens = displayTotalTokens;
   const statusTone =
     task.status === "failed"
       ? "danger"
@@ -2066,7 +2093,7 @@ export function TaskDetail({
 
           {/* ── Cost Tab (Neuromorphic Grid) ───────────────────────────────────── */}
           {activeTab === "cost" &&
-            (costStats ? (
+            (costStats || (tokenUsage && Object.keys(tokenUsage).length > 0) ? (
               <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-black/20">
                 <div className="flex items-center justify-between">
                   <h2
@@ -2105,7 +2132,7 @@ export function TaskDetail({
                       className="text-2xl font-black font-mono tracking-tight relative z-10"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      {(costStats.total_tokens || 0).toLocaleString()}
+                      {(displayTotalTokens || 0).toLocaleString()}
                     </div>
                   </div>
 
@@ -2124,11 +2151,11 @@ export function TaskDetail({
                       Op Cost
                     </div>
                     <div className="text-2xl font-black font-mono tracking-tight relative z-10 text-emerald-400">
-                      ${((costStats.input || 0) / 1000000).toFixed(6)}
+                      ${(displayInputCost || 0).toFixed(6)}
                     </div>
                   </div>
 
-                  {costStats.duration_ms && (
+                  {costStats?.duration_ms && (
                     <div
                       className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
                       style={{
@@ -2152,7 +2179,7 @@ export function TaskDetail({
                     </div>
                   )}
 
-                  {costStats.tool_calls !== undefined && (
+                  {costStats?.tool_calls !== undefined && (
                     <div
                       className="rounded-xl p-4 border border-white/5 relative overflow-hidden group"
                       style={{
@@ -2194,10 +2221,10 @@ export function TaskDetail({
                       <div className="flex items-center justify-between border-b border-white/5 pb-2">
                         <span className="text-dimmed">Input Stream</span>
                         <span className="text-blue-400 font-bold">
-                          ↓{(costStats.input_tokens || 0).toLocaleString()}
+                          ↓{(displayInputTokens || 0).toLocaleString()}
                         </span>
                       </div>
-                      {costStats.cached && costStats.cached > 0 && (
+                      {costStats?.cached && costStats.cached > 0 && (
                         <div className="flex items-center justify-between border-b border-white/5 pb-2">
                           <span className="text-dimmed">Cache Hit</span>
                           <span className="text-emerald-400 font-bold">
@@ -2208,13 +2235,14 @@ export function TaskDetail({
                       <div className="flex items-center justify-between">
                         <span className="text-dimmed">Output Stream</span>
                         <span className="text-purple-400 font-bold">
-                          ↑{(costStats.output_tokens || 0).toLocaleString()}
+                          ↑{(displayOutputTokens || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {costStats.models && Object.keys(costStats.models).length > 0 && (
+                  {((tokenUsage && Object.keys(tokenUsage).length > 0) ||
+                    (costStats?.models && Object.keys(costStats.models).length > 0)) && (
                     <div
                       className="rounded-xl p-5 border border-white/5"
                       style={{ background: "rgba(10,10,10,0.8)" }}
@@ -2227,37 +2255,82 @@ export function TaskDetail({
                         Model Utilization
                       </h3>
                       <div className="space-y-3">
-                        {Object.entries(costStats.models).map(([model, stats]) => (
-                          <div
-                            key={model}
-                            className="flex items-center justify-between p-2.5 rounded-lg border border-white/5"
-                            style={{ background: "rgba(255,255,255,0.02)" }}
-                          >
-                            <span
-                              className="text-[10px] font-mono truncate mr-4"
-                              style={{ color: "var(--text-primary)" }}
-                              title={model}
-                            >
-                              {model.split("/").pop()}
-                            </span>
-                            <div className="flex items-center gap-4 text-[10px] font-mono shrink-0">
-                              <div className="text-right">
-                                <span className="text-dimmed mr-1">T:</span>
-                                <span className="text-blue-300">
-                                  {stats.total_tokens.toLocaleString()}
-                                </span>
-                              </div>
-                              {stats.input !== undefined && (
-                                <div className="text-right min-w-[60px]">
-                                  <span className="text-dimmed mr-1">$</span>
-                                  <span className="text-emerald-400">
-                                    {(stats.input / 1000000).toFixed(4)}
+                        {tokenUsage && Object.keys(tokenUsage).length > 0
+                          ? (
+                              Object.entries(tokenUsage) as Array<
+                                [string, NonNullable<typeof tokenUsage>[string]]
+                              >
+                            ).map(([model, stats]) => (
+                              <div
+                                key={model}
+                                className="flex items-center justify-between p-2.5 rounded-lg border border-white/5"
+                                style={{ background: "rgba(255,255,255,0.02)" }}
+                              >
+                                <div className="flex flex-col min-w-0 mr-4">
+                                  <span
+                                    className="text-[10px] font-bold font-mono truncate text-left"
+                                    style={{ color: "var(--text-primary)" }}
+                                    title={model}
+                                  >
+                                    {model.split("/").pop()}
+                                  </span>
+                                  <span className="text-[9px] text-dimmed font-mono text-left">
+                                    in: {stats.input_tokens.toLocaleString()} | out:{" "}
+                                    {stats.output_tokens.toLocaleString()}
                                   </span>
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                                <div className="flex items-center gap-4 text-[10px] font-mono shrink-0">
+                                  <div className="text-right">
+                                    <span className="text-dimmed mr-1">T:</span>
+                                    <span className="text-blue-300">
+                                      {stats.total_tokens.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="text-right min-w-[60px]">
+                                    <span className="text-dimmed mr-1">$</span>
+                                    <span className="text-emerald-400">
+                                      {(
+                                        stats.total_cost ??
+                                        (stats.input_cost || 0) + (stats.output_cost || 0)
+                                      ).toFixed(6)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          : Object.entries(costStats?.models || {}).map(
+                              ([model, stats]: [string, any]) => (
+                                <div
+                                  key={model}
+                                  className="flex items-center justify-between p-2.5 rounded-lg border border-white/5"
+                                  style={{ background: "rgba(255,255,255,0.02)" }}
+                                >
+                                  <span
+                                    className="text-[10px] font-mono truncate mr-4 text-left"
+                                    style={{ color: "var(--text-primary)" }}
+                                    title={model}
+                                  >
+                                    {model.split("/").pop()}
+                                  </span>
+                                  <div className="flex items-center gap-4 text-[10px] font-mono shrink-0">
+                                    <div className="text-right">
+                                      <span className="text-dimmed mr-1">T:</span>
+                                      <span className="text-blue-300">
+                                        {stats.total_tokens.toLocaleString()}
+                                      </span>
+                                    </div>
+                                    {stats.input !== undefined && (
+                                      <div className="text-right min-w-[60px]">
+                                        <span className="text-dimmed mr-1">$</span>
+                                        <span className="text-emerald-400">
+                                          {(stats.input / 1000000).toFixed(4)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            )}
                       </div>
                     </div>
                   )}

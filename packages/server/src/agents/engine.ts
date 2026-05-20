@@ -21,6 +21,7 @@ export interface AgentEvent {
     output_tokens: number;
     cached?: number;
     input?: number;
+    output?: number;
     duration_ms?: number;
     tool_calls?: number;
     models?: Record<
@@ -31,6 +32,7 @@ export interface AgentEvent {
         output_tokens: number;
         cached?: number;
         input?: number;
+        output?: number;
       }
     >;
   };

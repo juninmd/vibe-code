@@ -355,6 +355,24 @@ export async function runWorkspaceScripts(
   }
 }
 
+function escalateModel(currentModel?: string): string | undefined {
+  if (!currentModel) return undefined;
+  const lower = currentModel.toLowerCase();
+  if (lower.includes("flash")) {
+    if (lower.includes("gemini")) {
+      return "gemini-2.5-pro";
+    }
+    return "gpt-4o";
+  }
+  if (lower.includes("mini") || lower.includes("gpt-3.5") || lower.includes("gpt-4o-mini")) {
+    return "gpt-4o";
+  }
+  if (lower.includes("gpt-4o") || lower.includes("pro")) {
+    return "claude-3-5-sonnet-20241022";
+  }
+  return currentModel;
+}
+
 export async function executeAgent(
   task: Task,
   run: AgentRun,
@@ -371,7 +389,7 @@ export async function executeAgent(
   orchestrator?: import("../orchestrator").Orchestrator,
   registry?: import("../registry").EngineRegistry
 ): Promise<void> {
-  const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
+  const barePath = repo.localPath ?? (await git.getBarePath(repo.name, repo.url));
   const slugTitle = task.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -428,6 +446,17 @@ export async function executeAgent(
   let prCreated = false;
   let runStartTime = Date.now();
   let capturedCostStats: object | null = null;
+  const accumulatedTokenUsage: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost?: number;
+      output_cost?: number;
+      total_cost?: number;
+    }
+  > = {};
   let resumeSessionId: string | undefined;
   let activeSessionId: string | undefined;
   let validationRecordCount = 0;
@@ -841,6 +870,29 @@ export async function executeAgent(
       }
       if (event.type === "cost" && event.costStats) {
         capturedCostStats = event.costStats;
+        const activeModelName = model || engine.name;
+        if (!accumulatedTokenUsage[activeModelName]) {
+          accumulatedTokenUsage[activeModelName] = {
+            total_tokens: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            input_cost: 0,
+            output_cost: 0,
+            total_cost: 0,
+          };
+        }
+        const currentStats = event.costStats;
+        const mUsage = accumulatedTokenUsage[activeModelName];
+        mUsage.total_tokens = Math.max(mUsage.total_tokens, currentStats.total_tokens || 0);
+        mUsage.input_tokens = Math.max(mUsage.input_tokens, currentStats.input_tokens || 0);
+        mUsage.output_tokens = Math.max(mUsage.output_tokens, currentStats.output_tokens || 0);
+        if (currentStats.input !== undefined)
+          mUsage.input_cost = Math.max(mUsage.input_cost || 0, currentStats.input / 1_000_000);
+        if (currentStats.output !== undefined)
+          mUsage.output_cost = Math.max(mUsage.output_cost || 0, currentStats.output / 1_000_000);
+        mUsage.total_cost = (mUsage.input_cost || 0) + (mUsage.output_cost || 0);
+        db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+
         if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
           const costInDollars =
             event.costStats.input !== undefined ? event.costStats.input / 1_000_000 : 0;
@@ -924,10 +976,21 @@ export async function executeAgent(
         let repairExitCode: number | null = null;
         const repairPrompt = buildValidationRepairPrompt(task, latestVerification, memoryContext);
 
+        let activeModel = model;
+        if (attempt > 1) {
+          const escalated = escalateModel(model);
+          if (escalated && escalated !== model) {
+            sysLog(
+              `[MODEL ESCALATION] Escalating engine model from ${model} to ${escalated} for attempt ${attempt} to resolve validation failure.`
+            );
+            activeModel = escalated;
+          }
+        }
+
         for await (const event of engine.execute(repairPrompt, wtPath, {
           runId: run.id,
           signal: abort.signal,
-          model,
+          model: activeModel,
           litellmKey,
           litellmBaseUrl,
           nativeApiKeys,
@@ -941,6 +1004,34 @@ export async function executeAgent(
           if (event.type === "complete") {
             repairExitCode = event.exitCode ?? 0;
             continue;
+          }
+          if (event.type === "cost" && event.costStats) {
+            capturedCostStats = event.costStats;
+            const activeModelName = activeModel || model || engine.name;
+            if (!accumulatedTokenUsage[activeModelName]) {
+              accumulatedTokenUsage[activeModelName] = {
+                total_tokens: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                input_cost: 0,
+                output_cost: 0,
+                total_cost: 0,
+              };
+            }
+            const currentStats = event.costStats;
+            const mUsage = accumulatedTokenUsage[activeModelName];
+            mUsage.total_tokens = Math.max(mUsage.total_tokens, currentStats.total_tokens || 0);
+            mUsage.input_tokens = Math.max(mUsage.input_tokens, currentStats.input_tokens || 0);
+            mUsage.output_tokens = Math.max(mUsage.output_tokens, currentStats.output_tokens || 0);
+            if (currentStats.input !== undefined)
+              mUsage.input_cost = Math.max(mUsage.input_cost || 0, currentStats.input / 1_000_000);
+            if (currentStats.output !== undefined)
+              mUsage.output_cost = Math.max(
+                mUsage.output_cost || 0,
+                currentStats.output / 1_000_000
+              );
+            mUsage.total_cost = (mUsage.input_cost || 0) + (mUsage.output_cost || 0);
+            db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
           }
           await handleAgentEvent(event, run.id, task.id, db, hub, () => {
             lastActivity = Date.now();
@@ -1391,6 +1482,9 @@ export async function executeAgent(
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);
+    if (Object.keys(accumulatedTokenUsage).length > 0) {
+      db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+    }
 
     // M5.2: Record run metrics
     try {

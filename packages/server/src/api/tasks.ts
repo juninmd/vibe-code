@@ -496,7 +496,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       };
     };
 
-    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const barePath = repo.localPath ?? git.getBarePath(repo.name, repo.url);
     const latestRun = db.runs.getLatestByTask(task.id);
     let previewWorktreePath: string | null = null;
     let cleanupWorktreePath: string | null = null;
@@ -847,7 +847,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const repo = db.repos.getById(task.repoId);
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
 
-    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const barePath = repo.localPath ?? git.getBarePath(repo.name, repo.url);
     const latestRun = db.runs.getLatestByTask(task.id);
 
     try {
@@ -894,7 +894,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const repo = db.repos.getById(task.repoId);
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
 
-    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const barePath = repo.localPath ?? git.getBarePath(repo.name, repo.url);
     const latestRun = db.runs.getLatestByTask(task.id);
 
     try {
@@ -939,7 +939,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
     const latestRun = db.runs.getLatestByTask(task.id);
     const targetPath =
-      latestRun?.worktreePath ?? repo.localPath ?? (git ? git.getBarePath(repo.name) : null);
+      latestRun?.worktreePath ??
+      repo.localPath ??
+      (git ? git.getBarePath(repo.name, repo.url) : null);
 
     if (!targetPath) {
       return c.json({ error: "invalid_state", message: "No path available to open" }, 400);
@@ -976,7 +978,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const repo = db.repos.getById(task.repoId);
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
 
-    const barePath = repo.localPath ?? git.getBarePath(repo.name);
+    const barePath = repo.localPath ?? git.getBarePath(repo.name, repo.url);
     const safeName = repo.name.replace(/[^a-zA-Z0-9_-]/g, "_");
     const safeBranch = task.branchName.replace(/[^a-zA-Z0-9_/-]/g, "_").replace(/\//g, "-");
     const archiveName = `${safeName}_${safeBranch}.zip`;

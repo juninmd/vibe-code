@@ -19,7 +19,7 @@ export async function retryPR(
   if (!repo) throw new Error("Repository not found");
   const baseBranch = task.baseBranch || repo.defaultBranch;
 
-  const barePath = repo.localPath ?? git.getBarePath(repo.name);
+  const barePath = repo.localPath ?? git.getBarePath(repo.name, repo.url);
   const run = db.runs.getLatestByTask(taskId);
   if (!run) throw new Error("No run found for this task");
 

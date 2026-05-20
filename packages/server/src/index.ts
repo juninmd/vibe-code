@@ -32,6 +32,7 @@ import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
+import { logValidationReport, validateSkills } from "./skills/validator";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -45,13 +46,18 @@ const db = createDb(DB_PATH);
 const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
-const hub = new BroadcastHub();
+const hub = new BroadcastHub(db);
 const registry = new EngineRegistry();
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
 const orchestrator = new Orchestrator(db, git, registry, hub, storedMaxAgents || MAX_AGENTS);
 const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
+validateSkills(skillsLoader)
+  .then(logValidationReport)
+  .catch((err) => {
+    console.error("[startup] Skills validation failed with error:", err);
+  });
 const skillRegistry = new SkillRegistryService();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
@@ -178,7 +184,16 @@ const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 const server = Bun.serve({
   port: PORT,
   reusePort: true,
-  fetch: app.fetch,
+  fetch(req, server) {
+    const url = new URL(req.url);
+    if (url.pathname === "/ws") {
+      const workspaceId = url.searchParams.get("workspaceId") || null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const success = (server as any).upgrade(req, { data: { workspaceId } });
+      if (success) return undefined;
+    }
+    return app.fetch(req);
+  },
   websocket: {
     open(ws) {
       const client = hub.addClient(ws);
