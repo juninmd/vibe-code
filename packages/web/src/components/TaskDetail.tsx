@@ -611,11 +611,19 @@ export function TaskDetail({
   let displayInputCost = costStats?.input !== undefined ? costStats.input / 1000000 : 0;
   let displayInputTokens = costStats?.input_tokens ?? 0;
   let displayOutputTokens = costStats?.output_tokens ?? 0;
+  let displayCachedTokens = costStats?.cached ?? 0;
+
+  let displayInputCostRaw = costStats?.input;
+  let displayOutputCostRaw = costStats?.output;
+  let displayTotalCostRaw = costStats?.total;
 
   if (tokenUsage && Object.keys(tokenUsage).length > 0) {
     let sumTotalTokens = 0;
     let sumInputTokens = 0;
     let sumOutputTokens = 0;
+    let sumCachedTokens = 0;
+    let sumInputCost = 0;
+    let sumOutputCost = 0;
     let sumTotalCost = 0;
     for (const [, stats] of Object.entries(tokenUsage) as Array<
       [string, NonNullable<typeof tokenUsage>[string]]
@@ -623,17 +631,25 @@ export function TaskDetail({
       sumTotalTokens += stats.total_tokens || 0;
       sumInputTokens += stats.input_tokens || 0;
       sumOutputTokens += stats.output_tokens || 0;
+      sumCachedTokens += (stats as any).cached_tokens || (stats as any).cached || 0;
+      sumInputCost += stats.input_cost || 0;
+      sumOutputCost += stats.output_cost || 0;
       sumTotalCost += stats.total_cost || (stats.input_cost || 0) + (stats.output_cost || 0);
     }
     displayTotalTokens = sumTotalTokens;
     displayInputTokens = sumInputTokens;
     displayOutputTokens = sumOutputTokens;
+    displayCachedTokens = sumCachedTokens;
     displayInputCost = sumTotalCost;
+
+    displayInputCostRaw = sumInputCost * 1_000_000;
+    displayOutputCostRaw = sumOutputCost * 1_000_000;
+    displayTotalCostRaw = sumTotalCost * 1_000_000;
   }
 
-  const inputCost = formatCurrencyMicros(costStats?.input);
-  const outputCost = formatCurrencyMicros(costStats?.output);
-  const totalCost = formatCurrencyMicros(costStats?.total);
+  const inputCost = formatCurrencyMicros(displayInputCostRaw);
+  const outputCost = formatCurrencyMicros(displayOutputCostRaw);
+  const totalCost = formatCurrencyMicros(displayTotalCostRaw);
   const totalTokens = displayTotalTokens;
   const statusTone =
     task.status === "failed"
@@ -1639,7 +1655,7 @@ export function TaskDetail({
                 </div>
               )}
 
-              {costStats && (
+              {(costStats || (tokenUsage && Object.keys(tokenUsage).length > 0)) && (
                 <section className="col-span-1 rounded-lg border border-warning/20 bg-warning/10 p-3 lg:col-span-3">
                   <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-warning">
                     Usage recorded by engine
@@ -1647,19 +1663,19 @@ export function TaskDetail({
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <DetailField
                       label="Input tokens"
-                      value={(costStats.input_tokens || 0).toLocaleString()}
+                      value={(displayInputTokens || 0).toLocaleString()}
                     />
                     <DetailField
                       label="Output tokens"
-                      value={(costStats.output_tokens || 0).toLocaleString()}
+                      value={(displayOutputTokens || 0).toLocaleString()}
                     />
                     <DetailField
                       label="Total tokens"
-                      value={(costStats.total_tokens || 0).toLocaleString()}
+                      value={(displayTotalTokens || 0).toLocaleString()}
                     />
                     <DetailField
                       label="Cached tokens"
-                      value={(costStats.cached || 0).toLocaleString()}
+                      value={(displayCachedTokens || 0).toLocaleString()}
                     />
                     <DetailField label="Input cost" value={inputCost ?? "Not reported"} />
                     <DetailField label="Output cost" value={outputCost ?? "Not reported"} />
@@ -1667,7 +1683,7 @@ export function TaskDetail({
                     <DetailField
                       label="Tool calls"
                       value={
-                        costStats.tool_calls === undefined
+                        costStats?.tool_calls === undefined
                           ? "Not reported"
                           : costStats.tool_calls.toLocaleString()
                       }
@@ -2224,11 +2240,11 @@ export function TaskDetail({
                           ↓{(displayInputTokens || 0).toLocaleString()}
                         </span>
                       </div>
-                      {costStats?.cached && costStats.cached > 0 && (
+                      {displayCachedTokens > 0 && (
                         <div className="flex items-center justify-between border-b border-white/5 pb-2">
                           <span className="text-dimmed">Cache Hit</span>
                           <span className="text-emerald-400 font-bold">
-                            +{(costStats.cached || 0).toLocaleString()}
+                            +{(displayCachedTokens || 0).toLocaleString()}
                           </span>
                         </div>
                       )}

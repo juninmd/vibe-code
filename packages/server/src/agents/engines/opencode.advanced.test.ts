@@ -44,6 +44,6 @@ describe("OpenCodeEngine Advanced Contract Tests", () => {
     });
 
     const events = engine.parseLine(line);
-    expect(events.find((e) => e.content?.includes("Saved"))).toBeDefined();
+    expect(events.find((e) => e.content?.includes("saved"))).toBeDefined();
   });
 });

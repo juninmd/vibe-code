@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 ### Added
+- **Grok and ACPX Native Engines**: Ported native local Grok CLI execution engine and Agent Client Protocol (ACPX) parser adapter with full unit test coverage.
+- **Cost Safety & Multi-run Budget Enforcement**: Implemented cost warnings at 80% and hard-abort/pause gating at 100% of max cost during both generation and validation repair cycles.
 - **Process Tree Reaping**: Created process-tree execution safety utility for cross-platform recursive child-process termination during agent abort signals.
 - **Graceful Shutdown**: Added signal handling (`SIGINT`/`SIGTERM`) to the server orchestrator to cancel active runs and release locks safely on server exit.
 - **Validation Loop Detection**: Hashing signature mechanism added to the deterministic validation loop in the execution manager to identify and abort repeating/stalled retry loops.
@@ -12,6 +14,8 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **OpenCode Dynamic Configuration Isolation**: Configured OpenCode to execute using temporary configuration folders via isolated `XDG_CONFIG_HOME` env variables to prevent polluting the git workspace repository.
+- **Unified Telemetry & Micro-dollar Conversion**: Refactored OpenCode event parsing to progressively accumulate execution costs, reporting unified cumulative costStats telemetry, and mapped cost units in task detail modals/cards to handle micro-dollar and standard-dollar conversions correctly.
 - **Workspace Isolation**: Refactored the control plane database schema and Hono API endpoints to native `workspace_id` referencing workspace records, completely separating repository contexts.
 - **Conflict Resolution Flow**: Conflict-resolution tasks now reuse the existing PR branch and preserve the conflicted rebase state so the agent can resolve real merge conflicts instead of showing an inactive terminal against a clean workspace.
 - **Task Execution Telemetry**: Restored visible token/cost telemetry with an execution summary header and an explicit Cost tab empty state when engines have not emitted usage data yet.

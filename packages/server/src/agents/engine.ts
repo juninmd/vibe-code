@@ -22,6 +22,7 @@ export interface AgentEvent {
     cached?: number;
     input?: number;
     output?: number;
+    total?: number;
     duration_ms?: number;
     tool_calls?: number;
     models?: Record<

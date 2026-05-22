@@ -22,11 +22,14 @@ function readConfig(path?: string): SidecarConfig {
 
   // Env vars override file config — allows cluster/Docker deployment without rebuilding image
   if (process.env.VIBE_SERVER_URL) base.serverUrl = process.env.VIBE_SERVER_URL;
-  if (process.env.SIDECAR_INTERVAL_MINUTES) base.intervalMinutes = Number(process.env.SIDECAR_INTERVAL_MINUTES);
-  if (process.env.SIDECAR_PROVIDER) base.provider = process.env.SIDECAR_PROVIDER as SidecarConfig["provider"];
+  if (process.env.SIDECAR_INTERVAL_MINUTES)
+    base.intervalMinutes = Number(process.env.SIDECAR_INTERVAL_MINUTES);
+  if (process.env.SIDECAR_PROVIDER)
+    base.provider = process.env.SIDECAR_PROVIDER as SidecarConfig["provider"];
   if (process.env.SIDECAR_MODEL) base.model = process.env.SIDECAR_MODEL;
   if (process.env.OLLAMA_BASE_URL) base.ollamaBaseUrl = process.env.OLLAMA_BASE_URL;
-  if (process.env.SIDECAR_STALEST_LIMIT) base.stalestRepoLimit = Number(process.env.SIDECAR_STALEST_LIMIT);
+  if (process.env.SIDECAR_STALEST_LIMIT)
+    base.stalestRepoLimit = Number(process.env.SIDECAR_STALEST_LIMIT);
 
   return base;
 }
@@ -40,9 +43,15 @@ async function runCycle(
   try {
     const repos = await listStalestRepos(config.serverUrl, limit);
     repoUrls = repos.map((r) => r.url);
-    console.log(`[sidecar] Targeting ${repoUrls.length} stalest repos:`, repoUrls.map((u) => u.split("/").pop()).join(", "));
+    console.log(
+      `[sidecar] Targeting ${repoUrls.length} stalest repos:`,
+      repoUrls.map((u) => u.split("/").pop()).join(", ")
+    );
   } catch (err) {
-    console.error("[sidecar] Failed to fetch repos from server:", err instanceof Error ? err.message : err);
+    console.error(
+      "[sidecar] Failed to fetch repos from server:",
+      err instanceof Error ? err.message : err
+    );
     return;
   }
   try {

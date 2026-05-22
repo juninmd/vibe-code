@@ -66,7 +66,7 @@ describe("Orchestrator coverage", () => {
     // We override launch to just record the launched tasks instead of running full executeAgent
     orch.launch = mock().mockImplementation(async (task) => {
       launched.push(task.id);
-      orch.activeRuns.set(task.id, {
+      (orch as any).activeRuns.set(task.id, {
         runId: "r",
         taskId: task.id,
         engineName: "e",
@@ -86,7 +86,7 @@ describe("Orchestrator coverage", () => {
     const orch = new Orchestrator({} as any, {} as any, {} as any, {} as any, 2);
 
     // Populate retry queue
-    orch.retryQueue.set("t1", {
+    (orch as any).retryQueue.set("t1", {
       attempt: 2,
       dueAt: Date.now() + 5000,
       reason: "failed",
@@ -101,7 +101,7 @@ describe("Orchestrator coverage", () => {
     expect(snapshot[0].reason).toBe("failed");
 
     // Cleanup timer
-    orch.cancelRetry("t1");
+    (orch as any).cancelRetry("t1");
   });
 
   test("recoverInProgressTasks correctly parks tasks according to limits", async () => {

@@ -1,5 +1,6 @@
 import type { EngineInfo } from "@vibe-code/shared";
 import type { AgentEngine } from "./engine";
+import { AcpxEngine } from "./engines/acpx";
 import { AiderEngine } from "./engines/aider";
 import { AmpCodeEngine } from "./engines/ampcode";
 import { ClaudeCodeEngine } from "./engines/claude-code";
@@ -7,6 +8,7 @@ import { CodexEngine } from "./engines/codex";
 import { CopilotEngine } from "./engines/copilot";
 import { CursorAgentEngine } from "./engines/cursor-agent";
 import { GeminiEngine } from "./engines/gemini";
+import { GrokEngine } from "./engines/grok";
 import { HermesEngine } from "./engines/hermes";
 import { KimiEngine } from "./engines/kimi";
 import { KiroCliEngine } from "./engines/kiro-cli";
@@ -33,6 +35,8 @@ export class EngineRegistry {
     this.register(new AmpCodeEngine());
     this.register(new KimiEngine());
     this.register(new KiroCliEngine());
+    this.register(new GrokEngine());
+    this.register(new AcpxEngine());
   }
 
   register(engine: AgentEngine): void {

@@ -192,6 +192,28 @@ export class Orchestrator {
       throw new Error("Max concurrent agents reached.");
     }
 
+    if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
+      const runs = this.db.runs.listByTask(task.id);
+      let taskTotalCost = 0;
+      for (const r of runs) {
+        if (r.tokenUsage) {
+          for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+            taskTotalCost += modelUsage.total_cost || 0;
+          }
+        }
+      }
+
+      if (taskTotalCost >= task.maxCost) {
+        logOrchestratorEvent(
+          `Task [${task.id.slice(0, 8)}] launch blocked: task total cost ($${taskTotalCost.toFixed(4)}) is at or above maxCost limit ($${task.maxCost.toFixed(4)})`,
+          "warn"
+        );
+        throw new Error(
+          `Task cost limit exceeded ($${taskTotalCost.toFixed(4)} >= $${task.maxCost.toFixed(4)})`
+        );
+      }
+    }
+
     // Per-status concurrency gate (VIBE_CODE_MAX_AGENTS_BY_STATUS)
     const statusLimit = this.maxAgentsByStatus.get(task.status.toLowerCase());
     if (statusLimit !== undefined) {

@@ -446,6 +446,7 @@ export async function executeAgent(
   let prCreated = false;
   let runStartTime = Date.now();
   let capturedCostStats: object | null = null;
+  let costWarningSent = false;
   const accumulatedTokenUsage: Record<
     string,
     {
@@ -894,13 +895,37 @@ export async function executeAgent(
         db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
 
         if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
-          const costInDollars =
-            event.costStats.input !== undefined ? event.costStats.input / 1_000_000 : 0;
-          if (costInDollars > task.maxCost) {
+          let currentRunCost = 0;
+          for (const key of Object.keys(accumulatedTokenUsage)) {
+            currentRunCost += accumulatedTokenUsage[key].total_cost || 0;
+          }
+
+          const runs = db.runs.listByTask(task.id);
+          let otherRunsCost = 0;
+          for (const r of runs) {
+            if (r.id !== run.id && r.tokenUsage) {
+              for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+                otherRunsCost += modelUsage.total_cost || 0;
+              }
+            }
+          }
+
+          const totalTaskCost = otherRunsCost + currentRunCost;
+
+          if (totalTaskCost >= task.maxCost) {
             sysLog(
-              `[BUDGET EXCEEDED] Run cost ($${costInDollars.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
+              `[BUDGET EXCEEDED] Total task cost ($${totalTaskCost.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
             );
             abort.abort();
+          } else if (totalTaskCost >= task.maxCost * 0.8 && !costWarningSent) {
+            costWarningSent = true;
+            sysLog(
+              `[BUDGET WARNING] Total task cost ($${totalTaskCost.toFixed(4)}) has reached 80% of maxCost limit ($${task.maxCost.toFixed(4)}).`
+            );
+            logOrchestratorEvent(
+              `Task [${task.id.slice(0, 8)}] cost warning: $${totalTaskCost.toFixed(4)} of $${task.maxCost.toFixed(4)} limit reached.`,
+              "warn"
+            );
           }
         }
         continue;
@@ -1032,6 +1057,42 @@ export async function executeAgent(
               );
             mUsage.total_cost = (mUsage.input_cost || 0) + (mUsage.output_cost || 0);
             db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+
+            if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
+              let currentRunCost = 0;
+              for (const key of Object.keys(accumulatedTokenUsage)) {
+                currentRunCost += accumulatedTokenUsage[key].total_cost || 0;
+              }
+
+              const runs = db.runs.listByTask(task.id);
+              let otherRunsCost = 0;
+              for (const r of runs) {
+                if (r.id !== run.id && r.tokenUsage) {
+                  for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+                    otherRunsCost += modelUsage.total_cost || 0;
+                  }
+                }
+              }
+
+              const totalTaskCost = otherRunsCost + currentRunCost;
+
+              if (totalTaskCost >= task.maxCost) {
+                sysLog(
+                  `[BUDGET EXCEEDED] Total task cost ($${totalTaskCost.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
+                );
+                abort.abort();
+              } else if (totalTaskCost >= task.maxCost * 0.8 && !costWarningSent) {
+                costWarningSent = true;
+                sysLog(
+                  `[BUDGET WARNING] Total task cost ($${totalTaskCost.toFixed(4)}) has reached 80% of maxCost limit ($${task.maxCost.toFixed(4)}).`
+                );
+                logOrchestratorEvent(
+                  `Task [${task.id.slice(0, 8)}] cost warning: $${totalTaskCost.toFixed(4)} of $${task.maxCost.toFixed(4)} limit reached.`,
+                  "warn"
+                );
+              }
+            }
+            continue;
           }
           await handleAgentEvent(event, run.id, task.id, db, hub, () => {
             lastActivity = Date.now();
