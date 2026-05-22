@@ -175,6 +175,22 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
     task.labels?.length
   );
 
+  let displayCost: number | null = null;
+  const run = task.latestRun;
+  if (run) {
+    if (run.tokenUsage && Object.keys(run.tokenUsage).length > 0) {
+      let sumTotalCost = 0;
+      for (const stats of Object.values(run.tokenUsage) as any[]) {
+        sumTotalCost += stats.total_cost || (stats.input_cost || 0) + (stats.output_cost || 0);
+      }
+      displayCost = sumTotalCost;
+    } else if (run.costStats) {
+      const rawTotal =
+        run.costStats.total ?? (run.costStats.input || 0) + (run.costStats.output || 0);
+      displayCost = rawTotal / 1_000_000;
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -293,9 +309,9 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.5)] animate-pulse" />
                   {elapsed}
                 </span>
-              ) : task.latestRun?.costStats ? (
+              ) : displayCost !== null ? (
                 <span className="text-[10px] font-mono text-warning/80 bg-warning/10 px-1.5 py-0.5 rounded">
-                  ${((task.latestRun.costStats.input || 0) / 1_000_000).toFixed(2)}
+                  ${displayCost.toFixed(2)}
                 </span>
               ) : isDone && task.latestRun?.finishedAt ? (
                 <span

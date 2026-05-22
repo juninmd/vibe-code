@@ -347,6 +347,60 @@ describe("OpenCodeEngine.parseLine", () => {
     expect(events.find((e) => e.type === "status")?.content).toBe("Awaiting input...");
     expect(events.find((e) => e.content?.includes("?"))).toBeDefined();
   });
+
+  it("accumulates tokens and cost cumulatively across multiple step_finish events", () => {
+    const accumulators = {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      cached: 0,
+      input_cost: 0,
+      output_cost: 0,
+      total_cost: 0,
+    };
+
+    // First step
+    const events1 = engine.parseLine(
+      JSON.stringify({
+        type: "step_finish",
+        part: {
+          tokens: { input: 100, output: 50, total: 150 },
+          cost: 0.003, // $0.003 USD = 3000 micro-dollars
+        },
+      }),
+      accumulators
+    );
+
+    const costEvent1 = events1.find((e) => e.type === "cost")?.costStats;
+    expect(costEvent1).toBeDefined();
+    expect(costEvent1?.input_tokens).toBe(100);
+    expect(costEvent1?.output_tokens).toBe(50);
+    expect(costEvent1?.total_tokens).toBe(150);
+    expect(costEvent1?.total).toBe(3000);
+
+    // Second step
+    const events2 = engine.parseLine(
+      JSON.stringify({
+        type: "step_finish",
+        part: {
+          tokens: { input: 200, output: 100, total: 300 },
+          cost: 0.006, // $0.006 USD = 6000 micro-dollars
+        },
+      }),
+      accumulators
+    );
+
+    const costEvent2 = events2.find((e) => e.type === "cost")?.costStats;
+    expect(costEvent2).toBeDefined();
+    // Cumulative: 100 + 200 = 300
+    expect(costEvent2?.input_tokens).toBe(300);
+    // Cumulative: 50 + 100 = 150
+    expect(costEvent2?.output_tokens).toBe(150);
+    // Cumulative: 150 + 300 = 450
+    expect(costEvent2?.total_tokens).toBe(450);
+    // Cumulative: 3000 + 6000 = 9000
+    expect(costEvent2?.total).toBe(9000);
+  });
 });
 
 describe("OpenCodeEngine.buildCommand", () => {
@@ -386,17 +440,25 @@ describe("OpenCodeEngine.buildCommand", () => {
 // ─── execute: opencode.json lifecycle ─────────────────────────────────────────
 
 describe("execute: opencode.json lifecycle", () => {
-  it("creates opencode.json with permission *:allow before running the subprocess", async () => {
-    // The script checks if opencode.json exists and emits a JSON event with the result.
+  it("creates opencode.json in isolated directory and configures XDG_CONFIG_HOME", async () => {
     const engine = new FakeOpenCodeEngine(
       `
       const fs = require("node:fs");
-      const exists = fs.existsSync(process.cwd() + "/opencode.json");
+      const path = require("node:path");
+      const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+      const disableProj = process.env.OPENCODE_DISABLE_PROJECT_CONFIG;
+      const configPath = xdgConfigHome ? path.join(xdgConfigHome, "opencode", "opencode.json") : "";
+      const exists = configPath && fs.existsSync(configPath);
       let config = {};
       if (exists) {
-        try { config = JSON.parse(fs.readFileSync(process.cwd() + "/opencode.json", "utf8")); } catch {}
+        try { config = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch {}
       }
-      const payload = JSON.stringify({type:"text", part:{text: exists ? "CONFIG_EXISTS:" + JSON.stringify(config) : "CONFIG_MISSING"}});
+      const payload = JSON.stringify({
+        type: "text",
+        part: {
+          text: "CONFIG_EXISTS:exists=" + exists + ";disableProj=" + disableProj + ";config=" + JSON.stringify(config) + ";xdg=" + xdgConfigHome
+        }
+      });
       process.stdout.write(payload + "\\n");
       `
     );
@@ -406,16 +468,39 @@ describe("execute: opencode.json lifecycle", () => {
       (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("CONFIG_EXISTS")
     );
     expect(textEvent).toBeDefined();
+    expect(textEvent?.content).toContain("exists=true");
+    expect(textEvent?.content).toContain("disableProj=true");
     expect(textEvent?.content).toContain('"*"');
     expect(textEvent?.content).toContain('"allow"');
   }, 10_000);
 
-  it("deletes opencode.json after execution completes", async () => {
-    const engine = new FakeOpenCodeEngine("// no-op");
-    await collectAll(engine, workdir);
+  it("deletes the isolated config directory and leaves workspace clean after execution", async () => {
+    const engine = new FakeOpenCodeEngine(
+      `
+      const payload = JSON.stringify({
+        type: "text",
+        part: {
+          text: "XDG_PATH:" + process.env.XDG_CONFIG_HOME
+        }
+      });
+      process.stdout.write(payload + "\\n");
+      `
+    );
+    const events = await collectAll(engine, workdir);
+    const xdgEvent = events.find(
+      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("XDG_PATH:")
+    );
+    expect(xdgEvent).toBeDefined();
+    const xdgPath = xdgEvent?.content?.substring("XDG_PATH:".length);
+    expect(xdgPath).toBeTruthy();
 
-    const exists = await Bun.file(join(workdir, "opencode.json")).exists();
-    expect(exists).toBe(false);
+    // Verify workspace file does not exist
+    const workspaceConfigExists = await Bun.file(join(workdir, "opencode.json")).exists();
+    expect(workspaceConfigExists).toBe(false);
+
+    // Verify temp isolated directory was deleted
+    const fs = require("node:fs");
+    expect(fs.existsSync(xdgPath)).toBe(false);
   }, 10_000);
 });
 

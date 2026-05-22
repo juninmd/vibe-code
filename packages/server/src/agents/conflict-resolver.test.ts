@@ -57,7 +57,7 @@ function makeOrchestrator(db: Db) {
     exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
   } as any;
   const registry = { get: () => undefined, list: () => [] } as any;
-  return new Orchestrator(db, git, hub, registry, { maxConcurrent: 2, dataDir: "/tmp" });
+  return new Orchestrator(db, git, registry, hub, 2);
 }
 
 describe("ConflictResolver", () => {
@@ -73,7 +73,6 @@ describe("ConflictResolver", () => {
 
     // Create a test repo
     const repo = db.repos.create({
-      name: "test-repo",
       url: "https://github.com/owner/test-repo",
       defaultBranch: "main",
     });
@@ -116,7 +115,7 @@ describe("ConflictResolver", () => {
       expect(conflictTask?.description).toContain("--force-with-lease");
 
       // Prompt must NOT contain bare --force (without --lease)
-      const descLines = conflictTask?.description?.split("\n");
+      const descLines = conflictTask?.description?.split("\n") ?? [];
       const hasBareForcePush = descLines.some((line) => {
         // Match `git push --force` but not `git push --force-with-lease`
         return /git push .*--force(?!-with-lease)/.test(line);
@@ -253,7 +252,7 @@ describe("ConflictResolver", () => {
       fetchSpy.mockRestore();
 
       expect(launch).toHaveBeenCalledTimes(1);
-      expect(launch.mock.calls[0]?.[0].branchName).toBe("feat/launch-branch");
+      expect((launch.mock.calls as any)[0]?.[0].branchName).toBe("feat/launch-branch");
     });
   });
 
