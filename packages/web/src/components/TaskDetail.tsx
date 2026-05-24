@@ -608,14 +608,21 @@ export function TaskDetail({
 
   // Calculate aggregated stats from tokenUsage if available
   let displayTotalTokens = costStats?.total_tokens ?? 0;
-  let displayInputCost = costStats?.input !== undefined ? costStats.input / 1000000 : 0;
   let displayInputTokens = costStats?.input_tokens ?? 0;
   let displayOutputTokens = costStats?.output_tokens ?? 0;
   let displayCachedTokens = costStats?.cached ?? 0;
 
+  let displayInputCostUSD = costStats?.input !== undefined ? costStats.input / 1_000_000 : 0;
+  let displayOutputCostUSD = costStats?.output !== undefined ? costStats.output / 1_000_000 : 0;
+  let displayTotalCostUSD =
+    costStats?.total !== undefined
+      ? costStats.total / 1_000_000
+      : displayInputCostUSD + displayOutputCostUSD;
+
   let displayInputCostRaw = costStats?.input;
   let displayOutputCostRaw = costStats?.output;
-  let displayTotalCostRaw = costStats?.total;
+  let displayTotalCostRaw =
+    costStats?.total ?? (costStats ? (costStats.input || 0) + (costStats.output || 0) : undefined);
 
   if (tokenUsage && Object.keys(tokenUsage).length > 0) {
     let sumTotalTokens = 0;
@@ -640,7 +647,9 @@ export function TaskDetail({
     displayInputTokens = sumInputTokens;
     displayOutputTokens = sumOutputTokens;
     displayCachedTokens = sumCachedTokens;
-    displayInputCost = sumTotalCost;
+    displayInputCostUSD = sumInputCost;
+    displayOutputCostUSD = sumOutputCost;
+    displayTotalCostUSD = sumTotalCost;
 
     displayInputCostRaw = sumInputCost * 1_000_000;
     displayOutputCostRaw = sumOutputCost * 1_000_000;
@@ -1656,8 +1665,14 @@ export function TaskDetail({
               )}
 
               {(costStats || (tokenUsage && Object.keys(tokenUsage).length > 0)) && (
-                <section className="col-span-1 rounded-lg border border-warning/20 bg-warning/10 p-3 lg:col-span-3">
-                  <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-warning">
+                <section
+                  className="col-span-1 rounded-xl glass-card border p-3.5 lg:col-span-3 shadow-sm"
+                  style={{ borderColor: "var(--glass-border)" }}
+                >
+                  <h3
+                    className="mb-3 text-[10px] font-black uppercase tracking-[0.16em]"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
                     Usage recorded by engine
                   </h3>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -2128,6 +2143,32 @@ export function TaskDetail({
                   )}
                 </div>
 
+                {task.maxCost !== undefined && task.maxCost > 0 && (
+                  <div
+                    className="rounded-xl p-4 border border-white/5 space-y-2"
+                    style={{
+                      background: "rgba(20,20,20,0.4)",
+                      borderColor: "var(--glass-border)",
+                    }}
+                  >
+                    <div className="flex justify-between text-[10px] font-mono">
+                      <span style={{ color: "var(--text-dimmed)" }}>BUDGET CONSUMPTION</span>
+                      <span className="font-bold text-emerald-400">
+                        {((displayTotalCostUSD / task.maxCost) * 100).toFixed(1)}% ($
+                        {displayTotalCostUSD.toFixed(4)} / ${task.maxCost.toFixed(2)})
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-500 ease-out"
+                        style={{
+                          width: `${Math.min(100, (displayTotalCostUSD / task.maxCost) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {/* Primary Metrics Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div
@@ -2164,10 +2205,10 @@ export function TaskDetail({
                       className="text-[9px] font-black uppercase tracking-[0.2em] mb-2 relative z-10"
                       style={{ color: "var(--text-dimmed)" }}
                     >
-                      Op Cost
+                      Total Cost
                     </div>
                     <div className="text-2xl font-black font-mono tracking-tight relative z-10 text-emerald-400">
-                      ${(displayInputCost || 0).toFixed(6)}
+                      ${(displayTotalCostUSD || 0).toFixed(6)}
                     </div>
                   </div>
 
