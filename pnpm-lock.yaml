@@ -13,8 +13,8 @@ importers:
   .:
     dependencies:
       '@ai-sdk/openai':
-        specifier: ^3.0.63
-        version: 3.0.64(zod@4.3.6)
+        specifier: ^3.0.65
+        version: 3.0.65(zod@4.3.6)
       '@openrouter/ai-sdk-provider':
         specifier: ^2.9.0
         version: 2.9.0(ai@6.0.184(zod@4.3.6))(zod@4.3.6)
@@ -275,8 +275,8 @@ packages:
     peerDependencies:
       zod: 4.3.6
 
-  '@ai-sdk/openai@3.0.64':
-    resolution: {integrity: sha512-epO4iS6QwktaY2PF6uBcPnDTJ3BxPOfsGS7/OEtBe3GtNj7C8h8gMDVtIe5K8W16HNDbn0tbR4dcQfpfs+XVFg==}
+  '@ai-sdk/openai@3.0.65':
+    resolution: {integrity: sha512-ZlVoWH+zrdiYDiUt6n/xvfCsk33mzsB81TUQkBRVx79rxU1FKZqVH9J/QCtEpSLqx0cUzjvtIw9l9p7EbUv+dw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.3.6
@@ -2332,7 +2332,7 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
 
-  '@ai-sdk/openai@3.0.64(zod@4.3.6)':
+  '@ai-sdk/openai@3.0.65(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
       '@ai-sdk/provider-utils': 4.0.27(zod@4.3.6)
