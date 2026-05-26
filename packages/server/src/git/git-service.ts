@@ -228,6 +228,13 @@ export class GitService {
 
   async commitAll(wtPath: string, message: string): Promise<void> {
     await this.exec(["git", "add", "-A"], { cwd: wtPath });
+    // Safety: ensure accidental `.vibe-code` directory (from misconfigured DATA_DIR)
+    // is not staged or committed. Remove from the index if present (keep files).
+    try {
+      await this.exec(["git", "rm", "-r", "--cached", ".vibe-code"], { cwd: wtPath });
+    } catch {
+      // ignore: path may not exist or not be tracked
+    }
     const hasChanges = await this.hasChanges(wtPath);
     if (hasChanges) {
       // Ensure git identity is set (required in some environments)

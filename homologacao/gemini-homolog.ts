@@ -92,7 +92,7 @@ if (!geminiInfo) {
 console.log("\n── 3. Repositório ───────────────────────────────────────────");
 const reposRes: any = await req("GET", "/api/repos");
 const repos: any[] = reposRes?.data ?? [];
-const readyRepo = repos.find((r: any) => r.status === "ready");
+const readyRepo = repos.find((r: any) => r.name === "mika" && r.status === "ready") ?? repos.find((r: any) => r.status === "ready");
 
 if (!readyRepo) {
   ko(`Nenhum repo 'ready' encontrado (${repos.length} total) — adicione um repositório`);
@@ -105,9 +105,9 @@ ok(`Repo pronto: "${readyRepo.name}" (${readyRepo.id})`);
 console.log("\n── 4. Criar task (engine: gemini) ───────────────────────────");
 const taskRes: any = await req("POST", "/api/tasks", {
   repoId: readyRepo.id,
-  title: "homolog: Gemini CLI E2E — escreva um arquivo README-HOMOLOG.md",
+  title: "docs: add MIKA_IMPROVEMENTS.md highlighting Neon Noir design principles",
   description:
-    "Crie o arquivo README-HOMOLOG.md na raiz do projeto com uma linha: '# Gemini CLI Homolog OK'. Não faça mais nada.",
+    "Create a documentation file named MIKA_IMPROVEMENTS.md in the root directory detailing the Neon Noir premium UI design principles: primary cyan #06b6d4, accent gold #f59e0b, dark Obsidian background #020617, JetBrains Mono, Clash Display, Outfit fonts, and tech-clipped corners using vt-card.",
   engine: "gemini",
   status: "backlog",
 });

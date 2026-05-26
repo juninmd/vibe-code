@@ -12,7 +12,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const SERVER_URL = "http://localhost:3002";
-const WEB_URL = "http://localhost:5173";
+let WEB_URL = "http://localhost:5173";
 const API_KEY = "local-test-key";
 const PRINTS_DIR = join(import.meta.dir, "prints");
 
@@ -58,7 +58,13 @@ async function run() {
   console.log("\n🔍 Verificando servidores...");
 
   const serverOk = await waitForServer(SERVER_URL + "/api/repos", "API Server");
-  const webOk = await waitForServer(WEB_URL, "Web UI");
+  let webOk = await waitForServer(WEB_URL, "Web UI");
+
+  if (!webOk && serverOk) {
+    console.log("  ⚠️  Web dev server não está rodando, direcionando para o servidor de produção (3002)");
+    WEB_URL = SERVER_URL;
+    webOk = true;
+  }
 
   if (!serverOk || !webOk) {
     console.error("\n❌ Servidor não está rodando. Execute: bun run dev:server && bun run dev:web");
@@ -66,7 +72,15 @@ async function run() {
   }
 
   console.log("\n🚀 Iniciando Playwright (Chromium headless)...");
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage"
+    ]
+  });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     locale: "pt-BR",
@@ -86,13 +100,13 @@ async function run() {
   // ── PRINT 03: Criando nova task via API ───────────────────────────────────
   console.log("[03] Criando task de teste via API...");
   const repos = await api("GET", "/api/repos");
-  const readyRepo = repos?.data?.find((r: any) => r.status === "ready");
+  const readyRepo = repos?.data?.find((r: any) => r.name === "mika" && r.status === "ready") ?? repos?.data?.find((r: any) => r.status === "ready");
   if (!readyRepo) throw new Error("Nenhum repo 'ready' disponível");
 
   const newTask = await api("POST", "/api/tasks", {
     repoId: readyRepo.id,
-    title: "docs: homologação E2E — adicionar nota de versão",
-    description: "Task de homologação automatizada. Adicionar um arquivo RELEASE-NOTES.md simples.",
+    title: "feat: create a system monitor widget for Mika in slot hud-top",
+    description: "1) Create widget apps/plugins/sys-monitor/renderer/widgets/sys-monitor.widget.tsx with Outfit, JetBrains Mono, and vt-card styling. 2) Expose in index.tsx using defineMikaUI. 3) Register in sys-monitor.feature.ts using defineFeature under slot hud-top.",
     engine: "opencode",
     status: "backlog",
   });
