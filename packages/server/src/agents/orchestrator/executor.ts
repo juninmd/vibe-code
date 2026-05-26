@@ -20,6 +20,7 @@ import { MemoryService } from "../memory-service";
 import { runBaselineCheck } from "./baseline-check";
 import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
+import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
 import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
@@ -551,7 +552,13 @@ export async function executeAgent(
       false
     );
     recordValidationArtifact(title, verification, metadata);
-    if (!verification.passed) {
+    if (verification.passed) {
+      try {
+        await captureFrontendScreenshotIfNeeded(wtPath, task, run, db, sysLog);
+      } catch (err: any) {
+        sysLog(`[verify] Failed to capture frontend screenshot: ${err.message}`);
+      }
+    } else {
       const failed = verification.results.find((result) => !result.passed);
       logOrchestratorEvent(
         `validation_failed command='${failed?.command ?? "unknown"}' exit_code=${failed?.exitCode ?? -1} artifact=run:${run.id}:validation:${validationRecordCount}`,

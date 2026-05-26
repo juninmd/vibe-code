@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { config } from "dotenv";
 
 config({ path: resolve(import.meta.dir, "../../../.env") });
@@ -36,9 +36,29 @@ import { logValidationReport, validateSkills } from "./skills/validator";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_DIR = process.env.VIBE_CODE_DATA_DIR
+let DATA_DIR = process.env.VIBE_CODE_DATA_DIR
   ? process.env.VIBE_CODE_DATA_DIR.replace(/^~/, homedir())
   : join(homedir(), ".vibe-code");
+
+// Safety: prevent using a data dir that lives inside the repository/workspace
+try {
+  const resolvedDataDir = resolve(DATA_DIR);
+  const cwd = process.cwd();
+  const rel = relative(cwd, resolvedDataDir);
+  // If `rel` does not start with '..' then DATA_DIR is inside (or equal to) cwd
+  if (!(rel.startsWith("..") || rel === "")) {
+    // inside a subpath of cwd -> override to user's home directory
+    const fallback = join(homedir(), ".vibe-code");
+    if (resolve(fallback) !== resolvedDataDir) {
+      console.warn(
+        `[startup] VIBE_CODE_DATA_DIR (${resolvedDataDir}) is inside the repository; overriding to ${fallback}`
+      );
+      DATA_DIR = fallback;
+    }
+  }
+} catch (err) {
+  // best-effort; if path ops fail, fall back to default behavior
+}
 const DB_PATH = join(DATA_DIR, "vibe.db");
 const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 

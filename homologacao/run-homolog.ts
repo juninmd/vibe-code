@@ -8,7 +8,7 @@ import { join } from "node:path";
 const PRINTS_DIR = join(import.meta.dir, "prints");
 const API_KEY = "local-test-key";
 const SERVER_URL = "http://localhost:3002";
-const WEB_URL = "http://localhost:5173";
+let WEB_URL = "http://localhost:5173";
 const ROOT = join(import.meta.dir, "..");
 const SERVER_DIST = join(ROOT, "packages/server/dist/index.js");
 
@@ -33,8 +33,11 @@ function portListening(port: number): boolean {
 
 const serverOk = portListening(3002);
 const webOk = portListening(5173);
+if (!webOk) {
+  WEB_URL = "http://localhost:3002";
+}
 console.log(`  API Server (3002): ${serverOk ? "✓ rodando" : "↑ será iniciado"}`);
-console.log(`  Web UI     (5173): ${webOk ? "✓ rodando" : "↑ será iniciado"}`);
+console.log(`  Web UI     (5173): ${webOk ? "✓ rodando" : "↑ será iniciado (ou direcionado para 3002)"}`);
 
 let serverProc: any = null;
 if (!serverOk) {
@@ -55,45 +58,18 @@ if (!serverOk) {
 }
 
 // ── Launch Chrome ─────────────────────────────────────────────────────────────
-console.log("\n🚀 Lançando Chrome com remote debugging (porta 9222)...");
-const chromeProc = Bun.spawn([
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "--headless=new",
-  "--remote-debugging-port=9222",
-  "--no-sandbox",
-  "--disable-gpu",
-  "--no-first-run",
-  "--no-default-browser-check",
-  `--user-data-dir=${join(import.meta.dir, ".chrome-profile")}`,
-], { stdout: "pipe", stderr: "pipe" });
-
-const cdec = new TextDecoder();
-(async () => { for await (const c of chromeProc.stderr) process.stderr.write(cdec.decode(c)); })().catch(() => {});
-
-// Wait for Chrome CDP port
-for (let i = 0; i < 20; i++) {
-  await Bun.sleep(1000);
-  if (portListening(9222)) { console.log("  ✓ Chrome CDP port aberta"); break; }
-  process.stdout.write(".");
-}
-
-// Connect Playwright via CDP
+console.log("\n🚀 Lançando Chrome via Playwright...");
 const { chromium: cr } = await import("playwright");
-let browser: any;
-for (let i = 0; i < 5; i++) {
-  try {
-    browser = await cr.connectOverCDP("http://localhost:9222");
-    const info = await fetch("http://localhost:9222/json/version").then(r => r.json()) as any;
-    console.log(`  ✓ Playwright conectado: ${info.Browser}`);
-    break;
-  } catch (e) {
-    console.log(`  Tentativa ${i+1} falhou: ${(e as any).message?.slice(0, 60)}`);
-    await Bun.sleep(2000);
-  }
-}
-if (!browser) throw new Error("Playwright não conectou via CDP");
-
-const ctx = browser.contexts()[0] ?? await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const browser = await cr.launch({
+  headless: true,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-gpu",
+    "--disable-dev-shm-usage"
+  ]
+});
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 page.on("pageerror", () => {});
 
@@ -146,7 +122,7 @@ console.log(`   Total repos: ${allRepos.length} | Ready: ${readyRepos.length}`);
 console.log(`   Repos ready: ${readyRepos.map((r: any) => r.name).join(", ") || "(nenhum)"}`);
 console.log(`   Engines: ${engines?.map?.((e: any) => e.name)?.join(", ") ?? "N/A"}`);
 
-const targetRepo = readyRepos[0] ?? allRepos[0];
+const targetRepo = readyRepos.find((r: any) => r.name === "mika") ?? readyRepos[0] ?? allRepos[0];
 if (!targetRepo) {
   console.error("   ✗ Nenhum repo disponível");
   await browser.close();
@@ -159,8 +135,8 @@ console.log(`   Usando repo: "${targetRepo.name}" (${targetRepo.id})`);
 console.log("[04] Criando task de homologação via API");
 const task = await api("POST", "/api/tasks", {
   repoId: targetRepo.id,
-  title: "docs: homologação E2E — registro de versão vibe-code",
-  description: "Task criada pelo script de homologação. Valida o fluxo completo da interface.",
+  title: "feat: create a system monitor widget for Mika in slot hud-top",
+  description: "1) Create widget apps/plugins/sys-monitor/renderer/widgets/sys-monitor.widget.tsx with Outfit, JetBrains Mono, and vt-card styling. 2) Expose in index.tsx using defineMikaUI. 3) Register in sys-monitor.feature.ts using defineFeature under slot hud-top.",
   engine: "opencode",
   status: "backlog",
 });
@@ -172,7 +148,7 @@ await shot("03-board-com-task-homolog");
 
 // 05: Detalhe da task
 console.log("[05] Tentando abrir detalhe da task");
-const card = page.locator('[role="button"]').filter({ hasText: "homologação E2E" }).first();
+const card = page.locator('[role="button"]').filter({ hasText: "feat: create a system" }).first();
 if (await card.isVisible({ timeout: 5000 }).catch(() => false)) {
   await card.click();
   await Bun.sleep(1800);
@@ -187,7 +163,7 @@ if (await card.isVisible({ timeout: 5000 }).catch(() => false)) {
 console.log("[06] Criando conflict-resolution task");
 const conflictTask = await api("POST", "/api/tasks", {
   repoId: targetRepo.id,
-  title: `fix(conflicts): resolve merge conflicts for "docs: homologação E2E"`,
+  title: `fix(conflicts): resolve merge conflicts for "feat: create a system monitor widget"`,
   description: [
     `Branch tem conflitos com main. Siga os passos:`,
     `STEP 1 — git fetch origin && git rebase origin/main`,
@@ -278,7 +254,6 @@ if (conflictTask?.id) await api("DELETE", `/api/tasks/${conflictTask.id}`).catch
 if (task?.id) await api("DELETE", `/api/tasks/${task.id}`).catch(() => {});
 
 await browser.close().catch(() => {});
-chromeProc.kill();
 if (serverProc) serverProc.kill();
 
 console.log("\n" + "═".repeat(60));
