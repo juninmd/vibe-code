@@ -303,6 +303,29 @@ export class OpenCodeEngine implements AgentEngine {
     }
   }
 
+  async selectFreeModel(): Promise<string> {
+    try {
+      const binary = resolveOpencodeBinary();
+      const proc = Bun.spawn([binary, "models"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode === 0) {
+        const text = await new Response(proc.stdout).text();
+        const models = text
+          .split("\n")
+          .map((m) => m.trim())
+          .filter(Boolean);
+        const free = models.filter((m) => m.endsWith("-free") || m === "opencode/big-pickle");
+        if (free.length > 0) {
+          const chosen = free[Math.floor(Math.random() * free.length)];
+          return chosen;
+        }
+      }
+    } catch (e) {
+      console.warn("[opencode] Failed to query local free models, falling back to big-pickle", e);
+    }
+    return "opencode/big-pickle";
+  }
+
   async listModels(): Promise<string[]> {
     return listLiteLLMModels(getLiteLLMBaseUrl());
   }
@@ -312,7 +335,10 @@ export class OpenCodeEngine implements AgentEngine {
     workdir: string,
     options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
-    const model = options.model ?? DEFAULT_OPENCODE_MODEL;
+    let model = options.model ?? DEFAULT_OPENCODE_MODEL;
+    if (model === "auto-free") {
+      model = await this.selectFreeModel();
+    }
     yield {
       type: "log",
       stream: "system",
