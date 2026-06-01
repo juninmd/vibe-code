@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+- Fixed GitHub Actions validation by replacing the external reusable workflow dependency with local Bun lint, typecheck, test, and build gates.
+
 ### Added
 - **Grok and ACPX Native Engines**: Ported native local Grok CLI execution engine and Agent Client Protocol (ACPX) parser adapter with full unit test coverage.
 - **Cost Safety & Multi-run Budget Enforcement**: Implemented cost warnings at 80% and hard-abort/pause gating at 100% of max cost during both generation and validation repair cycles.
