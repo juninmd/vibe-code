@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -708,4 +708,54 @@ describe("execute: heartbeat", () => {
     );
     expect(heartbeats.length).toBeGreaterThanOrEqual(1);
   }, 10_000);
+});
+
+// ─── execute: auto-free selection ──────────────────────────────────────────────
+
+describe("OpenCodeEngine auto-free selection", () => {
+  it("selects a free model from listing", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 0,
+            stdout: new Response(
+              "opencode/model-a-free\nopencode/model-b-premium\nopencode/big-pickle\n"
+            ).body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const model = await engine.selectFreeModel();
+      expect(model === "opencode/model-a-free" || model === "opencode/big-pickle").toBe(true);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("falls back to big-pickle on command error", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 1,
+            stdout: new Response("").body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const model = await engine.selectFreeModel();
+      expect(model).toBe("opencode/big-pickle");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
 });
