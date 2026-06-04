@@ -35,22 +35,27 @@ export class ClaudeCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    const staticModels = [
-      "claude-3-7-sonnet-20250219",
-      "claude-3-5-sonnet-20241022",
-      "claude-3-5-sonnet-20240620",
-      "claude-3-5-haiku-20241022",
-      "claude-3-opus-20240229",
-      "claude-3-sonnet-20240229",
-      "claude-3-haiku-20240307",
-    ];
+    const models = new Set<string>();
     try {
       const all = await listLiteLLMModels(getLiteLLMBaseUrl());
-      const litellm = all.filter((m) => m.startsWith("anthropic/") || m.startsWith("claude-"));
-      return Array.from(new Set([...staticModels, ...litellm])).sort();
-    } catch {
-      return staticModels;
+      for (const m of all) {
+        if (m.startsWith("anthropic/") || m.startsWith("claude-")) {
+          models.add(m);
+        }
+      }
+    } catch {}
+    if (process.env.VIBE_CLAUDE_CODE_MODELS) {
+      for (const m of process.env.VIBE_CLAUDE_CODE_MODELS.split(",").map((x) => x.trim())) {
+        models.add(m);
+      }
     }
+    if (models.size === 0) {
+      const fallbackList =
+        process.env.VIBE_CLAUDE_CODE_DEFAULT_MODELS ||
+        "claude-3-7-sonnet-20250219,claude-3-5-sonnet-20241022,claude-3-5-sonnet-20240620,claude-3-5-haiku-20241022,claude-3-opus-20240229,claude-3-sonnet-20240229,claude-3-haiku-20240307";
+      return fallbackList.split(",").map((x) => x.trim());
+    }
+    return Array.from(models).sort();
   }
 
   async *execute(

@@ -759,3 +759,30 @@ describe("OpenCodeEngine auto-free selection", () => {
     }
   });
 });
+
+describe("OpenCodeEngine model listing", () => {
+  it("returns fallback models when external providers list nothing", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 1,
+            stdout: new Response("").body,
+            stderr: new Response("").body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const models = await engine.listModels();
+      expect(models).toContain("github-models/openai/gpt-4o-mini");
+      expect(models).toContain("auto-free");
+      expect(models.length).toBeGreaterThan(0);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
