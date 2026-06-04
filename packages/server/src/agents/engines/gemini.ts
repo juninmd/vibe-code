@@ -175,7 +175,10 @@ export class GeminiEngine implements AgentEngine {
 
     // Fallback if empty
     if (models.length === 0) {
-      models = ["auto", "pro", "flash", "flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"];
+      const fallbackList =
+        process.env.VIBE_GEMINI_DEFAULT_MODELS ||
+        "auto,pro,flash,flash-lite,gemini-1.5-pro,gemini-1.5-flash";
+      models = fallbackList.split(",").map((x) => x.trim());
     }
 
     this.cachedModels = models.sort();

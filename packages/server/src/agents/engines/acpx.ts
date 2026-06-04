@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
@@ -32,7 +33,22 @@ export class AcpxEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    return ["claude", "codex"];
+    const models = new Set<string>();
+    try {
+      const litellm = await listLiteLLMModels(getLiteLLMBaseUrl());
+      for (const m of litellm) models.add(m);
+    } catch {}
+    if (process.env.VIBE_ACPX_MODELS) {
+      for (const m of process.env.VIBE_ACPX_MODELS.split(",").map((x) => x.trim())) {
+        models.add(m);
+      }
+    }
+    if (models.size === 0) {
+      // Return a basic fallback if offline and no env config is present
+      const fallbackList = process.env.VIBE_ACPX_DEFAULT_MODELS || "claude,codex";
+      return fallbackList.split(",").map((x) => x.trim());
+    }
+    return Array.from(models);
   }
 
   async *execute(

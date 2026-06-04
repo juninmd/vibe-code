@@ -2,9 +2,15 @@
 
 ## [Unreleased]
 ### Fixed
+- Fixed fallback models list by completely removing hardcoded registry models and increasing `opencode models` query timeout to 10s to ensure list is dynamically loaded.
+- Fixed OpenCode model selection by returning a stable fallback model list when LiteLLM or the local OpenCode CLI cannot list models quickly.
 - Fixed GitHub Actions validation by replacing the external reusable workflow dependency with local Bun lint, typecheck, test, and build gates.
+- Fixed web Vitest execution on Windows by using forked workers, restoring the root `bun run test` homologation gate.
 
 ### Added
+- **Model hardcoding lock test**: Added a verification test that automatically scans all agent engines to ensure no models are statically hardcoded, enforcing dynamic resolution via CLI, LiteLLM or environment variables.
+- **Bulk Card Deletion**: Added board-level multi-select controls plus per-column delete-all actions for non-running task columns.
+- **Task Detail Modal UX Audit**: Documented the modal information-density problem, console-first execution decision, implemented changes, and remaining UX cuts in `docs/task-detail-modal-ux-audit.md`.
 - **Grok and ACPX Native Engines**: Ported native local Grok CLI execution engine and Agent Client Protocol (ACPX) parser adapter with full unit test coverage.
 - **Cost Safety & Multi-run Budget Enforcement**: Implemented cost warnings at 80% and hard-abort/pause gating at 100% of max cost during both generation and validation repair cycles.
 - **Process Tree Reaping**: Created process-tree execution safety utility for cross-platform recursive child-process termination during agent abort signals.
@@ -17,6 +23,7 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- **Task Detail Execution UX**: Reduced non-execution chrome in running task modals and made full-height agent output open in a raw, readable log view with the existing step timeline available on demand.
 - **OpenCode Dynamic Configuration Isolation**: Configured OpenCode to execute using temporary configuration folders via isolated `XDG_CONFIG_HOME` env variables to prevent polluting the git workspace repository.
 - **Unified Telemetry & Micro-dollar Conversion**: Refactored OpenCode event parsing to progressively accumulate execution costs, reporting unified cumulative costStats telemetry, and mapped cost units in task detail modals/cards to handle micro-dollar and standard-dollar conversions correctly.
 - **Workspace Isolation**: Refactored the control plane database schema and Hono API endpoints to native `workspace_id` referencing workspace records, completely separating repository contexts.

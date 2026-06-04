@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
 
@@ -32,7 +33,40 @@ export class GrokEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    return ["grok-build"];
+    const models = new Set<string>();
+    try {
+      const proc = Bun.spawn(["grok", "models"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode === 0) {
+        const text = await new Response(proc.stdout).text();
+        const matches = text.match(/grok-\S+/g);
+        if (matches) {
+          for (const m of matches) {
+            models.add(m.replace(/[()*]/g, "").trim());
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[grok] Failed to list CLI models", err);
+    }
+    try {
+      const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+      for (const m of all) {
+        if (m.startsWith("grok/")) {
+          models.add(m);
+        }
+      }
+    } catch {}
+    if (process.env.VIBE_GROK_MODELS) {
+      for (const m of process.env.VIBE_GROK_MODELS.split(",").map((x) => x.trim())) {
+        models.add(m);
+      }
+    }
+    if (models.size === 0) {
+      const fallbackList = process.env.VIBE_GROK_DEFAULT_MODELS || "grok-build";
+      return fallbackList.split(",").map((x) => x.trim());
+    }
+    return Array.from(models).sort();
   }
 
   async *execute(

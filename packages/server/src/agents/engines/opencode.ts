@@ -148,9 +148,27 @@ export function humanizeStderr(line: string): string | null {
 
 /**
  * Default model for OpenCode when no model is specified.
- * Uses the LiteLLM auto-routing format: provider/model-name.
+ * GitHub Models works in the local/free deployment with GITHUB_TOKEN.
  */
-export const DEFAULT_OPENCODE_MODEL = "anthropic/claude-sonnet-4-5";
+export const DEFAULT_OPENCODE_MODEL = "github-models/openai/gpt-4o-mini";
+
+export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
+
+const MODEL_LIST_TIMEOUT_MS = 10_000;
+
+async function waitForModelsProcess(proc: Subprocess): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timeout = setTimeout(() => resolve("timeout"), MODEL_LIST_TIMEOUT_MS);
+  });
+  const result = await Promise.race([proc.exited.then(() => "done" as const), timedOut]);
+  if (timeout) clearTimeout(timeout);
+  if (result === "timeout") {
+    proc.kill();
+    return false;
+  }
+  return proc.exitCode === 0;
+}
 
 // Why: Windows batch `%*` argv forwarding does not preserve newlines, so the
 // `opencode.cmd` npm shim truncates multi-line prompts at the first \n before
@@ -327,7 +345,33 @@ export class OpenCodeEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    return listLiteLLMModels(getLiteLLMBaseUrl());
+    const models = new Set<string>();
+
+    try {
+      const litellm = await listLiteLLMModels(getLiteLLMBaseUrl());
+      for (const model of litellm) models.add(model);
+    } catch (err) {
+      console.warn("[opencode] Failed to list LiteLLM models", err);
+    }
+
+    try {
+      const binary = resolveOpencodeBinary();
+      const proc = Bun.spawn([binary, "models"], { stdout: "pipe", stderr: "pipe" });
+      if (await waitForModelsProcess(proc)) {
+        const text = await new Response(proc.stdout).text();
+        for (const model of text
+          .split("\n")
+          .map((m) => m.trim())
+          .filter(Boolean)) {
+          models.add(model);
+        }
+      }
+    } catch (err) {
+      console.warn("[opencode] Failed to list CLI models", err);
+    }
+
+    for (const model of OPENCODE_FALLBACK_MODELS) models.add(model);
+    return Array.from(models);
   }
 
   async *execute(
