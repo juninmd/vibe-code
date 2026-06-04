@@ -17,10 +17,12 @@ RUN bun run build
 FROM oven/bun:${BUN_VERSION}-debian AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
-# OS deps: git (worktrees), curl/ca (CLI installers + healthcheck), openssh (git@), tini (PID 1)
+# OS deps: git (worktrees), curl/ca (CLI installers + healthcheck), openssh (git@), tini (PID 1),
+# build-essential + pkg-config (C compiler/linker `cc`/`ld` for native builds, e.g. Rust/cgo agents)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       git ca-certificates curl openssh-client tini \
+      build-essential pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
 # Node + Claude Code CLI (distributed via npm)
