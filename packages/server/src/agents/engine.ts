@@ -60,6 +60,8 @@ export interface EngineOptions {
   skills?: SkillPayload;
   /** Environment variables to be merged with process.env and passed to the agent process. */
   env?: Record<string, string>;
+  /** MCP servers to be configured for the run. */
+  mcpServers?: Record<string, any>;
 }
 
 export interface AgentEngine {

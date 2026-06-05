@@ -12,7 +12,7 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
-type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general" | "telegram";
+type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general" | "telegram" | "mcp";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -1174,6 +1174,396 @@ function TelegramTab() {
   );
 }
 
+function McpTab() {
+  const nameInputId = useId();
+  const commandInputId = useId();
+  const urlInputId = useId();
+  const [mcpServers, setMcpServers] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // New server form state
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState<"local" | "remote">("local");
+  const [newCommand, setNewCommand] = useState("");
+  const [newUrl, setNewUrl] = useState("");
+  const [envKeys, setEnvKeys] = useState<string[]>([""]);
+  const [envValues, setEnvValues] = useState<string[]>([""]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.settings
+      .get()
+      .then((s) => {
+        setMcpServers(s.mcpServers ?? {});
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleToggleServer = async (name: string) => {
+    const updated = { ...mcpServers };
+    if (updated[name]) {
+      updated[name] = { ...updated[name], enabled: !updated[name].enabled };
+      setMcpServers(updated);
+      try {
+        await api.settings.update({ mcpServers: updated });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  };
+
+  const handleDeleteServer = async (name: string) => {
+    const updated = { ...mcpServers };
+    delete updated[name];
+    setMcpServers(updated);
+    try {
+      await api.settings.update({ mcpServers: updated });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleAddEnvRow = () => {
+    setEnvKeys([...envKeys, ""]);
+    setEnvValues([...envValues, ""]);
+  };
+
+  const handleRemoveEnvRow = (index: number) => {
+    const keys = [...envKeys];
+    const vals = [...envValues];
+    keys.splice(index, 1);
+    vals.splice(index, 1);
+    setEnvKeys(keys);
+    setEnvValues(vals);
+  };
+
+  const handleAddServer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim().toLowerCase();
+    if (!name) return;
+
+    const serverConfig: any = {
+      type: newType,
+      enabled: true,
+    };
+
+    if (newType === "local") {
+      serverConfig.command = newCommand
+        .split(/\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else {
+      serverConfig.url = newUrl.trim();
+    }
+
+    // Build environment variables
+    const environment: Record<string, string> = {};
+    for (let i = 0; i < envKeys.length; i++) {
+      const k = envKeys[i].trim();
+      const v = envValues[i].trim();
+      if (k && v) {
+        environment[k] = v;
+      }
+    }
+    if (Object.keys(environment).length > 0) {
+      serverConfig.environment = environment;
+    }
+
+    const updated = { ...mcpServers, [name]: serverConfig };
+    setSaving(true);
+    try {
+      await api.settings.update({ mcpServers: updated });
+      setMcpServers(updated);
+      // Reset form
+      setNewName("");
+      setNewCommand("");
+      setNewUrl("");
+      setEnvKeys([""]);
+      setEnvValues([""]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="text-sm text-muted py-8 text-center">Loading MCP Configuration...</div>;
+  }
+
+  return (
+    <div className="space-y-8">
+      <SettingsSection title="Model Context Protocol (MCP)">
+        <p className="text-[11px] text-muted leading-relaxed">
+          MCP is an open standard that enables secure integration of tools and data sources into AI
+          systems. Configure MCP servers below to grant agent engines access to additional utilities
+          (such as search tools, database clients, or github management APIs).
+        </p>
+
+        {error && (
+          <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 flex gap-3 items-center text-danger text-xs font-bold">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              className="shrink-0"
+              aria-hidden="true"
+            >
+              <title>Error</title>
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* MCP Server List */}
+        <div className="space-y-3">
+          {Object.keys(mcpServers).length === 0 ? (
+            <div className="p-6 rounded-[2rem] border border-white/5 bg-white/[0.01] text-center text-xs text-muted">
+              No custom MCP servers configured. (GitHub MCP will still activate automatically if a
+              token is available)
+            </div>
+          ) : (
+            Object.entries(mcpServers).map(([name, config]: [string, any]) => (
+              <div
+                key={name}
+                className="p-5 rounded-[2rem] bg-white/[0.02] border border-white/5 flex items-start gap-4 transition-all"
+              >
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                    config.enabled
+                      ? "bg-accent/15 text-accent border border-accent/20"
+                      : "bg-white/5 text-muted border border-white/5"
+                  }`}
+                >
+                  🔌
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-primary tracking-tight">{name}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted px-1.5 py-0.5 rounded bg-white/5">
+                      {config.type}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted mt-1 truncate font-mono">
+                    {config.type === "local"
+                      ? Array.isArray(config.command)
+                        ? config.command.join(" ")
+                        : config.command
+                      : config.url}
+                  </p>
+                  {config.environment && Object.keys(config.environment).length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {Object.keys(config.environment).map((k) => (
+                        <span
+                          key={k}
+                          className="text-[8px] font-mono bg-white/5 border border-white/5 rounded px-1.5 py-0.5 text-muted"
+                        >
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Enable/Disable Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleServer(name)}
+                    className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                      config.enabled ? "bg-accent" : "bg-white/10"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        config.enabled ? "translate-x-4" : ""
+                      }`}
+                    />
+                  </button>
+                  {/* Delete Button */}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => handleDeleteServer(name)}
+                    className="h-8 rounded-xl px-3 text-[9px] font-black uppercase tracking-widest shadow-inner shadow-danger/10"
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </SettingsSection>
+
+      {/* Add new MCP server form */}
+      <SettingsSection title="Register New MCP Server">
+        <form
+          onSubmit={handleAddServer}
+          className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-5"
+        >
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor={nameInputId}
+                className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
+              >
+                Server Identifier Name
+              </label>
+              <Input
+                id={nameInputId}
+                required
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. brave-search"
+                className="h-10 rounded-xl bg-input/40 border-white/5 text-xs font-mono"
+              />
+            </div>
+            <div>
+              <div className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1">
+                Connection Type
+              </div>
+              <div className="flex gap-2 p-1 rounded-xl bg-input/40 border border-white/5">
+                {(["local", "remote"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setNewType(t)}
+                    className={`flex-1 text-[9px] font-black uppercase tracking-widest py-1.5 rounded-lg transition-all cursor-pointer ${
+                      newType === t
+                        ? "bg-accent text-white shadow"
+                        : "text-muted hover:text-primary"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {newType === "local" ? (
+            <div>
+              <label
+                htmlFor={commandInputId}
+                className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
+              >
+                Command / Arguments
+              </label>
+              <Input
+                id={commandInputId}
+                required={newType === "local"}
+                value={newCommand}
+                onChange={(e) => setNewCommand(e.target.value)}
+                placeholder="e.g. npx -y @modelcontextprotocol/server-postgres postgres://localhost:5432"
+                className="h-10 rounded-xl bg-input/40 border-white/5 text-xs font-mono"
+              />
+              <p className="text-[9px] mt-1 ml-1 text-dimmed">
+                The command line to launch this MCP server. Words will be parsed as arguments
+                automatically.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label
+                htmlFor={urlInputId}
+                className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
+              >
+                Remote Server Endpoint URL
+              </label>
+              <Input
+                id={urlInputId}
+                required={newType === "remote"}
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="e.g. https://mcp.exa.ai/mcp"
+                className="h-10 rounded-xl bg-input/40 border-white/5 text-xs font-mono"
+              />
+            </div>
+          )}
+
+          {/* Environment Variables */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="block text-[10px] font-black uppercase tracking-widest text-dimmed ml-1">
+                Environment Variables (Secrets/Config)
+              </div>
+              <button
+                type="button"
+                onClick={handleAddEnvRow}
+                className="text-[9px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-colors cursor-pointer"
+              >
+                + Add Variable
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {envKeys.map((key, idx) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: idx is stable and unique for rows
+                <div key={idx} className="flex gap-2 items-center">
+                  <Input
+                    value={key}
+                    onChange={(e) => {
+                      const updatedKeys = [...envKeys];
+                      updatedKeys[idx] = e.target.value;
+                      setEnvKeys(updatedKeys);
+                    }}
+                    placeholder="KEY"
+                    className="h-9 rounded-lg bg-input/30 border-white/5 text-[11px] font-mono flex-1"
+                  />
+                  <Input
+                    value={envValues[idx]}
+                    onChange={(e) => {
+                      const updatedVals = [...envValues];
+                      updatedVals[idx] = e.target.value;
+                      setEnvValues(updatedVals);
+                    }}
+                    placeholder="VALUE"
+                    className="h-9 rounded-lg bg-input/30 border-white/5 text-[11px] font-mono flex-1"
+                  />
+                  {(envKeys.length > 1 || key || envValues[idx]) && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEnvRow(idx)}
+                      className="text-[10px] font-bold text-danger hover:text-red-400 p-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={saving || !newName.trim()}
+              className="rounded-xl h-10 px-8 shadow-lg shadow-accent/20 font-black uppercase tracking-widest text-[9px]"
+            >
+              {saving ? "Registering..." : "Add MCP Server"}
+            </Button>
+          </div>
+        </form>
+      </SettingsSection>
+    </div>
+  );
+}
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [tab, setTab] = useState<Tab>("github");
 
@@ -1181,20 +1571,22 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     <Dialog open={open} onClose={onClose} title="System Configuration" size="2xl">
       {/* Modern High-End Tabs */}
       <div className="flex gap-2 mb-8 p-1.5 rounded-[1.25rem] bg-input/40 border border-white/5 backdrop-blur-md">
-        {(["github", "gitlab", "litellm", "apikeys", "general", "telegram"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
-              tab === t
-                ? "bg-accent text-white shadow-lg shadow-accent/25"
-                : "text-muted hover:text-primary hover:bg-white/5"
-            }`}
-          >
-            {t === "apikeys" ? "API Keys" : t}
-          </button>
-        ))}
+        {(["github", "gitlab", "litellm", "apikeys", "general", "telegram", "mcp"] as Tab[]).map(
+          (t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
+                tab === t
+                  ? "bg-accent text-white shadow-lg shadow-accent/25"
+                  : "text-muted hover:text-primary hover:bg-white/5"
+              }`}
+            >
+              {t === "apikeys" ? "API Keys" : t === "mcp" ? "MCP" : t}
+            </button>
+          )
+        )}
       </div>
 
       <div className="min-h-[320px] max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -1216,6 +1608,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         {tab === "general" && <GeneralTab />}
 
         {tab === "telegram" && <TelegramTab />}
+
+        {tab === "mcp" && <McpTab />}
       </div>
 
       <div className="mt-8 pt-6 border-t border-white/5 flex justify-end">
