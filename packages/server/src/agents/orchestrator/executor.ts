@@ -699,6 +699,28 @@ export async function executeAgent(
       openai: db.settings.get("openai_api_key") || undefined,
     };
 
+    const mcpServersStr = db.settings.get("mcp_servers") || "{}";
+    let mcpServers: Record<string, any> = {};
+    try {
+      mcpServers = JSON.parse(mcpServersStr);
+    } catch {
+      // ignore
+    }
+
+    if (!mcpServers.github) {
+      const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+      if (ghToken) {
+        mcpServers.github = {
+          type: "local",
+          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+          enabled: true,
+          environment: {
+            GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
+          },
+        };
+      }
+    }
+
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
       sysLog(
@@ -865,6 +887,7 @@ export async function executeAgent(
       skills: skillPayload,
       resumeSessionId: activeSessionId,
       env: agentEnv,
+      mcpServers,
     })) {
       if (abort.signal.aborted) break;
       recordCliLoadedSkills();
@@ -1027,6 +1050,7 @@ export async function executeAgent(
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
@@ -1171,6 +1195,7 @@ export async function executeAgent(
               litellmBaseUrl,
               nativeApiKeys,
               resumeSessionId: activeSessionId,
+              mcpServers,
             })) {
               if (abort.signal.aborted) break;
               if (event.type === "session" && event.sessionId) {
@@ -1301,6 +1326,7 @@ export async function executeAgent(
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
@@ -1345,6 +1371,7 @@ export async function executeAgent(
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {

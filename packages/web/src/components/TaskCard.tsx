@@ -29,6 +29,9 @@ interface TaskCardProps {
   onClick: (task: TaskWithRun) => void;
   onRetryPR: (taskId: string) => void;
   onUnblock?: (taskId: string) => void;
+  selectionMode?: boolean;
+  selected?: boolean;
+  onSelectionChange?: (taskId: string, selected: boolean) => void;
   retryEntry?: RetryState;
 }
 
@@ -123,7 +126,16 @@ const conflictColor = {
   glow: "shadow-[0_0_24px_-4px_rgba(244,63,94,0.4)]",
 };
 
-function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: TaskCardProps) {
+function TaskCardComponent({
+  task,
+  onClick,
+  onRetryPR,
+  onUnblock,
+  selectionMode = false,
+  selected = false,
+  onSelectionChange,
+  retryEntry,
+}: TaskCardProps) {
   const isConflictResolution = task.tags?.includes("conflict-resolution") ?? false;
   const colors = isConflictResolution
     ? conflictColor
@@ -157,6 +169,11 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
     } finally {
       setRetrying(false);
     }
+  };
+
+  const handleSelectionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    onSelectionChange?.(task.id, e.currentTarget.checked);
   };
 
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
@@ -207,7 +224,9 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
         }
       }}
       onClick={() => onClick(task)}
-      className={`group relative rounded-lg cursor-grab active:cursor-grabbing transition-all duration-300 overflow-hidden ${isRunning ? colors.glow : ""}`}
+      className={`group relative rounded-lg cursor-grab active:cursor-grabbing transition-all duration-300 overflow-hidden ${
+        selected ? "ring-2 ring-danger/50" : ""
+      } ${isRunning ? colors.glow : ""}`}
     >
       <div
         className={`absolute inset-0 bg-gradient-to-br ${colors.bg} opacity-50 group-hover:opacity-80 transition-opacity duration-300`}
@@ -229,6 +248,16 @@ function TaskCardComponent({ task, onClick, onRetryPR, onUnblock, retryEntry }: 
         <div className="p-3 border-b border-white/[0.05]">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-start gap-2 min-w-0 flex-1">
+              {selectionMode && (
+                <input
+                  type="checkbox"
+                  aria-label={`Selecionar ${task.title}`}
+                  checked={selected}
+                  onChange={handleSelectionChange}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-red-500"
+                />
+              )}
               {ProviderIcon && (
                 <span className={`mt-0.5 shrink-0 ${provider?.color}`}>
                   <ProviderIcon size={13} />
@@ -429,6 +458,9 @@ export const TaskCard = memo(TaskCardComponent, (prev, next) => {
     prev.task === next.task &&
     prev.onClick === next.onClick &&
     prev.onRetryPR === next.onRetryPR &&
+    prev.selectionMode === next.selectionMode &&
+    prev.selected === next.selected &&
+    prev.onSelectionChange === next.onSelectionChange &&
     prev.retryEntry === next.retryEntry
   );
 });

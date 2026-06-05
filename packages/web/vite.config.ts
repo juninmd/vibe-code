@@ -73,7 +73,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
-      pool: "threads",
+      pool: "forks",
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
       globals: true,

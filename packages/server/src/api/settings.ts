@@ -11,6 +11,32 @@ function maskToken(token: string | null | undefined): string {
   return "•".repeat(token.length - 4) + token.slice(-4);
 }
 
+function maskMcpSecrets(mcpServers: Record<string, any>): Record<string, any> {
+  const masked = JSON.parse(JSON.stringify(mcpServers));
+  for (const serverName of Object.keys(masked)) {
+    const server = masked[serverName];
+    if (
+      server &&
+      typeof server === "object" &&
+      server.environment &&
+      typeof server.environment === "object"
+    ) {
+      for (const envKey of Object.keys(server.environment)) {
+        const lowerKey = envKey.toLowerCase();
+        if (
+          lowerKey.includes("token") ||
+          lowerKey.includes("key") ||
+          lowerKey.includes("secret") ||
+          lowerKey.includes("password")
+        ) {
+          server.environment[envKey] = maskToken(server.environment[envKey]);
+        }
+      }
+    }
+  }
+  return masked;
+}
+
 const updateSettingsSchema = z.object({
   githubToken: z.string().optional(),
   gitlabToken: z.string().optional(),
@@ -27,6 +53,7 @@ const updateSettingsSchema = z.object({
   telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
   telegramEnabled: z.boolean().optional(),
+  mcpServers: z.any().optional(),
 });
 
 export function createSettingsRouter(
@@ -55,6 +82,26 @@ export function createSettingsRouter(
     const telegramBotToken = db.settings.get("telegram_bot_token");
     const telegramChatId = db.settings.get("telegram_chat_id") || "";
     const telegramEnabled = db.settings.get("telegram_enabled") !== "false";
+
+    const mcpServersStr = db.settings.get("mcp_servers") || "{}";
+    let mcpServers: Record<string, any> = {};
+    try {
+      mcpServers = JSON.parse(mcpServersStr);
+    } catch {}
+
+    if (!mcpServers.github) {
+      const token = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+      if (token) {
+        mcpServers.github = {
+          type: "local",
+          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+          enabled: true,
+          environment: {
+            GITHUB_PERSONAL_ACCESS_TOKEN: token,
+          },
+        };
+      }
+    }
 
     return c.json({
       data: {
@@ -89,6 +136,7 @@ export function createSettingsRouter(
           chatId: telegramChatId,
           enabled: telegramEnabled,
         },
+        mcpServers: maskMcpSecrets(mcpServers),
         // Legacy compat
         githubToken: maskToken(ghToken),
         githubTokenSet: !!ghToken,
@@ -180,6 +228,40 @@ export function createSettingsRouter(
     }
     if (parsed.data.telegramEnabled !== undefined) {
       db.settings.set("telegram_enabled", parsed.data.telegramEnabled ? "true" : "false");
+    }
+    if (parsed.data.mcpServers !== undefined) {
+      const existingStr = db.settings.get("mcp_servers") || "{}";
+      let existing: Record<string, any> = {};
+      try {
+        existing = JSON.parse(existingStr);
+      } catch {}
+
+      const updated = parsed.data.mcpServers;
+      for (const serverName of Object.keys(updated)) {
+        const updatedServer = updated[serverName];
+        const existingServer = existing[serverName];
+        if (
+          updatedServer &&
+          typeof updatedServer === "object" &&
+          updatedServer.environment &&
+          typeof updatedServer.environment === "object" &&
+          existingServer &&
+          typeof existingServer === "object" &&
+          existingServer.environment &&
+          typeof existingServer.environment === "object"
+        ) {
+          for (const envKey of Object.keys(updatedServer.environment)) {
+            const val = updatedServer.environment[envKey];
+            if (typeof val === "string" && (val.includes("•") || val === "")) {
+              const originalVal = existingServer.environment[envKey];
+              if (originalVal) {
+                updatedServer.environment[envKey] = originalVal;
+              }
+            }
+          }
+        }
+      }
+      db.settings.set("mcp_servers", JSON.stringify(updated, null, 2));
     }
     return c.json({ data: { ok: true } });
   });

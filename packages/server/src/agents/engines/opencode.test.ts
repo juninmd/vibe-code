@@ -786,3 +786,58 @@ describe("OpenCodeEngine model listing", () => {
     }
   });
 });
+
+describe("OpenCodeEngine MCP configuration", () => {
+  it("serializes options.mcpServers into opencode.json", async () => {
+    const scriptPath = join(workdir, "inspect-mcp.js");
+    await Bun.write(
+      scriptPath,
+      `const fs = require('node:fs');
+       const path = require('node:path');
+       const configPath = path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json');
+       const content = fs.readFileSync(configPath, 'utf8').replace(/\\n/g, ' ');
+       console.log(JSON.stringify({ type: 'text', part: { text: 'MCP_CONFIG:' + content } }));`
+    );
+
+    class ScriptFileOpenCodeEngine extends OpenCodeEngine {
+      protected override buildCommandArgs(
+        _model: string,
+        _workdir: string,
+        _resumeSessionId?: string
+      ): string[] {
+        return ["bun", scriptPath];
+      }
+    }
+
+    const engine = new ScriptFileOpenCodeEngine();
+
+    const mcpServers = {
+      github: {
+        type: "local",
+        command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+        enabled: true,
+        environment: {
+          GITHUB_PERSONAL_ACCESS_TOKEN: "test_token",
+        },
+      },
+    };
+
+    const events: AgentEvent[] = [];
+    for await (const event of engine.execute("test", workdir, {
+      runId: "test",
+      litellmKey: "",
+      litellmBaseUrl: "",
+      mcpServers,
+    })) {
+      events.push(event);
+    }
+    const logEvent = events.find(
+      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("MCP_CONFIG:")
+    );
+    expect(logEvent).toBeDefined();
+    const rawJson = logEvent?.content?.slice("MCP_CONFIG:".length) ?? "{}";
+    const config = JSON.parse(rawJson);
+    expect(config.mcp).toBeDefined();
+    expect(config.mcp.github).toEqual(mcpServers.github);
+  });
+});

@@ -1049,47 +1049,49 @@ export function TaskDetail({
             )}
           </div>
 
-          <div className="mt-4 grid gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-3 md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
-                <span className="text-dimmed">Task objective</span>
-                <span className="font-semibold text-primary0">
-                  {cleanStatusLabel[task.status] ?? task.status}
+          {activeTab === "info" && (
+            <div className="mt-4 grid gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-3 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
+                  <span className="text-dimmed">Task objective</span>
+                  <span className="font-semibold text-primary0">
+                    {cleanStatusLabel[task.status] ?? task.status}
+                  </span>
+                </div>
+                <p className="truncate text-xs text-secondary">
+                  {hasText(task.goal) ? task.goal : task.description || "No description recorded"}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="hidden text-[10px] uppercase tracking-widest text-dimmed sm:inline">
+                  Jump to
                 </span>
-              </div>
-              <p className="truncate text-xs text-secondary">
-                {hasText(task.goal) ? task.goal : task.description || "No description recorded"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="hidden text-[10px] uppercase tracking-widest text-dimmed sm:inline">
-                Jump to
-              </span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                  onClick={() => setActiveTab("execution")}
-                >
-                  Execution
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                  onClick={() => setActiveTab("memory")}
-                >
-                  Memory
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                  onClick={() => setActiveTab("reviews")}
-                >
-                  Reviews
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                    onClick={() => setActiveTab("execution")}
+                  >
+                    Execution
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                    onClick={() => setActiveTab("memory")}
+                  >
+                    Memory
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
+                    onClick={() => setActiveTab("reviews")}
+                  >
+                    Reviews
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
           {/* Tab bar */}
           <div className="relative z-20 mt-4 overflow-x-auto no-scrollbar">
             <div className="flex min-w-max gap-1 pb-2">

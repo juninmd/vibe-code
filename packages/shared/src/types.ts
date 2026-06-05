@@ -878,6 +878,7 @@ export interface SettingsResponse {
   skillsPath: string;
   theme: string;
   maxAgents?: number;
+  mcpServers?: Record<string, any>;
 }
 
 export interface UpdateSettingsRequest {
@@ -894,6 +895,7 @@ export interface UpdateSettingsRequest {
   telegramBotToken?: string;
   telegramChatId?: string;
   telegramEnabled?: boolean;
+  mcpServers?: Record<string, any>;
 }
 
 export interface TestConnectionResult {

@@ -400,6 +400,7 @@ export class OpenCodeEngine implements AgentEngine {
       permission: Record<string, string>;
       tools?: Record<string, unknown>;
       providers?: OpenCodeProvider[];
+      mcp?: Record<string, unknown>;
     }
     const config: OpenCodeConfig = {
       permission: {
@@ -414,6 +415,10 @@ export class OpenCodeEngine implements AgentEngine {
         web_fetch: true,
       },
     };
+
+    if (options.mcpServers) {
+      config.mcp = options.mcpServers;
+    }
 
     if (options.litellmKey) {
       config.providers = [
