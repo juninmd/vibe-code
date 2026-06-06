@@ -150,7 +150,7 @@ export function humanizeStderr(line: string): string | null {
  * Default model for OpenCode when no model is specified.
  * GitHub Models works in the local/free deployment with GITHUB_TOKEN.
  */
-export const DEFAULT_OPENCODE_MODEL = "github-models/openai/gpt-4o-mini";
+export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
 
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
 
@@ -390,16 +390,9 @@ export class OpenCodeEngine implements AgentEngine {
     };
 
     // Build config for opencode.json
-    interface OpenCodeProvider {
-      id: string;
-      name: string;
-      apiKey: string;
-      apiUrl?: string;
-    }
     interface OpenCodeConfig {
       permission: Record<string, string>;
       tools?: Record<string, unknown>;
-      providers?: OpenCodeProvider[];
       mcp?: Record<string, unknown>;
     }
     const config: OpenCodeConfig = {
@@ -420,51 +413,27 @@ export class OpenCodeEngine implements AgentEngine {
       config.mcp = options.mcpServers;
     }
 
+    // opencode 1.15.13 does not support `providers` key in opencode.json.
+    // LiteLLM is configured via OPENAI_API_KEY + OPENAI_BASE_URL env vars instead.
+    // The model name must be prefixed with "openai/" so opencode routes to that provider.
+    const litellmEnv: Record<string, string> = {};
     if (options.litellmKey) {
-      config.providers = [
-        {
-          id: "anthropic",
-          name: "Anthropic (via LiteLLM)",
-          apiUrl: options.litellmBaseUrl,
-          apiKey: options.litellmKey,
-        },
-        {
-          id: "openai",
-          name: "OpenAI (via LiteLLM)",
-          apiUrl: `${options.litellmBaseUrl}/v1`,
-          apiKey: options.litellmKey,
-        },
-        {
-          id: "google",
-          name: "Google (via LiteLLM)",
-          apiUrl: options.litellmBaseUrl,
-          apiKey: options.litellmKey,
-        },
-      ];
+      litellmEnv.OPENAI_API_KEY = options.litellmKey;
+      litellmEnv.OPENAI_BASE_URL = options.litellmBaseUrl ?? "";
+      // Prefix model with openai/ if not already provider-qualified
+      if (!model.includes("/") || model.startsWith("cloud/") || model.startsWith("openai/cloud/")) {
+        model = `openai/${model.replace(/^openai\//, "")}`;
+      }
     } else if (
       options.nativeApiKeys?.anthropic ||
       options.nativeApiKeys?.openai ||
       options.nativeApiKeys?.gemini
     ) {
-      config.providers = [];
+      // Inject native keys as env vars (opencode 1.15.13 reads them directly)
       if (options.nativeApiKeys.anthropic)
-        config.providers.push({
-          id: "anthropic",
-          name: "Anthropic",
-          apiKey: options.nativeApiKeys.anthropic,
-        });
-      if (options.nativeApiKeys.openai)
-        config.providers.push({
-          id: "openai",
-          name: "OpenAI",
-          apiKey: options.nativeApiKeys.openai,
-        });
-      if (options.nativeApiKeys.gemini)
-        config.providers.push({
-          id: "google",
-          name: "Google",
-          apiKey: options.nativeApiKeys.gemini,
-        });
+        litellmEnv.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
+      if (options.nativeApiKeys.openai) litellmEnv.OPENAI_API_KEY = options.nativeApiKeys.openai;
+      if (options.nativeApiKeys.gemini) litellmEnv.GEMINI_API_KEY = options.nativeApiKeys.gemini;
     }
 
     let isolatedDir: string | null = null;
@@ -495,6 +464,7 @@ export class OpenCodeEngine implements AgentEngine {
           OPENCODE_PERMISSION: '{"*":"allow"}',
           OPENCODE_DISABLE_PROJECT_CONFIG: "true",
           XDG_CONFIG_HOME: isolatedDir,
+          ...litellmEnv,
           ...options.env,
         },
       });

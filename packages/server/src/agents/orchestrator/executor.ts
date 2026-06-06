@@ -409,7 +409,7 @@ export async function executeAgent(
   if (!effectiveModel && registry) {
     effectiveModel = (await registry.getDefaultFreeModel(engine.name)) ?? undefined;
   }
-  effectiveModel = effectiveModel ?? "opencode/deepseek-v4-flash-free";
+  effectiveModel = effectiveModel ?? "cloud/llama-70b";
   logAgentStart(task.id, engine.name, effectiveModel, repo.name);
 
   const timeoutId = setTimeout(() => {
