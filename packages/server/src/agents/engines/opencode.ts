@@ -152,6 +152,10 @@ export function humanizeStderr(line: string): string | null {
  */
 export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
 
+// Model name opencode uses when routing via LiteLLM's OpenAI-compatible endpoint.
+// LiteLLM maps this name to the actual backend (see litellm configmap gpt-4o entry).
+export const LITELLM_OPENAI_COMPAT_MODEL = "gpt-4o";
+
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -422,8 +426,9 @@ export class OpenCodeEngine implements AgentEngine {
       litellmEnv.OPENAI_BASE_URL = options.litellmBaseUrl ?? "";
       // Map model to openai/ provider so opencode routes to LiteLLM.
       // opencode/* models require opencode.ai API key (unavailable) → redirect to LiteLLM fallback.
-      if (model.startsWith("opencode/") || model === "auto-free") {
-        model = `openai/${DEFAULT_OPENCODE_MODEL}`;
+      if (model.startsWith("opencode/") || model === "auto-free" || model.startsWith("cloud/")) {
+        // opencode doesn't know cloud/* models; use the OpenAI-compat alias LiteLLM maps to the backend
+        model = `openai/${LITELLM_OPENAI_COMPAT_MODEL}`;
       } else if (!model.startsWith("openai/")) {
         model = `openai/${model}`;
       }
