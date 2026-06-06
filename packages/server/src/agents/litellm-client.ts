@@ -45,8 +45,6 @@ export async function generateVirtualKey(
     body: JSON.stringify({
       // No expiry — we delete the key ourselves in the finally block.
       metadata: { task_id: taskId, engine, created_by: "vibe-code" },
-      // Tag the key so it appears grouped in the LiteLLM dashboard
-      tags: [`task:${taskId.slice(0, 8)}`, `engine:${engine}`],
     }),
   });
 
