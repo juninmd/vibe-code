@@ -152,9 +152,11 @@ export function humanizeStderr(line: string): string | null {
  */
 export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
 
-// Model name opencode uses when routing via LiteLLM's OpenAI-compatible endpoint.
-// LiteLLM maps this name to the actual backend (see litellm configmap gpt-4o entry).
-export const LITELLM_OPENAI_COMPAT_MODEL = "gpt-4o";
+// Model name opencode uses when routing via LiteLLM's Anthropic-compatible endpoint.
+// opencode uses /v1/messages (Anthropic SDK) for anthropic/* models — avoids the
+// /responses endpoint incompatibility that affects openai/* models in LiteLLM.
+// LiteLLM maps this alias to the actual backend (see litellm configmap entry).
+export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-20241022";
 
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
 
@@ -418,20 +420,15 @@ export class OpenCodeEngine implements AgentEngine {
     }
 
     // opencode 1.15.13 does not support `providers` key in opencode.json.
-    // LiteLLM is configured via OPENAI_API_KEY + OPENAI_BASE_URL env vars instead.
-    // The model name must be prefixed with "openai/" so opencode routes to that provider.
+    // Route LiteLLM via the Anthropic SDK path (ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL)
+    // because opencode uses POST /v1/messages for anthropic/* models, which LiteLLM
+    // supports correctly — unlike POST /responses used for openai/* models.
     const litellmEnv: Record<string, string> = {};
     if (options.litellmKey) {
-      litellmEnv.OPENAI_API_KEY = options.litellmKey;
-      litellmEnv.OPENAI_BASE_URL = options.litellmBaseUrl ?? "";
-      // Map model to openai/ provider so opencode routes to LiteLLM.
-      // opencode/* models require opencode.ai API key (unavailable) → redirect to LiteLLM fallback.
-      if (model.startsWith("opencode/") || model === "auto-free" || model.startsWith("cloud/")) {
-        // opencode doesn't know cloud/* models; use the OpenAI-compat alias LiteLLM maps to the backend
-        model = `openai/${LITELLM_OPENAI_COMPAT_MODEL}`;
-      } else if (!model.startsWith("openai/")) {
-        model = `openai/${model}`;
-      }
+      litellmEnv.ANTHROPIC_API_KEY = options.litellmKey;
+      litellmEnv.ANTHROPIC_BASE_URL = options.litellmBaseUrl ?? "";
+      // Remap any model to the Anthropic-compat alias LiteLLM maps to the real backend.
+      model = `anthropic/${LITELLM_ANTHROPIC_COMPAT_MODEL}`;
     } else if (
       options.nativeApiKeys?.anthropic ||
       options.nativeApiKeys?.openai ||
