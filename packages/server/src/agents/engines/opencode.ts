@@ -420,9 +420,12 @@ export class OpenCodeEngine implements AgentEngine {
     if (options.litellmKey) {
       litellmEnv.OPENAI_API_KEY = options.litellmKey;
       litellmEnv.OPENAI_BASE_URL = options.litellmBaseUrl ?? "";
-      // Prefix model with openai/ if not already provider-qualified
-      if (!model.includes("/") || model.startsWith("cloud/") || model.startsWith("openai/cloud/")) {
-        model = `openai/${model.replace(/^openai\//, "")}`;
+      // Map model to openai/ provider so opencode routes to LiteLLM.
+      // opencode/* models require opencode.ai API key (unavailable) → redirect to LiteLLM fallback.
+      if (model.startsWith("opencode/") || model === "auto-free") {
+        model = `openai/cloud/llama-70b`;
+      } else if (!model.startsWith("openai/")) {
+        model = `openai/${model}`;
       }
     } else if (
       options.nativeApiKeys?.anthropic ||
