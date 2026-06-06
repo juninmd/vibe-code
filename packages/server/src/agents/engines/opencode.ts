@@ -156,7 +156,8 @@ export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
 // opencode uses /v1/messages (Anthropic SDK) for anthropic/* models — avoids the
 // /responses endpoint incompatibility that affects openai/* models in LiteLLM.
 // LiteLLM maps this alias to the actual backend (see litellm configmap entry).
-export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-20241022";
+// Must be a model name that opencode's Anthropic provider allowlist recognizes.
+export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-latest";
 
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
 
@@ -426,7 +427,9 @@ export class OpenCodeEngine implements AgentEngine {
     const litellmEnv: Record<string, string> = {};
     if (options.litellmKey) {
       litellmEnv.ANTHROPIC_API_KEY = options.litellmKey;
-      litellmEnv.ANTHROPIC_BASE_URL = options.litellmBaseUrl ?? "";
+      // opencode appends /messages to ANTHROPIC_BASE_URL; LiteLLM serves Anthropic
+      // proxy at /v1/messages, so we must include /v1 in the base URL.
+      litellmEnv.ANTHROPIC_BASE_URL = `${(options.litellmBaseUrl ?? "").replace(/\/$/, "")}/v1`;
       // Remap any model to the Anthropic-compat alias LiteLLM maps to the real backend.
       model = `anthropic/${LITELLM_ANTHROPIC_COMPAT_MODEL}`;
     } else if (
