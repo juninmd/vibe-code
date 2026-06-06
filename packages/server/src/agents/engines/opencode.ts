@@ -423,7 +423,7 @@ export class OpenCodeEngine implements AgentEngine {
       // Map model to openai/ provider so opencode routes to LiteLLM.
       // opencode/* models require opencode.ai API key (unavailable) → redirect to LiteLLM fallback.
       if (model.startsWith("opencode/") || model === "auto-free") {
-        model = `openai/cloud/llama-70b`;
+        model = `openai/${DEFAULT_OPENCODE_MODEL}`;
       } else if (!model.startsWith("openai/")) {
         model = `openai/${model}`;
       }
