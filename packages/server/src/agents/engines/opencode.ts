@@ -408,6 +408,10 @@ export class OpenCodeEngine implements AgentEngine {
         question: "allow",
         plan_enter: "allow",
         plan_exit: "allow",
+        // Platform creates PRs automatically after commit — deny to prevent model loops
+        github_create_pull_request: "deny",
+        // deepseek passes array as JSON string causing schema errors — deny to prevent noise
+        todowrite: "deny",
       },
       tools: {
         file_write: true,
