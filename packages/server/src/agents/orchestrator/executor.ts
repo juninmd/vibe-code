@@ -707,19 +707,10 @@ export async function executeAgent(
       // ignore
     }
 
-    if (!mcpServers.github) {
-      const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
-      if (ghToken) {
-        mcpServers.github = {
-          type: "local",
-          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
-          enabled: true,
-          environment: {
-            GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
-          },
-        };
-      }
-    }
+    // GitHub MCP intentionally excluded: the server exposes github_create_pull_request
+    // which causes deepseek and weaker models to loop on "invalid tool" errors.
+    // PRs are created by the platform after commit via git push — no MCP needed.
+    delete mcpServers.github;
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
