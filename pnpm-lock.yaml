@@ -22,8 +22,8 @@ importers:
         specifier: ^6.0.180
         version: 6.0.184(zod@4.3.6)
       hono:
-        specifier: ^4.12.19
-        version: 4.12.19
+        specifier: ^4.12.23
+        version: 4.12.23
       nanoid:
         specifier: ^5.1.11
         version: 5.1.11
@@ -155,8 +155,8 @@ importers:
         specifier: ^17.4.2
         version: 17.4.2
       hono:
-        specifier: ^4.12.19
-        version: 4.12.19
+        specifier: ^4.12.23
+        version: 4.12.23
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -1334,8 +1334,8 @@ packages:
     resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
     engines: {node: '>=12.0.0'}
 
-  hono@4.12.19:
-    resolution: {integrity: sha512-xa3eYXYXx68XTT4hZ7dRzsXBhaq85ToSrlUJNoR0gwz/1Ap/CNwX47wfvV7pc/xWhjKVVkLT7zBJy8chhNguqQ==}
+  hono@4.12.23:
+    resolution: {integrity: sha512-eIaZ9qDgu7XV0pxOCrg7/WhnQ6Ivm22UcxhXx/A3dcbqbbYgBEkc6e/J/s7j2tS96zoB0S9VBdLwQNCWwUo4LA==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@6.0.0:
@@ -3327,7 +3327,7 @@ snapshots:
   highlight.js@11.11.1:
     optional: true
 
-  hono@4.12.19: {}
+  hono@4.12.23: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:
