@@ -1530,14 +1530,21 @@ export async function executeAgent(
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
 
-    // Telegram: notify when a conflict-resolution task completes successfully
-    if (task.tags?.includes("conflict-resolution")) {
+    // Telegram: notify on task completion
+    {
       const telegram = createTelegramNotifier(db);
       if (telegram.isConfigured()) {
         const repo = db.repos.getById(task.repoId);
+        const isConflict = task.tags?.includes("conflict-resolution");
+        const emoji = prUrl ? "✅" : "🏁";
+        const header = isConflict
+          ? `${emoji} <b>Merge conflicts resolved!</b>`
+          : prUrl
+            ? `${emoji} <b>Task completed with PR</b>`
+            : `${emoji} <b>Task completed</b>`;
         telegram
           .send(
-            `✅ <b>Merge conflicts resolved!</b>\n\n` +
+            `${header}\n\n` +
               `<b>Task:</b> ${task.title.slice(0, 80)}\n` +
               `<b>Repo:</b> ${repo?.name ?? task.repoId}\n` +
               `<b>Branch:</b> <code>${task.branchName ?? "?"}</code>\n` +
