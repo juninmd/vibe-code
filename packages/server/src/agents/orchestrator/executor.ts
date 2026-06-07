@@ -710,9 +710,18 @@ export async function executeAgent(
     if (!mcpServers.github) {
       const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
       if (ghToken) {
+        // Use proxy script to coerce boolean fields (draft, maintainer_can_modify)
+        // that weaker models pass as strings, causing MCP schema errors and loops.
+        const proxyScript = join(
+          process.cwd(),
+          "packages",
+          "server",
+          "scripts",
+          "github-mcp-proxy.mjs"
+        );
         mcpServers.github = {
           type: "local",
-          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+          command: ["node", proxyScript],
           enabled: true,
           environment: {
             GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
