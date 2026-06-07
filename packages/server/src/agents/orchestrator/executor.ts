@@ -707,10 +707,19 @@ export async function executeAgent(
       // ignore
     }
 
-    // GitHub MCP intentionally excluded: the server exposes github_create_pull_request
-    // which causes deepseek and weaker models to loop on "invalid tool" errors.
-    // PRs are created by the platform after commit via git push — no MCP needed.
-    delete mcpServers.github;
+    if (!mcpServers.github) {
+      const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+      if (ghToken) {
+        mcpServers.github = {
+          type: "local",
+          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+          enabled: true,
+          environment: {
+            GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
+          },
+        };
+      }
+    }
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
@@ -1429,6 +1438,18 @@ export async function executeAgent(
     db.tasks.updateField(task.id, "branch_name", branch);
     let prUrl: string | null = null;
 
+    // Check if the model already created a PR via GitHub MCP tool
+    const runLogs = db.agentLogs.listByRun(run.id);
+    for (const log of runLogs) {
+      const match = (log.content ?? "").match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/);
+      if (match) {
+        prUrl = match[0];
+        db.tasks.updateField(task.id, "pr_url", prUrl);
+        sysLog(`PR detected from agent output: ${prUrl}`);
+        break;
+      }
+    }
+
     try {
       setRunPhase("pr_creating");
       // Sync with base before push to avoid opening a PR with conflicts
@@ -1492,8 +1513,10 @@ export async function executeAgent(
         return;
       }
 
-      prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
-      db.tasks.updateField(task.id, "pr_url", prUrl);
+      if (!prUrl) {
+        prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
+        db.tasks.updateField(task.id, "pr_url", prUrl);
+      }
       recordTaskArtifact(db, task, run, {
         kind: "pull_request",
         title: "Pull request",
@@ -1501,7 +1524,7 @@ export async function executeAgent(
         metadata: { branch, baseBranch },
       });
       prCreated = true;
-      sysLog(`PR created: ${prUrl}`);
+      sysLog(`PR: ${prUrl}`);
     } catch (err: any) {
       sysLog(`Push/PR skipped: ${err.message || String(err)}`);
     }
