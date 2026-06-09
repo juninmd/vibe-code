@@ -3,20 +3,9 @@ import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
+import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
-
-// Known Copilot-compatible models (static list — no CLI command to list them)
-const COPILOT_MODELS = [
-  "gpt-4.1",
-  "gpt-4o",
-  "o3",
-  "o4-mini",
-  "o3-mini",
-  "claude-3.5-sonnet",
-  "claude-3.7-sonnet",
-  "gemini-2.0-flash",
-];
 
 export class CopilotEngine implements AgentEngine {
   name = "copilot";
@@ -92,7 +81,27 @@ export class CopilotEngine implements AgentEngine {
   }
 
   async listModels(): Promise<string[]> {
-    return COPILOT_MODELS;
+    const models = new Set<string>();
+    try {
+      const all = await listLiteLLMModels(getLiteLLMBaseUrl());
+      for (const m of all) {
+        if (m.startsWith("github-copilot/") || m.startsWith("copilot/")) {
+          models.add(m);
+        }
+      }
+    } catch {}
+    if (process.env.VIBE_COPILOT_MODELS) {
+      for (const m of process.env.VIBE_COPILOT_MODELS.split(",").map((x) => x.trim())) {
+        models.add(m);
+      }
+    }
+    if (models.size === 0) {
+      const fallbackList =
+        process.env.VIBE_COPILOT_DEFAULT_MODELS ||
+        "gpt-4.1,gpt-4o,o3,o4-mini,o3-mini,claude-3.5-sonnet,claude-3.7-sonnet,gemini-2.0-flash";
+      return fallbackList.split(",").map((x) => x.trim());
+    }
+    return Array.from(models);
   }
 
   async *execute(

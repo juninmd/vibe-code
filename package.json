@@ -25,7 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",
     "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1",
+    "@commitlint/config-conventional": "^21.0.2",
     "@playwright/test": "^1.60.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
@@ -33,10 +33,10 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.63",
+    "@ai-sdk/openai": "^3.0.67",
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "ai": "^6.0.180",
-    "hono": "^4.12.19",
+    "hono": "^4.12.23",
     "nanoid": "^5.1.11",
     "ollama-ai-provider": "^1.2.0",
     "zod": "4.3.6"

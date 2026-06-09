@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,6 +105,14 @@ describe("humanizeStderr", () => {
     expect(humanizeStderr(JSON.stringify({ level: "error", message: "disk full" }))).toBe(
       "disk full"
     );
+  });
+
+  it("serializes object-shaped stderr messages instead of [object Object]", () => {
+    expect(
+      humanizeStderr(
+        JSON.stringify({ level: "error", message: { code: "auth", text: "missing key" } })
+      )
+    ).toBe(JSON.stringify({ code: "auth", text: "missing key" }));
   });
 });
 
@@ -261,9 +269,9 @@ describe("OpenCodeEngine.parseLine", () => {
 
   it("humanizes tool results correctly", () => {
     const testResults = [
-      { name: "read_file", output: "line1\nline2", expected: "2 lines read" },
+      { name: "read_file", output: "line1\nline2", expected: "Read 2 non-empty lines" },
       { name: "bash", output: "Success output", expected: "Success output" },
-      { name: "write_file", output: "saved", expected: "Saved" },
+      { name: "write_file", output: "saved", expected: "File saved" },
     ];
 
     for (const res of testResults) {
@@ -273,9 +281,26 @@ describe("OpenCodeEngine.parseLine", () => {
           part: { name: res.name, state: { status: "completed", output: res.output } },
         })
       );
-      const log = events.find((e) => e.type === "log" && e.stream === "stdout")?.content;
+      const log = events.find(
+        (e) => e.type === "log" && e.stream === "stdout" && e.content?.includes(res.expected)
+      )?.content;
       expect(log).toContain(res.expected);
     }
+  });
+
+  it("emits a tool label before completed tool output", () => {
+    const events = engine.parseLine(
+      JSON.stringify({
+        type: "tool_use",
+        part: {
+          name: "read_file",
+          state: { status: "completed", input: { path: "src/plugin.ts" }, output: "line1\nline2" },
+        },
+      })
+    );
+    expect(events.map((e) => e.content).filter(Boolean)).toEqual(
+      expect.arrayContaining(["  Reading src/plugin.ts", "    Read 2 non-empty lines"])
+    );
   });
 
   it("parses real 'text' event correctly (contract snapshot)", () => {
@@ -322,6 +347,60 @@ describe("OpenCodeEngine.parseLine", () => {
     expect(events.find((e) => e.type === "status")?.content).toBe("Awaiting input...");
     expect(events.find((e) => e.content?.includes("?"))).toBeDefined();
   });
+
+  it("accumulates tokens and cost cumulatively across multiple step_finish events", () => {
+    const accumulators = {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      cached: 0,
+      input_cost: 0,
+      output_cost: 0,
+      total_cost: 0,
+    };
+
+    // First step
+    const events1 = engine.parseLine(
+      JSON.stringify({
+        type: "step_finish",
+        part: {
+          tokens: { input: 100, output: 50, total: 150 },
+          cost: 0.003, // $0.003 USD = 3000 micro-dollars
+        },
+      }),
+      accumulators
+    );
+
+    const costEvent1 = events1.find((e) => e.type === "cost")?.costStats;
+    expect(costEvent1).toBeDefined();
+    expect(costEvent1?.input_tokens).toBe(100);
+    expect(costEvent1?.output_tokens).toBe(50);
+    expect(costEvent1?.total_tokens).toBe(150);
+    expect(costEvent1?.total).toBe(3000);
+
+    // Second step
+    const events2 = engine.parseLine(
+      JSON.stringify({
+        type: "step_finish",
+        part: {
+          tokens: { input: 200, output: 100, total: 300 },
+          cost: 0.006, // $0.006 USD = 6000 micro-dollars
+        },
+      }),
+      accumulators
+    );
+
+    const costEvent2 = events2.find((e) => e.type === "cost")?.costStats;
+    expect(costEvent2).toBeDefined();
+    // Cumulative: 100 + 200 = 300
+    expect(costEvent2?.input_tokens).toBe(300);
+    // Cumulative: 50 + 100 = 150
+    expect(costEvent2?.output_tokens).toBe(150);
+    // Cumulative: 150 + 300 = 450
+    expect(costEvent2?.total_tokens).toBe(450);
+    // Cumulative: 3000 + 6000 = 9000
+    expect(costEvent2?.total).toBe(9000);
+  });
 });
 
 describe("OpenCodeEngine.buildCommand", () => {
@@ -361,17 +440,25 @@ describe("OpenCodeEngine.buildCommand", () => {
 // ─── execute: opencode.json lifecycle ─────────────────────────────────────────
 
 describe("execute: opencode.json lifecycle", () => {
-  it("creates opencode.json with permission *:allow before running the subprocess", async () => {
-    // The script checks if opencode.json exists and emits a JSON event with the result.
+  it("creates opencode.json in isolated directory and configures XDG_CONFIG_HOME", async () => {
     const engine = new FakeOpenCodeEngine(
       `
       const fs = require("node:fs");
-      const exists = fs.existsSync(process.cwd() + "/opencode.json");
+      const path = require("node:path");
+      const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+      const disableProj = process.env.OPENCODE_DISABLE_PROJECT_CONFIG;
+      const configPath = xdgConfigHome ? path.join(xdgConfigHome, "opencode", "opencode.json") : "";
+      const exists = configPath && fs.existsSync(configPath);
       let config = {};
       if (exists) {
-        try { config = JSON.parse(fs.readFileSync(process.cwd() + "/opencode.json", "utf8")); } catch {}
+        try { config = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch {}
       }
-      const payload = JSON.stringify({type:"text", part:{text: exists ? "CONFIG_EXISTS:" + JSON.stringify(config) : "CONFIG_MISSING"}});
+      const payload = JSON.stringify({
+        type: "text",
+        part: {
+          text: "CONFIG_EXISTS:exists=" + exists + ";disableProj=" + disableProj + ";config=" + JSON.stringify(config) + ";xdg=" + xdgConfigHome
+        }
+      });
       process.stdout.write(payload + "\\n");
       `
     );
@@ -381,16 +468,39 @@ describe("execute: opencode.json lifecycle", () => {
       (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("CONFIG_EXISTS")
     );
     expect(textEvent).toBeDefined();
+    expect(textEvent?.content).toContain("exists=true");
+    expect(textEvent?.content).toContain("disableProj=true");
     expect(textEvent?.content).toContain('"*"');
     expect(textEvent?.content).toContain('"allow"');
   }, 10_000);
 
-  it("deletes opencode.json after execution completes", async () => {
-    const engine = new FakeOpenCodeEngine("// no-op");
-    await collectAll(engine, workdir);
+  it("deletes the isolated config directory and leaves workspace clean after execution", async () => {
+    const engine = new FakeOpenCodeEngine(
+      `
+      const payload = JSON.stringify({
+        type: "text",
+        part: {
+          text: "XDG_PATH:" + process.env.XDG_CONFIG_HOME
+        }
+      });
+      process.stdout.write(payload + "\\n");
+      `
+    );
+    const events = await collectAll(engine, workdir);
+    const xdgEvent = events.find(
+      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("XDG_PATH:")
+    );
+    expect(xdgEvent).toBeDefined();
+    const xdgPath = xdgEvent?.content?.substring("XDG_PATH:".length);
+    expect(xdgPath).toBeTruthy();
 
-    const exists = await Bun.file(join(workdir, "opencode.json")).exists();
-    expect(exists).toBe(false);
+    // Verify workspace file does not exist
+    const workspaceConfigExists = await Bun.file(join(workdir, "opencode.json")).exists();
+    expect(workspaceConfigExists).toBe(false);
+
+    // Verify temp isolated directory was deleted
+    const fs = require("node:fs");
+    expect(fs.existsSync(xdgPath)).toBe(false);
   }, 10_000);
 });
 
@@ -598,4 +708,136 @@ describe("execute: heartbeat", () => {
     );
     expect(heartbeats.length).toBeGreaterThanOrEqual(1);
   }, 10_000);
+});
+
+// ─── execute: auto-free selection ──────────────────────────────────────────────
+
+describe("OpenCodeEngine auto-free selection", () => {
+  it("selects a free model from listing", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 0,
+            stdout: new Response(
+              "opencode/model-a-free\nopencode/model-b-premium\nopencode/big-pickle\n"
+            ).body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const model = await engine.selectFreeModel();
+      expect(model === "opencode/model-a-free" || model === "opencode/big-pickle").toBe(true);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("falls back to big-pickle on command error", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 1,
+            stdout: new Response("").body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const model = await engine.selectFreeModel();
+      expect(model).toBe("opencode/big-pickle");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
+
+describe("OpenCodeEngine model listing", () => {
+  it("returns fallback models when external providers list nothing", async () => {
+    const originalSpawn = Bun.spawn;
+    try {
+      Bun.spawn = mock((cmd: string[], options?: any) => {
+        if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
+          return {
+            exited: Promise.resolve(),
+            exitCode: 1,
+            stdout: new Response("").body,
+            stderr: new Response("").body,
+          } as any;
+        }
+        return originalSpawn(cmd, options);
+      }) as any;
+
+      const engine = new OpenCodeEngine();
+      const models = await engine.listModels();
+      expect(models).toContain("github-models/openai/gpt-4o-mini");
+      expect(models).toContain("auto-free");
+      expect(models.length).toBeGreaterThan(0);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
+
+describe("OpenCodeEngine MCP configuration", () => {
+  it("serializes options.mcpServers into opencode.json", async () => {
+    const scriptPath = join(workdir, "inspect-mcp.js");
+    await Bun.write(
+      scriptPath,
+      `const fs = require('node:fs');
+       const path = require('node:path');
+       const configPath = path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json');
+       const content = fs.readFileSync(configPath, 'utf8').replace(/\\n/g, ' ');
+       console.log(JSON.stringify({ type: 'text', part: { text: 'MCP_CONFIG:' + content } }));`
+    );
+
+    class ScriptFileOpenCodeEngine extends OpenCodeEngine {
+      protected override buildCommandArgs(
+        _model: string,
+        _workdir: string,
+        _resumeSessionId?: string
+      ): string[] {
+        return ["bun", scriptPath];
+      }
+    }
+
+    const engine = new ScriptFileOpenCodeEngine();
+
+    const mcpServers = {
+      github: {
+        type: "local",
+        command: ["npx", "-y", "@modelcontextprotocol/server-github"],
+        enabled: true,
+        environment: {
+          GITHUB_PERSONAL_ACCESS_TOKEN: "test_token",
+        },
+      },
+    };
+
+    const events: AgentEvent[] = [];
+    for await (const event of engine.execute("test", workdir, {
+      runId: "test",
+      litellmKey: "",
+      litellmBaseUrl: "",
+      mcpServers,
+    })) {
+      events.push(event);
+    }
+    const logEvent = events.find(
+      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("MCP_CONFIG:")
+    );
+    expect(logEvent).toBeDefined();
+    const rawJson = logEvent?.content?.slice("MCP_CONFIG:".length) ?? "{}";
+    const config = JSON.parse(rawJson);
+    expect(config.mcp).toBeDefined();
+    expect(config.mcp.github).toEqual(mcpServers.github);
+  });
 });

@@ -97,6 +97,8 @@ describe("TaskDetail tabs", () => {
   it("opens in execution tab for running tasks", () => {
     renderDetail();
     expect(screen.getByText("execution-timeline-mock")).toBeInTheDocument();
+    expect(screen.queryByText("Task objective")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jump to")).not.toBeInTheDocument();
   });
 
   it("switches to terminal tab when terminal tab is clicked", async () => {
@@ -126,6 +128,8 @@ describe("TaskDetail tabs", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Info" }));
 
+    expect(screen.getByText("Task objective")).toBeInTheDocument();
+    expect(screen.getByText("Jump to")).toBeInTheDocument();
     expect(screen.getByText("Presentation readiness")).toBeInTheDocument();
     expect(screen.getByText("Repository context")).toBeInTheDocument();
     expect(screen.getByText("Delivery output")).toBeInTheDocument();

@@ -9,7 +9,7 @@ import { Input } from "./ui/input";
 interface AddRepoDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { url: string }) => void;
+  onSubmit: (data: { url: string }) => Promise<void>;
   githubUsername?: string | null;
 }
 
@@ -23,6 +23,8 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
   const [mode, setMode] = useState<"github" | "gitlab" | "manual" | "create">("github");
   const [createProvider, setCreateProvider] = useState<"github" | "gitlab">("github");
   const [_isSearchResult, setIsSearchResult] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Create new repo state
@@ -95,16 +97,27 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
     };
   }, [search, mode, fetchRecent, githubUsername]);
 
+  const submitRepository = async (url: string) => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit({ url });
+      handleClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSelect = (repo: RemoteRepo) => {
-    onSubmit({ url: repo.url });
-    handleClose();
+    void submitRepository(repo.url);
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualUrl.trim()) return;
-    onSubmit({ url: manualUrl.trim() });
-    handleClose();
+    void submitRepository(manualUrl.trim());
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -120,8 +133,7 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
         description: newDescription.trim(),
         isPrivate: newIsPrivate,
       });
-      onSubmit({ url: repo.url });
-      handleClose();
+      await submitRepository(repo.url);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -135,6 +147,8 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
     setMode("github");
     setRepos([]);
     setError(null);
+    setSubmitError(null);
+    setSubmitting(false);
     setNewName("");
     setNewDescription("");
     setNewIsPrivate(true);
@@ -313,6 +327,11 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
               </div>
             )}
           </div>
+          {submitError && (
+            <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-xs font-bold text-danger">
+              {submitError}
+            </div>
+          )}
         </div>
       ) : mode === "create" ? (
         <form
@@ -466,6 +485,11 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
               <p className="text-xs font-bold text-danger">{createError}</p>
             </div>
           )}
+          {submitError && (
+            <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-xs font-bold text-danger">
+              {submitError}
+            </div>
+          )}
 
           <div className="flex gap-3 justify-end pt-2">
             <Button
@@ -479,10 +503,10 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
             <Button
               type="submit"
               variant="primary"
-              disabled={!newName.trim() || creating}
+              disabled={!newName.trim() || creating || submitting}
               className="rounded-xl h-12 px-8 shadow-xl shadow-accent/25"
             >
-              {creating ? "Creating..." : "Create Repository"}
+              {creating || submitting ? "Creating..." : "Create Repository"}
             </Button>
           </div>
         </form>
@@ -529,6 +553,11 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
               </p>
             </div>
           </div>
+          {submitError && (
+            <div className="p-4 rounded-2xl bg-danger/10 border border-danger/20 text-xs font-bold text-danger">
+              {submitError}
+            </div>
+          )}
           <div className="flex gap-3 justify-end">
             <Button
               type="button"
@@ -541,10 +570,10 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
             <Button
               type="submit"
               variant="primary"
-              disabled={!manualUrl.trim()}
+              disabled={!manualUrl.trim() || submitting}
               className="rounded-xl h-12 px-10 shadow-xl shadow-accent/25"
             >
-              Add Repository
+              {submitting ? "Adding..." : "Add Repository"}
             </Button>
           </div>
         </form>

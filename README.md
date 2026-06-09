@@ -312,10 +312,10 @@ bun run typecheck
 # Ambos server e web (recomendado)
 bun run dev
 
-# Ou apenas o servidor (port 3000)
+# Apenas o servidor/API (sem frontend dev)
 bun run dev:server
 
-# Ou apenas o web (Vite dev server, port 5173)
+# Apenas o Vite frontend dev server
 bun run dev:web
 ```
 
@@ -335,7 +335,20 @@ Press h to show help
 
 ### 3️⃣ Acesse a Interface Web
 
-Abra seu navegador em **http://localhost:5173**
+Abra seu navegador em **http://localhost:3000**
+
+No desenvolvimento local, `3000` é a entrada única do sistema:
+- `/` renderiza o frontend via Vite, usando `VITE_DEV_URL`.
+- `/api/*` é a API do backend.
+- `/ws` é o WebSocket da aplicação.
+
+O endereço `http://localhost:5173` é apenas o servidor interno do Vite. Use-o só para depurar o frontend isoladamente.
+
+Para GitHub OAuth local, use a mesma origem canônica:
+- `VIBE_CODE_PUBLIC_URL=http://localhost:3000`
+- GitHub OAuth callback: `http://localhost:3000/api/auth/github/callback`
+
+Em produção, a mesma regra vale com o domínio público: abra o sistema pelo domínio definido em `VIBE_CODE_PUBLIC_URL`, e cadastre o callback `<VIBE_CODE_PUBLIC_URL>/api/auth/github/callback`.
 
 Você verá:
 - 📋 **Board View** — Uma visão operacional do pipeline (não a única superfície do produto)
@@ -402,7 +415,7 @@ docker run --rm \
 | Volume — dados | `/data` (SQLite, repos bare, worktrees) |
 | Volume — skills | `/home/vibe/.agents` |
 | Env obrigatória | `ANTHROPIC_API_KEY` (ou outras keys conforme engine) |
-| Env opcionais | `PORT`, `VIBE_CODE_MAX_AGENTS`, `LITELLM_BASE_URL`, `LITELLM_MASTER_KEY` |
+| Env opcionais | `PORT`, `VIBE_CODE_MAX_AGENTS`, `LITELLM_BASE_URL`, `LITELLM_MASTER_KEY`, `VIBE_CODE_PUBLIC_URL` |
 
 ---
 
@@ -423,12 +436,18 @@ VIBE_CODE_REVIEW_ENABLED=true                 # Enable review pipeline
 VIBE_CODE_REVIEW_STRICT=false                 # Block PR on review failures
 VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/quality suggestions
 VIBE_CODE_DOCS_AUTO_APPLY=true                # Run docs finisher step before PR creation
+VIBE_CODE_PUBLIC_URL=https://vibe.example.com # URL pública para links em notificações externas
 
 # GitHub (Para criar PRs automaticamente)
 GITHUB_TOKEN=ghp_xxxxx...                     # (required para PRs)
 
 # OpenCode (se usar esse engine)
 OPENCODE_API_KEY=sk_xxxx...                   # (optional)
+
+# Telegram (notificações de conclusão de tasks)
+# Configure via Settings na UI ou via variáveis abaixo
+# TELEGRAM_BOT_TOKEN=...
+# TELEGRAM_CHAT_ID=...
 ```
 
 ### Estrutura de Configuração Local
@@ -488,23 +507,40 @@ aider --version
 
 #### OpenCode
 ```bash
-# Download do repositório
-git clone https://github.com/shroominic/codeinterpreter-api
-cd codeinterpreter-api
-pip install -e .
-
-# Ou PyPI
-pip install opencode
+# Instale via npm
+npm install -g opencode-ai
 
 # Verificar
 opencode --version
 ```
 
 **Features:**
-- ✅ JSON structured output
-- ✅ Multimodal support
-- ✅ Sandboxed execution
-- ✅ Tool use de forma estruturada
+- ✅ JSON structured output com `opencode run --format json`
+- ✅ Suporte a MCP servers (GitHub, filesystem, etc.)
+- ✅ Compatível com LiteLLM (roteamento multi-modelo)
+- ✅ Configuração via `opencode.json` por workspace
+
+**Comportamento no Vibe-Code:**
+- PRs são criados automaticamente pela plataforma após o commit — `github_create_pull_request` é bloqueado no `opencode.json` gerado
+- `todowrite` também é bloqueado (bug de schema com modelos que serializam arrays como string)
+- Configuração injetada em `opencode.json` temporário por run, incluindo MCP GitHub com o token configurado
+
+### 🔔 Notificações Telegram
+
+O Vibe-Code envia notificações Telegram ao completar tasks. Configure via **Settings** na UI:
+
+| Campo | Descrição |
+|-------|-----------|
+| **Bot Token** | Token do bot Telegram (`@BotFather`) |
+| **Chat ID** | ID do canal ou grupo (ex: `-1001234567890`) |
+| **Enabled** | Ativar/desativar notificações |
+
+Mensagens enviadas:
+- `✅ Task completed with PR` — task concluiu e abriu PR (inclui link)
+- `🏁 Task completed` — task concluiu sem PR
+- `✅ Merge conflicts resolved!` — task de conflict-resolution concluiu
+
+**`VIBE_CODE_PUBLIC_URL`** controla a base URL usada nos links das notificações. Configure para a URL externa acessível (ex: `https://vibe.meudominio.com`) — internamente a API ainda usa o endereço interno do cluster.
 
 ---
 

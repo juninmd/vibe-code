@@ -108,7 +108,7 @@ describe("E2E Homologation — full task lifecycle", () => {
       { type: "complete", exitCode: 0 },
     ];
 
-    const engine = makeEngine(engineEvents);
+    const engine = makeEngine(engineEvents as any);
     const registry = makeRegistry(engine);
     const git = makeGit();
 
@@ -212,8 +212,8 @@ describe("E2E Homologation — full task lifecycle", () => {
     expect(conflictTask?.branchName).toBe("feat/conflicting");
 
     // No bare --force in prompt
-    const lines = conflictTask?.description?.split("\n");
-    const bareForce = lines?.filter((l) => /git push .*--force(?!-with-lease)/.test(l));
+    const lines = conflictTask?.description?.split("\n") ?? [];
+    const bareForce = lines.filter((l) => /git push .*--force(?!-with-lease)/.test(l));
     expect(bareForce).toHaveLength(0);
     console.log(`[STEP 5] Prompt safety verified: --force-with-lease ✓, no bare --force ✓`);
   });

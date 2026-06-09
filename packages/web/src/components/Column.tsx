@@ -89,6 +89,13 @@ interface ColumnProps {
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
+  selectionMode?: boolean;
+  selectedTaskIds?: Set<string>;
+  onSelectionModeChange?: (enabled: boolean) => void;
+  onTaskSelectionChange?: (taskId: string, selected: boolean) => void;
+  onSelectColumn?: (taskIds: string[]) => void;
+  onDeleteSelected?: () => void;
+  onDeleteColumn?: (status: TaskStatus, taskIds: string[]) => void;
   horizontal?: boolean;
   collapsible?: boolean;
   collapsed?: boolean;
@@ -179,6 +186,13 @@ function ColumnComponent({
   onArchiveDone,
   onClearFailed,
   onRetryAllFailed,
+  selectionMode = false,
+  selectedTaskIds = new Set(),
+  onSelectionModeChange,
+  onTaskSelectionChange,
+  onSelectColumn,
+  onDeleteSelected,
+  onDeleteColumn,
   horizontal = false,
   collapsible = false,
   collapsed = false,
@@ -191,6 +205,8 @@ function ColumnComponent({
   const cfg = columnConfig[status];
   const runningCount =
     status === "in_progress" ? tasks.filter((t) => t.latestRun?.status === "running").length : 0;
+  const selectedCount = tasks.filter((task) => selectedTaskIds.has(task.id)).length;
+  const canBulkDelete = tasks.length > 0 && status !== "in_progress";
 
   return (
     <div
@@ -225,6 +241,61 @@ function ColumnComponent({
 
           {/* Action buttons */}
           <div className="flex items-center gap-0.5">
+            {canBulkDelete && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSelectionModeChange?.(!selectionMode)}
+                  aria-label={selectionMode ? "Sair da seleção em massa" : "Selecionar cards"}
+                  title={selectionMode ? "Sair da seleção em massa" : "Selecionar cards"}
+                  className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                    selectionMode
+                      ? "text-danger bg-danger/15"
+                      : "text-dimmed hover:text-danger hover:bg-danger/15"
+                  }`}
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+                    <path d="m5 8 2 2 4-5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteColumn?.(status, taskIds)}
+                  aria-label={`Excluir todos em ${TASK_STATUS_LABELS[status]}`}
+                  title={`Excluir todos em ${TASK_STATUS_LABELS[status]}`}
+                  className="p-1.5 rounded-lg text-dimmed hover:text-danger hover:bg-danger/15 transition-all cursor-pointer"
+                >
+                  <svg
+                    aria-hidden="true"
+                    width="13"
+                    height="13"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M2 4h12" />
+                    <path d="M6 2h4" />
+                    <path d="M5 6v7" />
+                    <path d="M8 6v7" />
+                    <path d="M11 6v7" />
+                  </svg>
+                </button>
+              </>
+            )}
             {collapsible && onToggleCollapse && (
               <button
                 type="button"
@@ -347,6 +418,25 @@ function ColumnComponent({
               : "flex-1 overflow-y-auto px-2.5 py-2.5 space-y-2 min-h-[80px]"
           }
         >
+          {selectionMode && tasks.length > 0 && (
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-danger/20 bg-danger/10 px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => onSelectColumn?.(taskIds)}
+                className="text-[10px] font-medium text-danger hover:text-red-300"
+              >
+                {selectedCount === tasks.length ? "Selecionados" : "Selecionar coluna"}
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteSelected}
+                disabled={selectedTaskIds.size === 0}
+                className="rounded-md border border-danger/30 px-2 py-1 text-[10px] font-semibold text-danger transition-colors hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Excluir {selectedTaskIds.size || ""}
+              </button>
+            </div>
+          )}
           <SortableContext
             items={taskIds}
             strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
@@ -359,6 +449,9 @@ function ColumnComponent({
                     onClick={onTaskClick}
                     onRetryPR={onRetryPR}
                     onUnblock={onUnblock}
+                    selectionMode={selectionMode}
+                    selected={selectedTaskIds.has(task.id)}
+                    onSelectionChange={onTaskSelectionChange}
                     retryEntry={retryQueueMap?.get(task.id)}
                   />
                 </div>
@@ -403,6 +496,13 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.onArchiveDone === next.onArchiveDone &&
     prev.onClearFailed === next.onClearFailed &&
     prev.onRetryAllFailed === next.onRetryAllFailed &&
+    prev.selectionMode === next.selectionMode &&
+    prev.selectedTaskIds === next.selectedTaskIds &&
+    prev.onSelectionModeChange === next.onSelectionModeChange &&
+    prev.onTaskSelectionChange === next.onTaskSelectionChange &&
+    prev.onSelectColumn === next.onSelectColumn &&
+    prev.onDeleteSelected === next.onDeleteSelected &&
+    prev.onDeleteColumn === next.onDeleteColumn &&
     prev.collapsible === next.collapsible &&
     prev.collapsed === next.collapsed &&
     prev.onToggleCollapse === next.onToggleCollapse &&

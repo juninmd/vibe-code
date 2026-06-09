@@ -14,8 +14,8 @@ const { chromium: cr } = await import("playwright");
 
 // Connect via CDP — this process is a real OS process, no sandbox
 console.log("  [shots] Conectando via CDP...");
-const browser = await cr.connectOverCDP("http://localhost:9222");
-const info = await fetch("http://localhost:9222/json/version").then(r => r.json()) as any;
+const browser = await cr.connectOverCDP("http://127.0.0.1:9222");
+const info = await fetch("http://127.0.0.1:9222/json/version").then(r => r.json()) as any;
 console.log(`  [shots] ✓ Conectado: ${info.Browser}`);
 
 const ctx = browser.contexts()[0] ?? await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -60,7 +60,7 @@ console.log(`   Total repos: ${allRepos.length} | Ready: ${readyRepos.length}`);
 console.log(`   Repos ready: ${readyRepos.map((r: any) => r.name).join(", ") || "(nenhum)"}`);
 console.log(`   Engines: ${engines?.map?.((e: any) => e.name)?.join(", ") ?? "N/A"}`);
 
-const targetRepo = readyRepos[0] ?? allRepos[0];
+const targetRepo = readyRepos.find((r: any) => r.name === "mika") ?? readyRepos[0] ?? allRepos[0];
 if (!targetRepo) {
   console.error("   ✗ Nenhum repo disponível — abortando");
   await browser.close();
@@ -72,8 +72,8 @@ console.log(`   Usando repo: "${targetRepo.name}" (${targetRepo.id})`);
 console.log("[04] Criando task de homologação via API");
 const task = await api("POST", "/api/tasks", {
   repoId: targetRepo.id,
-  title: "docs: homologação E2E — registro de versão vibe-code",
-  description: "Task criada pelo script de homologação. Valida o fluxo completo da interface.",
+  title: "feat: create a system monitor widget for Mika in slot hud-top",
+  description: "1) Create widget apps/plugins/sys-monitor/renderer/widgets/sys-monitor.widget.tsx with Outfit, JetBrains Mono, and vt-card styling. 2) Expose in index.tsx using defineMikaUI. 3) Register in sys-monitor.feature.ts using defineFeature under slot hud-top.",
   engine: "opencode",
   status: "backlog",
 });
@@ -85,7 +85,7 @@ await shot("03-board-com-task-homolog");
 
 // ── 05: Detalhe da task ───────────────────────────────────────────────────────
 console.log("[05] Abrindo detalhe da task");
-const card = page.locator('[role="button"]').filter({ hasText: "homologação E2E" }).first();
+const card = page.locator('[role="button"]').filter({ hasText: "feat: create a system" }).first();
 if (await card.isVisible({ timeout: 5000 }).catch(() => false)) {
   await card.click();
   await Bun.sleep(1800);
@@ -100,7 +100,7 @@ if (await card.isVisible({ timeout: 5000 }).catch(() => false)) {
 console.log("[06] Criando conflict-resolution task");
 const conflictTask = await api("POST", "/api/tasks", {
   repoId: targetRepo.id,
-  title: `fix(conflicts): resolve merge conflicts for "docs: homologação E2E"`,
+  title: `fix(conflicts): resolve merge conflicts for "feat: create a system monitor widget"`,
   description: [
     "Branch tem conflitos com main.",
     "STEP 1 — git fetch origin && git rebase origin/main",

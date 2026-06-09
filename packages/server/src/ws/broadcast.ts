@@ -1,9 +1,11 @@
 import type { LogStream, WsServerMessage } from "@vibe-code/shared";
 import type { ServerWebSocket } from "bun";
+import type { Db } from "../db";
 
 export interface WsClient {
-  ws: ServerWebSocket<unknown>;
+  ws: ServerWebSocket<any>;
   subscribedTasks: Set<string>;
+  workspaceId: string | null;
 }
 
 /** How long to accumulate log events before flushing to clients (ms). */
@@ -11,6 +13,10 @@ const LOG_BATCH_MS = 30;
 
 export class BroadcastHub {
   private clients = new Set<WsClient>();
+  private taskWorkspaceCache = new Map<string, string | null>();
+  private repoWorkspaceCache = new Map<string, string | null>();
+
+  constructor(private db?: Db) {}
 
   // ─── Log batching ──────────────────────────────────────────────────────────
   // Accumulate agent_log events per task and flush as a single WS message every
@@ -22,8 +28,9 @@ export class BroadcastHub {
   >();
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  addClient(ws: ServerWebSocket<unknown>): WsClient {
-    const client: WsClient = { ws, subscribedTasks: new Set() };
+  addClient(ws: ServerWebSocket<any>): WsClient {
+    const workspaceId = (ws.data as any)?.workspaceId || null;
+    const client: WsClient = { ws, subscribedTasks: new Set(), workspaceId };
     this.clients.add(client);
     return client;
   }
@@ -40,28 +47,102 @@ export class BroadcastHub {
     client.subscribedTasks.delete(taskId);
   }
 
+  private resolveWorkspaceFromTaskId(taskId: string): string | null {
+    if (this.taskWorkspaceCache.has(taskId)) {
+      return this.taskWorkspaceCache.get(taskId) ?? null;
+    }
+    if (!this.db) return null;
+    try {
+      const row = this.db.raw
+        .query(
+          "SELECT r.workspace_id FROM tasks t JOIN repositories r ON t.repo_id = r.id WHERE t.id = ?"
+        )
+        .get(taskId) as { workspace_id: string } | undefined;
+      const workspaceId = row?.workspace_id ?? null;
+      this.taskWorkspaceCache.set(taskId, workspaceId);
+      return workspaceId;
+    } catch (err) {
+      console.warn(`[BroadcastHub] Failed to resolve workspace for task ${taskId}:`, err);
+      return null;
+    }
+  }
+
+  private resolveWorkspaceFromRepoId(repoId: string): string | null {
+    if (this.repoWorkspaceCache.has(repoId)) {
+      return this.repoWorkspaceCache.get(repoId) ?? null;
+    }
+    if (!this.db) return null;
+    try {
+      const row = this.db.raw
+        .query("SELECT workspace_id FROM repositories WHERE id = ?")
+        .get(repoId) as { workspace_id: string } | undefined;
+      const workspaceId = row?.workspace_id ?? null;
+      this.repoWorkspaceCache.set(repoId, workspaceId);
+      return workspaceId;
+    } catch (err) {
+      console.warn(`[BroadcastHub] Failed to resolve workspace for repo ${repoId}:`, err);
+      return null;
+    }
+  }
+
+  private getWorkspaceIdForMessage(message: WsServerMessage): string | null {
+    if ("taskId" in message && message.taskId) {
+      return this.resolveWorkspaceFromTaskId(message.taskId);
+    }
+    if (message.type === "task_created" || message.type === "task_updated") {
+      if (message.task?.repoId) {
+        return this.resolveWorkspaceFromRepoId(message.task.repoId);
+      }
+    }
+    if (message.type === "repo_updated") {
+      if (message.repo?.workspaceId) {
+        return message.repo.workspaceId;
+      }
+    }
+    if (message.type === "run_updated") {
+      if (message.run?.taskId) {
+        return this.resolveWorkspaceFromTaskId(message.run.taskId);
+      }
+    }
+    return null;
+  }
+
   /** Broadcast to all connected clients */
   broadcastAll(message: WsServerMessage): void {
+    const msgWorkspaceId = this.getWorkspaceIdForMessage(message);
     const data = JSON.stringify(message);
     for (const client of this.clients) {
-      try {
-        client.ws.send(data);
-      } catch {
-        // Client disconnected
-        this.clients.delete(client);
+      if (
+        msgWorkspaceId === null ||
+        client.workspaceId === null ||
+        client.workspaceId === msgWorkspaceId
+      ) {
+        try {
+          client.ws.send(data);
+        } catch {
+          // Client disconnected
+          this.clients.delete(client);
+        }
       }
     }
   }
 
   /** Broadcast to clients subscribed to a specific task */
   broadcastToTask(taskId: string, message: WsServerMessage): void {
+    const msgWorkspaceId = this.getWorkspaceIdForMessage(message);
     const data = JSON.stringify(message);
     for (const client of this.clients) {
       if (client.subscribedTasks.has(taskId)) {
-        try {
-          client.ws.send(data);
-        } catch {
-          this.clients.delete(client);
+        if (
+          msgWorkspaceId === null ||
+          client.workspaceId === null ||
+          client.workspaceId === msgWorkspaceId
+        ) {
+          try {
+            client.ws.send(data);
+          } catch {
+            this.clients.delete(client);
+          }
         }
       }
     }

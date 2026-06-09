@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 type ValidationCommandSource = "workflow" | "package_json" | "detected";
@@ -166,7 +166,25 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
   try {
     const packageJsonText = await readFile(join(wtPath, PACKAGE_JSON_FILE), "utf8");
     const packageJsonCommands = parsePackageJsonCommands(packageJsonText);
-    if (packageJsonCommands.length > 0) return packageJsonCommands;
+    if (packageJsonCommands.length > 0) {
+      // Ensure node_modules exist before running package scripts
+      const hasModules = await access(join(wtPath, "node_modules"))
+        .then(() => true)
+        .catch(() => false);
+      if (!hasModules) {
+        const parsed = JSON.parse(packageJsonText) as { packageManager?: string };
+        const installCmd = parsed.packageManager?.startsWith("pnpm")
+          ? "pnpm install --frozen-lockfile"
+          : parsed.packageManager?.startsWith("yarn")
+            ? "yarn install --frozen-lockfile"
+            : "bun install";
+        return [
+          { name: "install", command: installCmd, source: "package_json" as const },
+          ...packageJsonCommands,
+        ];
+      }
+      return packageJsonCommands;
+    }
   } catch {
     // Unsupported repository shape.
   }

@@ -115,8 +115,8 @@ describe("ConflictResolver", () => {
       expect(conflictTask?.description).toContain("--force-with-lease");
 
       // Prompt must NOT contain bare --force (without --lease)
-      const descLines = conflictTask?.description?.split("\n");
-      const hasBareForcePush = descLines?.some((line) => {
+      const descLines = conflictTask?.description?.split("\n") ?? [];
+      const hasBareForcePush = descLines.some((line) => {
         // Match `git push --force` but not `git push --force-with-lease`
         return /git push .*--force(?!-with-lease)/.test(line);
       });
@@ -252,8 +252,7 @@ describe("ConflictResolver", () => {
       fetchSpy.mockRestore();
 
       expect(launch).toHaveBeenCalledTimes(1);
-      const args = launch.mock.calls as any;
-      expect(args[0]?.[0]?.branchName).toBe("feat/launch-branch");
+      expect((launch.mock.calls as any)[0]?.[0].branchName).toBe("feat/launch-branch");
     });
   });
 
