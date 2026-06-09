@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -115,8 +116,29 @@ export class GitService {
     }
   }
 
+  private getCollisionSafeName(url: string, defaultName: string): string {
+    try {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        const u = new URL(url);
+        const host = u.hostname;
+        const ownerAndName = u.pathname.replace(/^\//, "").replace(/\.git$/, "");
+        const pathSlug = ownerAndName.replace(/\//g, "+");
+        return `${host}+${pathSlug}`;
+      }
+      const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^.]+)(?:\.git)?$/);
+      if (sshMatch) {
+        const [, host, owner, name] = sshMatch;
+        return `${host}+${owner}+${name}`;
+      }
+    } catch {
+      // ignore, fallback to defaultName
+    }
+    return defaultName;
+  }
+
   async cloneRepo(url: string, name: string): Promise<string> {
-    const barePath = join(this.reposDir, `${name}.git`);
+    const safeName = this.getCollisionSafeName(url, name);
+    const barePath = join(this.reposDir, `${safeName}.git`);
     await GitService.withRepoLock(barePath, () =>
       this.exec(["git", "clone", "--bare", this.injectToken(url), barePath])
     );
@@ -206,6 +228,13 @@ export class GitService {
 
   async commitAll(wtPath: string, message: string): Promise<void> {
     await this.exec(["git", "add", "-A"], { cwd: wtPath });
+    // Safety: ensure accidental `.vibe-code` directory (from misconfigured DATA_DIR)
+    // is not staged or committed. Remove from the index if present (keep files).
+    try {
+      await this.exec(["git", "rm", "-r", "--cached", ".vibe-code"], { cwd: wtPath });
+    } catch {
+      // ignore: path may not exist or not be tracked
+    }
     const hasChanges = await this.hasChanges(wtPath);
     if (hasChanges) {
       // Ensure git identity is set (required in some environments)
@@ -440,7 +469,15 @@ export class GitService {
     }
   }
 
-  getBarePath(repoName: string): string {
+  getBarePath(repoName: string, url?: string): string {
+    if (url) {
+      const safeName = this.getCollisionSafeName(url, repoName);
+      const collisionSafePath = join(this.reposDir, `${safeName}.git`);
+      const legacyPath = join(this.reposDir, `${repoName}.git`);
+      if (existsSync(collisionSafePath)) return collisionSafePath;
+      if (existsSync(legacyPath)) return legacyPath;
+      return collisionSafePath;
+    }
     return join(this.reposDir, `${repoName}.git`);
   }
 

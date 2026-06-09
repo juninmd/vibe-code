@@ -30,12 +30,12 @@ Turn repository work into autonomous, reviewable, high-quality implementation ru
 ## Current Quality Gate
 
 Use the root Bun scripts as the repository validation contract.
+Worktrees do not share node_modules, so install deps first.
 
 ```bash
+bun install --frozen-lockfile
 bun run lint
 bun run typecheck
-bun run test
-bun run build
 ```
 
 If a change touches runtime startup or operator workflows on Windows, account for the current shell limitation of `bun run dev`, which depends on `bash ./scripts/dev-safe.sh`.

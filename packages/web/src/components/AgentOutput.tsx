@@ -117,16 +117,40 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
     return t.charAt(0).toUpperCase() + t.slice(1);
   };
 
+  const classifySummaryLog = (
+    log: AgentLog
+  ): { name: string; icon: string; color: string } | null => {
+    const c = log.content.trim();
+    if (/^\d+\s+lines?\s+read$/i.test(c) || /^read\s+\d+\s+non-empty\s+lines?$/i.test(c)) {
+      return { name: "Reading file", icon: "R", color: detectToolColor("read_file") };
+    }
+    if (/^\d+\s+matches?$/i.test(c) || /^found\s+\d+\s+matches?$/i.test(c)) {
+      return { name: "Searching", icon: "S", color: detectToolColor("search") };
+    }
+    if (/^saved$/i.test(c) || /^file saved$/i.test(c)) {
+      return { name: "Writing file", icon: "W", color: detectToolColor("write_file") };
+    }
+    if (/^command exited with code \d+/i.test(c) || /^command output:/i.test(c)) {
+      return { name: "Command failed", icon: "!", color: detectToolColor("bash") };
+    }
+    if (log.stream === "stderr") {
+      return { name: "Error", icon: "!", color: "#f87171" };
+    }
+    return null;
+  };
+
   for (const log of logs) {
+    const trimmedContent = log.content.trim();
     // Pattern 1: OpenCode humanized tool labels ("Reading...", "Writing...", etc.)
-    const humanizedMatch = log.content.match(
+    const humanizedMatch = trimmedContent.match(
       /^(Reading|Writing|Editing|Deleting|Moving|Running:|Listing|Searching|Fetching|Git:|⚙️)/
     );
 
     // Pattern 2: Gemini-style "[tool] tool_name" system logs
-    const geminiToolMatch = log.content.match(/^\[tool\]\s*(.+)/);
+    const geminiToolMatch = trimmedContent.match(/^\[tool\]\s*(.+)/);
+    const summaryMatch = !humanizedMatch && !geminiToolMatch ? classifySummaryLog(log) : null;
 
-    if (humanizedMatch || geminiToolMatch) {
+    if (humanizedMatch || geminiToolMatch || summaryMatch) {
       if (currentGroup) {
         currentGroup.isComplete = true;
         currentGroup.finishedAt = prevTimestamp;
@@ -134,13 +158,15 @@ function buildStepGroups(logs: AgentLog[]): StepGroup[] {
       }
       stepId++;
       const toolLabel = humanizedMatch
-        ? log.content.split(" ")[0].trim()
-        : normalizeToolName(geminiToolMatch?.[1] ?? log.content);
+        ? trimmedContent.split(" ")[0].trim()
+        : summaryMatch
+          ? summaryMatch.name
+          : normalizeToolName(geminiToolMatch?.[1] ?? trimmedContent);
       currentGroup = {
         id: stepId,
-        toolName: log.content,
-        toolIcon: detectToolIcon(toolLabel || log.content),
-        accentColor: detectToolColor(toolLabel || log.content),
+        toolName: summaryMatch?.name ?? trimmedContent,
+        toolIcon: summaryMatch?.icon ?? detectToolIcon(toolLabel || trimmedContent),
+        accentColor: summaryMatch?.color ?? detectToolColor(toolLabel || trimmedContent),
         logs: [],
         thinkingContent: null,
         isComplete: false,
@@ -515,6 +541,7 @@ export function AgentOutput({
   const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const [showTimestamps, setShowTimestamps] = useState(false);
   const [splitMode, setSplitMode] = useState<"none" | "right" | "down">("none");
+  const [viewMode, setViewMode] = useState<"raw" | "steps">(fullHeight ? "raw" : "steps");
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -708,6 +735,14 @@ export function AgentOutput({
     });
   }, [stepGroups, selectedTools]);
 
+  const visibleLogs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return allLogs.filter((log) => {
+      if (streamFilter !== "all" && log.stream !== streamFilter) return false;
+      return !query || log.content.toLowerCase().includes(query);
+    });
+  }, [allLogs, streamFilter, searchQuery]);
+
   const toggleToolFilter = useCallback((key: string) => {
     setSelectedTools((prev) => {
       const next = new Set(prev);
@@ -751,7 +786,7 @@ export function AgentOutput({
       {/* Toolbar */}
       <div className="flex items-center gap-1 px-2 py-1.5 bg-input border-b border-default flex-wrap">
         {/* Semantic status pill — shows what the agent is doing this second */}
-        {isRunning && (
+        {!fullHeight && isRunning && (
           <TaskStatusPill
             taskStatus={taskStatus ?? "in_progress"}
             logs={allLogs}
@@ -808,12 +843,39 @@ export function AgentOutput({
         <div className="flex-1" />
 
         {/* Tool filter — multi-select by detected step group */}
-        <ToolFilterDropdown
-          options={toolFilterOptions}
-          selected={selectedTools}
-          onToggle={toggleToolFilter}
-          onClear={clearToolFilters}
-        />
+        <div className="flex items-center gap-1 rounded-md border border-default bg-app p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode("raw")}
+            className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
+              viewMode === "raw"
+                ? "bg-surface-hover text-primary"
+                : "text-dimmed hover:text-secondary"
+            }`}
+          >
+            Raw
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("steps")}
+            className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
+              viewMode === "steps"
+                ? "bg-surface-hover text-primary"
+                : "text-dimmed hover:text-secondary"
+            }`}
+          >
+            Steps
+          </button>
+        </div>
+
+        {viewMode === "steps" && (
+          <ToolFilterDropdown
+            options={toolFilterOptions}
+            selected={selectedTools}
+            onToggle={toggleToolFilter}
+            onClear={clearToolFilters}
+          />
+        )}
 
         {/* Search toggle */}
         <button
@@ -915,7 +977,7 @@ export function AgentOutput({
       </div>
 
       {/* Current activity bar — shows last status message when running */}
-      {isRunning && currentStatus && (
+      {!fullHeight && isRunning && currentStatus && (
         <div className="flex items-center gap-2 px-3 py-1 bg-info/15 border-b border-info/30">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
           <span className="text-[11px] text-info font-mono truncate">{currentStatus}</span>
@@ -983,55 +1045,97 @@ export function AgentOutput({
       </div>
 
       {/* Timeline bar — visual overview of step groups, click to jump */}
-      <AgentTimelineBar
-        segments={
-          filteredStepGroups.map((g) => ({
-            id: g.id,
-            toolName: g.toolName,
-            toolIcon: g.toolIcon,
-            accentColor: g.accentColor,
-            logCount: g.logs.length,
-            hasError: g.logs.some((sl) => sl.log.stream === "stderr"),
-          })) satisfies TimelineSegment[]
-        }
-        activeId={expandedSteps.size > 0 ? Math.max(...Array.from(expandedSteps)) : null}
-        onSegmentClick={(id) => {
-          setExpandedSteps((prev) => new Set([...prev, id]));
-          requestAnimationFrame(() => {
-            const el = scrollRef.current?.querySelector(`[data-step-id="${id}"]`);
-            el?.scrollIntoView({ behavior: "smooth", block: "start" });
-          });
-        }}
-      />
+      {viewMode === "steps" && (
+        <AgentTimelineBar
+          segments={
+            filteredStepGroups.map((g) => ({
+              id: g.id,
+              toolName: g.toolName,
+              toolIcon: g.toolIcon,
+              accentColor: g.accentColor,
+              logCount: g.logs.length,
+              hasError: g.logs.some((sl) => sl.log.stream === "stderr"),
+            })) satisfies TimelineSegment[]
+          }
+          activeId={expandedSteps.size > 0 ? Math.max(...Array.from(expandedSteps)) : null}
+          onSegmentClick={(id) => {
+            setExpandedSteps((prev) => new Set([...prev, id]));
+            requestAnimationFrame(() => {
+              const el = scrollRef.current?.querySelector(`[data-step-id="${id}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+          }}
+        />
+      )}
 
       {/* Step accordion output */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className={`bg-app overflow-y-auto cursor-text ${
-          isFullscreen || fullHeight ? "flex-1" : "max-h-[480px] min-h-[140px]"
+        className={`bg-app overflow-y-auto overscroll-contain cursor-text ${
+          isFullscreen || fullHeight ? "min-h-0 flex-1" : "max-h-[480px] min-h-[140px]"
         }`}
       >
-        {filteredStepGroups.map((group, idx) => (
-          <StepAccordion
-            key={group.id}
-            group={group}
-            isExpanded={expandedSteps.has(group.id)}
-            onToggle={() => toggleStep(group.id)}
-            isLast={idx === filteredStepGroups.length - 1}
-            isRunning={isRunning}
-            showTimestamps={showTimestamps}
-            streamFilter={streamFilter}
-          />
-        ))}
+        {viewMode === "raw" ? (
+          <div className="px-3 py-2 font-mono text-xs leading-relaxed">
+            {visibleLogs.map((log, idx) => {
+              const html = convertAnsi(redactSecrets(log.content));
+              const color =
+                log.stream === "stderr"
+                  ? "#f87171"
+                  : log.stream === "system"
+                    ? "#71717a"
+                    : log.stream === "stdin"
+                      ? "#34d399"
+                      : undefined;
+              return (
+                <div
+                  key={log.id ?? `raw-log-${idx}`}
+                  className={`grid gap-2 border-b border-white/[0.03] py-0.5 last:border-b-0 ${
+                    showTimestamps ? "grid-cols-[auto_auto_1fr]" : "grid-cols-[auto_1fr]"
+                  }`}
+                  style={{ color }}
+                >
+                  {showTimestamps && (
+                    <span className="text-[10px] text-dimmed">{formatTime(log.timestamp)}</span>
+                  )}
+                  <span className="w-12 select-none text-[10px] uppercase text-dimmed">
+                    {log.stream}
+                  </span>
+                  <span
+                    className="min-w-0 whitespace-pre-wrap break-words text-secondary"
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: ansi-to-html with escapeXML:true
+                    dangerouslySetInnerHTML={{ __html: html }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          filteredStepGroups.map((group, idx) => (
+            <StepAccordion
+              key={group.id}
+              group={group}
+              isExpanded={expandedSteps.has(group.id)}
+              onToggle={() => toggleStep(group.id)}
+              isLast={idx === filteredStepGroups.length - 1}
+              isRunning={isRunning}
+              showTimestamps={showTimestamps}
+              streamFilter={streamFilter}
+            />
+          ))
+        )}
 
         {!loadingLogs && allLogs.length === 0 && (
           <div className="text-dimmed p-3">Aguardando saída...</div>
         )}
+        {!loadingLogs && viewMode === "raw" && allLogs.length > 0 && visibleLogs.length === 0 && (
+          <div className="text-dimmed p-3">Nenhum log encontrado para o filtro atual.</div>
+        )}
       </div>
 
       {/* Running status footer */}
-      {isRunning && !awaitingQuestion && stepGroups.length > 0 && (
+      {!fullHeight && isRunning && !awaitingQuestion && stepGroups.length > 0 && (
         <div className="flex items-center gap-1.5 text-info px-3 py-1 border-t border-default bg-input/80 shrink-0">
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
           <span className="text-[11px]">Agente rodando...</span>

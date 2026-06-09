@@ -73,6 +73,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      pool: "forks",
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
       globals: true,
@@ -86,6 +87,10 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
+      hmr: {
+        host: "localhost",
+        clientPort: 5173,
+      },
       proxy: {
         "/api": {
           target: serverUrl,

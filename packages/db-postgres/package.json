@@ -11,7 +11,7 @@
   "dependencies": {
     "@vibe-code/db-adapter": "workspace:*",
     "pg": "^8.11.3",
-    "pg-pool": "^3.6.1"
+    "pg-pool": "^3.14.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,5 +1,16 @@
 # ROADMAP — Integrações inspiradas no multica
 
+## Próxima Execução — Planejamento Técnico
+
+Tópicos planejados para a próxima iteração:
+1. **Intelligent Model Progression**: Escalada de modelo (ex: Flash -> Pro -> Sonnet) ao falhar em loops de correção de validação.
+2. **Dashboard de Custos & Telemetria**: Coluna `token_usage` em `agent_runs` e painel no frontend exibindo tokens e custos (USD).
+3. **Collision-Safe Bare Repos**: Mapeamento seguro de repositórios bare usando host+owner+nome para evitar colisões de nomes idênticos de remotes distintos.
+4. **Isolamento Workspace no Websocket**: Segmentação do `BroadcastHub` por workspace ID para evitar vazamento de logs e estados em tempo real.
+5. **Static Skill Validator**: Detector estático em boot-time para identificar conflitos e overrides de comandos duplicados entre as skills registradas.
+
+---
+
 Candidatos catalogados durante deep explore de `D:\Solutions\pessoal\vibe\multica`. Cada item está pareado com a fonte original e o pré-requisito que falta no vibe-code hoje.
 
 ## Backend / engine

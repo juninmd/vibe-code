@@ -27,6 +27,7 @@ interface BoardProps {
   onArchiveDone?: () => void;
   onClearFailed?: () => void;
   onRetryAllFailed?: () => void;
+  onDeleteTasks?: (taskIds: string[]) => void | Promise<void>;
   retryQueueMap?: Map<string, RetryState>;
   onNewTask?: () => void;
 }
@@ -40,10 +41,13 @@ export function Board({
   onArchiveDone,
   onClearFailed,
   onRetryAllFailed,
+  onDeleteTasks,
   retryQueueMap,
   onNewTask: _onNewTask,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const noopTaskClick = useCallback(() => {}, []);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -122,6 +126,65 @@ export function Board({
     [tasksByColumn.failed.length, tasksByColumn.scheduled.length]
   );
 
+  const handleSelectionModeChange = useCallback((enabled: boolean) => {
+    setSelectionMode(enabled);
+    if (!enabled) setSelectedTaskIds(new Set());
+  }, []);
+
+  const handleTaskSelectionChange = useCallback((taskId: string, selected: boolean) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  const handleSelectColumn = useCallback((taskIds: string[]) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = taskIds.every((id) => next.has(id));
+      for (const id of taskIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (!onDeleteTasks || selectedTaskIds.size === 0) return;
+    const ids = Array.from(selectedTaskIds);
+    if (
+      !window.confirm(
+        `Excluir ${ids.length} card${ids.length === 1 ? "" : "s"} selecionado${ids.length === 1 ? "" : "s"}?`
+      )
+    ) {
+      return;
+    }
+    await onDeleteTasks(ids);
+    setSelectedTaskIds(new Set());
+    setSelectionMode(false);
+  }, [onDeleteTasks, selectedTaskIds]);
+
+  const handleDeleteColumn = useCallback(
+    async (status: TaskStatus, taskIds: string[]) => {
+      if (!onDeleteTasks || taskIds.length === 0) return;
+      if (status === "in_progress") return;
+      const label = status.replace("_", " ");
+      if (!window.confirm(`Excluir todos os ${taskIds.length} cards da coluna ${label}?`)) {
+        return;
+      }
+      await onDeleteTasks(taskIds);
+      setSelectedTaskIds((prev) => {
+        const next = new Set(prev);
+        for (const id of taskIds) next.delete(id);
+        return next;
+      });
+    },
+    [onDeleteTasks]
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -149,6 +212,13 @@ export function Board({
                 onArchiveDone={onArchiveDone}
                 onClearFailed={onClearFailed}
                 onRetryAllFailed={onRetryAllFailed}
+                selectionMode={selectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onSelectionModeChange={handleSelectionModeChange}
+                onTaskSelectionChange={handleTaskSelectionChange}
+                onSelectColumn={handleSelectColumn}
+                onDeleteSelected={handleDeleteSelected}
+                onDeleteColumn={handleDeleteColumn}
                 retryQueueMap={retryQueueMap}
                 fillWidth
               />

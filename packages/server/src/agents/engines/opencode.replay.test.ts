@@ -19,7 +19,7 @@ describe("OpenCodeEngine replay fixtures", () => {
       (event) => event.stream === "stderr" && event.content?.includes("must read file")
     );
     const readLog = events.find(
-      (event) => event.stream === "stdout" && event.content?.includes("lines read")
+      (event) => event.stream === "stdout" && event.content?.includes("non-empty line")
     );
     const finalText = events.find(
       (event) =>
@@ -28,7 +28,7 @@ describe("OpenCodeEngine replay fixtures", () => {
     );
 
     expect(stderrLog?.content).toContain("hello.txt before overwriting it");
-    expect(readLog?.content).toBe("    5 lines read");
+    expect(readLog?.content).toBe("    Read 5 non-empty lines");
     expect(finalText?.content).toContain("No changes needed.");
 
     const stderrIndex = stderrLog ? events.indexOf(stderrLog) : -1;

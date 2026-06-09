@@ -1,9 +1,11 @@
+import { useCurrentWorkspace } from "@vibe-code/core";
 import type { WsClientMessage, WsServerMessage } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type MessageHandler = (msg: WsServerMessage) => void;
 
 export function useWebSocket(onMessage: MessageHandler) {
+  const { workspaceId } = useCurrentWorkspace();
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
@@ -40,9 +42,10 @@ export function useWebSocket(onMessage: MessageHandler) {
       if (destroyed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const apiPort = import.meta.env.VITE_API_PORT || "3000";
+      const queryParam = workspaceId ? `?workspaceId=${workspaceId}` : "";
       const wsUrl = import.meta.env.DEV
-        ? `${protocol}//${window.location.hostname}:${apiPort}/ws`
-        : `${protocol}//${window.location.host}/ws`;
+        ? `${protocol}//${window.location.hostname}:${apiPort}/ws${queryParam}`
+        : `${protocol}//${window.location.host}/ws${queryParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -103,7 +106,7 @@ export function useWebSocket(onMessage: MessageHandler) {
       if (pingTimer) clearInterval(pingTimer);
       wsRef.current?.close();
     };
-  }, []);
+  }, [workspaceId]);
 
   const send = useCallback((msg: WsClientMessage) => {
     const ws = wsRef.current;

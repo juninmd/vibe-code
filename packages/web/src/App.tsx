@@ -793,6 +793,23 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     [tasks, selectedTask, removeTask, handleCloseDetail, createTask, toast]
   );
 
+  const handleDeleteTasks = useCallback(
+    async (taskIds: string[]) => {
+      if (taskIds.length === 0) return;
+      try {
+        await Promise.all(taskIds.map((id) => removeTask(id)));
+        if (selectedTask && taskIds.includes(selectedTask.id)) handleCloseDetail();
+        toast(
+          `${taskIds.length} card${taskIds.length === 1 ? "" : "s"} excluido${taskIds.length === 1 ? "" : "s"}`,
+          "info"
+        );
+      } catch {
+        toast("Falha ao excluir cards", "error");
+      }
+    },
+    [selectedTask, removeTask, handleCloseDetail, toast]
+  );
+
   const handleOpenTaskById = useCallback(
     async (taskId: string) => {
       try {
@@ -1405,6 +1422,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                         toast("Failed to retry failed tasks", "error");
                       }
                     }}
+                    onDeleteTasks={handleDeleteTasks}
                     retryQueueMap={retryQueueMap}
                     onNewTask={() => setShowNewTask(true)}
                   />

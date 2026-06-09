@@ -122,6 +122,7 @@ interface RunRow {
   matched_skills: string | null;
   state_snapshot: string | null;
   cost_stats: string | null;
+  token_usage: string | null;
   created_at: string;
 }
 
@@ -222,6 +223,7 @@ function mapRun(row: RunRow): AgentRun {
     matchedSkills: row.matched_skills,
     stateSnapshot: row.state_snapshot,
     costStats: row.cost_stats ? JSON.parse(row.cost_stats) : null,
+    tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : null,
     createdAt: row.created_at,
   };
 }
@@ -755,6 +757,12 @@ export function createRunQueries(db: Database) {
     updateCostStats: (id: string, costStats: object): void => {
       db.prepare("UPDATE agent_runs SET cost_stats = ? WHERE id = ?").run(
         JSON.stringify(costStats),
+        id
+      );
+    },
+    updateTokenUsage: (id: string, tokenUsage: object): void => {
+      db.prepare("UPDATE agent_runs SET token_usage = ? WHERE id = ?").run(
+        JSON.stringify(tokenUsage),
         id
       );
     },

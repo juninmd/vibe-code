@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { config } from "dotenv";
 
 config({ path: resolve(import.meta.dir, "../../../.env") });
@@ -32,12 +32,33 @@ import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
+import { logValidationReport, validateSkills } from "./skills/validator";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_DIR = process.env.VIBE_CODE_DATA_DIR
+let DATA_DIR = process.env.VIBE_CODE_DATA_DIR
   ? process.env.VIBE_CODE_DATA_DIR.replace(/^~/, homedir())
   : join(homedir(), ".vibe-code");
+
+// Safety: prevent using a data dir that lives inside the repository/workspace
+try {
+  const resolvedDataDir = resolve(DATA_DIR);
+  const cwd = process.cwd();
+  const rel = relative(cwd, resolvedDataDir);
+  // If `rel` does not start with '..' then DATA_DIR is inside (or equal to) cwd
+  if (!(rel.startsWith("..") || rel === "")) {
+    // inside a subpath of cwd -> override to user's home directory
+    const fallback = join(homedir(), ".vibe-code");
+    if (resolve(fallback) !== resolvedDataDir) {
+      console.warn(
+        `[startup] VIBE_CODE_DATA_DIR (${resolvedDataDir}) is inside the repository; overriding to ${fallback}`
+      );
+      DATA_DIR = fallback;
+    }
+  }
+} catch (err) {
+  // best-effort; if path ops fail, fall back to default behavior
+}
 const DB_PATH = join(DATA_DIR, "vibe.db");
 const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 
@@ -45,13 +66,18 @@ const db = createDb(DB_PATH);
 const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
-const hub = new BroadcastHub();
+const hub = new BroadcastHub(db);
 const registry = new EngineRegistry();
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
 const orchestrator = new Orchestrator(db, git, registry, hub, storedMaxAgents || MAX_AGENTS);
 const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
+validateSkills(skillsLoader)
+  .then(logValidationReport)
+  .catch((err) => {
+    console.error("[startup] Skills validation failed with error:", err);
+  });
 const skillRegistry = new SkillRegistryService();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
@@ -92,9 +118,20 @@ app.route("/api/auth", authRouter);
 // all other /api/* routes require authentication
 app.use("/api/*", authMiddleware(db));
 
-// Serve web/dist in production; redirect to Vite dev server in development
+// Serve web/dist in production; proxy to Vite dev server in development
 const WEB_DIST = resolve(import.meta.dir, "../../web/dist");
 const isProduction = process.env.NODE_ENV === "production";
+
+async function proxyDevFrontend(c: import("hono").Context, devFrontend: string): Promise<Response> {
+  const requestUrl = new URL(c.req.url);
+  const targetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devFrontend);
+  return fetch(targetUrl, {
+    method: c.req.raw.method,
+    headers: c.req.raw.headers,
+    body: c.req.raw.body,
+    redirect: "manual",
+  });
+}
 
 async function serveStatic(_c: import("hono").Context, filePath: string): Promise<Response> {
   try {
@@ -169,8 +206,10 @@ if (isProduction) {
   // SPA catch-all: must be registered AFTER all API routes
   app.get("*", (c) => serveStatic(c, join(WEB_DIST, "index.html")));
 } else {
-  const devFrontend = process.env.VITE_DEV_URL || "http://localhost:5173";
-  app.get("/", (c) => c.redirect(devFrontend));
+  if (process.env.VITE_DEV_URL) {
+    const devFrontend = process.env.VITE_DEV_URL;
+    app.all("*", (c) => proxyDevFrontend(c, devFrontend));
+  }
 }
 
 const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
@@ -178,7 +217,16 @@ const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 const server = Bun.serve({
   port: PORT,
   reusePort: true,
-  fetch: app.fetch,
+  fetch(req, server) {
+    const url = new URL(req.url);
+    if (url.pathname === "/ws") {
+      const workspaceId = url.searchParams.get("workspaceId") || null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const success = (server as any).upgrade(req, { data: { workspaceId } });
+      if (success) return undefined;
+    }
+    return app.fetch(req);
+  },
   websocket: {
     open(ws) {
       const client = hub.addClient(ws);

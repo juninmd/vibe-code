@@ -1,5 +1,6 @@
 import { existsSync, type Stats, statSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { delimiter, dirname, extname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
@@ -46,14 +47,14 @@ function humanizeToolResult(tool: string, output: unknown): string | null {
   const preview = text.slice(0, 120).replace(/\n/g, " ").trim();
 
   if (t === "bash" || t.includes("run_command") || t.includes("execute")) {
-    if (!text.trim()) return "    Done (no output)";
-    return `    ${preview}${text.length > 120 ? ` … (${lines} lines)` : ""}`;
+    if (!text.trim()) return "    Command completed with no output";
+    return `    Command output: ${preview}${text.length > 120 ? ` ... (${lines} lines)` : ""}`;
   }
   if (t.includes("read") || t === "view_file") {
-    return `    ${lines} line${lines !== 1 ? "s" : ""} read`;
+    return `    Read ${lines} non-empty line${lines !== 1 ? "s" : ""}`;
   }
   if (t.includes("search") || t.includes("grep") || t.includes("glob")) {
-    return `    ${lines} match${lines !== 1 ? "es" : ""}`;
+    return `    Found ${lines} match${lines !== 1 ? "es" : ""}`;
   }
   if (
     t.includes("write") ||
@@ -61,17 +62,25 @@ function humanizeToolResult(tool: string, output: unknown): string | null {
     t.includes("create") ||
     t.includes("str_replace")
   ) {
-    return "    Saved";
+    return "    File saved";
   }
   if (t.includes("web") || t.includes("fetch")) {
-    return `    ${lines} line${lines !== 1 ? "s" : ""} fetched`;
+    return `    Fetched ${lines} non-empty line${lines !== 1 ? "s" : ""}`;
   }
   if (text.length <= 80) return `    ${preview}`;
   return null;
 }
 
 function str(v: unknown): string {
-  return v != null ? String(v) : "";
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Error) return v.message;
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
 }
 
 // Filter/humanize stderr — return null to suppress, or a string to show.
@@ -83,7 +92,7 @@ export function humanizeStderr(line: string): string | null {
   try {
     const obj = JSON.parse(trimmed) as Record<string, unknown>;
     const level = str(obj.level ?? obj.severity ?? "").toLowerCase();
-    const msg = str(obj.message ?? obj.msg ?? obj.text ?? "");
+    const msg = str(obj.message ?? obj.msg ?? obj.text ?? obj.error ?? obj);
     if (level === "debug" || level === "trace" || level === "verbose") return null;
     if (
       msg.includes("session") ||
@@ -139,9 +148,34 @@ export function humanizeStderr(line: string): string | null {
 
 /**
  * Default model for OpenCode when no model is specified.
- * Uses the LiteLLM auto-routing format: provider/model-name.
+ * GitHub Models works in the local/free deployment with GITHUB_TOKEN.
  */
-export const DEFAULT_OPENCODE_MODEL = "anthropic/claude-sonnet-4-5";
+export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
+
+// Model name opencode uses when routing via LiteLLM's Anthropic-compatible endpoint.
+// opencode uses /v1/messages (Anthropic SDK) for anthropic/* models — avoids the
+// /responses endpoint incompatibility that affects openai/* models in LiteLLM.
+// LiteLLM maps this alias to the actual backend (see litellm configmap entry).
+// Must be a model name that opencode's Anthropic provider allowlist recognizes.
+export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-latest";
+
+export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
+
+const MODEL_LIST_TIMEOUT_MS = 10_000;
+
+async function waitForModelsProcess(proc: Subprocess): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timeout = setTimeout(() => resolve("timeout"), MODEL_LIST_TIMEOUT_MS);
+  });
+  const result = await Promise.race([proc.exited.then(() => "done" as const), timedOut]);
+  if (timeout) clearTimeout(timeout);
+  if (result === "timeout") {
+    proc.kill();
+    return false;
+  }
+  return proc.exitCode === 0;
+}
 
 // Why: Windows batch `%*` argv forwarding does not preserve newlines, so the
 // `opencode.cmd` npm shim truncates multi-line prompts at the first \n before
@@ -215,6 +249,16 @@ export function resolveOpencodeBinary(): string {
   return native ?? shim;
 }
 
+export interface OpenCodeAccumulators {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached: number;
+  input_cost: number;
+  output_cost: number;
+  total_cost: number;
+}
+
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
   binaryName = "opencode";
@@ -230,37 +274,10 @@ export class OpenCodeEngine implements AgentEngine {
 
   /**
    * Writes opencode.json with permissions pre-configured for non-interactive mode.
-   * This runs BEFORE the agent starts so the config is ready.
+   * This is now a no-op as the config is isolated during execute.
    */
-  async prepareWorkdir(workdir: string, _skills: SkillPayload): Promise<string[]> {
-    const configPath = join(workdir, "opencode.json");
-    const config: Record<string, unknown> = {
-      permission: {
-        "*": "allow",
-        question: "allow",
-        plan_enter: "allow",
-        plan_exit: "allow",
-      },
-      tools: {
-        file_write: true,
-        bash: true,
-        web_fetch: true,
-      },
-      model: {
-        fallback: ["anthropic/claude-sonnet-4-5", "opencode/minimax-m2.7"],
-        temperature: 0.7,
-      },
-    };
-
-    const createdFiles: string[] = [];
-    try {
-      await mkdir(dirname(configPath), { recursive: true });
-      await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
-      createdFiles.push(configPath);
-    } catch (err) {
-      console.warn("[opencode] Failed to write opencode.json:", err);
-    }
-    return createdFiles;
+  async prepareWorkdir(_workdir: string, _skills: SkillPayload): Promise<string[]> {
+    return [];
   }
 
   /**
@@ -311,8 +328,57 @@ export class OpenCodeEngine implements AgentEngine {
     }
   }
 
+  async selectFreeModel(): Promise<string> {
+    try {
+      const binary = resolveOpencodeBinary();
+      const proc = Bun.spawn([binary, "models"], { stdout: "pipe", stderr: "pipe" });
+      await proc.exited;
+      if (proc.exitCode === 0) {
+        const text = await new Response(proc.stdout).text();
+        const models = text
+          .split("\n")
+          .map((m) => m.trim())
+          .filter(Boolean);
+        const free = models.filter((m) => m.endsWith("-free") || m === "opencode/big-pickle");
+        if (free.length > 0) {
+          const chosen = free[Math.floor(Math.random() * free.length)];
+          return chosen;
+        }
+      }
+    } catch (e) {
+      console.warn("[opencode] Failed to query local free models, falling back to big-pickle", e);
+    }
+    return "opencode/big-pickle";
+  }
+
   async listModels(): Promise<string[]> {
-    return listLiteLLMModels(getLiteLLMBaseUrl());
+    const models = new Set<string>();
+
+    try {
+      const litellm = await listLiteLLMModels(getLiteLLMBaseUrl());
+      for (const model of litellm) models.add(model);
+    } catch (err) {
+      console.warn("[opencode] Failed to list LiteLLM models", err);
+    }
+
+    try {
+      const binary = resolveOpencodeBinary();
+      const proc = Bun.spawn([binary, "models"], { stdout: "pipe", stderr: "pipe" });
+      if (await waitForModelsProcess(proc)) {
+        const text = await new Response(proc.stdout).text();
+        for (const model of text
+          .split("\n")
+          .map((m) => m.trim())
+          .filter(Boolean)) {
+          models.add(model);
+        }
+      }
+    } catch (err) {
+      console.warn("[opencode] Failed to list CLI models", err);
+    }
+
+    for (const model of OPENCODE_FALLBACK_MODELS) models.add(model);
+    return Array.from(models);
   }
 
   async *execute(
@@ -320,26 +386,21 @@ export class OpenCodeEngine implements AgentEngine {
     workdir: string,
     options: EngineOptions
   ): AsyncGenerator<AgentEvent> {
-    const model = options.model ?? DEFAULT_OPENCODE_MODEL;
+    let model = options.model ?? DEFAULT_OPENCODE_MODEL;
+    if (model === "auto-free") {
+      model = await this.selectFreeModel();
+    }
     yield {
       type: "log",
       stream: "system",
       content: `[opencode] Starting in ${workdir} (model: ${model})`,
     };
 
-    // Build config for opencode.json — written in prepareWorkdir, but we also
-    // write it here for immediate use when running without prepareWorkdir.
-    const configPath = join(workdir, "opencode.json");
-    interface OpenCodeProvider {
-      id: string;
-      name: string;
-      apiKey: string;
-      apiUrl?: string;
-    }
+    // Build config for opencode.json
     interface OpenCodeConfig {
       permission: Record<string, string>;
       tools?: Record<string, unknown>;
-      providers?: OpenCodeProvider[];
+      mcp?: Record<string, unknown>;
     }
     const config: OpenCodeConfig = {
       permission: {
@@ -355,288 +416,304 @@ export class OpenCodeEngine implements AgentEngine {
       },
     };
 
+    if (options.mcpServers) {
+      config.mcp = options.mcpServers;
+    }
+
+    // opencode 1.15.13 does not support `providers` key in opencode.json.
+    // Route LiteLLM via the Anthropic SDK path (ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL)
+    // because opencode uses POST /v1/messages for anthropic/* models, which LiteLLM
+    // supports correctly — unlike POST /responses used for openai/* models.
+    const litellmEnv: Record<string, string> = {};
     if (options.litellmKey) {
-      config.providers = [
-        {
-          id: "anthropic",
-          name: "Anthropic (via LiteLLM)",
-          apiUrl: options.litellmBaseUrl,
-          apiKey: options.litellmKey,
-        },
-        {
-          id: "openai",
-          name: "OpenAI (via LiteLLM)",
-          apiUrl: `${options.litellmBaseUrl}/v1`,
-          apiKey: options.litellmKey,
-        },
-        {
-          id: "google",
-          name: "Google (via LiteLLM)",
-          apiUrl: options.litellmBaseUrl,
-          apiKey: options.litellmKey,
-        },
-      ];
+      litellmEnv.ANTHROPIC_API_KEY = options.litellmKey;
+      // opencode appends /messages to ANTHROPIC_BASE_URL; LiteLLM serves Anthropic
+      // proxy at /v1/messages, so we must include /v1 in the base URL.
+      litellmEnv.ANTHROPIC_BASE_URL = `${(options.litellmBaseUrl ?? "").replace(/\/$/, "")}/v1`;
+      // Remap any model to the Anthropic-compat alias LiteLLM maps to the real backend.
+      model = `anthropic/${LITELLM_ANTHROPIC_COMPAT_MODEL}`;
     } else if (
       options.nativeApiKeys?.anthropic ||
       options.nativeApiKeys?.openai ||
       options.nativeApiKeys?.gemini
     ) {
-      config.providers = [];
+      // Inject native keys as env vars (opencode 1.15.13 reads them directly)
       if (options.nativeApiKeys.anthropic)
-        config.providers.push({
-          id: "anthropic",
-          name: "Anthropic",
-          apiKey: options.nativeApiKeys.anthropic,
-        });
-      if (options.nativeApiKeys.openai)
-        config.providers.push({
-          id: "openai",
-          name: "OpenAI",
-          apiKey: options.nativeApiKeys.openai,
-        });
-      if (options.nativeApiKeys.gemini)
-        config.providers.push({
-          id: "google",
-          name: "Google",
-          apiKey: options.nativeApiKeys.gemini,
-        });
+        litellmEnv.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
+      if (options.nativeApiKeys.openai) litellmEnv.OPENAI_API_KEY = options.nativeApiKeys.openai;
+      if (options.nativeApiKeys.gemini) litellmEnv.GEMINI_API_KEY = options.nativeApiKeys.gemini;
     }
+
+    let isolatedDir: string | null = null;
+    let proc: Subprocess | null = null;
+    let stdoutTask: Promise<void> | null = null;
+    let stderrTask: Promise<void> | null = null;
+    let heartbeatActive = true;
 
     try {
+      isolatedDir = await mkdtemp(join(tmpdir(), "opencode-config-"));
+      const opencodeSubdir = join(isolatedDir, "opencode");
+      await mkdir(opencodeSubdir, { recursive: true });
+      const configPath = join(opencodeSubdir, "opencode.json");
       await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
-    } catch {
-      /* best-effort — prepareWorkdir may have already written it */
-    }
 
-    const args = this.buildCommandArgs(model, workdir, options.resumeSessionId);
-    yield { type: "log", stream: "system", content: `[opencode] running: ${args.join(" ")}` };
+      const args = this.buildCommandArgs(model, workdir, options.resumeSessionId);
+      yield { type: "log", stream: "system", content: `[opencode] running: ${args.join(" ")}` };
 
-    const proc = Bun.spawn(args, {
-      cwd: workdir,
-      stdout: "pipe",
-      stderr: "pipe",
-      stdin: "pipe",
-      env: {
-        ...process.env,
-        // Belt-and-suspenders auto-allow (complements opencode.json) — ported
-        // from multica's daemon: this works even if opencode.json is missing.
-        OPENCODE_PERMISSION: '{"*":"allow"}',
-        ...options.env,
-      },
-    });
+      proc = Bun.spawn(args, {
+        cwd: workdir,
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: "pipe",
+        env: {
+          ...process.env,
+          // Belt-and-suspenders auto-allow (complements opencode.json) — ported
+          // from multica's daemon: this works even if opencode.json is missing.
+          OPENCODE_PERMISSION: '{"*":"allow"}',
+          OPENCODE_DISABLE_PROJECT_CONFIG: "true",
+          XDG_CONFIG_HOME: isolatedDir,
+          ...litellmEnv,
+          ...options.env,
+        },
+      });
 
-    // Send prompt via stdin, then close it to signal end of input
-    if (proc.stdin && typeof proc.stdin !== "number") {
-      try {
-        const sink = proc.stdin as import("bun").FileSink;
-        sink.write(prompt);
-        sink.flush();
-        sink.end();
-      } catch {
-        // stdin may already be closed
-      }
-    }
-
-    if (process.platform === "win32") {
-      // Close stdin immediately on Windows to send EOF — prevents deadlocks
-      // while letting OpenCode know there's no more user input.
-      try {
-        proc.stdin?.end();
-      } catch {
-        // stdin may already be closed
-      }
-      yield {
-        type: "log",
-        stream: "system",
-        content: "[opencode] stdin closed (Windows: non-interactive mode)",
-      };
-    }
-
-    if (options.runId) {
-      // Kill any stale process for this runId before registering the new one
-      const stale = this.processes.get(options.runId);
-      if (stale) {
+      // Send prompt via stdin, then close it to signal end of input
+      if (proc.stdin && typeof proc.stdin !== "number") {
         try {
-          stale.kill();
+          const sink = proc.stdin as import("bun").FileSink;
+          sink.write(prompt);
+          sink.flush();
+          sink.end();
+        } catch {
+          // stdin may already be closed
+        }
+      }
+
+      if (process.platform === "win32") {
+        // Close stdin immediately on Windows to send EOF — prevents deadlocks
+        // while letting OpenCode know there's no more user input.
+        try {
+          if (proc.stdin && typeof proc.stdin !== "number") {
+            (proc.stdin as any).end();
+          }
+        } catch {
+          // stdin may already be closed
+        }
+        yield {
+          type: "log",
+          stream: "system",
+          content: "[opencode] stdin closed (Windows: non-interactive mode)",
+        };
+      }
+
+      if (options.runId) {
+        // Kill any stale process for this runId before registering the new one
+        const stale = this.processes.get(options.runId);
+        if (stale) {
+          try {
+            stale.kill();
+          } catch {
+            /* best effort */
+          }
+        }
+        this.processes.set(options.runId, proc);
+      }
+      if (options.signal) {
+        options.signal.addEventListener("abort", () => {
+          proc?.kill();
+          if (options.runId) this.processes.delete(options.runId);
+        });
+      }
+
+      // ─── Shared event queue ────────────────────────────────────────────────
+      const queue: AgentEvent[] = [];
+      let stdoutDone = false;
+      let stderrDone = false;
+      const waiting: { resolve: (() => void) | null } = { resolve: null };
+
+      const notify = () => {
+        if (waiting.resolve) {
+          waiting.resolve();
+          waiting.resolve = null;
+        }
+      };
+      const push = (e: AgentEvent) => {
+        queue.push(e);
+        notify();
+      };
+
+      // Define accumulators inside the generator scope
+      const accumulators: OpenCodeAccumulators = {
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+        cached: 0,
+        input_cost: 0,
+        output_cost: 0,
+        total_cost: 0,
+      };
+
+      // ─── Task 1: stream stdout ─────────────────────────────────────────────
+      // OpenCode writes JSON lines to stdout. We parse each line in real-time.
+      const pStdout = proc.stdout as any;
+      stdoutTask = (async () => {
+        const reader = pStdout.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              for (const event of this.parseLine(line, accumulators)) push(event);
+            }
+          }
+          if (buf.trim()) {
+            for (const event of this.parseLine(buf, accumulators)) push(event);
+          }
+        } catch {
+          // Reader was cancelled (e.g. child process keeping pipe open on Windows)
+        } finally {
+          try {
+            reader.releaseLock();
+          } catch {
+            /* ignore */
+          }
+          stdoutDone = true;
+          notify();
+        }
+      })();
+
+      // On Windows, child processes spawned by OpenCode (git, bash tools) inherit the
+      // stdout pipe handle. After OpenCode exits its children may still hold the pipe
+      // open, so the reader never reaches EOF. Cancel the reader after the process
+      // exits + a short grace period so any final bytes are flushed first.
+      const pStdoutReader = proc.stdout as any;
+      proc.exited.then(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!stdoutDone) {
+          try {
+            const reader = pStdoutReader.getReader();
+            await reader.cancel();
+            reader.releaseLock();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+
+      // ─── Task 2: stream stderr ─────────────────────────────────────────────
+      const pStderr = proc.stderr as any;
+      stderrTask = (async () => {
+        const reader = pStderr.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() ?? "";
+            for (const line of lines) {
+              const msg = humanizeStderr(line);
+              if (msg) push({ type: "log", stream: "stderr", content: msg });
+            }
+          }
+          const msg = humanizeStderr(buf);
+          if (msg) push({ type: "log", stream: "stderr", content: msg });
+        } catch {
+          // Reader was cancelled
+        } finally {
+          try {
+            reader.releaseLock();
+          } catch {
+            /* ignore */
+          }
+          stderrDone = true;
+          notify();
+        }
+      })();
+
+      // Same cancellation guard for stderr (child processes may hold it open on Windows).
+      const pStderrReader = proc.stderr as any;
+      proc.exited.then(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!stderrDone) {
+          try {
+            const reader = pStderrReader.getReader();
+            await reader.cancel();
+            reader.releaseLock();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+
+      // ─── Task 3: heartbeat ─────────────────────────────────────────────────
+      // Emits a "still running" log every heartbeatIntervalMs.
+      // Uses a separate flag so we can cancel it without waiting for the next tick.
+      const allDone = () => stdoutDone && stderrDone;
+      const startedAt = Date.now();
+      const _heartbeatTask = (async () => {
+        while (heartbeatActive && !allDone()) {
+          await new Promise((r) => setTimeout(r, this.heartbeatIntervalMs));
+          if (!heartbeatActive || allDone()) break;
+          const secs = Math.round((Date.now() - startedAt) / 1000);
+          const mins = Math.floor(secs / 60);
+          const s = secs % 60;
+          const elapsed = mins > 0 ? `${mins}m ${s}s` : `${s}s`;
+          push({ type: "log", stream: "system", content: `  Still running... ${elapsed}` });
+        }
+      })();
+
+      // ─── Main yield loop ───────────────────────────────────────────────────
+      // Runs until BOTH stdout AND stderr reach EOF (which happens on process exit).
+      while (true) {
+        while (queue.length > 0) {
+          // biome-ignore lint/style/noNonNullAssertion: length checked above
+          yield queue.shift()!;
+        }
+        if (allDone() && queue.length === 0) break;
+
+        await new Promise<void>((r) => {
+          waiting.resolve = r;
+        });
+      }
+    } finally {
+      // Stop the heartbeat before awaiting — it might be sleeping for up to
+      // heartbeatIntervalMs; we don't need to wait for it to wake up.
+      heartbeatActive = false;
+      if (stdoutTask || stderrTask) {
+        await Promise.all([stdoutTask, stderrTask].filter(Boolean));
+      }
+      let exitCode = 0;
+      if (proc) {
+        exitCode = (await proc.exited) ?? 0;
+      }
+
+      if (options.runId) this.processes.delete(options.runId);
+
+      // Cleanup temp config directory recursively
+      if (isolatedDir) {
+        try {
+          await rm(isolatedDir, { recursive: true, force: true });
         } catch {
           /* best effort */
         }
       }
-      this.processes.set(options.runId, proc);
+
+      if (proc && exitCode !== 0) {
+        yield { type: "log", stream: "stderr", content: `[process] Exited with code ${exitCode}` };
+      }
+      yield { type: "complete", exitCode: exitCode ?? 0 };
     }
-    if (options.signal) {
-      options.signal.addEventListener("abort", () => {
-        proc.kill();
-        if (options.runId) this.processes.delete(options.runId);
-      });
-    }
-
-    // ─── Shared event queue ────────────────────────────────────────────────
-    const queue: AgentEvent[] = [];
-    let stdoutDone = false;
-    let stderrDone = false;
-    const waiting: { resolve: (() => void) | null } = { resolve: null };
-
-    const notify = () => {
-      if (waiting.resolve) {
-        waiting.resolve();
-        waiting.resolve = null;
-      }
-    };
-    const push = (e: AgentEvent) => {
-      queue.push(e);
-      notify();
-    };
-
-    // ─── Task 1: stream stdout ─────────────────────────────────────────────
-    // OpenCode writes JSON lines to stdout. We parse each line in real-time.
-    let stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-    const stdoutTask = (async () => {
-      const reader = proc.stdout.getReader();
-      stdoutReader = reader;
-      const dec = new TextDecoder();
-      let buf = "";
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            for (const event of this.parseLine(line)) push(event);
-          }
-        }
-        if (buf.trim()) {
-          for (const event of this.parseLine(buf)) push(event);
-        }
-      } catch {
-        // Reader was cancelled (e.g. child process keeping pipe open on Windows)
-      } finally {
-        try {
-          reader.releaseLock();
-        } catch {
-          /* ignore */
-        }
-        stdoutDone = true;
-        notify();
-      }
-    })();
-
-    // On Windows, child processes spawned by OpenCode (git, bash tools) inherit the
-    // stdout pipe handle. After OpenCode exits its children may still hold the pipe
-    // open, so the reader never reaches EOF. Cancel the reader after the process
-    // exits + a short grace period so any final bytes are flushed first.
-    proc.exited.then(async () => {
-      await new Promise((r) => setTimeout(r, 1500));
-      if (!stdoutDone && stdoutReader) {
-        try {
-          await stdoutReader.cancel();
-        } catch {
-          /* ignore */
-        }
-      }
-    });
-
-    // ─── Task 2: stream stderr ─────────────────────────────────────────────
-    let stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-    const stderrTask = (async () => {
-      const reader = proc.stderr.getReader();
-      stderrReader = reader;
-      const dec = new TextDecoder();
-      let buf = "";
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            const msg = humanizeStderr(line);
-            if (msg) push({ type: "log", stream: "stderr", content: msg });
-          }
-        }
-        const msg = humanizeStderr(buf);
-        if (msg) push({ type: "log", stream: "stderr", content: msg });
-      } catch {
-        // Reader was cancelled
-      } finally {
-        try {
-          reader.releaseLock();
-        } catch {
-          /* ignore */
-        }
-        stderrDone = true;
-        notify();
-      }
-    })();
-
-    // Same cancellation guard for stderr (child processes may hold it open on Windows).
-    proc.exited.then(async () => {
-      await new Promise((r) => setTimeout(r, 1500));
-      if (!stderrDone && stderrReader) {
-        try {
-          await stderrReader.cancel();
-        } catch {
-          /* ignore */
-        }
-      }
-    });
-
-    // ─── Task 3: heartbeat ─────────────────────────────────────────────────
-    // Emits a "still running" log every heartbeatIntervalMs.
-    // Uses a separate flag so we can cancel it without waiting for the next tick.
-    let heartbeatActive = true;
-    const allDone = () => stdoutDone && stderrDone;
-    const startedAt = Date.now();
-    const _heartbeatTask = (async () => {
-      while (heartbeatActive && !allDone()) {
-        await new Promise((r) => setTimeout(r, this.heartbeatIntervalMs));
-        if (!heartbeatActive || allDone()) break;
-        const secs = Math.round((Date.now() - startedAt) / 1000);
-        const mins = Math.floor(secs / 60);
-        const s = secs % 60;
-        const elapsed = mins > 0 ? `${mins}m ${s}s` : `${s}s`;
-        push({ type: "log", stream: "system", content: `  Still running... ${elapsed}` });
-      }
-    })();
-
-    // ─── Main yield loop ───────────────────────────────────────────────────
-    // Runs until BOTH stdout AND stderr reach EOF (which happens on process exit).
-    while (true) {
-      while (queue.length > 0) {
-        // biome-ignore lint/style/noNonNullAssertion: length checked above
-        yield queue.shift()!;
-      }
-      if (allDone() && queue.length === 0) break;
-
-      await new Promise<void>((r) => {
-        waiting.resolve = r;
-      });
-    }
-
-    // Stop the heartbeat before awaiting — it might be sleeping for up to
-    // heartbeatIntervalMs; we don't need to wait for it to wake up.
-    heartbeatActive = false;
-    await Promise.all([stdoutTask, stderrTask]);
-    const exitCode = await proc.exited;
-
-    if (options.runId) this.processes.delete(options.runId);
-
-    // Cleanup temp files — don't include in git commits
-    try {
-      await rm(configPath);
-    } catch {
-      /* best effort */
-    }
-
-    if (exitCode !== 0) {
-      yield { type: "log", stream: "stderr", content: `[process] Exited with code ${exitCode}` };
-    }
-    yield { type: "complete", exitCode: exitCode ?? 0 };
   }
+
   abort(runId: string): void {
     const proc = this.processes.get(runId);
     if (proc) {
@@ -646,6 +723,7 @@ export class OpenCodeEngine implements AgentEngine {
       this.processes.delete(runId);
     }
   }
+
   sendInput(runId: string, input: string): boolean {
     const proc = this.processes.get(runId);
     if (!proc?.stdin || typeof proc.stdin === "number") return false;
@@ -659,7 +737,7 @@ export class OpenCodeEngine implements AgentEngine {
     }
   }
 
-  parseLine(line: string): AgentEvent[] {
+  parseLine(line: string, accumulators?: OpenCodeAccumulators): AgentEvent[] {
     const results: AgentEvent[] = [];
     const jsonObjects: string[] = [];
 
@@ -779,7 +857,47 @@ export class OpenCodeEngine implements AgentEngine {
           if (method === "cost" || method === "usage") {
             const costStats = params as Record<string, unknown>;
             if (costStats.total_tokens || costStats.input_tokens || costStats.output_tokens) {
-              results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+              if (accumulators) {
+                accumulators.total_tokens = Math.max(
+                  accumulators.total_tokens,
+                  Number(costStats.total_tokens ?? 0)
+                );
+                accumulators.input_tokens = Math.max(
+                  accumulators.input_tokens,
+                  Number(costStats.input_tokens ?? 0)
+                );
+                accumulators.output_tokens = Math.max(
+                  accumulators.output_tokens,
+                  Number(costStats.output_tokens ?? 0)
+                );
+                accumulators.cached = Math.max(accumulators.cached, Number(costStats.cached ?? 0));
+                accumulators.input_cost = Math.max(
+                  accumulators.input_cost,
+                  Number(costStats.input ?? 0)
+                );
+                accumulators.output_cost = Math.max(
+                  accumulators.output_cost,
+                  Number(costStats.output ?? 0)
+                );
+                accumulators.total_cost = Math.max(
+                  accumulators.total_cost,
+                  Number(costStats.total ?? 0)
+                );
+                results.push({
+                  type: "cost",
+                  costStats: {
+                    total_tokens: accumulators.total_tokens,
+                    input_tokens: accumulators.input_tokens,
+                    output_tokens: accumulators.output_tokens,
+                    cached: accumulators.cached || undefined,
+                    input: accumulators.input_cost,
+                    output: accumulators.output_cost,
+                    total: accumulators.total_cost,
+                  },
+                });
+              } else {
+                results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+              }
             }
             continue;
           }
@@ -818,7 +936,47 @@ export class OpenCodeEngine implements AgentEngine {
         if (eventType === "cost" || part.type === "cost" || raw.total_tokens) {
           const costStats = (raw.costStats ?? raw.usage ?? raw) as Record<string, unknown>;
           if (costStats.total_tokens || costStats.input_tokens || costStats.output_tokens) {
-            results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+            if (accumulators) {
+              accumulators.total_tokens = Math.max(
+                accumulators.total_tokens,
+                Number(costStats.total_tokens ?? 0)
+              );
+              accumulators.input_tokens = Math.max(
+                accumulators.input_tokens,
+                Number(costStats.input_tokens ?? 0)
+              );
+              accumulators.output_tokens = Math.max(
+                accumulators.output_tokens,
+                Number(costStats.output_tokens ?? 0)
+              );
+              accumulators.cached = Math.max(accumulators.cached, Number(costStats.cached ?? 0));
+              accumulators.input_cost = Math.max(
+                accumulators.input_cost,
+                Number(costStats.input ?? 0)
+              );
+              accumulators.output_cost = Math.max(
+                accumulators.output_cost,
+                Number(costStats.output ?? 0)
+              );
+              accumulators.total_cost = Math.max(
+                accumulators.total_cost,
+                Number(costStats.total ?? 0)
+              );
+              results.push({
+                type: "cost",
+                costStats: {
+                  total_tokens: accumulators.total_tokens,
+                  input_tokens: accumulators.input_tokens,
+                  output_tokens: accumulators.output_tokens,
+                  cached: accumulators.cached || undefined,
+                  input: accumulators.input_cost,
+                  output: accumulators.output_cost,
+                  total: accumulators.total_cost,
+                },
+              });
+            } else {
+              results.push({ type: "cost", costStats: costStats as AgentEvent["costStats"] });
+            }
           }
           continue;
         }
@@ -865,8 +1023,10 @@ export class OpenCodeEngine implements AgentEngine {
           } else if (status === "completed" || status === "success" || status === "done") {
             const metadata = (state.metadata ?? part.metadata ?? {}) as Record<string, unknown>;
             const exitCode = metadata.exitCode ?? metadata.exit ?? metadata.code;
+            const callLabel = humanizeToolCall(toolName, input as Record<string, unknown>);
             const label = humanizeToolResult(toolName, output);
 
+            results.push({ type: "log", stream: "stdout", content: callLabel });
             results.push({
               type: "tool_result",
               toolResult: {
@@ -926,11 +1086,6 @@ export class OpenCodeEngine implements AgentEngine {
           eventType === "step-finish" ||
           part.type === "step_finish"
         ) {
-          // OpenCode emits per-step token usage with cache breakdown:
-          //   { tokens: { input, output, cache: { read, write } } }
-          // Multica accumulates these into a single TokenUsage; here we emit
-          // a `cost` event per step so the orchestrator can sum across the run
-          // and surface cache hit rates (the most actionable cost lever).
           const tokens = (part.tokens ?? part.usage ?? raw) as {
             input?: number;
             output?: number;
@@ -942,16 +1097,57 @@ export class OpenCodeEngine implements AgentEngine {
           const cacheRead = Number(tokens?.cache?.read ?? 0);
           const cacheWrite = Number(tokens?.cache?.write ?? 0);
           const total = Number(tokens?.total ?? input + output);
-          if (input || output || cacheRead || cacheWrite || total) {
+
+          // cost in USD for this step
+          const stepCostUsd = Number(part.cost ?? 0);
+          const stepCostMicro = Math.round(stepCostUsd * 1_000_000);
+
+          // split cost proportional to input vs output tokens
+          const stepTotalTokens = input + output;
+          const inputRatio = stepTotalTokens > 0 ? input / stepTotalTokens : 0.5;
+          const stepInputCost = Math.round(stepCostMicro * inputRatio);
+          const stepOutputCost = stepCostMicro - stepInputCost;
+
+          if (accumulators) {
+            accumulators.input_tokens += input;
+            accumulators.output_tokens += output;
+            accumulators.total_tokens += total;
+            accumulators.cached += cacheRead;
+            accumulators.input_cost += stepInputCost;
+            accumulators.output_cost += stepOutputCost;
+            accumulators.total_cost += stepCostMicro;
+
             results.push({
               type: "cost",
               costStats: {
-                total_tokens: total,
-                input_tokens: input,
-                output_tokens: output,
-                cached: cacheRead || undefined,
+                total_tokens: accumulators.total_tokens,
+                input_tokens: accumulators.input_tokens,
+                output_tokens: accumulators.output_tokens,
+                cached: accumulators.cached || undefined,
+                input: accumulators.input_cost,
+                output: accumulators.output_cost,
+                total: accumulators.total_cost,
               },
             });
+          } else {
+            // fallback if no accumulator (e.g. standard tests)
+            if (input || output || cacheRead || cacheWrite || total) {
+              results.push({
+                type: "cost",
+                costStats: {
+                  total_tokens: total,
+                  input_tokens: input,
+                  output_tokens: output,
+                  cached: cacheRead || undefined,
+                  input: stepInputCost || undefined,
+                  output: stepOutputCost || undefined,
+                  total: stepCostMicro || undefined,
+                },
+              });
+            }
+          }
+
+          if (input || output || cacheRead || cacheWrite || total) {
             const cacheNote =
               cacheRead || cacheWrite
                 ? `  (cache r:${cacheRead.toLocaleString()} w:${cacheWrite.toLocaleString()})`

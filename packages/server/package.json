@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun --external zod",
+    "build": "bun build src/index.ts --outdir dist --target bun --external zod --external playwright && bun -e \"import fs from 'node:fs'; fs.mkdirSync('dist/templates', { recursive: true }); fs.cpSync('src/agents/templates', 'dist/templates', { recursive: true })\"",
     "typecheck": "tsc --noEmit",
     "test": "bun test src --timeout 15000"
   },
@@ -12,7 +12,7 @@
     "@vibe-code/shared": "workspace:*",
     "croner": "^10.0.1",
     "dotenv": "^17.4.2",
-    "hono": "^4.12.19",
+    "hono": "^4.12.23",
     "zod": "^4.3.6"
   },
   "devDependencies": {

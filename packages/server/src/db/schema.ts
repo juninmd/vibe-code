@@ -58,6 +58,7 @@ export function initDatabase(dbPath: string): Database {
       finished_at    TEXT,
       exit_code      INTEGER,
       error_message  TEXT,
+      token_usage    TEXT,
       created_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -235,6 +236,11 @@ export function initDatabase(dbPath: string): Database {
   // M6.5: cost_stats for provider billing summary (JSON from provider result events)
   if (!runColNames.includes("cost_stats")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN cost_stats TEXT");
+  }
+
+  // Token usage column for breakdown dashboard
+  if (!runColNames.includes("token_usage")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN token_usage TEXT");
   }
 
   // Labels system (Multica-inspired): colored labels per repo + task_labels join

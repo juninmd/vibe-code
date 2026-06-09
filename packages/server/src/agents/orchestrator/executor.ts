@@ -20,6 +20,7 @@ import { MemoryService } from "../memory-service";
 import { runBaselineCheck } from "./baseline-check";
 import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
+import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
 import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
@@ -355,6 +356,24 @@ export async function runWorkspaceScripts(
   }
 }
 
+function escalateModel(currentModel?: string): string | undefined {
+  if (!currentModel) return undefined;
+  const lower = currentModel.toLowerCase();
+  if (lower.includes("flash")) {
+    if (lower.includes("gemini")) {
+      return "gemini-2.5-pro";
+    }
+    return "gpt-4o";
+  }
+  if (lower.includes("mini") || lower.includes("gpt-3.5") || lower.includes("gpt-4o-mini")) {
+    return "gpt-4o";
+  }
+  if (lower.includes("gpt-4o") || lower.includes("pro")) {
+    return "claude-3-5-sonnet-20241022";
+  }
+  return currentModel;
+}
+
 export async function executeAgent(
   task: Task,
   run: AgentRun,
@@ -371,7 +390,7 @@ export async function executeAgent(
   orchestrator?: import("../orchestrator").Orchestrator,
   registry?: import("../registry").EngineRegistry
 ): Promise<void> {
-  const barePath = repo.localPath ?? (await git.getBarePath(repo.name));
+  const barePath = repo.localPath ?? (await git.getBarePath(repo.name, repo.url));
   const slugTitle = task.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -390,7 +409,7 @@ export async function executeAgent(
   if (!effectiveModel && registry) {
     effectiveModel = (await registry.getDefaultFreeModel(engine.name)) ?? undefined;
   }
-  effectiveModel = effectiveModel ?? "opencode/deepseek-v4-flash-free";
+  effectiveModel = effectiveModel ?? "cloud/llama-70b";
   logAgentStart(task.id, engine.name, effectiveModel, repo.name);
 
   const timeoutId = setTimeout(() => {
@@ -428,6 +447,18 @@ export async function executeAgent(
   let prCreated = false;
   let runStartTime = Date.now();
   let capturedCostStats: object | null = null;
+  let costWarningSent = false;
+  const accumulatedTokenUsage: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost?: number;
+      output_cost?: number;
+      total_cost?: number;
+    }
+  > = {};
   let resumeSessionId: string | undefined;
   let activeSessionId: string | undefined;
   let validationRecordCount = 0;
@@ -521,7 +552,13 @@ export async function executeAgent(
       false
     );
     recordValidationArtifact(title, verification, metadata);
-    if (!verification.passed) {
+    if (verification.passed) {
+      try {
+        await captureFrontendScreenshotIfNeeded(wtPath, task, run, db, sysLog);
+      } catch (err: any) {
+        sysLog(`[verify] Failed to capture frontend screenshot: ${err.message}`);
+      }
+    } else {
       const failed = verification.results.find((result) => !result.passed);
       logOrchestratorEvent(
         `validation_failed command='${failed?.command ?? "unknown"}' exit_code=${failed?.exitCode ?? -1} artifact=run:${run.id}:validation:${validationRecordCount}`,
@@ -661,6 +698,37 @@ export async function executeAgent(
       anthropic: db.settings.get("anthropic_api_key") || undefined,
       openai: db.settings.get("openai_api_key") || undefined,
     };
+
+    const mcpServersStr = db.settings.get("mcp_servers") || "{}";
+    let mcpServers: Record<string, any> = {};
+    try {
+      mcpServers = JSON.parse(mcpServersStr);
+    } catch {
+      // ignore
+    }
+
+    if (!mcpServers.github) {
+      const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+      if (ghToken) {
+        // Use proxy script to coerce boolean fields (draft, maintainer_can_modify)
+        // that weaker models pass as strings, causing MCP schema errors and loops.
+        const proxyScript = join(
+          process.cwd(),
+          "packages",
+          "server",
+          "scripts",
+          "github-mcp-proxy.mjs"
+        );
+        mcpServers.github = {
+          type: "local",
+          command: ["node", proxyScript],
+          enabled: true,
+          environment: {
+            GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
+          },
+        };
+      }
+    }
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
@@ -828,6 +896,7 @@ export async function executeAgent(
       skills: skillPayload,
       resumeSessionId: activeSessionId,
       env: agentEnv,
+      mcpServers,
     })) {
       if (abort.signal.aborted) break;
       recordCliLoadedSkills();
@@ -841,14 +910,61 @@ export async function executeAgent(
       }
       if (event.type === "cost" && event.costStats) {
         capturedCostStats = event.costStats;
+        const activeModelName = model || engine.name;
+        if (!accumulatedTokenUsage[activeModelName]) {
+          accumulatedTokenUsage[activeModelName] = {
+            total_tokens: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            input_cost: 0,
+            output_cost: 0,
+            total_cost: 0,
+          };
+        }
+        const currentStats = event.costStats;
+        const mUsage = accumulatedTokenUsage[activeModelName];
+        mUsage.total_tokens = Math.max(mUsage.total_tokens, currentStats.total_tokens || 0);
+        mUsage.input_tokens = Math.max(mUsage.input_tokens, currentStats.input_tokens || 0);
+        mUsage.output_tokens = Math.max(mUsage.output_tokens, currentStats.output_tokens || 0);
+        if (currentStats.input !== undefined)
+          mUsage.input_cost = Math.max(mUsage.input_cost || 0, currentStats.input / 1_000_000);
+        if (currentStats.output !== undefined)
+          mUsage.output_cost = Math.max(mUsage.output_cost || 0, currentStats.output / 1_000_000);
+        mUsage.total_cost = (mUsage.input_cost || 0) + (mUsage.output_cost || 0);
+        db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+
         if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
-          const costInDollars =
-            event.costStats.input !== undefined ? event.costStats.input / 1_000_000 : 0;
-          if (costInDollars > task.maxCost) {
+          let currentRunCost = 0;
+          for (const key of Object.keys(accumulatedTokenUsage)) {
+            currentRunCost += accumulatedTokenUsage[key].total_cost || 0;
+          }
+
+          const runs = db.runs.listByTask(task.id);
+          let otherRunsCost = 0;
+          for (const r of runs) {
+            if (r.id !== run.id && r.tokenUsage) {
+              for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+                otherRunsCost += modelUsage.total_cost || 0;
+              }
+            }
+          }
+
+          const totalTaskCost = otherRunsCost + currentRunCost;
+
+          if (totalTaskCost >= task.maxCost) {
             sysLog(
-              `[BUDGET EXCEEDED] Run cost ($${costInDollars.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
+              `[BUDGET EXCEEDED] Total task cost ($${totalTaskCost.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
             );
             abort.abort();
+          } else if (totalTaskCost >= task.maxCost * 0.8 && !costWarningSent) {
+            costWarningSent = true;
+            sysLog(
+              `[BUDGET WARNING] Total task cost ($${totalTaskCost.toFixed(4)}) has reached 80% of maxCost limit ($${task.maxCost.toFixed(4)}).`
+            );
+            logOrchestratorEvent(
+              `Task [${task.id.slice(0, 8)}] cost warning: $${totalTaskCost.toFixed(4)} of $${task.maxCost.toFixed(4)} limit reached.`,
+              "warn"
+            );
           }
         }
         continue;
@@ -924,14 +1040,26 @@ export async function executeAgent(
         let repairExitCode: number | null = null;
         const repairPrompt = buildValidationRepairPrompt(task, latestVerification, memoryContext);
 
+        let activeModel = model;
+        if (attempt > 1) {
+          const escalated = escalateModel(model);
+          if (escalated && escalated !== model) {
+            sysLog(
+              `[MODEL ESCALATION] Escalating engine model from ${model} to ${escalated} for attempt ${attempt} to resolve validation failure.`
+            );
+            activeModel = escalated;
+          }
+        }
+
         for await (const event of engine.execute(repairPrompt, wtPath, {
           runId: run.id,
           signal: abort.signal,
-          model,
+          model: activeModel,
           litellmKey,
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
@@ -940,6 +1068,70 @@ export async function executeAgent(
           }
           if (event.type === "complete") {
             repairExitCode = event.exitCode ?? 0;
+            continue;
+          }
+          if (event.type === "cost" && event.costStats) {
+            capturedCostStats = event.costStats;
+            const activeModelName = activeModel || model || engine.name;
+            if (!accumulatedTokenUsage[activeModelName]) {
+              accumulatedTokenUsage[activeModelName] = {
+                total_tokens: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                input_cost: 0,
+                output_cost: 0,
+                total_cost: 0,
+              };
+            }
+            const currentStats = event.costStats;
+            const mUsage = accumulatedTokenUsage[activeModelName];
+            mUsage.total_tokens = Math.max(mUsage.total_tokens, currentStats.total_tokens || 0);
+            mUsage.input_tokens = Math.max(mUsage.input_tokens, currentStats.input_tokens || 0);
+            mUsage.output_tokens = Math.max(mUsage.output_tokens, currentStats.output_tokens || 0);
+            if (currentStats.input !== undefined)
+              mUsage.input_cost = Math.max(mUsage.input_cost || 0, currentStats.input / 1_000_000);
+            if (currentStats.output !== undefined)
+              mUsage.output_cost = Math.max(
+                mUsage.output_cost || 0,
+                currentStats.output / 1_000_000
+              );
+            mUsage.total_cost = (mUsage.input_cost || 0) + (mUsage.output_cost || 0);
+            db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+
+            if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
+              let currentRunCost = 0;
+              for (const key of Object.keys(accumulatedTokenUsage)) {
+                currentRunCost += accumulatedTokenUsage[key].total_cost || 0;
+              }
+
+              const runs = db.runs.listByTask(task.id);
+              let otherRunsCost = 0;
+              for (const r of runs) {
+                if (r.id !== run.id && r.tokenUsage) {
+                  for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+                    otherRunsCost += modelUsage.total_cost || 0;
+                  }
+                }
+              }
+
+              const totalTaskCost = otherRunsCost + currentRunCost;
+
+              if (totalTaskCost >= task.maxCost) {
+                sysLog(
+                  `[BUDGET EXCEEDED] Total task cost ($${totalTaskCost.toFixed(4)}) exceeded maxCost limit ($${task.maxCost.toFixed(4)}). Aborting...`
+                );
+                abort.abort();
+              } else if (totalTaskCost >= task.maxCost * 0.8 && !costWarningSent) {
+                costWarningSent = true;
+                sysLog(
+                  `[BUDGET WARNING] Total task cost ($${totalTaskCost.toFixed(4)}) has reached 80% of maxCost limit ($${task.maxCost.toFixed(4)}).`
+                );
+                logOrchestratorEvent(
+                  `Task [${task.id.slice(0, 8)}] cost warning: $${totalTaskCost.toFixed(4)} of $${task.maxCost.toFixed(4)} limit reached.`,
+                  "warn"
+                );
+              }
+            }
             continue;
           }
           await handleAgentEvent(event, run.id, task.id, db, hub, () => {
@@ -1012,6 +1204,7 @@ export async function executeAgent(
               litellmBaseUrl,
               nativeApiKeys,
               resumeSessionId: activeSessionId,
+              mcpServers,
             })) {
               if (abort.signal.aborted) break;
               if (event.type === "session" && event.sessionId) {
@@ -1142,6 +1335,7 @@ export async function executeAgent(
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
@@ -1186,6 +1380,7 @@ export async function executeAgent(
           litellmBaseUrl,
           nativeApiKeys,
           resumeSessionId: activeSessionId,
+          mcpServers,
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
@@ -1252,6 +1447,18 @@ export async function executeAgent(
     db.tasks.updateField(task.id, "branch_name", branch);
     let prUrl: string | null = null;
 
+    // Check if the model already created a PR via GitHub MCP tool
+    const runLogs = db.agentLogs.listByRun(run.id);
+    for (const log of runLogs) {
+      const match = (log.content ?? "").match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/);
+      if (match) {
+        prUrl = match[0];
+        db.tasks.updateField(task.id, "pr_url", prUrl);
+        sysLog(`PR detected from agent output: ${prUrl}`);
+        break;
+      }
+    }
+
     try {
       setRunPhase("pr_creating");
       // Sync with base before push to avoid opening a PR with conflicts
@@ -1315,8 +1522,10 @@ export async function executeAgent(
         return;
       }
 
-      prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
-      db.tasks.updateField(task.id, "pr_url", prUrl);
+      if (!prUrl) {
+        prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
+        db.tasks.updateField(task.id, "pr_url", prUrl);
+      }
       recordTaskArtifact(db, task, run, {
         kind: "pull_request",
         title: "Pull request",
@@ -1324,7 +1533,7 @@ export async function executeAgent(
         metadata: { branch, baseBranch },
       });
       prCreated = true;
-      sysLog(`PR created: ${prUrl}`);
+      sysLog(`PR: ${prUrl}`);
     } catch (err: any) {
       sysLog(`Push/PR skipped: ${err.message || String(err)}`);
     }
@@ -1344,14 +1553,21 @@ export async function executeAgent(
     if (updatedTask) hub.broadcastAll({ type: "task_updated", task: updatedTask });
     logAgentFinish(task.id, "completed", prUrl ? `PR: ${prUrl}` : "no PR");
 
-    // Telegram: notify when a conflict-resolution task completes successfully
-    if (task.tags?.includes("conflict-resolution")) {
+    // Telegram: notify on task completion
+    {
       const telegram = createTelegramNotifier(db);
       if (telegram.isConfigured()) {
         const repo = db.repos.getById(task.repoId);
+        const isConflict = task.tags?.includes("conflict-resolution");
+        const emoji = prUrl ? "✅" : "🏁";
+        const header = isConflict
+          ? `${emoji} <b>Merge conflicts resolved!</b>`
+          : prUrl
+            ? `${emoji} <b>Task completed with PR</b>`
+            : `${emoji} <b>Task completed</b>`;
         telegram
           .send(
-            `✅ <b>Merge conflicts resolved!</b>\n\n` +
+            `${header}\n\n` +
               `<b>Task:</b> ${task.title.slice(0, 80)}\n` +
               `<b>Repo:</b> ${repo?.name ?? task.repoId}\n` +
               `<b>Branch:</b> <code>${task.branchName ?? "?"}</code>\n` +
@@ -1391,6 +1607,9 @@ export async function executeAgent(
   } finally {
     clearTimeout(timeoutId);
     clearInterval(monitorId);
+    if (Object.keys(accumulatedTokenUsage).length > 0) {
+      db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
+    }
 
     // M5.2: Record run metrics
     try {

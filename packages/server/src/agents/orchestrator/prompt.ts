@@ -408,6 +408,7 @@ function assemblePrompt(task: Task, ctx: ProjectContext, contractBundle: Contrac
     "- You may modify files only inside the current task worktree/repository.",
     "- Do NOT read, edit, or run commands against any other local repository or parent/sibling directories.",
     "- Never delete remote repositories (GitHub/GitLab).",
+    "- Do NOT call `github_create_pull_request` or any MCP tool to create a pull request. The platform creates the PR automatically after your commit — just commit your changes and stop.",
     "",
     "**Code quality rules:**",
     "- Do NOT rely on `pgrep`. Prefer `ps`, `grep`, `lsof`, or `/proc`-based checks when process inspection is needed.",
