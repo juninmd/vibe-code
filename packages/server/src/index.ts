@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { config } from "dotenv";
@@ -56,7 +56,7 @@ try {
       DATA_DIR = fallback;
     }
   }
-} catch (err) {
+} catch (_err) {
   // best-effort; if path ops fail, fall back to default behavior
 }
 const DB_PATH = join(DATA_DIR, "vibe.db");
@@ -95,6 +95,15 @@ try {
   }
 } catch (err) {
   console.warn("[startup] Failed to cleanup orphaned runs:", err);
+}
+
+// Clean up all worked workspaces at startup to prevent PVC storage exhaustion
+try {
+  const workspacesPath = join(DATA_DIR, "workspaces");
+  await rm(workspacesPath, { recursive: true, force: true });
+  console.log(`[startup] Cleaned up stale workspaces at ${workspacesPath}`);
+} catch (err) {
+  console.warn("[startup] Failed to cleanup stale workspaces:", err);
 }
 
 orchestrator.recoverInProgressTasks().catch((err) => {

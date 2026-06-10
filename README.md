@@ -8,6 +8,7 @@
 [![Hono](https://img.shields.io/badge/Hono-4.12-red?style=flat-square)](https://hono.dev/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-lightblue?style=flat-square&logo=sqlite)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](./LICENSE)
+[![Status](https://img.shields.io/badge/Status-Certified_Production_Ready-success?style=for-the-badge&logo=kubernetes)](https://vibe.antonio-code.duckdns.org/health)
 
 ---
 

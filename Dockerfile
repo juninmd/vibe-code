@@ -29,7 +29,7 @@ RUN apt-get update \
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/* \
- && npm i -g @anthropic-ai/claude-code \
+ && npm i -g @anthropic-ai/claude-code pnpm \
  && npm cache clean --force
 
 # OpenCode CLI (binary installer)
