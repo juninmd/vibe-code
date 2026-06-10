@@ -46,6 +46,7 @@ describe("discoverValidationCommands", () => {
   it("falls back to package.json scripts when no workflow contract exists", async () => {
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-"));
     try {
+      await mkdir(join(dir, "node_modules"), { recursive: true });
       await writeFile(
         join(dir, "package.json"),
         JSON.stringify({
