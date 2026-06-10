@@ -288,6 +288,64 @@ async function buildPRBody(
   return normalizeAsciiText(task.description?.trim() || `Task: ${task.title}`);
 }
 
+export async function autoInstallDependencies(
+  wtPath: string,
+  sysLog: (msg: string) => void
+): Promise<void> {
+  const hasPackageJson = await access(join(wtPath, "package.json"))
+    .then(() => true)
+    .catch(() => false);
+  if (!hasPackageJson) return;
+
+  sysLog("Detecting package manager for dependency installation...");
+  let installCmd: string[] = [];
+
+  const hasBunLock = await access(join(wtPath, "bun.lock"))
+    .then(() => true)
+    .catch(() => false);
+  const hasPnpmLock = await access(join(wtPath, "pnpm-lock.yaml"))
+    .then(() => true)
+    .catch(() => false);
+  const hasNpmLock = await access(join(wtPath, "package-lock.json"))
+    .then(() => true)
+    .catch(() => false);
+
+  if (hasBunLock) {
+    installCmd = ["bun", "install"];
+  } else if (hasPnpmLock) {
+    installCmd = ["pnpm", "install"];
+  } else if (hasNpmLock) {
+    installCmd = ["npm", "install"];
+  } else {
+    installCmd = ["bun", "install"]; // Default fallback
+  }
+
+  sysLog(`Running automatic dependency installation: ${installCmd.join(" ")}...`);
+  try {
+    const proc = Bun.spawn(installCmd, {
+      cwd: wtPath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const stdoutText = await new Response(proc.stdout).text();
+    const stderrText = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    if (stdoutText.trim()) sysLog(stdoutText.trim());
+    if (stderrText.trim()) sysLog(stderrText.trim());
+
+    if (exitCode === 0) {
+      sysLog("Dependencies installed successfully.");
+    } else {
+      sysLog(`Dependency installation failed with exit code ${exitCode}`);
+    }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    sysLog(`Error auto-installing dependencies: ${errMsg}`);
+  }
+}
+
 export async function runWorkspaceScripts(
   type: "setup" | "teardown",
   wtPath: string,
@@ -437,7 +495,6 @@ export async function executeAgent(
   }, 30_000);
 
   let wtPath: string | undefined;
-  let keepWorkspaceForRetry = false;
   let litellmTokenId: string | undefined;
   let skillPayload: SkillPayload | undefined;
   let validatorAttempts = 0;
@@ -650,6 +707,9 @@ export async function executeAgent(
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
     setRunPhase("worktree_ready");
+
+    // Auto-install dependencies if package.json exists
+    await autoInstallDependencies(wtPath, sysLog);
 
     // Run setup scripts if available
     await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
@@ -1583,10 +1643,6 @@ export async function executeAgent(
     const errMsg = err.message || String(err);
     const isCancelled = !timedOut && abort.signal.aborted;
     if (!isCancelled) {
-      keepWorkspaceForRetry = true;
-      if (wtPath) {
-        sysLog(`Workspace preserved for retry at ${wtPath}`);
-      }
       if (errMsg.includes("Verification failed")) {
         sysLog("Verification failed. MR creation blocked for this run.");
       }
@@ -1737,7 +1793,7 @@ export async function executeAgent(
       await deleteVirtualKey(litellmTokenId, baseUrl);
     }
 
-    if (wtPath && !keepWorkspaceForRetry) {
+    if (wtPath) {
       // Run teardown scripts before removing worktree
       await runWorkspaceScripts("teardown", wtPath, repo.name, sysLog);
 
