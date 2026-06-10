@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "../db";
@@ -107,6 +107,7 @@ function makeGit(
         ),
         "utf8"
       );
+      await mkdir(join(worktree, "node_modules"));
       return worktree;
     },
     removeWorktree: async () => {},
