@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { computeRunQualityScore, discoverValidationCommands } from "./verify";
@@ -58,9 +58,39 @@ describe("discoverValidationCommands", () => {
         }),
         "utf8"
       );
+      await mkdir(join(dir, "node_modules"));
 
       const commands = await discoverValidationCommands(dir);
       expect(commands.map((command) => command.command)).toEqual([
+        "bun run lint",
+        "bun run test",
+        "bun run build",
+      ]);
+      expect(commands.every((command) => command.source === "package_json")).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("prepends bun install when no node_modules folder exists", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({
+          packageManager: "bun@1.3.0",
+          scripts: {
+            lint: "biome check .",
+            test: "vitest run",
+            build: "vite build",
+          },
+        }),
+        "utf8"
+      );
+
+      const commands = await discoverValidationCommands(dir);
+      expect(commands.map((command) => command.command)).toEqual([
+        "bun install",
         "bun run lint",
         "bun run test",
         "bun run build",

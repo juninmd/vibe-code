@@ -1508,7 +1508,7 @@ export async function executeAgent(
     let prUrl: string | null = null;
 
     // Check if the model already created a PR via GitHub MCP tool
-    const runLogs = db.agentLogs.listByRun(run.id);
+    const runLogs = db.logs.listByRun(run.id);
     for (const log of runLogs) {
       const match = (log.content ?? "").match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/);
       if (match) {

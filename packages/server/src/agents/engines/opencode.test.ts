@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../engine";
-import { humanizeStderr, OpenCodeEngine } from "./opencode";
+import { DEFAULT_OPENCODE_MODEL, humanizeStderr, OpenCodeEngine } from "./opencode";
 
 // ─── Test helper ──────────────────────────────────────────────────────────────
 // Replaces the opencode CLI with an inline Bun script for deterministic tests.
@@ -778,7 +778,7 @@ describe("OpenCodeEngine model listing", () => {
 
       const engine = new OpenCodeEngine();
       const models = await engine.listModels();
-      expect(models).toContain("github-models/openai/gpt-4o-mini");
+      expect(models).toContain(DEFAULT_OPENCODE_MODEL);
       expect(models).toContain("auto-free");
       expect(models.length).toBeGreaterThan(0);
     } finally {
