@@ -59,7 +59,6 @@ describe("discoverValidationCommands", () => {
         }),
         "utf8"
       );
-      await mkdir(join(dir, "node_modules"));
 
       const commands = await discoverValidationCommands(dir);
       expect(commands.map((command) => command.command)).toEqual([

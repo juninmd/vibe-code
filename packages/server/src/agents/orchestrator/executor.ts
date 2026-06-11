@@ -1643,7 +1643,6 @@ export async function executeAgent(
     const errMsg = err.message || String(err);
     const isCancelled = !timedOut && abort.signal.aborted;
     if (!isCancelled) {
-      keepWorkspaceForRetry = false;
       if (wtPath) {
         sysLog(`Workspace cleanup scheduled at ${wtPath}`);
       }
