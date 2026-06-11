@@ -326,6 +326,10 @@ export async function autoInstallDependencies(
       cwd: wtPath,
       stdout: "pipe",
       stderr: "pipe",
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+      },
     });
 
     const stdoutText = await new Response(proc.stdout).text();

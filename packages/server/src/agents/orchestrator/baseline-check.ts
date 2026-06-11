@@ -118,6 +118,10 @@ async function runCmd(args: string[], cwd: string): Promise<{ ok: boolean; outpu
       cwd,
       stdout: "pipe",
       stderr: "pipe",
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+      },
       // 60 s timeout — fast commands only
     });
 

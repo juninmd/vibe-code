@@ -467,6 +467,7 @@ export class OpenCodeEngine implements AgentEngine {
         stdin: "pipe",
         env: {
           ...process.env,
+          NODE_ENV: "development",
           // Belt-and-suspenders auto-allow (complements opencode.json) — ported
           // from multica's daemon: this works even if opencode.json is missing.
           OPENCODE_PERMISSION: '{"*":"allow"}',
