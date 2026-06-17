@@ -4,6 +4,7 @@ import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "../agents/litellm-client"
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
+import { resolveTelegramConfig } from "../notifications/telegram";
 import type { SkillsLoader } from "../skills/loader";
 
 function maskToken(token: string | null | undefined): string {
@@ -79,9 +80,7 @@ export function createSettingsRouter(
     const geminiApiKey = db.settings.get("gemini_api_key");
     const anthropicApiKey = db.settings.get("anthropic_api_key");
     const openaiApiKey = db.settings.get("openai_api_key");
-    const telegramBotToken = db.settings.get("telegram_bot_token");
-    const telegramChatId = db.settings.get("telegram_chat_id") || "";
-    const telegramEnabled = db.settings.get("telegram_enabled") !== "false";
+    const telegram = resolveTelegramConfig(db);
 
     const mcpServersStr = db.settings.get("mcp_servers") || "{}";
     let mcpServers: Record<string, any> = {};
@@ -131,10 +130,10 @@ export function createSettingsRouter(
         autoSweep:
           db.settings.get("auto_sweep") !== "false" && process.env.VIBE_CODE_AUTO_SWEEP !== "false",
         telegram: {
-          botToken: maskToken(telegramBotToken),
-          botTokenSet: !!telegramBotToken,
-          chatId: telegramChatId,
-          enabled: telegramEnabled,
+          botToken: maskToken(telegram.token),
+          botTokenSet: !!telegram.token,
+          chatId: telegram.chatId || "",
+          enabled: telegram.enabled,
         },
         mcpServers: maskMcpSecrets(mcpServers),
         // Legacy compat
@@ -268,18 +267,17 @@ export function createSettingsRouter(
 
   // POST /api/settings/test/telegram — send a test message
   app.post("/test/telegram", async (c) => {
-    const token = db.settings.get("telegram_bot_token");
-    const chatId = db.settings.get("telegram_chat_id");
-    if (!token || !chatId) {
+    const telegram = resolveTelegramConfig(db);
+    if (!telegram.enabled || !telegram.token || !telegram.chatId) {
       return c.json({ data: { ok: false, error: "Bot token and Chat ID are required" } });
     }
     try {
-      const url = `https://api.telegram.org/bot${token}/sendMessage`;
+      const url = `https://api.telegram.org/bot${telegram.token}/sendMessage`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: chatId,
+          chat_id: telegram.chatId,
           text: "✅ <b>vibe-code</b> — Telegram integration is working!",
           parse_mode: "HTML",
         }),
