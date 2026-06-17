@@ -1,9 +1,12 @@
 # Session Context
 
-## Task: Adicione testes unitários
+## Task: Docs: describe cluster-safe defaults and terminal panel workflow
 
 ### Description
-vamos obter ao menos 90% de cobertura de testes
+Update the README with a short operator note covering:
+- the current cluster-safe runtime defaults (`VIBE_CODE_MAX_AGENTS=1`, longer inactivity window, and the 3Gi memory headroom)
+- where the task detail terminal panel lives and what it is for
+Keep the change focused and small, add/update tests only if needed, and open a PR when done.
 
 ### Status
 backlog
@@ -13,8 +16,6 @@ backlog
 ### Branch
 (not yet created)
 
-### Base Branch
-main
 
 ## Previous Session Notes
 (no previous notes)
@@ -24,16 +25,16 @@ main
 
 ## Recent Git History
 ```
-21ae2f4 feat: add task dependencies, approval gates, and UI improvements
-a976221 feat: add missing engine UI configurations to match Multica (#18)
-747e51b fix: improved
-c9e8593 feat: improved
-640165d feat: improve task management error
-18d6e8e fix: add error handling in usetasks hook
-a435ffb feat: improved
-0f24004 feat: add github/gitlab issues importer with bulk task creation
-229bab9 fix: commit
-f98e5c2 Merge branch 'main' of https://github.com/juninmd/vibe-code
+aa7b141 feat: polish terminal session panel
+e5f48f4 fix: stabilize git sync and agent capacity
+a4e8860 fix(ui): improve timeline semantics and deploy manifest
+ccc547e chore(deps-dev): bump @types/bun from 1.3.13 to 1.3.14 (#73)
+4d5e95a fix(orchestrator): override node env to development for agent run and commands
+2357476 fix(orchestrator): fix executor reference error and test mkdir duplication
+674ca40 fix(server): auto cleanup workspaces and add pnpm to docker
+e387d7d fix(orchestrator): fix agent logs property error and update workspace tests
+4042452 chore: update bun.lock to match dependency versions
+3048c21 feat(orchestrator): auto-install-deps and always cleanup workspaces
 ```
 
 ---
