@@ -93,7 +93,7 @@ spec:
             - name: VIBE_CODE_DATA_DIR
               value: /data
             - name: VIBE_CODE_MAX_AGENTS
-              value: "4"
+              value: "1"
             - name: HOME
               value: /home/vibe
             - name: VIBE_CODE_PUBLIC_URL
@@ -114,7 +114,7 @@ spec:
               memory: "1Gi"
             limits:
               cpu: "500m"
-              memory: "2Gi"
+              memory: "3Gi"
           livenessProbe:
             httpGet:
               path: /health

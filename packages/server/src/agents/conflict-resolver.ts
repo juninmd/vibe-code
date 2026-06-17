@@ -103,7 +103,7 @@ Branch \`${branch}\` has merge conflicts with \`${baseBranch}\`. Follow these st
 
 STEP 1 — Fetch and start rebase:
 \`\`\`
-git fetch origin
+git fetch --prune origin +refs/heads/*:refs/remotes/origin/*
 git rebase origin/${baseBranch}
 \`\`\`
 

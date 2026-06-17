@@ -146,9 +146,7 @@ export class GitService {
   }
 
   async fetchRepo(barePath: string): Promise<void> {
-    await GitService.withRepoLock(barePath, () =>
-      this.exec(["git", "--git-dir", barePath, "fetch", "origin", "--prune"])
-    );
+    await GitService.withRepoLock(barePath, () => this.fetchOrigin({ barePath }));
   }
 
   async createWorktree(
@@ -164,7 +162,7 @@ export class GitService {
 
     await GitService.withRepoLock(barePath, async () => {
       // Fetch + worktree-add must be atomic vs other tasks on the same bare.
-      await this.exec(["git", "--git-dir", barePath, "fetch", "origin", "--prune"]);
+      await this.fetchOrigin({ barePath });
       const args = ["git", "--git-dir", barePath, "worktree", "add"];
       if (isNewBranch) {
         args.push("-b", branch, wtPath, base);
@@ -493,7 +491,10 @@ export class GitService {
   ): Promise<{ ok: boolean; message: string }> {
     try {
       // Fetch latest from origin
-      await this.exec(["git", "fetch", "origin"], { cwd: wtPath });
+      await this.fetchOrigin({
+        cwd: wtPath,
+        refspecs: [`+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`],
+      });
       // Rebase onto base branch
       const result = await this.exec(["git", "rebase", `origin/${baseBranch}`], { cwd: wtPath });
       if (result.exitCode !== 0) {
@@ -510,6 +511,22 @@ export class GitService {
       }
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
+  }
+
+  private async fetchOrigin(
+    options: { barePath?: string; cwd?: string; refspecs?: string[] } = {}
+  ): Promise<void> {
+    const args = ["git"];
+    if (options.barePath) {
+      args.push("--git-dir", options.barePath);
+    }
+    args.push(
+      "fetch",
+      "--prune",
+      "origin",
+      ...(options.refspecs ?? ["+refs/heads/*:refs/remotes/origin/*"])
+    );
+    await this.exec(args, { cwd: options.cwd });
   }
 
   private async exec(

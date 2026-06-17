@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 ### Fixed
+- Fixed prod pod crash risk by capping max agents to the deployment env and raising the runtime memory limit to 3Gi.
+- Fixed Git fetch/sync for bare repo mirrors by fetching explicit remote-tracking branches before worktree setup and rebase.
 - Fixed fallback models list by completely removing hardcoded registry models and increasing `opencode models` query timeout to 10s to ensure list is dynamically loaded.
 - Fixed OpenCode model selection by returning a stable fallback model list when LiteLLM or the local OpenCode CLI cannot list models quickly.
 - Fixed GitHub Actions validation by replacing the external reusable workflow dependency with local Bun lint, typecheck, test, and build gates.
