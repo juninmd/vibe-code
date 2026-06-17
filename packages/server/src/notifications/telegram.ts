@@ -5,22 +5,35 @@ export interface TelegramNotifier {
   isConfigured(): boolean;
 }
 
+export interface TelegramConfig {
+  token: string | null;
+  chatId: string | null;
+  enabled: boolean;
+}
+
+export function resolveTelegramConfig(db: Db): TelegramConfig {
+  const token = db.settings.get("telegram_bot_token") || process.env.TELEGRAM_BOT_TOKEN || null;
+  const chatId = db.settings.get("telegram_chat_id") || process.env.TELEGRAM_CHAT_ID || null;
+  const enabledSetting = db.settings.get("telegram_enabled");
+  const enabled =
+    enabledSetting === undefined
+      ? process.env.TELEGRAM_ENABLED !== "false"
+      : enabledSetting !== "false";
+
+  return { token, chatId, enabled };
+}
+
 export function createTelegramNotifier(db: Db): TelegramNotifier {
   return {
     isConfigured() {
-      const enabled = db.settings.get("telegram_enabled");
-      if (enabled === "false") return false;
-      const token = db.settings.get("telegram_bot_token");
-      const chatId = db.settings.get("telegram_chat_id");
-      return !!(token && chatId);
+      const { enabled, token, chatId } = resolveTelegramConfig(db);
+      return enabled && !!(token && chatId);
     },
 
     async send(message: string) {
-      const token = db.settings.get("telegram_bot_token");
-      const chatId = db.settings.get("telegram_chat_id");
-      const enabled = db.settings.get("telegram_enabled");
+      const { token, chatId, enabled } = resolveTelegramConfig(db);
 
-      if (enabled === "false" || !token || !chatId) return;
+      if (!enabled || !token || !chatId) return;
 
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
       const res = await fetch(url, {
