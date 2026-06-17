@@ -165,7 +165,7 @@ export class GitService {
       await this.fetchOrigin({ barePath });
       const args = ["git", "--git-dir", barePath, "worktree", "add"];
       if (isNewBranch) {
-        args.push("-b", branch, wtPath, base);
+        args.push("-b", branch, wtPath, "origin/" + base);
       } else {
         args.push(wtPath, branch);
       }
