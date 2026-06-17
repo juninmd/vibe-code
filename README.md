@@ -1,5 +1,11 @@
 # 🚀 Vibe-Code
 
+## Operator Note
+* Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
+- Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.
+- Terminal session workflow lives in WORKFLOW.md.
+
+
 > **Autonomous Code Production Control Plane** — Orquestra agentes de código IA (Claude Code, Aider, OpenCode) para transformar objetivos em mudanças validadas, evidências operacionais e handoffs previsíveis entre múltiplos repositórios Git.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
