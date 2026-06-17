@@ -1,14 +1,17 @@
 {
-  "id": "81dca1918a4c3729",
-  "title": "Adicione testes unitários",
+  "id": "ec0b6f3b39bb8297",
+  "title": "Docs: describe cluster-safe defaults and terminal panel workflow",
   "status": "backlog",
   "branchName": null,
-  "baseBranch": "main",
-  "parentTaskId": "dcd587cc460ea77d",
-  "tags": [],
+  "baseBranch": null,
+  "parentTaskId": null,
+  "tags": [
+    "uiux",
+    "docs"
+  ],
   "goal": null,
   "desiredOutcome": null,
-  "runId": "14e1935c8edc23a7",
+  "runId": "9b69a04716b8ef8f",
   "engine": "opencode",
   "matchedSkills": []
 }
