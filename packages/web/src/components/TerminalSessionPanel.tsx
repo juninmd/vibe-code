@@ -27,7 +27,7 @@ export function TerminalSessionPanel({
   const outputRef = useRef<HTMLDivElement>(null);
   const { close, sendInput, sendSignal } = useTerminalSession({ taskId, runId, onWsSend });
   const mergedOutput = useMemo(() => chunks.map((chunk) => chunk.chunk).join(""), [chunks]);
-  const hasOutput = mergedOutput.trim().length > 0;
+  const hasOutput = /\S/.test(mergedOutput);
   const sessionState = runId ? (hasOutput ? "Live session" : "Waiting") : "No session";
 
   useEffect(() => {
