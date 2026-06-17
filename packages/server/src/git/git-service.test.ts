@@ -111,6 +111,17 @@ async function getCurrentBranch(dir: string): Promise<string> {
   return text.trim() || "main";
 }
 
+async function getHeadSha(dir: string, ref = "HEAD"): Promise<string> {
+  const proc = Bun.spawn(["git", "rev-parse", ref], {
+    cwd: dir,
+    env: GitService.gitEnv() as any,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const text = await new Response(proc.stdout).text();
+  return text.trim();
+}
+
 describe("GitService.hasCommitsAhead", () => {
   let tmpDir: string;
   let bareDir: string;
@@ -279,13 +290,20 @@ describe("Git integration operations", () => {
     expect(stat.isDirectory()).toBe(true);
   });
 
+  it("fetchRepo() populates remote-tracking branches in the bare repo", async () => {
+    await git.fetchRepo(barePath);
+
+    const branches = await git.listBranches(barePath);
+    expect(branches).toEqual(expect.arrayContaining(["main", "feature"]));
+  });
+
   it("getBarePath() matches cloneRepo bare path", () => {
     expect(git.getBarePath("my-repo")).toBe(barePath);
   });
 
-  it("listBranches() returns empty array if no remote branches", async () => {
-    // Because it's a bare clone of a local dir without setting up remote tracking in the same way, `branch -r` is empty.
-    const branches = await git.listBranches(barePath);
+  it("listBranches() returns empty array on a fresh bare clone", async () => {
+    const freshBare = await git.cloneRepo(seedDir, "fresh-repo");
+    const branches = await git.listBranches(freshBare);
     expect(branches).toEqual([]);
   });
 
@@ -313,6 +331,28 @@ describe("Git integration operations", () => {
     const fs = await import("node:fs/promises");
     const stat = await fs.stat(wtPath);
     expect(stat.isDirectory()).toBe(true);
+  });
+
+  it("syncWithBase() refreshes origin/main before rebasing", async () => {
+    await Bun.spawn(["git", "-C", seedDir, "checkout", "main"], {
+      env: GitService.gitEnv() as any,
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited;
+    await writeFile(join(seedDir, "upstream.txt"), "fresh upstream");
+    await Bun.spawn(["git", "-C", seedDir, "add", "-A"], { env: GitService.gitEnv() as any })
+      .exited;
+    await Bun.spawn(["git", "-C", seedDir, "commit", "-m", "upstream main"], {
+      env: GitService.gitEnv() as any,
+      stdout: "pipe",
+      stderr: "pipe",
+    }).exited;
+
+    const remoteSha = await getHeadSha(seedDir);
+    const result = await git.syncWithBase(wtPath, "main");
+
+    expect(result.ok).toBe(true);
+    expect(await getHeadSha(wtPath, "origin/main")).toBe(remoteSha);
   });
 
   it("branchExists() returns true for new-branch and false for fake", async () => {

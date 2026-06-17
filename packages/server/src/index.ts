@@ -27,6 +27,7 @@ import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
 import { createWorkspacesRouter } from "./api/workspaces";
 import { authMiddleware, createAuthRouter } from "./auth";
+import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
@@ -70,7 +71,13 @@ const hub = new BroadcastHub(db);
 const registry = new EngineRegistry();
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
-const orchestrator = new Orchestrator(db, git, registry, hub, storedMaxAgents || MAX_AGENTS);
+const orchestrator = new Orchestrator(
+  db,
+  git,
+  registry,
+  hub,
+  resolveMaxAgents(MAX_AGENTS, storedMaxAgents)
+);
 const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
 validateSkills(skillsLoader)
