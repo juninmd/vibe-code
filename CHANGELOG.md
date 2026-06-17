@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Fixed
+- Added Telegram env fallback so notifications and the test endpoint work when DB settings are empty in cluster deployments.
 - Improved the task detail terminal panel with clearer session state, a stronger output frame, and a more readable idle state.
 - Fixed prod pod crash risk by capping max agents to the deployment env and raising the runtime memory limit to 3Gi.
 - Fixed Git fetch/sync for bare repo mirrors by fetching explicit remote-tracking branches before worktree setup and rebase.
