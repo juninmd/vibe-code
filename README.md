@@ -1,7 +1,7 @@
 # 🚀 Vibe-Code
 
 ## Operator Note
-
+* Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
 - Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.
 - Terminal session workflow lives in WORKFLOW.md.
 
