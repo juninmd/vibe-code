@@ -72,7 +72,8 @@ export function pickTaskStage(taskStatus: string | undefined, logs: AgentLog[]):
   }
 
   for (let i = logs.length - 1; i >= 0; i--) {
-    const log = logs[i]!;
+    const log = logs[i];
+    if (!log) continue;
     if (log.stream === "stderr") continue;
     const isHeartbeat = log.stream === "system" && /Still running|heartbeat/i.test(log.content);
     if (isHeartbeat) continue;

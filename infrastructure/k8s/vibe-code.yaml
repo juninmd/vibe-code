@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibe-code
+  namespace: vibe-code
+  labels:
+    app: vibe-code
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: ai-stack
+  annotations:
+    restartedAt: "2026-06-10T05:00:00Z"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: vibe-code
+      app.kubernetes.io/managed-by: argocd
+      app.kubernetes.io/part-of: ai-stack
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: vibe-code
+        app.kubernetes.io/managed-by: argocd
+        app.kubernetes.io/part-of: ai-stack
+      annotations:
+        restartedAt: "2026-06-10T05:00:00Z"
+    spec:
+      priorityClassName: app-high
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      initContainers:
+        - name: skills-bootstrap
+          image: ghcr.io/juninmd/vibe-code:latest
+          imagePullPolicy: Always
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -eu
+              TARGET=/home/vibe/.agents
+              TMP=$(mktemp -d)
+              trap 'rm -rf "$TMP"' EXIT
+              URL="${SKILLS_REPO_URL}"
+              if [ -n "${GIT_TOKEN:-}" ]; then
+                URL=$(echo "$URL" | sed "s|https://|https://${GIT_TOKEN}@|")
+              fi
+              echo "[skills] syncing ${SKILLS_REPO_URL}"
+              git clone --depth=1 "$URL" "$TMP/repo"
+              SRC="$TMP/repo"
+              if [ -d "$SRC/.agents" ]; then
+                SRC="$SRC/.agents"
+              fi
+              cd "$TARGET"
+              rm -rf .agents skills rules agents prompts tools AGENTS.md CLAUDE.md GEMINI.md CONVENTIONS.md
+              for entry in skills rules agents prompts tools AGENTS.md CLAUDE.md GEMINI.md CONVENTIONS.md; do
+                if [ -e "$SRC/$entry" ]; then
+                  cp -R "$SRC/$entry" "$TARGET/$entry"
+                fi
+              done
+              echo "[skills] done"
+          env:
+            - name: SKILLS_REPO_URL
+              value: https://github.com/juninmd/skills.git
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vibe-code-secret
+                  key: GIT_TOKEN
+                  optional: true
+          volumeMounts:
+            - name: skills
+              mountPath: /home/vibe/.agents
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "500m"
+              memory: "500Mi"
+      containers:
+        - name: vibe-code
+          image: ghcr.io/juninmd/vibe-code:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PORT
+              value: "3000"
+            - name: VIBE_CODE_DATA_DIR
+              value: /data
+            - name: VIBE_CODE_MAX_AGENTS
+              value: "4"
+            - name: HOME
+              value: /home/vibe
+            - name: VIBE_CODE_PUBLIC_URL
+              value: "https://vibe.antonio-code.duckdns.org"
+            - name: VIBE_CODE_INACTIVITY_MS
+              value: "1200000"
+          envFrom:
+            - secretRef:
+                name: vibe-code-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: skills
+              mountPath: /home/vibe/.agents
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "1Gi"
+            limits:
+              cpu: "500m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vibe-code-data
+        - name: skills
+          persistentVolumeClaim:
+            claimName: vibe-code-skills
