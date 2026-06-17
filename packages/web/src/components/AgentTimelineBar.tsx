@@ -24,9 +24,8 @@ export function AgentTimelineBar({ segments, activeId, onSegmentClick }: AgentTi
   const total = segments.reduce((sum, s) => sum + Math.max(1, s.logCount), 0);
 
   return (
-    <div
+    <nav
       className="flex gap-px h-3 px-2 py-1 bg-[var(--bg-surface)] border-b border-default"
-      role="navigation"
       aria-label="Execution timeline"
     >
       {segments.map((seg) => {
@@ -53,6 +52,6 @@ export function AgentTimelineBar({ segments, activeId, onSegmentClick }: AgentTi
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

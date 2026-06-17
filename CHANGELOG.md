@@ -6,6 +6,7 @@
 - Fixed OpenCode model selection by returning a stable fallback model list when LiteLLM or the local OpenCode CLI cannot list models quickly.
 - Fixed GitHub Actions validation by replacing the external reusable workflow dependency with local Bun lint, typecheck, test, and build gates.
 - Fixed web Vitest execution on Windows by using forked workers, restoring the root `bun run test` homologation gate.
+- Improved execution timeline semantics by using a real `nav` landmark and removed a non-null assertion from task stage scanning.
 
 ### Added
 - **Model hardcoding lock test**: Added a verification test that automatically scans all agent engines to ensure no models are statically hardcoded, enforcing dynamic resolution via CLI, LiteLLM or environment variables.
