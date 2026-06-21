@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^20.10.0",
+    "@types/node": "^26.0.0",
     "@types/react": "^19.2.15",
     "react": "^19.2.6",
     "typescript": "^6.0.2"
