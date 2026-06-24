@@ -46,6 +46,12 @@ interface SidebarProps {
   connected: boolean;
   apiOk?: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
+  /** When true the sidebar renders as an off-canvas drawer (mobile). */
+  isMobile?: boolean;
+  /** Drawer visibility on mobile. */
+  mobileOpen?: boolean;
+  /** Called to dismiss the mobile drawer (backdrop tap, nav selection, close button). */
+  onMobileClose?: () => void;
 }
 
 export function Sidebar({
@@ -68,10 +74,15 @@ export function Sidebar({
   connected,
   apiOk = true,
   repoStats,
+  isMobile = false,
+  mobileOpen = false,
+  onMobileClose,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [width, setWidth] = useState(readStoredWidth);
-  const [collapsed, setCollapsed] = useState(readStoredCollapsed);
+  const [collapsedPref, setCollapsedPref] = useState(readStoredCollapsed);
+  // On mobile the drawer is always shown expanded (collapse is a desktop affordance).
+  const collapsed = isMobile ? false : collapsedPref;
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
@@ -122,7 +133,7 @@ export function Sidebar({
   }, [width]);
 
   const toggleCollapse = () => {
-    setCollapsed((v) => {
+    setCollapsedPref((v) => {
       const next = !v;
       try {
         localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
@@ -131,15 +142,50 @@ export function Sidebar({
     });
   };
 
-  const sidebarWidth = collapsed ? 64 : width;
+  // Close the drawer after picking a repo / nav target on mobile.
+  const selectRepo = (id: string | null) => {
+    onSelectRepo(id);
+    if (isMobile) onMobileClose?.();
+  };
+  const runAndClose = (fn?: () => void) => () => {
+    fn?.();
+    if (isMobile) onMobileClose?.();
+  };
 
-  return (
+  const sidebarWidth = isMobile ? 300 : collapsed ? 64 : width;
+
+  const aside = (
     <aside
-      className="relative shrink-0 border-r flex flex-col glass-panel transition-[width] duration-200 shadow-2xl z-40"
+      className={
+        isMobile
+          ? "relative h-full border-r flex flex-col glass-panel shadow-2xl safe-pt"
+          : "relative shrink-0 border-r flex flex-col glass-panel transition-[width] duration-200 shadow-2xl z-40"
+      }
       style={{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }}
     >
+      {/* Mobile close button */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={onMobileClose}
+          aria-label="Fechar menu"
+          className="absolute right-3 top-3 z-50 p-2 rounded-lg text-muted hover:text-primary hover:bg-surface-hover transition-colors"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Close"
+          >
+            <path d="M4 4l8 8M12 4L4 12" />
+          </svg>
+        </button>
+      )}
       {/* Resizer handle */}
-      {!collapsed && (
+      {!collapsed && !isMobile && (
         <div
           aria-hidden="true"
           onMouseDown={onMouseDown}
@@ -190,7 +236,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={toggleCollapse}
-              className={`p-2 rounded-lg text-muted hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "w-full flex justify-center" : ""}`}
+              className={`p-2 rounded-lg text-muted hover:text-primary hover:bg-surface-hover transition-all active-shrink cursor-pointer ${collapsed ? "w-full flex justify-center" : ""} ${isMobile ? "hidden" : ""}`}
               title={collapsed ? "Expand (Ctrl+B)" : "Collapse (Ctrl+B)"}
             >
               {collapsed ? (
@@ -295,7 +341,7 @@ export function Sidebar({
           {/* Special Items */}
           <button
             type="button"
-            onClick={() => onSelectRepo(null)}
+            onClick={() => selectRepo(null)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all active-shrink cursor-pointer mb-2 ${
               selectedRepoId === null
                 ? "bg-accent text-white shadow-lg shadow-accent/25 border border-accent/20"
@@ -330,7 +376,7 @@ export function Sidebar({
               <div key={repo.id} className="relative group/item mb-0.5">
                 <button
                   type="button"
-                  onClick={() => onSelectRepo(repo.id)}
+                  onClick={() => selectRepo(repo.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all active-shrink cursor-pointer border ${
                     isSelected
                       ? "bg-accent text-white shadow-lg shadow-accent/25 border-accent/20"
@@ -413,42 +459,79 @@ export function Sidebar({
         </div>
 
         {/* Secondary Navigation */}
-        <div className="p-3 space-y-1.5 border-t border-white/5 bg-surface/30 backdrop-blur-md">
-          <SidebarNavItem icon="inbox" label="Inbox" onClick={onOpenInbox} collapsed={collapsed} />
-          <SidebarNavItem icon="code" label="Skills" onClick={onOpenSkills} collapsed={collapsed} />
+        <div className="p-3 space-y-1.5 border-t border-white/5 bg-surface/30 backdrop-blur-md safe-pb">
+          <SidebarNavItem
+            icon="inbox"
+            label="Inbox"
+            onClick={runAndClose(onOpenInbox)}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            icon="code"
+            label="Skills"
+            onClick={runAndClose(onOpenSkills)}
+            collapsed={collapsed}
+          />
           <SidebarNavItem
             icon="engines"
             label="AI Engines"
-            onClick={onOpenEngines}
+            onClick={runAndClose(onOpenEngines)}
             collapsed={collapsed}
           />
           <SidebarNavItem
             icon="clock"
             label="Schedules"
-            onClick={onOpenSchedules}
+            onClick={runAndClose(onOpenSchedules)}
             collapsed={collapsed}
           />
           <SidebarNavItem
             icon="grid"
             label="Runtimes"
-            onClick={onOpenRuntimes}
+            onClick={runAndClose(onOpenRuntimes)}
             collapsed={collapsed}
           />
           <SidebarNavItem
             icon="stats"
             label="Estatísticas"
-            onClick={onOpenStats}
+            onClick={runAndClose(onOpenStats)}
             collapsed={collapsed}
           />
           <SidebarNavItem
             icon="settings"
             label="Configurações"
-            onClick={onOpenSettings}
+            onClick={runAndClose(onOpenSettings)}
             collapsed={collapsed}
           />
         </div>
       </div>
     </aside>
+  );
+
+  if (!isMobile) return aside;
+
+  // ── Mobile: off-canvas drawer with backdrop ──────────────────────────────
+  return (
+    <div
+      className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? "" : "pointer-events-none"}`}
+      aria-hidden={!mobileOpen}
+    >
+      <button
+        type="button"
+        aria-label="Fechar menu"
+        tabIndex={mobileOpen ? 0 : -1}
+        onClick={onMobileClose}
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
+          mobileOpen ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <div
+        className={`absolute inset-y-0 left-0 max-w-[88vw] transition-transform duration-200 ease-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {aside}
+      </div>
+    </div>
   );
 }
 
