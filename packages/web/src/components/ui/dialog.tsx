@@ -96,7 +96,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-all animate-in fade-in duration-300"
         onClick={() => onCloseRef.current()}
@@ -108,7 +108,7 @@ export function Dialog({ open, onClose, title, children, size = "md" }: DialogPr
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className={`relative glass-panel text-primary rounded-[2rem] border border-white/10 p-8 w-full ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/60 focus:outline-none animate-in zoom-in-95 fade-in duration-300 ease-out`}
+        className={`relative glass-panel text-primary rounded-2xl sm:rounded-[2rem] border border-white/10 p-5 sm:p-8 w-full max-h-[90dvh] overflow-y-auto ${{ sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-xl", "2xl": "max-w-2xl", "5xl": "max-w-5xl" }[size]} shadow-2xl shadow-black/60 focus:outline-none animate-in zoom-in-95 fade-in duration-300 ease-out`}
       >
         <div className="flex items-start justify-between mb-6">
           <div className="space-y-1">
