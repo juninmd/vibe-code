@@ -844,7 +844,7 @@ export function TaskDetail({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
       {/* Backdrop */}
       <button
         type="button"
@@ -855,7 +855,7 @@ export function TaskDetail({
 
       {/* Modal */}
       <div
-        className="relative flex h-[92vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-xl border shadow-2xl shadow-black/60"
+        className="relative flex h-[100dvh] sm:h-[92vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-none sm:rounded-xl border shadow-2xl shadow-black/60"
         style={{
           background: "var(--bg-surface)",
           backgroundImage:
