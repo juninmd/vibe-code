@@ -29,6 +29,7 @@ import { Toaster } from "./components/ui/Toaster";
 import { useApiHealth } from "./hooks/useApiHealth";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
+import { useIsMobile } from "./hooks/useMediaQuery";
 import { useRepos } from "./hooks/useRepos";
 import { useRetryQueue } from "./hooks/useRetryQueue";
 import { useTasks } from "./hooks/useTasks";
@@ -282,7 +283,7 @@ function HeaderAction({
         </svg>
       )}
       {icon === "help" && <span className="font-black">?</span>}
-      <span>{label}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
@@ -310,6 +311,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showInbox, setShowInbox] = useState(false);
   const [showQuickView, setShowQuickView] = useState(false);
   const [showIssueImporter, setShowIssueImporter] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [selectedTaskLoadedSkills, setSelectedTaskLoadedSkills] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filters>(() => {
@@ -621,6 +624,21 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
   const { connected, send, subscribe, unsubscribe } = useWebSocket(handleWsMessage);
   const apiOk = useApiHealth();
+
+  // Auto-dismiss the mobile drawer when the viewport grows to desktop.
+  useEffect(() => {
+    if (!isMobile && mobileSidebarOpen) setMobileSidebarOpen(false);
+  }, [isMobile, mobileSidebarOpen]);
+
+  // Lock background scroll while the mobile drawer is open.
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileSidebarOpen]);
 
   const sendWsMessage = useCallback(
     (message: WsClientMessage) => {
@@ -1009,6 +1027,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
       // Escape — close open panels/dialogs (in cascading order)
       if (e.key === "Escape") {
+        if (mobileSidebarOpen) {
+          setMobileSidebarOpen(false);
+          return;
+        }
         if (showCommandPalette) {
           setShowCommandPalette(false);
           return;
@@ -1166,6 +1188,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     showInbox,
     showShortcuts,
     showIssueImporter,
+    mobileSidebarOpen,
     selectedTask,
     search,
     handleCloseDetail,
@@ -1220,16 +1243,39 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           onOpenSchedules={() => setShowSchedulesPanel(true)}
           connected={connected}
           apiOk={apiOk}
+          isMobile={isMobile}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={() => setMobileSidebarOpen(false)}
         />
 
         <div className="flex-1 flex flex-col min-w-0 bg-app overflow-hidden">
           {/* Top Header */}
-          <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-surface/20 backdrop-blur-xl z-30">
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="flex items-center gap-2">
+          <header className="h-16 shrink-0 flex items-center justify-between px-3 sm:px-6 border-b border-white/5 bg-surface/20 backdrop-blur-xl z-30 safe-pt">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+              {/* Mobile menu toggle */}
+              <button
+                type="button"
+                onClick={() => setMobileSidebarOpen(true)}
+                aria-label="Abrir menu"
+                className="md:hidden shrink-0 p-2 -ml-1 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18M3 12h18M3 18h18" />
+                </svg>
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
                 <WorkspaceSelector />
-                <div className="h-4 w-px bg-white/10" />
-                <h2 className="text-sm font-bold text-primary truncate max-w-[200px]">
+                <div className="hidden sm:block h-4 w-px bg-white/10" />
+                <h2 className="hidden sm:block text-sm font-bold text-primary truncate max-w-[120px] lg:max-w-[200px]">
                   {selectedRepo ? selectedRepo.name : "All Projects"}
                 </h2>
               </div>
@@ -1262,7 +1308,27 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               </div>
             </div>
 
-            <div className="flex items-center gap-3 ml-4 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-4 shrink-0">
+              {/* Mobile search / command palette trigger */}
+              <button
+                type="button"
+                onClick={() => setShowCommandPalette(true)}
+                aria-label="Buscar"
+                className="md:hidden p-2 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <circle cx="7" cy="7" r="5" />
+                  <path d="M11 11l4 4" strokeLinecap="round" />
+                </svg>
+              </button>
               <div className="hidden lg:flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default shadow-inner">
                 <ExportImportMenu
                   selectedRepoId={selectedRepoId}
@@ -1384,7 +1450,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               </div>
             ) : (
               <ErrorBoundary>
-                <div className="h-full w-full p-8 overflow-hidden">
+                <div className="h-full w-full p-3 sm:p-5 lg:p-8 overflow-hidden">
                   <Board
                     tasks={filteredTasks}
                     onTaskClick={handleTaskClick}
