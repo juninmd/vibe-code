@@ -5,6 +5,7 @@ import {
   humanizeStderr,
   isFreeOpencodeModel,
   LITELLM_ANTHROPIC_COMPAT_MODEL,
+  OPENCODE_BLOCKED_ARGS,
   OPENCODE_FALLBACK_MODELS,
   OpenCodeEngine,
 } from "./opencode";
@@ -361,5 +362,257 @@ describe("resolveOpencodeBinary invariants", () => {
     const engine = new OpenCodeEngine();
     expect(typeof engine.binaryName).toBe("string");
     expect(engine.binaryName.length).toBeGreaterThan(0);
+  });
+});
+
+describe("OPENCODE_BLOCKED_ARGS fuzz", () => {
+  it("all blocked args start with --", () => {
+    for (const flag of Object.keys(OPENCODE_BLOCKED_ARGS)) {
+      expect(flag.startsWith("--")).toBe(true);
+    }
+  });
+
+  it("all blocked args have mode with-value or standalone", () => {
+    for (const mode of Object.values(OPENCODE_BLOCKED_ARGS)) {
+      expect(mode === "with-value" || mode === "standalone").toBe(true);
+    }
+  });
+});
+
+describe("opencode model listing fuzz", () => {
+  it("isFreeOpencodeModel returns true for any string ending in -free", () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 30 }).filter((s) => /^[a-zA-Z0-9._/-]+$/.test(s)),
+        (prefix) => {
+          const model = `${prefix}-free`;
+          expect(isFreeOpencodeModel(model)).toBe(true);
+        }
+      ),
+      { numRuns: 500 }
+    );
+  });
+
+  it("isFreeOpencodeModel returns true for auto-free", () => {
+    expect(isFreeOpencodeModel("auto-free")).toBe(true);
+  });
+
+  it("isFreeOpencodeModel returns false for empty string", () => {
+    expect(isFreeOpencodeModel("")).toBe(false);
+  });
+
+  it("DEFAULT_OPENCODE_MODEL matches OPENCODE_FALLBACK_MODELS", () => {
+    expect(OPENCODE_FALLBACK_MODELS).toContain(DEFAULT_OPENCODE_MODEL);
+  });
+});
+
+describe("humanizeStderr structured log fuzz", () => {
+  it("handles ISO date with varying timezone offsets", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "INFO  2026-03-30T21:06:05 +0000 service=llm modelID=opencode/model-free calling free",
+          "INFO  2026-03-30T21:06:05 -0300 service=llm modelID=opencode/model-free calling capacity=3",
+          "INFO  2026-03-30T21:06:05 +0530 service=llm modelID=opencode/model-free calling"
+        ),
+        (line) => {
+          const result = humanizeStderr(line);
+          expect(result).toContain("opencode/model-free");
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("suppresses INFO for non-llm services", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "INFO  2026-03-30T21:06:06 +0ms service=permission permission=skill evaluate",
+          "INFO  2026-03-30T21:06:06 +0ms service=git command=pull",
+          "INFO  2026-03-30T21:06:06 +0ms service=filesystem path=/tmp"
+        ),
+        (line) => {
+          expect(humanizeStderr(line)).toBeNull();
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("surfaces WARN/ERROR structured lines with non-striped content", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "WARN  2026-03-30T21:06:07 +0ms service=llm rate_limit=42 retry_count=3 slow_response",
+          "ERROR 2026-03-30T21:06:08 +0ms service=git exit_code=128 clone_failed"
+        ),
+        (line) => {
+          const result = humanizeStderr(line);
+          expect(result).not.toBeNull();
+          expect(result).toMatch(/^\[(WARN|ERROR)\]/);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("returns null for JSON with session/provider keywords", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          JSON.stringify({ level: "info", message: "session started abc123" }),
+          JSON.stringify({ level: "info", message: "provider initialized" }),
+          JSON.stringify({ level: "info", message: "model loaded gpt-4" }),
+          JSON.stringify({ level: "info", message: "cleanup completed" })
+        ),
+        (line) => {
+          expect(humanizeStderr(line)).toBeNull();
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("surfaces JSON with error message content", () => {
+    fc.assert(
+      fc.property(fc.string({ minLength: 1, maxLength: 100 }), (msg) => {
+        const line = JSON.stringify({ level: "error", message: msg });
+        const result = humanizeStderr(line);
+        expect(result).not.toBeNull();
+        expect(result?.length).toBeGreaterThan(0);
+      }),
+      { numRuns: 200 }
+    );
+  });
+});
+
+describe("humanizeToolCall edge cases fuzz", () => {
+  it("matches tool names case-insensitively", () => {
+    const engine = new OpenCodeEngine();
+    const line = JSON.stringify({
+      type: "tool_use",
+      part: { name: "BASH", state: { status: "calling", input: { command: "ls" } } },
+    });
+    const events = engine.parseLine(line);
+    const status = events.find((e) => e.type === "status")?.content;
+    expect(status).toContain("Running");
+  });
+
+  it("handles tool names with special characters", () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 20 }).filter((s) => /^[a-zA-Z_-]+$/.test(s)),
+        (toolName) => {
+          const engine = new OpenCodeEngine();
+          const line = JSON.stringify({
+            type: "tool_use",
+            part: { name: toolName, state: { status: "calling", input: { path: "test.txt" } } },
+          });
+          expect(() => engine.parseLine(line)).not.toThrow();
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
+});
+
+describe("parseLine JSON-RPC fuzz", () => {
+  it("handles JSON-RPC session/started", () => {
+    const engine = new OpenCodeEngine();
+    const events = engine.parseLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "session/started",
+        params: { sessionId: "sess_123", id: "sess_123" },
+      })
+    );
+    expect(events.find((e) => e.type === "session")?.sessionId).toBe("sess_123");
+  });
+
+  it("handles JSON-RPC tool/use", () => {
+    const engine = new OpenCodeEngine();
+    const events = engine.parseLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tool/use",
+        params: { tool: "read_file", callId: "call_1", input: { path: "src/x.ts" } },
+      })
+    );
+    expect(events.find((e) => e.type === "tool_use")).toBeDefined();
+  });
+
+  it("handles JSON-RPC tool/result", () => {
+    const engine = new OpenCodeEngine();
+    const events = engine.parseLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tool/result",
+        params: { callId: "call_1", output: "line1\nline2" },
+      })
+    );
+    expect(events.find((e) => e.type === "tool_result")).toBeDefined();
+  });
+
+  it("handles JSON-RPC error method", () => {
+    const engine = new OpenCodeEngine();
+    const events = engine.parseLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "error",
+        params: { message: "API timeout" },
+      })
+    );
+    expect(events.find((e) => e.type === "error")).toBeDefined();
+  });
+
+  it("handles JSON-RPC cost method with token stats", () => {
+    const engine = new OpenCodeEngine();
+    const events = engine.parseLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "cost",
+        params: { total_tokens: 5000, input_tokens: 2000, output_tokens: 3000 },
+      })
+    );
+    expect(events.find((e) => e.type === "cost")?.costStats?.total_tokens).toBe(5000);
+  });
+});
+
+describe("parseLine token accumulation invariants", () => {
+  it("accumulators never go backwards", () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            input: fc.integer({ min: 0, max: 5000 }),
+            output: fc.integer({ min: 0, max: 5000 }),
+            total: fc.integer({ min: 0, max: 10000 }),
+          }),
+          { minLength: 2, maxLength: 8 }
+        ),
+        (tokenSequence) => {
+          const engine = new OpenCodeEngine();
+          const accum = {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            cached: 0,
+            input_cost: 0,
+            output_cost: 0,
+            total_cost: 0,
+          };
+          let prevTotal = 0;
+
+          for (const tokens of tokenSequence) {
+            const line = JSON.stringify({ type: "step_finish", part: { tokens } });
+            engine.parseLine(line, accum);
+            expect(accum.total_tokens).toBeGreaterThanOrEqual(prevTotal);
+            prevTotal = accum.total_tokens;
+          }
+        }
+      ),
+      { numRuns: 100 }
+    );
   });
 });
