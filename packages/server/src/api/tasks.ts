@@ -2,7 +2,13 @@ import { randomBytes } from "node:crypto";
 import { access, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { DiffFileSummary, DiffSummary, TaskWithRun } from "@vibe-code/shared";
+import type {
+  AgentRun,
+  DiffFileSummary,
+  DiffSummary,
+  TaskUsageSummary,
+  TaskWithRun,
+} from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -67,7 +73,16 @@ const updateTaskSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   status: z
-    .enum(["scheduled", "backlog", "in_progress", "review", "done", "failed", "archived"])
+    .enum([
+      "scheduled",
+      "backlog",
+      "in_progress",
+      "blocked",
+      "review",
+      "done",
+      "failed",
+      "archived",
+    ])
     .optional(),
   columnOrder: z.number().optional(),
   engine: z.string().optional(),
@@ -91,6 +106,85 @@ const launchTaskSchema = z.object({
   engine: z.string().optional(),
   model: z.string().optional(),
 });
+
+function emptyUsageSummary(): TaskUsageSummary {
+  return {
+    totalTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalCost: 0,
+    inputCost: 0,
+    outputCost: 0,
+    runCount: 0,
+    sessionIds: [],
+    models: {},
+  };
+}
+
+function addModelUsage(
+  summary: TaskUsageSummary,
+  model: string,
+  usage: NonNullable<AgentRun["tokenUsage"]>[string]
+): void {
+  if (!summary.models[model]) {
+    summary.models[model] = {
+      total_tokens: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      input_cost: 0,
+      output_cost: 0,
+      total_cost: 0,
+    };
+  }
+  const modelSummary = summary.models[model];
+  const inputCost = usage.input_cost || 0;
+  const outputCost = usage.output_cost || 0;
+  const totalCost = usage.total_cost || inputCost + outputCost;
+
+  modelSummary.total_tokens += usage.total_tokens || 0;
+  modelSummary.input_tokens += usage.input_tokens || 0;
+  modelSummary.output_tokens += usage.output_tokens || 0;
+  modelSummary.input_cost += inputCost;
+  modelSummary.output_cost += outputCost;
+  modelSummary.total_cost += totalCost;
+
+  summary.totalTokens += usage.total_tokens || 0;
+  summary.inputTokens += usage.input_tokens || 0;
+  summary.outputTokens += usage.output_tokens || 0;
+  summary.inputCost += inputCost;
+  summary.outputCost += outputCost;
+  summary.totalCost += totalCost;
+}
+
+function buildUsageSummary(runs: AgentRun[]): TaskUsageSummary {
+  const summary = emptyUsageSummary();
+  const sessionIds = new Set<string>();
+
+  for (const run of runs) {
+    summary.runCount += 1;
+    if (run.sessionId) sessionIds.add(run.sessionId);
+    if (run.tokenUsage && Object.keys(run.tokenUsage).length > 0) {
+      for (const [model, usage] of Object.entries(run.tokenUsage))
+        addModelUsage(summary, model, usage);
+      continue;
+    }
+    if (run.costStats) {
+      addModelUsage(summary, run.engine, {
+        total_tokens: run.costStats.total_tokens || 0,
+        input_tokens: run.costStats.input_tokens || 0,
+        output_tokens: run.costStats.output_tokens || 0,
+        input_cost: (run.costStats.input || 0) / 1_000_000,
+        output_cost: (run.costStats.output || 0) / 1_000_000,
+        total_cost:
+          (run.costStats.total ?? (run.costStats.input || 0) + (run.costStats.output || 0)) /
+          1_000_000,
+      });
+    }
+  }
+
+  summary.sessionIds = [...sessionIds];
+  return summary;
+}
 
 const importIssuesSchema = z.object({
   repoId: z.string().min(1),
@@ -118,6 +212,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const latestRunsByTaskId = new Map(
       db.runs.listLatestByTaskIds(tasks.map((task) => task.id)).map((run) => [run.taskId, run])
     );
+    const usageByTaskId = new Map(
+      tasks.map((task) => [task.id, buildUsageSummary(db.runs.listByTask(task.id))])
+    );
     const reposById = new Map(
       db.repos
         .listByIds(Array.from(new Set(tasks.map((task) => task.repoId))))
@@ -126,6 +223,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     return tasks.map((task) => ({
       ...task,
       latestRun: latestRunsByTaskId.get(task.id) ?? undefined,
+      usageSummary: usageByTaskId.get(task.id),
       repo: reposById.get(task.repoId) ?? undefined,
     }));
   }
@@ -406,7 +504,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
-    if (task.status !== "backlog" && task.status !== "failed") {
+    if (task.status !== "backlog" && task.status !== "failed" && task.status !== "blocked") {
       return c.json(
         { error: "invalid_state", message: `Cannot launch task in "${task.status}" status` },
         400
@@ -423,7 +521,16 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return c.json({ error: "launch_failed", message: msg }, 500);
+      const isCapacity = (err as Error & { capacityExceeded?: boolean }).capacityExceeded;
+      return c.json(
+        {
+          error: isCapacity ? "capacity_full" : "launch_failed",
+          message: isCapacity
+            ? "Todos os slots de agentes estao em uso. A task fica na fila e pode iniciar quando houver capacidade."
+            : msg,
+        },
+        isCapacity ? 429 : 500
+      );
     }
   });
 
@@ -632,7 +739,7 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const taskId = c.req.param("id");
     db.tasks.update(taskId, {
       pendingApproval: false,
-      status: "failed",
+      status: "blocked",
       notes: "Rejected by human.",
     });
     const task = db.tasks.getById(taskId);
@@ -679,8 +786,11 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const task = db.tasks.getById(taskId);
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
-    if (task.status !== "failed") {
-      return c.json({ error: "invalid_state", message: "Can only retry failed tasks" }, 400);
+    if (task.status !== "failed" && task.status !== "blocked") {
+      return c.json(
+        { error: "invalid_state", message: "Can only retry failed or blocked tasks" },
+        400
+      );
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -693,7 +803,16 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
       return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return c.json({ error: "retry_failed", message: msg }, 500);
+      const isCapacity = (err as Error & { capacityExceeded?: boolean }).capacityExceeded;
+      return c.json(
+        {
+          error: isCapacity ? "capacity_full" : "retry_failed",
+          message: isCapacity
+            ? "Todos os slots de agentes estao em uso. A task fica na fila e pode iniciar quando houver capacidade."
+            : msg,
+        },
+        isCapacity ? 429 : 500
+      );
     }
   });
 

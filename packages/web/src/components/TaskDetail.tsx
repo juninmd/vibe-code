@@ -97,7 +97,7 @@ const auraStyle: Record<string, string> = {
 
 const statusLabel: Record<string, string> = {
   scheduled: "Agendada",
-  backlog: "Backlog",
+  backlog: "Todo",
   in_progress: "Em execucao",
   review: "Em revisao",
   done: "Concluida",
@@ -114,7 +114,7 @@ const CRON_PRESETS = [
 
 const cleanStatusLabel: Record<string, string> = {
   scheduled: "Agendada",
-  backlog: "Backlog",
+  backlog: "Todo",
   in_progress: "Em execucao",
   review: "Em revisao",
   done: "Concluida",
@@ -603,6 +603,7 @@ export function TaskDetail({
   const sessionId = task.latestRun?.sessionId ?? runSnapshot?.sessionId ?? null;
   const costStats = task.latestRun?.costStats;
   const tokenUsage = task.latestRun?.tokenUsage;
+  const usageSummary = task.usageSummary;
 
   // Calculate aggregated stats from tokenUsage if available
   let displayTotalTokens = costStats?.total_tokens ?? 0;
@@ -652,6 +653,18 @@ export function TaskDetail({
     displayInputCostRaw = sumInputCost * 1_000_000;
     displayOutputCostRaw = sumOutputCost * 1_000_000;
     displayTotalCostRaw = sumTotalCost * 1_000_000;
+  }
+
+  if (usageSummary && usageSummary.runCount > 0) {
+    displayTotalTokens = usageSummary.totalTokens;
+    displayInputTokens = usageSummary.inputTokens;
+    displayOutputTokens = usageSummary.outputTokens;
+    displayInputCostUSD = usageSummary.inputCost;
+    displayOutputCostUSD = usageSummary.outputCost;
+    displayTotalCostUSD = usageSummary.totalCost;
+    displayInputCostRaw = usageSummary.inputCost * 1_000_000;
+    displayOutputCostRaw = usageSummary.outputCost * 1_000_000;
+    displayTotalCostRaw = usageSummary.totalCost * 1_000_000;
   }
 
   const inputCost = formatCurrencyMicros(displayInputCostRaw);
@@ -1490,6 +1503,15 @@ export function TaskDetail({
                     title={sessionId ?? undefined}
                   />
                   <DetailField
+                    label="Session IDs"
+                    value={
+                      usageSummary?.sessionIds.length
+                        ? usageSummary.sessionIds.map((id) => id.slice(0, 8)).join(", ")
+                        : "Not recorded"
+                    }
+                    title={usageSummary?.sessionIds.join("\n") || undefined}
+                  />
+                  <DetailField
                     label="Started"
                     value={formatNullableDate(task.latestRun?.startedAt)}
                   />
@@ -1650,7 +1672,9 @@ export function TaskDetail({
                 </div>
               )}
 
-              {(costStats || (tokenUsage && Object.keys(tokenUsage).length > 0)) && (
+              {(usageSummary?.runCount ||
+                costStats ||
+                (tokenUsage && Object.keys(tokenUsage).length > 0)) && (
                 <section
                   className="col-span-1 rounded-xl glass-card border p-3.5 lg:col-span-3 shadow-sm"
                   style={{ borderColor: "var(--glass-border)" }}
@@ -1659,7 +1683,7 @@ export function TaskDetail({
                     className="mb-3 text-[10px] font-black uppercase tracking-[0.16em]"
                     style={{ color: "var(--text-secondary)" }}
                   >
-                    Usage recorded by engine
+                    Usage recorded by task
                   </h3>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                     <DetailField
@@ -1760,69 +1784,74 @@ export function TaskDetail({
 
               {/* Actions */}
               <div className="space-y-4">
-                {(task.status === "backlog" || task.status === "failed") && engines && (
-                  <div className="bg-surface/30 border border-strong rounded-lg p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
-                        Run configuration
-                      </h3>
-                      <span className="text-[10px] text-dimmed italic">
-                        Choose engine and model before starting
-                      </span>
-                    </div>
+                {(task.status === "backlog" ||
+                  task.status === "failed" ||
+                  task.status === "blocked") &&
+                  engines && (
+                    <div className="bg-surface/30 border border-strong rounded-lg p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[10px] font-semibold text-primary0 uppercase tracking-wider">
+                          Run configuration
+                        </h3>
+                        <span className="text-[10px] text-dimmed italic">
+                          Choose engine and model before starting
+                        </span>
+                      </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[10px] text-primary0 mb-1">Engine</div>
-                        <Select
-                          value={selectedEngine}
-                          onChange={(e) => setSelectedEngine(e.target.value)}
-                          className="h-8 py-1 text-xs"
-                          required
-                        >
-                          <option value="" disabled>
-                            Selecione uma engine...
-                          </option>
-                          <option value="auto">Auto (First Available)</option>
-                          {engines.map((eng) => (
-                            <option key={eng.name} value={eng.name} disabled={!eng.available}>
-                              {eng.displayName}
-                              {!eng.available ? " (unavailable)" : ""}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[10px] text-primary0 mb-1">Engine</div>
+                          <Select
+                            value={selectedEngine}
+                            onChange={(e) => setSelectedEngine(e.target.value)}
+                            className="h-8 py-1 text-xs"
+                            required
+                          >
+                            <option value="" disabled>
+                              Selecione uma engine...
                             </option>
-                          ))}
-                        </Select>
-                      </div>
+                            <option value="auto">Auto (First Available)</option>
+                            {engines.map((eng) => (
+                              <option key={eng.name} value={eng.name} disabled={!eng.available}>
+                                {eng.displayName}
+                                {!eng.available ? " (unavailable)" : ""}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
 
-                      <div>
-                        <div className="text-[10px] text-primary0 mb-1">Modelo</div>
-                        <Select
-                          value={selectedModel}
-                          onChange={(e) => setSelectedModel(e.target.value)}
-                          disabled={loadingModels || !selectedEngine}
-                          className="h-8 py-1 text-xs"
-                        >
-                          <option value="">
-                            {loadingModels ? "Loading..." : "Engine default"}
-                          </option>
-                          {groupModelsByProvider(availableModels).map(
-                            ({ provider, models: providerModels }) => (
-                              <optgroup key={provider} label={provider}>
-                                {providerModels.map((m) => (
-                                  <option key={m} value={m}>
-                                    {m.includes("/") ? m.split("/").slice(1).join("/") : m}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )
-                          )}
-                        </Select>
+                        <div>
+                          <div className="text-[10px] text-primary0 mb-1">Modelo</div>
+                          <Select
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                            disabled={loadingModels || !selectedEngine}
+                            className="h-8 py-1 text-xs"
+                          >
+                            <option value="">
+                              {loadingModels ? "Loading..." : "Engine default"}
+                            </option>
+                            {groupModelsByProvider(availableModels).map(
+                              ({ provider, models: providerModels }) => (
+                                <optgroup key={provider} label={provider}>
+                                  {providerModels.map((m) => (
+                                    <option key={m} value={m}>
+                                      {m.includes("/") ? m.split("/").slice(1).join("/") : m}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )
+                            )}
+                          </Select>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 <div className="flex gap-3 flex-wrap items-center pt-4 border-t border-white/5">
-                  {(task.status === "backlog" || task.status === "failed") && (
+                  {(task.status === "backlog" ||
+                    task.status === "failed" ||
+                    task.status === "blocked") && (
                     <Button
                       variant="primary"
                       disabled={!!loadingAction || !selectedEngine}
@@ -1836,10 +1865,14 @@ export function TaskDetail({
                       }}
                       className="rounded-xl h-12 px-8 bg-gradient-to-r from-blue-600 to-indigo-600 shadow-xl shadow-blue-500/20 font-black uppercase tracking-widest text-[10px] active-shrink"
                     >
-                      {loadingAction === "launch" ? "Starting run..." : "Start run"}
+                      {loadingAction === "launch"
+                        ? "Starting run..."
+                        : task.status === "blocked"
+                          ? "Resume run"
+                          : "Start run"}
                     </Button>
                   )}
-                  {task.status === "failed" && (
+                  {(task.status === "failed" || task.status === "blocked") && (
                     <Button
                       variant="outline"
                       disabled={!!loadingAction || !selectedEngine}

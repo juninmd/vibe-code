@@ -159,14 +159,13 @@ export const DEFAULT_OPENCODE_MODEL = "auto-free";
 // Must be a model name that opencode's Anthropic provider allowlist recognizes.
 export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-latest";
 
-export const OPENCODE_FALLBACK_MODELS = ["auto-free", "opencode/big-pickle"];
+export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL];
 
 /**
- * Only `-free` OpenCode models (plus the `auto-free` selector and the
- * `opencode/big-pickle` free fallback) are exposed in the cluster deployment.
+ * Only the dynamic `auto-free` selector and models reported as free are exposed.
  */
 export function isFreeOpencodeModel(model: string): boolean {
-  return model === "auto-free" || model.endsWith("-free") || model === "opencode/big-pickle";
+  return model === DEFAULT_OPENCODE_MODEL || model.endsWith("-free");
 }
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -347,16 +346,16 @@ export class OpenCodeEngine implements AgentEngine {
           .split("\n")
           .map((m) => m.trim())
           .filter(Boolean);
-        const free = models.filter((m) => m.endsWith("-free") || m === "opencode/big-pickle");
+        const free = models.filter(isFreeOpencodeModel).filter((m) => m !== DEFAULT_OPENCODE_MODEL);
         if (free.length > 0) {
           const chosen = free[Math.floor(Math.random() * free.length)];
           return chosen;
         }
       }
     } catch (e) {
-      console.warn("[opencode] Failed to query local free models, falling back to big-pickle", e);
+      console.warn("[opencode] Failed to query local free models, falling back to auto-free", e);
     }
-    return "opencode/big-pickle";
+    return DEFAULT_OPENCODE_MODEL;
   }
 
   async listModels(): Promise<string[]> {
@@ -457,6 +456,8 @@ export class OpenCodeEngine implements AgentEngine {
     let proc: Subprocess | null = null;
     let stdoutTask: Promise<void> | null = null;
     let stderrTask: Promise<void> | null = null;
+    let stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let heartbeatActive = true;
 
     try {
@@ -531,6 +532,9 @@ export class OpenCodeEngine implements AgentEngine {
       if (options.signal) {
         options.signal.addEventListener("abort", () => {
           proc?.kill();
+          void stdoutReader?.cancel().catch(() => {});
+          void stderrReader?.cancel().catch(() => {});
+          notify();
           if (options.runId) this.processes.delete(options.runId);
         });
       }
@@ -568,6 +572,10 @@ export class OpenCodeEngine implements AgentEngine {
       const pStdout = proc.stdout as any;
       stdoutTask = (async () => {
         const reader = pStdout.getReader();
+        stdoutReader = reader;
+        if (options.signal?.aborted) {
+          await reader.cancel().catch(() => {});
+        }
         const dec = new TextDecoder();
         let buf = "";
         try {
@@ -593,6 +601,7 @@ export class OpenCodeEngine implements AgentEngine {
           } catch {
             /* ignore */
           }
+          stdoutReader = null;
           stdoutDone = true;
           notify();
         }
@@ -620,6 +629,10 @@ export class OpenCodeEngine implements AgentEngine {
       const pStderr = proc.stderr as any;
       stderrTask = (async () => {
         const reader = pStderr.getReader();
+        stderrReader = reader;
+        if (options.signal?.aborted) {
+          await reader.cancel().catch(() => {});
+        }
         const dec = new TextDecoder();
         let buf = "";
         try {
@@ -644,6 +657,7 @@ export class OpenCodeEngine implements AgentEngine {
           } catch {
             /* ignore */
           }
+          stderrReader = null;
           stderrDone = true;
           notify();
         }
@@ -689,6 +703,7 @@ export class OpenCodeEngine implements AgentEngine {
           yield queue.shift()!;
         }
         if (allDone() && queue.length === 0) break;
+        if (options.signal?.aborted) break;
 
         await new Promise<void>((r) => {
           waiting.resolve = r;
@@ -698,6 +713,13 @@ export class OpenCodeEngine implements AgentEngine {
       // Stop the heartbeat before awaiting — it might be sleeping for up to
       // heartbeatIntervalMs; we don't need to wait for it to wake up.
       heartbeatActive = false;
+      if (options.signal?.aborted) {
+        proc?.kill();
+        const currentStdoutReader = stdoutReader as ReadableStreamDefaultReader<Uint8Array> | null;
+        const currentStderrReader = stderrReader as ReadableStreamDefaultReader<Uint8Array> | null;
+        void currentStdoutReader?.cancel().catch(() => {});
+        void currentStderrReader?.cancel().catch(() => {});
+      }
       if (stdoutTask || stderrTask) {
         await Promise.all([stdoutTask, stderrTask].filter(Boolean));
       }

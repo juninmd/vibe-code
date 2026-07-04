@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 ### Fixed
+- Fixed task launch capacity responses so saturated runtimes return a friendly 429 while leaving tasks queued.
+- Fixed task status updates to accept `blocked` through the API.
+- Fixed auto-retry accounting so failed agent runs stop after the configured retry budget and move the task to `blocked`.
 - Added Telegram env fallback so notifications and the test endpoint work when DB settings are empty in cluster deployments.
 - Improved the task detail terminal panel with clearer session state, a stronger output frame, and a more readable idle state.
 - Fixed prod pod crash risk by capping max agents to the deployment env and raising the runtime memory limit to 3Gi.
@@ -28,6 +31,9 @@
 - **Coverage Additions**: Added tests for access control behavior and terminal panel session messaging.
 
 ### Changed
+- Task cards and task details now use task-level usage totals across all agent runs, including recorded session IDs.
+- Blocked tasks can be relaunched from the task detail modal with a new engine/model selection.
+- User-facing kanban labels now use `Todo` and `Working` while keeping the existing internal status names.
 - **Task Detail Execution UX**: Reduced non-execution chrome in running task modals and made full-height agent output open in a raw, readable log view with the existing step timeline available on demand.
 - **OpenCode Dynamic Configuration Isolation**: Configured OpenCode to execute using temporary configuration folders via isolated `XDG_CONFIG_HOME` env variables to prevent polluting the git workspace repository.
 - **Unified Telemetry & Micro-dollar Conversion**: Refactored OpenCode event parsing to progressively accumulate execution costs, reporting unified cumulative costStats telemetry, and mapped cost units in task detail modals/cards to handle micro-dollar and standard-dollar conversions correctly.

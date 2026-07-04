@@ -127,8 +127,8 @@ describe("isFreeOpencodeModel fuzz", () => {
     expect(isFreeOpencodeModel("auto-free")).toBe(true);
   });
 
-  it("returns true for big-pickle", () => {
-    expect(isFreeOpencodeModel("opencode/big-pickle")).toBe(true);
+  it("returns false for named non-free provider models", () => {
+    expect(isFreeOpencodeModel("opencode/big-pickle")).toBe(false);
   });
 
   it("returns true for any model ending in -free", () => {

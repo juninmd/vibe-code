@@ -128,13 +128,13 @@ export function createInboxRouter(db: Db, registry: EngineRegistry, orchestrator
       });
     }
 
-    if (orchestrator.activeCount >= Number(process.env.VIBE_CODE_MAX_AGENTS || 4)) {
+    if (orchestrator.activeCount >= orchestrator.maxConcurrentAgents) {
       items.push({
         id: "runtime_saturated:local",
         type: "runtime_saturated",
         severity: "warning",
         title: "Runtime local saturado",
-        description: "Todos os slots de agentes estao em uso.",
+        description: "Todos os slots de agentes estao em uso. Novas tasks ficam na fila.",
         taskId: null,
         repoId: null,
         repoName: null,

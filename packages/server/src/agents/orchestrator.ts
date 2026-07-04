@@ -40,25 +40,20 @@ function appendTaskNote(existing: string | undefined, note: string): string {
     .join("\n\n");
 }
 
-// Parse VIBE_CODE_MAX_AGENTS_BY_STATUS="in_progress:6,review:2"
-function parseMaxAgentsByStatus(): Map<string, number> {
-  const map = new Map<string, number>();
-  const raw = process.env.VIBE_CODE_MAX_AGENTS_BY_STATUS ?? "";
-  for (const entry of raw.split(",")) {
-    const [status, limit] = entry.split(":");
-    if (status?.trim() && limit?.trim()) {
-      const n = Number(limit.trim());
-      if (n > 0) map.set(status.trim().toLowerCase(), n);
-    }
-  }
-  return map;
+function capacityError(maxConcurrent: number): Error & { capacityExceeded: true } {
+  const err = new Error(`Max concurrent agents reached (${maxConcurrent}).`) as Error & {
+    capacityExceeded: true;
+  };
+  err.capacityExceeded = true;
+  return err;
 }
 
 export class Orchestrator {
   private activeRuns = new Map<string, ActiveRun>();
   private retryQueue = new Map<string, PendingRetry>();
+  private retryAttempts = new Map<string, number>();
+  private retryingTasks = new Set<string>();
   private maxConcurrent: number;
-  private maxAgentsByStatus: Map<string, number>;
   skillsLoader?: SkillsLoader;
 
   constructor(
@@ -69,7 +64,6 @@ export class Orchestrator {
     maxConcurrent = 4
   ) {
     this.maxConcurrent = maxConcurrent;
-    this.maxAgentsByStatus = parseMaxAgentsByStatus();
 
     // Ensure all active process trees are killed when the orchestrator shuts down
     const shutdown = async () => {
@@ -189,7 +183,7 @@ export class Orchestrator {
   async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
     if (this.activeCount >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
-      throw new Error("Max concurrent agents reached.");
+      throw capacityError(this.maxConcurrent);
     }
 
     if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
@@ -214,20 +208,6 @@ export class Orchestrator {
       }
     }
 
-    // Per-status concurrency gate (VIBE_CODE_MAX_AGENTS_BY_STATUS)
-    const statusLimit = this.maxAgentsByStatus.get(task.status.toLowerCase());
-    if (statusLimit !== undefined) {
-      const countForStatus = [...this.activeRuns.values()].filter((r) => {
-        const t = this.db.tasks.getById(r.taskId);
-        return t?.status === task.status;
-      }).length;
-      if (countForStatus >= statusLimit) {
-        throw new Error(
-          `Max concurrent agents for status "${task.status}" reached (${statusLimit})`
-        );
-      }
-    }
-
     if (task.dependsOn.length > 0) {
       const incompleteDeps = this.checkBlockedByDependencies(task.id, task.dependsOn);
       if (incompleteDeps.length > 0) {
@@ -239,8 +219,9 @@ export class Orchestrator {
       }
     }
 
-    // Cancel any pending retry for this task — it's being launched manually
+    // Cancel any pending retry for this task. Manual launches reset the retry budget.
     this.cancelRetry(task.id);
+    if (!this.retryingTasks.has(task.id)) this.retryAttempts.delete(task.id);
 
     // Reserve a slot immediately to prevent race conditions between concurrent launches
     const placeholder: ActiveRun = {
@@ -301,6 +282,9 @@ export class Orchestrator {
         () => {
           this.activeRuns.delete(task.id);
           this.checkLoopAndRelaunch(task.id, engineOverride, modelOverride);
+          if (this.db.tasks.getById(task.id)?.status !== "failed") {
+            this.retryAttempts.delete(task.id);
+          }
           this.maybeScheduleRetry(task.id, engineOverride, modelOverride);
         },
         model,
@@ -359,9 +343,7 @@ export class Orchestrator {
     if (!template || template.status !== "scheduled") throw new Error("Invalid template task");
 
     if (this.activeCount >= this.maxConcurrent) {
-      const err = new Error("Max concurrent agents reached — skipping scheduled trigger");
-      (err as any).capacityExceeded = true;
-      throw err;
+      throw capacityError(this.maxConcurrent);
     }
 
     const alreadyRunning =
@@ -479,14 +461,23 @@ export class Orchestrator {
     engineOverride?: string,
     modelOverride?: string
   ): void {
-    if (AUTO_RETRY_MAX <= 0) return;
-
     const task = this.db.tasks.getById(taskId);
     if (!task || task.status !== "failed") return;
 
-    const existing = this.retryQueue.get(taskId);
-    const attempt = (existing?.attempt ?? 0) + 1;
-    if (attempt > AUTO_RETRY_MAX) return;
+    if (AUTO_RETRY_MAX <= 0) {
+      this.blockFailedTask(taskId, "Agent failed and automatic retry is disabled.");
+      return;
+    }
+
+    const attempt = (this.retryAttempts.get(taskId) ?? 0) + 1;
+    if (attempt > AUTO_RETRY_MAX) {
+      this.blockFailedTask(
+        taskId,
+        `Agent failed after ${AUTO_RETRY_MAX} automatic retry attempt(s).`
+      );
+      return;
+    }
+    this.retryAttempts.set(taskId, attempt);
 
     const delayMs = retryBackoffMs(attempt);
     const dueAt = Date.now() + delayMs;
@@ -503,12 +494,16 @@ export class Orchestrator {
       if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
 
       try {
+        this.retryingTasks.add(taskId);
         await this.launch({ ...t, status: "backlog" }, engineOverride, modelOverride);
       } catch (err) {
         console.error(`[orchestrator] Auto-retry launch failed for task ${taskId}:`, err);
+      } finally {
+        this.retryingTasks.delete(taskId);
       }
     }, delayMs);
 
+    const existing = this.retryQueue.get(taskId);
     if (existing) clearTimeout(existing.timer);
 
     const run = this.db.runs.getLatestByTask(taskId);
@@ -538,6 +533,21 @@ export class Orchestrator {
     }
   }
 
+  private blockFailedTask(taskId: string, reason: string): void {
+    const task = this.db.tasks.getById(taskId);
+    if (!task || task.status !== "failed") return;
+
+    this.cancelRetry(taskId);
+    this.retryAttempts.delete(taskId);
+    const note = appendTaskNote(task.notes, reason);
+    const blocked = this.db.tasks.update(taskId, { status: "blocked", notes: note });
+    if (blocked) {
+      this.hub.broadcastAll({ type: "task_updated", task: blocked });
+      this.hub.broadcastAll({ type: "task_blocked", taskId, blockedBy: [reason] });
+    }
+    logOrchestratorEvent(`Task [${taskId.slice(0, 8)}] blocked: ${reason}`, "warn");
+  }
+
   private async cancelChildTask(taskId: string, parentTaskId: string): Promise<void> {
     const child = this.db.tasks.getById(taskId);
     if (!child) return;
@@ -562,7 +572,7 @@ export class Orchestrator {
       this.activeRuns.delete(taskId);
     }
 
-    const updated = this.db.tasks.update(taskId, { status: "failed", notes: note });
+    const updated = this.db.tasks.update(taskId, { status: "blocked", notes: note });
     if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
   }
 

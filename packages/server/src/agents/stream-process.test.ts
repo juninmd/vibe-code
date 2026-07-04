@@ -21,7 +21,7 @@ function passthrough(line: string): AgentEvent[] {
 }
 
 function spawn(code: string) {
-  return Bun.spawn(["bun", "-e", code], {
+  return Bun.spawn(["bun", "--eval", code], {
     stdout: "pipe",
     stderr: "pipe",
     stdin: "pipe",
@@ -39,19 +39,17 @@ describe("streamProcess", () => {
     });
 
     it("streams carriage-return progress lines in real time", async () => {
-      const proc = spawn(`
-        process.stdout.write("Progress 10%\\r");
-        process.stdout.write("Progress 50%\\r");
-        process.stdout.write("Progress 100%\\n");
-      `);
+      const proc = spawn(
+        'const cr = String.fromCharCode(13); process.stdout.write("Progress 10 pct" + cr); process.stdout.write("Progress 50 pct" + cr); process.stdout.write("Progress 100 pct\\n");'
+      );
       const events = await collect(proc, passthrough);
       const logs = events
         .filter((e) => e.type === "log" && e.stream === "stdout")
         .map((e) => e.content);
 
-      expect(logs).toContain("Progress 10%");
-      expect(logs).toContain("Progress 50%");
-      expect(logs).toContain("Progress 100%");
+      expect(logs).toContain("Progress 10 pct");
+      expect(logs).toContain("Progress 50 pct");
+      expect(logs).toContain("Progress 100 pct");
     });
 
     it("does not emit empty lines", async () => {

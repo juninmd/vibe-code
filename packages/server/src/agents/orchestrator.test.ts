@@ -339,7 +339,7 @@ describe("Orchestrator — task flow", () => {
     await orch.cancel(parent.id);
 
     const updatedChild = db.tasks.getById(child.id);
-    expect(updatedChild?.status).toBe("failed");
+    expect(updatedChild?.status).toBe("blocked");
     expect(updatedChild?.notes).toContain("Cancelled because parent task");
   });
 });

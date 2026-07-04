@@ -213,6 +213,7 @@ describe("filterCustomArgs fuzz", () => {
   it("removes blocked standalone flags but keeps the next value", () => {
     fc.assert(
       fc.property(flagString, flagString, (flag, val) => {
+        fc.pre(val !== flag);
         const args = [flag, val];
         const result = filterCustomArgs(args, nullProtoBlocked(flag, "standalone"));
         expect(result).toEqual([val]);

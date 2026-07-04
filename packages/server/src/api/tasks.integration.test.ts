@@ -17,7 +17,7 @@ function makeDb(): Db {
   return db;
 }
 
-function makeOrchestrator(): Orchestrator {
+function makeOrchestrator(overrides: Partial<Orchestrator> = {}): Orchestrator {
   return {
     launch: async () => ({
       id: "run-1",
@@ -48,6 +48,8 @@ function makeOrchestrator(): Orchestrator {
     }),
     sendInput: () => {},
     activeCount: 0,
+    maxConcurrentAgents: 4,
+    ...overrides,
   } as unknown as Orchestrator;
 }
 
@@ -63,9 +65,9 @@ function seedRepo(db: Db) {
   return result;
 }
 
-function buildApp(db: Db) {
+function buildApp(db: Db, orchestrator: Orchestrator = makeOrchestrator()) {
   const app = new Hono();
-  app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), makeGit()));
+  app.route("/api/tasks", createTasksRouter(db, orchestrator, makeGit()));
   return app;
 }
 
@@ -89,6 +91,46 @@ describe("GET /api/tasks", () => {
     expect(body.data).toHaveLength(2);
     expect(body.data.map((t: any) => t.title)).toContain("Task A");
     expect(body.data.map((t: any) => t.title)).toContain("Task B");
+  });
+
+  it("returns task-level token and session summary across runs", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Usage task", repoId: repo.id });
+    const run1 = db.runs.create(task.id, "opencode");
+    const run2 = db.runs.create(task.id, "claude-code");
+    db.runs.updateSessionId(run1.id, "sess-opencode");
+    db.runs.updateSessionId(run2.id, "sess-claude");
+    db.runs.updateTokenUsage(run1.id, {
+      "github-models/openai/gpt-4o-mini": {
+        total_tokens: 100,
+        input_tokens: 70,
+        output_tokens: 30,
+        input_cost: 0.001,
+        output_cost: 0.002,
+        total_cost: 0.003,
+      },
+    });
+    db.runs.updateTokenUsage(run2.id, {
+      "claude-sonnet": {
+        total_tokens: 50,
+        input_tokens: 40,
+        output_tokens: 10,
+        input_cost: 0.004,
+        output_cost: 0.005,
+        total_cost: 0.009,
+      },
+    });
+
+    const res = await buildApp(db).request("/api/tasks");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.data[0].usageSummary.totalTokens).toBe(150);
+    expect(body.data[0].usageSummary.inputTokens).toBe(110);
+    expect(body.data[0].usageSummary.outputTokens).toBe(40);
+    expect(body.data[0].usageSummary.totalCost).toBe(0.012);
+    expect(body.data[0].usageSummary.sessionIds).toEqual(["sess-claude", "sess-opencode"]);
   });
 
   it("filters tasks by repo_id", async () => {
@@ -291,6 +333,21 @@ describe("PATCH /api/tasks/:id", () => {
     expect((await res.json()).data.status).toBe("in_progress");
   });
 
+  it("accepts blocked as a task status", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Blocked task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "blocked" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe("blocked");
+  });
+
   it("returns 404 for unknown task", async () => {
     const res = await buildApp(makeDb()).request("/api/tasks/ghost", {
       method: "PATCH",
@@ -298,6 +355,52 @@ describe("PATCH /api/tasks/:id", () => {
       body: JSON.stringify({ title: "x" }),
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/tasks/:id/launch", () => {
+  it("returns 429 with a user-friendly message when capacity is full", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Queued task", repoId: repo.id });
+    const err = new Error("capacity") as Error & { capacityExceeded: true };
+    err.capacityExceeded = true;
+    const orchestrator = makeOrchestrator({
+      launch: async () => {
+        throw err;
+      },
+    });
+
+    const res = await buildApp(db, orchestrator).request(`/api/tasks/${task.id}/launch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(429);
+    expect(body.error).toBe("capacity_full");
+    expect(body.message).toContain("slots de agentes");
+    expect(db.tasks.getById(task.id)?.status).toBe("backlog");
+  });
+});
+
+describe("POST /api/tasks/:id/retry", () => {
+  it("allows retrying a blocked task", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Blocked task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "blocked" });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engine: "claude-code" }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(body.data.id).toBe("run-1");
   });
 });
 
