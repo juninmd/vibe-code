@@ -25,11 +25,12 @@ RUN apt-get update \
       build-essential pkg-config \
  && rm -rf /var/lib/apt/lists/*
 
-# Node + Claude Code CLI (distributed via npm)
+# Node + pnpm (claude-code is intentionally NOT installed in the container —
+# the cluster deployment runs OpenCode free models only).
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/* \
- && npm i -g @anthropic-ai/claude-code pnpm \
+ && npm i -g pnpm \
  && npm cache clean --force
 
 # OpenCode CLI (binary installer)

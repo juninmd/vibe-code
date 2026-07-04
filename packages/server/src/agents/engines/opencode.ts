@@ -150,7 +150,7 @@ export function humanizeStderr(line: string): string | null {
  * Default model for OpenCode when no model is specified.
  * GitHub Models works in the local/free deployment with GITHUB_TOKEN.
  */
-export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
+export const DEFAULT_OPENCODE_MODEL = "auto-free";
 
 // Model name opencode uses when routing via LiteLLM's Anthropic-compatible endpoint.
 // opencode uses /v1/messages (Anthropic SDK) for anthropic/* models — avoids the
@@ -159,7 +159,15 @@ export const DEFAULT_OPENCODE_MODEL = "cloud/llama-70b";
 // Must be a model name that opencode's Anthropic provider allowlist recognizes.
 export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-latest";
 
-export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL, "auto-free"];
+export const OPENCODE_FALLBACK_MODELS = ["auto-free", "opencode/big-pickle"];
+
+/**
+ * Only `-free` OpenCode models (plus the `auto-free` selector and the
+ * `opencode/big-pickle` free fallback) are exposed in the cluster deployment.
+ */
+export function isFreeOpencodeModel(model: string): boolean {
+  return model === "auto-free" || model.endsWith("-free") || model === "opencode/big-pickle";
+}
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
 
@@ -378,7 +386,8 @@ export class OpenCodeEngine implements AgentEngine {
     }
 
     for (const model of OPENCODE_FALLBACK_MODELS) models.add(model);
-    return Array.from(models);
+    // Cluster deployment only exposes free models.
+    return Array.from(models).filter(isFreeOpencodeModel);
   }
 
   async *execute(

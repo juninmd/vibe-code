@@ -127,10 +127,8 @@ const headerTabs = [
   { id: "terminal", label: "Terminal" },
   { id: "execution", label: "Execution" },
   { id: "diff", label: "Diff" },
-  { id: "artifacts", label: "Artifacts" },
   { id: "skills", label: "Skills" },
   { id: "cost", label: "Telemetry" },
-  { id: "memory", label: "Memory" },
   { id: "reviews", label: "Reviews" },
 ] satisfies { id: ActiveTab; label: string }[];
 
@@ -1077,13 +1075,6 @@ export function TaskDetail({
                   <button
                     type="button"
                     className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                    onClick={() => setActiveTab("memory")}
-                  >
-                    Memory
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
                     onClick={() => setActiveTab("reviews")}
                   >
                     Reviews
@@ -1123,13 +1114,6 @@ export function TaskDetail({
                       )}
                       {id === "diff" && task.branchName && !isActive && (
                         <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                      )}
-                      {id === "artifacts" && artifacts.length > 0 && (
-                        <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded-sm font-bold ${isActive ? "bg-white/10 text-primary" : "bg-white/5 text-muted"}`}
-                        >
-                          {artifacts.length}
-                        </span>
                       )}
                       {id === "skills" && matchedSkills.length > 0 && (
                         <span

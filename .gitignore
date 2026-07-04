@@ -11,3 +11,5 @@ tmp_test_db/
 packages/server/tmp_test_db/
 homologacao/.chrome-profile/
 *.log
+*.tsbuildinfo
+temp/
