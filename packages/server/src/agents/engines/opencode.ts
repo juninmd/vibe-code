@@ -114,8 +114,8 @@ export function humanizeStderr(line: string): string | null {
     trimmed.startsWith("TRACE") ||
     trimmed.match(/^\d{4}-\d{2}-\d{2}T.*\[DEBUG\]/) ||
     trimmed.match(/^\[debug\]/i) ||
-    trimmed.match(/^INF /) ||
-    trimmed.match(/^DBG /)
+    trimmed.match(/^INF\s/) ||
+    trimmed.startsWith("DBG")
   )
     return null;
 
