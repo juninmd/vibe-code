@@ -44,7 +44,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   in_progress: "Em progresso",
   blocked: "Bloqueadas",
   review: "Em review",
-  backlog: "Backlog",
+  backlog: "Todo",
   scheduled: "Agendadas",
   done: "Concluídas",
   failed: "Falhas",

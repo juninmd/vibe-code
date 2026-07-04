@@ -243,7 +243,7 @@ export function useTasks(repoFilter?: string) {
         await api.tasks.reject(id);
         const task = tasks.find((t) => t.id === id);
         if (task) {
-          updateTaskLocal({ ...task, pendingApproval: false, status: "failed" });
+          updateTaskLocal({ ...task, pendingApproval: false, status: "blocked" });
         }
       } catch (err) {
         console.error("Failed to reject task:", err);

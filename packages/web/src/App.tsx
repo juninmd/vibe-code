@@ -424,6 +424,11 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               notify(`✓ Task concluída: ${updated.title}`, "Agente executou com sucesso");
             else if (updated.status === "failed")
               notify(`✕ Task failed: ${updated.title}`, "Execução do agente failed");
+            else if (updated.status === "blocked")
+              notify(
+                `Task bloqueada: ${updated.title}`,
+                "Revise o erro e relance quando estiver pronto"
+              );
             else if (updated.status === "review")
               notify(`◎ PR pronto: ${updated.title}`, "Agente abriu um pull request");
           }

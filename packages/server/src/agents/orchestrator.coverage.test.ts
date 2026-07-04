@@ -104,6 +104,44 @@ describe("Orchestrator coverage", () => {
     (orch as any).cancelRetry("t1");
   });
 
+  test("maybeScheduleRetry blocks a failed task after retry budget is exhausted", async () => {
+    const task = makeTask({ id: "t1", status: "failed", notes: "" });
+    const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const mockDb = {
+      tasks: {
+        getById: mock().mockImplementation(() => task),
+        update: mock().mockImplementation((id: string, data: Record<string, unknown>) => {
+          updates.push({ id, data });
+          Object.assign(task, data);
+          return { ...task };
+        }),
+      },
+      runs: {
+        getLatestByTask: mock().mockReturnValue({ errorMessage: "Agent exited with code 1" }),
+      },
+    };
+    const mockHub = { broadcastAll: mock() };
+
+    const { Orchestrator } = await import("./orchestrator");
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
+
+    (orch as any).maybeScheduleRetry("t1");
+    (orch as any).maybeScheduleRetry("t1");
+    (orch as any).maybeScheduleRetry("t1");
+
+    expect(updates.at(-1)?.data.status).toBe("blocked");
+    expect((task as unknown as { notes: string }).notes).toContain(
+      "Agent failed after 2 automatic retry attempt"
+    );
+    expect(mockHub.broadcastAll).toHaveBeenCalledWith({
+      type: "task_blocked",
+      taskId: "t1",
+      blockedBy: ["Agent failed after 2 automatic retry attempt(s)."],
+    });
+
+    (orch as any).cancelRetry("t1");
+  });
+
   test("recoverInProgressTasks correctly parks tasks according to limits", async () => {
     const tasks = [
       makeTask({ id: "t1", priority: "none", status: "in_progress" }),

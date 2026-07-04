@@ -14,10 +14,6 @@ mock.module("./orchestrator/review", () => ({
   runReviewPipeline: async () => ({ blockers: [], actionableFindings: [], docsFindings: [] }),
 }));
 
-mock.module("../notifications/telegram", () => ({
-  createTelegramNotifier: () => ({ isConfigured: () => false, send: async () => {} }),
-}));
-
 const { Orchestrator } = await import("./orchestrator");
 
 type Db = ReturnType<typeof createDb>;
@@ -88,6 +84,7 @@ describe("E2E Homologation — full task lifecycle", () => {
   beforeAll(async () => {
     db = createDb(":memory:");
     db.settings.set("litellm_enabled", "false");
+    db.settings.set("telegram_enabled", "false");
     wsEvents = [];
     hub = makeHub(wsEvents);
 

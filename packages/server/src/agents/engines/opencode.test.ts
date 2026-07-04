@@ -21,7 +21,7 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     _workdir: string,
     _resumeSessionId?: string
   ): string[] {
-    return ["bun", "-e", this.script];
+    return ["bun", "--eval", this.script];
   }
 }
 
@@ -721,9 +721,7 @@ describe("OpenCodeEngine auto-free selection", () => {
           return {
             exited: Promise.resolve(),
             exitCode: 0,
-            stdout: new Response(
-              "opencode/model-a-free\nopencode/model-b-premium\nopencode/big-pickle\n"
-            ).body,
+            stdout: new Response("opencode/model-a-free\nopencode/model-b-premium\n").body,
           } as any;
         }
         return originalSpawn(cmd, options);
@@ -731,13 +729,13 @@ describe("OpenCodeEngine auto-free selection", () => {
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
-      expect(model === "opencode/model-a-free" || model === "opencode/big-pickle").toBe(true);
+      expect(model).toBe("opencode/model-a-free");
     } finally {
       Bun.spawn = originalSpawn;
     }
   });
 
-  it("falls back to big-pickle on command error", async () => {
+  it("falls back to auto-free on command error", async () => {
     const originalSpawn = Bun.spawn;
     try {
       Bun.spawn = mock((cmd: string[], options?: any) => {
@@ -753,7 +751,7 @@ describe("OpenCodeEngine auto-free selection", () => {
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
-      expect(model).toBe("opencode/big-pickle");
+      expect(model).toBe(DEFAULT_OPENCODE_MODEL);
     } finally {
       Bun.spawn = originalSpawn;
     }

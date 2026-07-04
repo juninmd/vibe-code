@@ -28,6 +28,8 @@ export async function* streamProcess(
   let stdoutDone = false;
   let stderrDone = false;
   let aborted = false;
+  let stdoutReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let stderrReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   const wake = () => {
     if (waiting.resolve) {
@@ -45,6 +47,8 @@ export async function* streamProcess(
     signal.addEventListener("abort", () => {
       aborted = true;
       proc.kill();
+      void stdoutReader?.cancel().catch(() => {});
+      void stderrReader?.cancel().catch(() => {});
       wake();
     });
   }
@@ -52,6 +56,7 @@ export async function* streamProcess(
   // Stream stderr in parallel
   const stderrTask = (async () => {
     const reader = proc.stderr.getReader();
+    stderrReader = reader;
     const decoder = new TextDecoder();
     let buffer = "";
     try {
@@ -71,7 +76,10 @@ export async function* streamProcess(
         push({ type: "log", stream: "stderr", content: buffer });
       }
     } finally {
-      reader.releaseLock();
+      try {
+        reader.releaseLock();
+      } catch {}
+      stderrReader = null;
       stderrDone = true;
       wake();
     }
@@ -80,6 +88,7 @@ export async function* streamProcess(
   // Stream stdout in parallel
   const stdoutTask = (async () => {
     const reader = proc.stdout.getReader();
+    stdoutReader = reader;
     const decoder = new TextDecoder();
     let buffer = "";
     try {
@@ -102,7 +111,10 @@ export async function* streamProcess(
         }
       }
     } finally {
-      reader.releaseLock();
+      try {
+        reader.releaseLock();
+      } catch {}
+      stdoutReader = null;
       stdoutDone = true;
       wake();
     }

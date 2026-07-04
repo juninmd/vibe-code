@@ -194,7 +194,9 @@ function TaskCardComponent({
 
   let displayCost: number | null = null;
   const run = task.latestRun;
-  if (run) {
+  if (task.usageSummary && task.usageSummary.runCount > 0) {
+    displayCost = task.usageSummary.totalCost;
+  } else if (run) {
     if (run.tokenUsage && Object.keys(run.tokenUsage).length > 0) {
       let sumTotalCost = 0;
       for (const stats of Object.values(run.tokenUsage) as any[]) {

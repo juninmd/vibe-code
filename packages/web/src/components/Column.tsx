@@ -34,14 +34,14 @@ const columnConfig: Record<
     countBg: "bg-surface-hover border-strong/40",
     countText: "text-secondary",
     emptyIcon: "list",
-    emptyText: "Add tasks here",
+    emptyText: "No tasks in Todo",
   },
   in_progress: {
     dot: "bg-blue-400",
     countBg: "bg-info/15 border-info/30",
     countText: "text-info",
     emptyIcon: "play",
-    emptyText: "No agents running",
+    emptyText: "No tasks working",
   },
   blocked: {
     dot: "bg-orange-400",

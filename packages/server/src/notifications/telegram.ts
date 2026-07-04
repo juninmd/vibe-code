@@ -11,32 +11,37 @@ export interface TelegramConfig {
   enabled: boolean;
 }
 
-export function resolveTelegramConfig(db: Db): TelegramConfig {
-  const token = db.settings.get("telegram_bot_token") || process.env.TELEGRAM_BOT_TOKEN || null;
-  const chatId = db.settings.get("telegram_chat_id") || process.env.TELEGRAM_CHAT_ID || null;
+type TelegramEnv = NodeJS.ProcessEnv;
+type TelegramFetch = typeof fetch;
+
+export function resolveTelegramConfig(db: Db, env: TelegramEnv = process.env): TelegramConfig {
+  const token = db.settings.get("telegram_bot_token") || env.TELEGRAM_BOT_TOKEN || null;
+  const chatId = db.settings.get("telegram_chat_id") || env.TELEGRAM_CHAT_ID || null;
   const enabledSetting = db.settings.get("telegram_enabled");
   const enabled =
-    enabledSetting === undefined
-      ? process.env.TELEGRAM_ENABLED !== "false"
-      : enabledSetting !== "false";
+    enabledSetting === undefined ? env.TELEGRAM_ENABLED !== "false" : enabledSetting !== "false";
 
   return { token, chatId, enabled };
 }
 
-export function createTelegramNotifier(db: Db): TelegramNotifier {
+export function createTelegramNotifier(
+  db: Db,
+  env: TelegramEnv = process.env,
+  fetchFn: TelegramFetch = fetch
+): TelegramNotifier {
   return {
     isConfigured() {
-      const { enabled, token, chatId } = resolveTelegramConfig(db);
+      const { enabled, token, chatId } = resolveTelegramConfig(db, env);
       return enabled && !!(token && chatId);
     },
 
     async send(message: string) {
-      const { token, chatId, enabled } = resolveTelegramConfig(db);
+      const { token, chatId, enabled } = resolveTelegramConfig(db, env);
 
       if (!enabled || !token || !chatId) return;
 
       const url = `https://api.telegram.org/bot${token}/sendMessage`;
-      const res = await fetch(url, {
+      const res = await fetchFn(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

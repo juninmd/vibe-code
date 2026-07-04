@@ -9,14 +9,6 @@ import { ConflictResolver } from "./conflict-resolver";
 
 type Db = ReturnType<typeof createDb>;
 
-// Mock Telegram so it doesn't fire real HTTP calls
-mock.module("../notifications/telegram", () => ({
-  createTelegramNotifier: () => ({
-    isConfigured: () => false,
-    send: async () => {},
-  }),
-}));
-
 const { Orchestrator } = await import("./orchestrator");
 
 mock.module("./orchestrator/review", () => ({
@@ -41,6 +33,7 @@ function makeHub(): BroadcastHub {
 function makeDb(): Db {
   const db = createDb(":memory:");
   db.settings.set("litellm_enabled", "false");
+  db.settings.set("telegram_enabled", "false");
   return db;
 }
 

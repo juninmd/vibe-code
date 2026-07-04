@@ -217,8 +217,8 @@ export const TASK_COLUMNS: TaskStatus[] = [
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   scheduled: "Agendadas",
-  backlog: "Backlog",
-  in_progress: "In Progress",
+  backlog: "Todo",
+  in_progress: "Working",
   blocked: "Blocked",
   review: "Review",
   done: "Done",
@@ -352,6 +352,28 @@ export interface AgentRun {
     >;
   };
   createdAt: string;
+}
+
+export interface TaskUsageSummary {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  inputCost: number;
+  outputCost: number;
+  runCount: number;
+  sessionIds: string[];
+  models: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }
+  >;
 }
 
 export interface AgentLog {
@@ -586,6 +608,7 @@ export interface TaskWithRun extends Task {
   latestRun?: AgentRun;
   repo?: Repository;
   labels?: Label[];
+  usageSummary?: TaskUsageSummary;
 }
 
 export type TaskArtifactKind =

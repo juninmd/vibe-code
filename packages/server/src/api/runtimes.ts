@@ -13,7 +13,7 @@ export function createRuntimesRouter(
   registry: EngineRegistry,
   orchestrator: Orchestrator,
   dataDir: string,
-  maxAgents: number
+  _maxAgents: number
 ) {
   const router = new Hono();
 
@@ -49,6 +49,7 @@ export function createRuntimesRouter(
 
     const availableEngines = engines.filter((engine) => engine.available).length;
     const activeAgents = orchestrator.activeCount;
+    const maxAgents = orchestrator.maxConcurrentAgents;
     const health =
       activeAgents >= maxAgents
         ? "saturated"
