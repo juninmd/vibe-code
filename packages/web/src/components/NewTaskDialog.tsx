@@ -5,7 +5,7 @@ import type {
   TaskPriority,
   TaskSpec,
 } from "@vibe-code/shared";
-import { TASK_COMPLEXITY_META, TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
+import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -210,7 +210,6 @@ export function NewTaskDialog({
   const [_loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("none");
-  const [taskComplexity, setTaskComplexity] = useState<string>("low");
   const [agentId, setAgentId] = useState("");
   const [skillsIndex, setSkillsIndex] = useState<SkillsIndex | null>(null);
 
@@ -363,76 +362,58 @@ export function NewTaskDialog({
                     >
                       Target Repository
                     </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors z-30">
+                    {reposLoading ? (
+                      <div className="flex h-12 items-center gap-2 rounded-xl border border-white/5 bg-input/40 px-4 text-sm text-muted">
+                        <div className="w-3 h-3 rounded-full bg-accent/40 animate-pulse" />
+                        Loading repositories...
+                      </div>
+                    ) : repos.length === 0 ? (
+                      <div className="flex h-12 items-center gap-2 rounded-xl border border-danger/20 bg-danger/5 px-4 text-sm text-danger">
                         <svg
                           width="14"
                           height="14"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2.5"
+                          strokeWidth="2"
                           aria-hidden="true"
                         >
-                          <title>Select icon</title>
-                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                          <title>Alert</title>
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
+                        No repositories found
                       </div>
-                      <div className="relative z-20 h-12 rounded-2xl bg-input/50 border border-white/5 focus-within:border-accent/40">
-                        {reposLoading ? (
-                          <div className="px-10 py-3 text-sm text-primary0 flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-accent/40 animate-pulse" />
-                            Loading repositories...
-                          </div>
-                        ) : repos.length === 0 ? (
-                          <div className="px-10 py-3 text-sm text-danger flex items-center gap-2">
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              aria-hidden="true"
-                            >
-                              <title>Alert</title>
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="12" y1="8" x2="12" y2="12" />
-                              <line x1="12" y1="16" x2="12.01" y2="16" />
-                            </svg>
-                            No repositories found
-                          </div>
-                        ) : (
-                          <Combobox
-                            inputId={NEW_TASK_FIELD_IDS.repository}
-                            value={repoId}
-                            onChange={setRepoId}
-                            placeholder="Search repositories..."
-                            required
-                            className="h-full bg-transparent border-none ring-0"
-                            inputClassName="pl-10 h-full font-bold"
-                            options={repos
-                              .filter((r) => r.status !== "error")
-                              .map((repo) => {
-                                const sublabel =
-                                  repo.status === "ready"
-                                    ? repo.url
-                                    : repo.status === "cloning"
-                                      ? "cloning…"
-                                      : repo.status === "pending"
-                                        ? "pending"
-                                        : repo.status;
-                                return {
-                                  value: repo.id,
-                                  label: repo.name,
-                                  sublabel,
-                                  searchText: repo.url,
-                                };
-                              })}
-                          />
-                        )}
-                      </div>
-                    </div>
+                    ) : (
+                      <Combobox
+                        inputId={NEW_TASK_FIELD_IDS.repository}
+                        value={repoId}
+                        onChange={setRepoId}
+                        placeholder="Search repositories..."
+                        required
+                        className="h-12 rounded-xl bg-input/40 border border-white/5 focus-within:border-accent/40"
+                        inputClassName="h-full px-4 font-bold text-sm"
+                        options={repos
+                          .filter((r) => r.status !== "error")
+                          .map((repo) => {
+                            const sublabel =
+                              repo.status === "ready"
+                                ? repo.url
+                                : repo.status === "cloning"
+                                  ? "cloning…"
+                                  : repo.status === "pending"
+                                    ? "pending"
+                                    : repo.status;
+                            return {
+                              value: repo.id,
+                              label: repo.name,
+                              sublabel,
+                              searchText: repo.url,
+                            };
+                          })}
+                      />
+                    )}
                   </div>
 
                   <div>
@@ -503,63 +484,34 @@ export function NewTaskDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label
-                    htmlFor="complexity-select"
-                    className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
-                  >
-                    Complexity Mapping
-                  </label>
-                  <div id="complexity-select" className="flex flex-wrap gap-2">
-                    {(["trivial", "low", "medium", "high", "critical"] as const).map((c) => {
-                      const meta = TASK_COMPLEXITY_META[c];
-                      const isActive = taskComplexity === c;
-                      return (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setTaskComplexity(c)}
-                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all active-shrink ${
-                            isActive
-                              ? "bg-white text-black border-white shadow-lg"
-                              : "bg-white/5 border-transparent text-muted hover:border-white/10 hover:text-primary"
-                          }`}
-                        >
-                          {meta.icon} {meta.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="priority-select"
-                    className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
-                  >
-                    Priority Signal
-                  </label>
-                  <div id="priority-select" className="flex flex-wrap gap-2">
-                    {TASK_PRIORITY_LEVELS.map((p) => {
-                      const meta = TASK_PRIORITY_META[p];
-                      const isActive = priority === p;
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setPriority(p)}
-                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all active-shrink ${
-                            isActive
-                              ? "bg-accent border-accent text-white shadow-lg shadow-accent/25"
-                              : "bg-white/5 border-transparent text-muted hover:border-white/10 hover:text-primary"
-                          }`}
-                        >
-                          {meta.icon} {meta.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div>
+                <label
+                  htmlFor="priority-select"
+                  className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
+                >
+                  Priority
+                </label>
+                <div id="priority-select" className="inline-flex rounded-xl bg-white/5 p-1 gap-1">
+                  {TASK_PRIORITY_LEVELS.map((p) => {
+                    const meta = TASK_PRIORITY_META[p];
+                    const isActive = priority === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPriority(p)}
+                        title={meta.label}
+                        aria-label={meta.label}
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-all active-shrink ${
+                          isActive
+                            ? "bg-accent text-white shadow-lg shadow-accent/25"
+                            : "text-muted hover:text-primary hover:bg-white/5"
+                        }`}
+                      >
+                        {meta.icon}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

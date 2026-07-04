@@ -34,6 +34,7 @@ import { ProviderRegistry } from "./git/providers/registry";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
 import { logValidationReport, validateSkills } from "./skills/validator";
+import { TerminalSessionService } from "./terminal/session-service";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -78,6 +79,56 @@ const orchestrator = new Orchestrator(
   hub,
   resolveMaxAgents(MAX_AGENTS, storedMaxAgents)
 );
+// Interactive terminal sessions (opened from the task "Terminal" tab). Each
+// session spawns a shell in the task's worktree so the operator can inspect what
+// the OpenCode agent is doing or drive it manually. Output is streamed back over
+// the WS hub to clients subscribed to the task.
+const now = () => new Date().toISOString();
+const terminalService = new TerminalSessionService({
+  onOpened: (taskId, runId, cols, rows) =>
+    hub.broadcastToTask(taskId, { type: "terminal_opened", taskId, runId, cols, rows }),
+  onOutput: (taskId, runId, stream, chunk) =>
+    hub.broadcastToTask(taskId, {
+      type: "terminal_output",
+      taskId,
+      runId,
+      stream,
+      chunk,
+      timestamp: now(),
+    }),
+  onClosed: (taskId, runId, exitCode) =>
+    hub.broadcastToTask(taskId, {
+      type: "terminal_closed",
+      taskId,
+      runId,
+      exitCode,
+      timestamp: now(),
+    }),
+  onError: (taskId, runId, message) =>
+    hub.broadcastToTask(taskId, {
+      type: "terminal_output",
+      taskId,
+      runId,
+      stream: "stderr",
+      chunk: `\n[terminal error] ${message}\n`,
+      timestamp: now(),
+    }),
+});
+
+/** Resolve the worktree directory for a task's most recent run (or null). */
+function resolveTaskWorktree(taskId: string): string | null {
+  try {
+    const row = db.raw
+      .query(
+        "SELECT worktree_path FROM agent_runs WHERE task_id = ? AND worktree_path IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+      )
+      .get(taskId) as { worktree_path: string } | undefined;
+    return row?.worktree_path ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
 validateSkills(skillsLoader)
@@ -259,6 +310,23 @@ const server = Bun.serve({
           hub.subscribe(client, msg.taskId);
         } else if (msg.type === "unsubscribe" && msg.taskId) {
           hub.unsubscribe(client, msg.taskId);
+        } else if (msg.type === "terminal_open" && msg.taskId) {
+          hub.subscribe(client, msg.taskId);
+          terminalService.openSession({
+            taskId: msg.taskId,
+            runId: msg.runId ?? null,
+            cwd: resolveTaskWorktree(msg.taskId) ?? undefined,
+            cols: msg.cols,
+            rows: msg.rows,
+          });
+        } else if (msg.type === "terminal_input" && msg.taskId) {
+          terminalService.sendInput(msg.taskId, msg.input);
+        } else if (msg.type === "terminal_resize" && msg.taskId) {
+          terminalService.resize(msg.taskId, msg.cols, msg.rows);
+        } else if (msg.type === "terminal_signal" && msg.taskId) {
+          terminalService.signal(msg.taskId, msg.signal);
+        } else if (msg.type === "terminal_close" && msg.taskId) {
+          terminalService.closeSession(msg.taskId);
         }
       } catch {
         // ignore malformed messages

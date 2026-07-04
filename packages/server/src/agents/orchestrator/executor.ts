@@ -471,7 +471,7 @@ export async function executeAgent(
   if (!effectiveModel && registry) {
     effectiveModel = (await registry.getDefaultFreeModel(engine.name)) ?? undefined;
   }
-  effectiveModel = effectiveModel ?? "cloud/llama-70b";
+  effectiveModel = effectiveModel ?? "auto-free";
   logAgentStart(task.id, engine.name, effectiveModel, repo.name);
 
   const timeoutId = setTimeout(() => {
