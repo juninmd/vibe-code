@@ -36,7 +36,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.67",
     "@openrouter/ai-sdk-provider": "^2.9.0",
-    "ai": "^6.0.180",
+    "ai": "^6.0.219",
     "hono": "^4.12.26",
     "nanoid": "^5.1.16",
     "ollama-ai-provider": "^1.2.0",
