@@ -25,7 +25,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
     "@commitlint/cli": "^21.2.0",
-    "@commitlint/config-conventional": "^21.0.2",
+    "@commitlint/config-conventional": "^21.2.0",
     "@playwright/test": "^1.61.1",
     "fast-check": "^4.8.0",
     "husky": "^9.1.7",
