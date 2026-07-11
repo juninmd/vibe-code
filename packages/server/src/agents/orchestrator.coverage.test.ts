@@ -181,4 +181,77 @@ describe("Orchestrator coverage", () => {
     expect(updatedStatuses.t2).toBe("blocked");
     expect(updatedStatuses.t1).toBe("blocked");
   });
+
+  test("recoverInProgressTasks parks excess in_progress tasks as blocked when over concurrency limit", async () => {
+    const inProgressTasks = [
+      makeTask({ id: "t1", status: "in_progress", priority: "urgent" }),
+      makeTask({ id: "t2", status: "in_progress", priority: "high" }),
+      makeTask({ id: "t3", status: "in_progress", priority: "medium" }),
+    ];
+
+    const mockDb = {
+      tasks: {
+        list: mock().mockReturnValue(inProgressTasks),
+        update: mock(),
+      },
+    };
+
+    const mockHub = {
+      broadcastAll: mock(),
+    };
+
+    const { Orchestrator } = await import("./orchestrator");
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 2); // Limit 2
+
+    await orch.recoverInProgressTasks();
+
+    expect(mockDb.tasks.update).toHaveBeenCalledWith("t1", { status: "backlog" });
+    expect(mockDb.tasks.update).toHaveBeenCalledWith("t2", { status: "backlog" });
+    expect(mockDb.tasks.update).toHaveBeenCalledWith("t3", { status: "blocked" });
+  });
+
+  test("unblockTask moves blocked task to backlog and triggers sweepBacklog", async () => {
+    const task = makeTask({ id: "t1", status: "blocked" });
+    const mockDb = {
+      tasks: {
+        getById: mock().mockReturnValue(task),
+        update: mock(),
+      },
+    };
+    const mockHub = { broadcastAll: mock() };
+    const { Orchestrator } = await import("./orchestrator");
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
+
+    orch.sweepBacklog = mock().mockResolvedValue(undefined);
+
+    await orch.unblockTask("t1");
+
+    expect(mockDb.tasks.update).toHaveBeenCalledWith("t1", { status: "backlog" });
+    expect(mockHub.broadcastAll).toHaveBeenCalledWith({
+      type: "task_updated",
+      task: { ...task, status: "backlog" },
+    });
+    expect(orch.sweepBacklog).toHaveBeenCalled();
+  });
+
+  test("unblockTask does nothing if task is not blocked", async () => {
+    const task = makeTask({ id: "t1", status: "in_progress" });
+    const mockDb = {
+      tasks: {
+        getById: mock().mockReturnValue(task),
+        update: mock(),
+      },
+    };
+    const mockHub = { broadcastAll: mock() };
+    const { Orchestrator } = await import("./orchestrator");
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
+
+    orch.sweepBacklog = mock().mockResolvedValue(undefined);
+
+    await orch.unblockTask("t1");
+
+    expect(mockDb.tasks.update).not.toHaveBeenCalled();
+    expect(mockHub.broadcastAll).not.toHaveBeenCalled();
+    expect(orch.sweepBacklog).not.toHaveBeenCalled();
+  });
 });
