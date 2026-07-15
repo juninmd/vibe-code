@@ -1,6 +1,6 @@
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { config } from "dotenv";
 
 config({ path: resolve(import.meta.dir, "../../../.env") });
@@ -47,8 +47,10 @@ try {
   const resolvedDataDir = resolve(DATA_DIR);
   const cwd = process.cwd();
   const rel = relative(cwd, resolvedDataDir);
-  // If `rel` does not start with '..' then DATA_DIR is inside (or equal to) cwd
-  if (!(rel.startsWith("..") || rel === "")) {
+  // If `rel` does not start with '..' then DATA_DIR is inside (or equal to) cwd.
+  // On Windows, paths on a different drive make relative() return an absolute
+  // path (no '..' prefix) — that also means DATA_DIR is outside the repo.
+  if (!(rel.startsWith("..") || rel === "" || isAbsolute(rel))) {
     // inside a subpath of cwd -> override to user's home directory
     const fallback = join(homedir(), ".vibe-code");
     if (resolve(fallback) !== resolvedDataDir) {

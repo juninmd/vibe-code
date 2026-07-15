@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AgentRun, Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
@@ -244,11 +245,25 @@ export class Orchestrator {
       }
 
       const model = modelOverride ?? task.model ?? undefined;
-      const repo = this.db.repos.getById(task.repoId);
+      let repo = this.db.repos.getById(task.repoId);
       if (!repo) throw new Error("Repository not found");
-      if (repo.status === "pending")
+      if (repo.status === "pending") {
         await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
-      else if (repo.status !== "ready") throw new Error(`Repository is in "${repo.status}" state`);
+      } else if (repo.status === "ready") {
+        // Self-heal: the DB may say "ready" while the bare clone was deleted
+        // from disk (e.g. data dir wiped). Re-clone instead of failing at fetch.
+        const barePath = repo.localPath ?? this.git.getBarePath(repo.name, repo.url);
+        if (!existsSync(barePath)) {
+          logOrchestratorEvent(
+            `Bare repo missing on disk for "${repo.name}" (${barePath}); re-cloning`,
+            "warn"
+          );
+          await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
+        }
+      } else {
+        throw new Error(`Repository is in "${repo.status}" state`);
+      }
+      repo = this.db.repos.getById(task.repoId) ?? repo;
 
       const run = this.db.runs.create(task.id, engine.name);
       logOrchestratorEvent(

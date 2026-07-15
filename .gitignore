@@ -13,3 +13,7 @@ homologacao/.chrome-profile/
 *.log
 *.tsbuildinfo
 temp/
+
+# Playwright e2e artifacts
+test-results/
+playwright-report/

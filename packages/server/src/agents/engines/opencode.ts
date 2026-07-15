@@ -935,7 +935,7 @@ export class OpenCodeEngine implements AgentEngine {
           }
 
           if (method === "error" || method === "tool/error") {
-            const msg = String(params.message ?? params.error ?? "Unknown error");
+            const msg = str(params.message ?? params.error ?? "Unknown error");
             results.push({ type: "log", stream: "stderr", content: `[opencode] ${msg}` });
             results.push({ type: "error", content: msg });
             continue;
@@ -1195,7 +1195,7 @@ export class OpenCodeEngine implements AgentEngine {
 
         // error events
         if (eventType === "error" || part.type === "error" || raw.error) {
-          const msg = String(part.message ?? part.error ?? raw.error ?? "Unknown error");
+          const msg = str(part.message ?? part.error ?? raw.error ?? "Unknown error");
           results.push({ type: "log", stream: "stderr", content: msg });
           results.push({ type: "error", content: msg });
           continue;

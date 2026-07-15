@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,11 +10,17 @@ import { DEFAULT_OPENCODE_MODEL, humanizeStderr, OpenCodeEngine } from "./openco
 // Replaces the opencode CLI with an inline Bun script for deterministic tests.
 
 class FakeOpenCodeEngine extends OpenCodeEngine {
+  private readonly scriptPath: string;
+
   constructor(
-    private readonly script: string,
+    script: string,
     heartbeatIntervalMs = 60_000 // disable heartbeat in most tests
   ) {
     super(heartbeatIntervalMs);
+    // Windows argv does not preserve newlines, so `bun --eval <multiline>`
+    // breaks (the child prints its help text). Run a temp file instead.
+    this.scriptPath = join(tmpdir(), `oc-fake-${crypto.randomUUID()}.mjs`);
+    writeFileSync(this.scriptPath, script);
   }
 
   protected override buildCommandArgs(
@@ -21,7 +28,7 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     _workdir: string,
     _resumeSessionId?: string
   ): string[] {
-    return ["bun", "--eval", this.script];
+    return ["bun", this.scriptPath];
   }
 }
 
