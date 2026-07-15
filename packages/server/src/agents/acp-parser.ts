@@ -101,7 +101,7 @@ export function parseAcpMessage(line: string): AgentEvent[] {
             {
               type: "log",
               stream: "system",
-              content: `  tokens: ${Number((tokens as Record<string, number>).total).toLocaleString()}`,
+              content: `  tokens: ${Number((tokens as Record<string, number>).total).toLocaleString("en-US")}`,
             },
           ];
         }
@@ -284,7 +284,11 @@ export function parseAcpMessage(line: string): AgentEvent[] {
       const tokens = (parsed.tokens ?? parsed.usage ?? {}) as Record<string, number>;
       if (tokens?.total) {
         return [
-          { type: "log", stream: "system", content: `  tokens: ${tokens.total.toLocaleString()}` },
+          {
+            type: "log",
+            stream: "system",
+            content: `  tokens: ${tokens.total.toLocaleString("en-US")}`,
+          },
         ];
       }
       return [];

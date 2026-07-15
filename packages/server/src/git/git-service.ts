@@ -233,8 +233,11 @@ export class GitService {
     } catch {
       // ignore: path may not exist or not be tracked
     }
-    const hasChanges = await this.hasChanges(wtPath);
-    if (hasChanges) {
+    // Check the index, not the working tree: after unstaging `.vibe-code` the
+    // only remaining changes may be unstaged (e.g. harness context files), and
+    // `git commit` with an empty index exits 1 with "nothing to commit".
+    const staged = await this.exec(["git", "diff", "--cached", "--name-only"], { cwd: wtPath });
+    if (staged.stdout.trim().length > 0) {
       // Ensure git identity is set (required in some environments)
       try {
         await this.exec(["git", "config", "user.email"], { cwd: wtPath });
@@ -242,7 +245,16 @@ export class GitService {
         await this.exec(["git", "config", "user.email", "vibe-code@localhost"], { cwd: wtPath });
         await this.exec(["git", "config", "user.name", "vibe-code"], { cwd: wtPath });
       }
-      await this.exec(["git", "commit", "-m", message], { cwd: wtPath });
+      try {
+        await this.exec(["git", "commit", "-m", message], { cwd: wtPath });
+      } catch (err) {
+        // Target-repo hooks (husky/commitlint) can reject orchestrator commits.
+        // Quality gates run in the validation pipeline, so bypass hooks here.
+        console.warn(
+          `[git] commit with hooks failed, retrying with --no-verify: ${err instanceof Error ? err.message : err}`
+        );
+        await this.exec(["git", "commit", "--no-verify", "-m", message], { cwd: wtPath });
+      }
     }
   }
 
@@ -549,7 +561,10 @@ export class GitService {
 
     if (exitCode !== 0) {
       const sanitized = cmd.map((s) => s.replace(/https?:\/\/[^@]+@/g, "https://***@")).join(" ");
-      throw new Error(`Command failed (exit ${exitCode}): ${sanitized}\n${stderr}`);
+      // Include stdout when stderr is empty — git hooks (husky, commitlint)
+      // report failures on stdout.
+      const detail = stderr.trim() || stdout.trim();
+      throw new Error(`Command failed (exit ${exitCode}): ${sanitized}\n${detail.slice(-2000)}`);
     }
 
     return { stdout, stderr, exitCode };
