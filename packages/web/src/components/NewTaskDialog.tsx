@@ -206,8 +206,8 @@ export function NewTaskDialog({
   const [autoLaunch, setAutoLaunch] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
   const [baseBranch, setBaseBranch] = useState("");
-  const [_branches, setBranches] = useState<string[]>([]);
-  const [_loadingBranches, setLoadingBranches] = useState(false);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [agentId, setAgentId] = useState("");
@@ -300,7 +300,8 @@ export function NewTaskDialog({
         baseBranch: baseBranch || undefined,
         priority: priority !== "none" ? priority : undefined,
         tags: tags.length > 0 ? tags : undefined,
-        agentId: agentId || undefined,
+        agentId: agentId && !agentId.startsWith("workflow:") ? agentId : undefined,
+        workflowId: agentId.startsWith("workflow:") ? agentId.slice("workflow:".length) : undefined,
         autoLaunch: isScheduled ? false : autoLaunch,
         schedule: isScheduled ? { cronExpression } : undefined,
         loopConfig: loopEnabled
@@ -415,6 +416,40 @@ export function NewTaskDialog({
                       />
                     )}
                   </div>
+
+                  {repoId && (
+                    <div>
+                      <label
+                        htmlFor={NEW_TASK_FIELD_IDS.baseBranch}
+                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
+                      >
+                        Base Branch
+                      </label>
+                      {branches.length > 0 ? (
+                        <Select
+                          id={NEW_TASK_FIELD_IDS.baseBranch}
+                          value={baseBranch}
+                          onChange={(e) => setBaseBranch(e.target.value)}
+                          disabled={loadingBranches}
+                          className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
+                        >
+                          {branches.map((b) => (
+                            <option key={b} value={b}>
+                              {b}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <Input
+                          id={NEW_TASK_FIELD_IDS.baseBranch}
+                          value={baseBranch}
+                          onChange={(e) => setBaseBranch(e.target.value)}
+                          placeholder={loadingBranches ? "Loading branches..." : "main"}
+                          className="h-11 rounded-2xl bg-input/40 border-white/5 text-sm font-bold"
+                        />
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <label
@@ -550,7 +585,7 @@ export function NewTaskDialog({
                           </option>
                         ))}
                         {skillsIndex.workflows.map((w) => (
-                          <option key={w.name} value={w.name}>
+                          <option key={w.name} value={`workflow:${w.name}`}>
                             {w.name} (Workflow)
                           </option>
                         ))}

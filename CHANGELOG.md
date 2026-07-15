@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 ### Fixed
+- Fixed task launch failing with `git fetch exit 128` when the bare repo was deleted from disk but the DB still said `ready` — the orchestrator now self-heals by re-cloning.
+- Fixed post-validation `git commit` failing with "nothing to commit" when only `.vibe-code/` harness files changed — commit now checks the staged index, and retries with `--no-verify` when target-repo hooks (husky/commitlint) reject orchestrator commits.
+- Fixed OpenCode error events being logged as `[object Object]`, masking the real failure cause.
+- Fixed `VIBE_CODE_DATA_DIR` being silently overridden to `~/.vibe-code` on Windows when the data dir lives on a different drive than the repo (`path.relative` returns an absolute path across drives).
+- Fixed git command errors omitting hook output — stdout is now included when stderr is empty.
+- Fixed the New Task modal never sending `workflowId` (selecting a workflow stored its name in `agentId`).
+- Fixed 7 pre-existing test failures on Windows: `bun --eval` multiline scripts lose newlines in argv (test helper now runs a temp file) and locale-dependent `toLocaleString()` output (pinned to `en-US`).
+
 - Fixed task launch capacity responses so saturated runtimes return a friendly 429 while leaving tasks queued.
 - Fixed task status updates to accept `blocked` through the API.
 - Fixed auto-retry accounting so failed agent runs stop after the configured retry budget and move the task to `blocked`.
@@ -16,6 +24,8 @@
 - Improved execution timeline semantics by using a real `nav` landmark and removed a non-null assertion from task stage scanning.
 
 ### Added
+- **Base Branch field in the New Task modal**: branches were already fetched from the API but never rendered; the modal now exposes a base-branch selector once a repository is chosen.
+- **E2E + API smoke suite (Playwright)**: `bun run test:e2e` boots an isolated real server (temp data dir, auth disabled) plus Vite, then runs API smoke checks (health, auth, engines, repo→task lifecycle) and browser flows (board load, New Task modal fields, task creation, task detail).
 - **Model hardcoding lock test**: Added a verification test that automatically scans all agent engines to ensure no models are statically hardcoded, enforcing dynamic resolution via CLI, LiteLLM or environment variables.
 - **Bulk Card Deletion**: Added board-level multi-select controls plus per-column delete-all actions for non-running task columns.
 - **Task Detail Modal UX Audit**: Documented the modal information-density problem, console-first execution decision, implemented changes, and remaining UX cuts in `docs/task-detail-modal-ux-audit.md`.
