@@ -292,7 +292,7 @@ describe("parseAcpMessage", () => {
         {
           type: "tool_result",
           toolResult: { toolId: "123", output: "file1 file2", status: "success" },
-        }
+        },
       ];
       expect(parseAcpMessage(input)).toEqual(expected as any);
     });
@@ -304,7 +304,7 @@ describe("parseAcpMessage", () => {
         callId: "123",
         status: "completed",
         output: "file1 file2",
-        metadata: { exitCode: 1 }
+        metadata: { exitCode: 1 },
       });
       const expected = [
         {
@@ -315,7 +315,7 @@ describe("parseAcpMessage", () => {
           type: "log",
           stream: "stderr",
           content: "  Exit code: 1",
-        }
+        },
       ];
       expect(parseAcpMessage(input)).toEqual(expected as any);
     });
@@ -391,7 +391,9 @@ describe("parseAcpMessage", () => {
 
   describe("Plain Text Fallback", () => {
     it("should handle valid plain text", () => {
-      expect(parseAcpMessage("Hello world")).toEqual([{ type: "log", stream: "stdout", content: "Hello world" }]);
+      expect(parseAcpMessage("Hello world")).toEqual([
+        { type: "log", stream: "stdout", content: "Hello world" },
+      ]);
     });
 
     it("should ignore noise starting with DEBUG", () => {
@@ -435,11 +437,15 @@ describe("parseAcpMessage", () => {
     });
 
     it("should process type: thinking plain text", () => {
-      expect(parseAcpMessage("type: thinking")).toEqual([{ type: "status", content: "Thinking..." }]);
+      expect(parseAcpMessage("type: thinking")).toEqual([
+        { type: "status", content: "Thinking..." },
+      ]);
     });
 
     it("should process type: tool_use plain text", () => {
-      expect(parseAcpMessage("type: tool_use")).toEqual([{ type: "status", content: "Using tool..." }]);
+      expect(parseAcpMessage("type: tool_use")).toEqual([
+        { type: "status", content: "Using tool..." },
+      ]);
     });
 
     it("should process type: tool_result plain text", () => {
@@ -447,7 +453,9 @@ describe("parseAcpMessage", () => {
     });
 
     it("should process event: plain text", () => {
-       expect(parseAcpMessage("event: thinking")).toEqual([{ type: "status", content: "Thinking..." }]);
+      expect(parseAcpMessage("event: thinking")).toEqual([
+        { type: "status", content: "Thinking..." },
+      ]);
     });
   });
 });
@@ -463,38 +471,38 @@ describe("parseAcpMessage uncovered coverage", () => {
   });
 
   it("should process function_call_request", () => {
-     const input = JSON.stringify({
-        type: "function_call_request",
-        function: "my_func",
-        id: "call_abc",
-        status: "pending",
-     });
-     const expected = [
-        {
-          type: "tool_use",
-          toolUse: { toolId: "call_abc", toolName: "my_func", parameters: {} },
-        },
-        { type: "log", stream: "system", content: "[tool] my_func" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({
+      type: "function_call_request",
+      function: "my_func",
+      id: "call_abc",
+      status: "pending",
+    });
+    const expected = [
+      {
+        type: "tool_use",
+        toolUse: { toolId: "call_abc", toolName: "my_func", parameters: {} },
+      },
+      { type: "log", stream: "system", content: "[tool] my_func" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should process tool status active", () => {
-      const input = JSON.stringify({
-        type: "tool",
-        tool: "cmd",
-        callId: "123",
-        status: "active",
-        input: { cmd: "ls" },
-      });
-      const expected = [
-        {
-          type: "tool_use",
-          toolUse: { toolId: "123", toolName: "cmd", parameters: { cmd: "ls" } },
-        },
-        { type: "log", stream: "system", content: "[tool] cmd" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({
+      type: "tool",
+      tool: "cmd",
+      callId: "123",
+      status: "active",
+      input: { cmd: "ls" },
+    });
+    const expected = [
+      {
+        type: "tool_use",
+        toolUse: { toolId: "123", toolName: "cmd", parameters: { cmd: "ls" } },
+      },
+      { type: "log", stream: "system", content: "[tool] cmd" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should parse step_complete event type", () => {
@@ -509,35 +517,37 @@ describe("parseAcpMessage uncovered coverage", () => {
   });
 
   it("should process tool with done status", () => {
-     const input = JSON.stringify({
-        type: "tool_use",
-        tool: "cmd",
-        callId: "123",
-        status: "done",
-        output: "done output"
-      });
-      const expected = [
-        {
-          type: "tool_result",
-          toolResult: { toolId: "123", output: "done output", status: "success" },
-        }
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({
+      type: "tool_use",
+      tool: "cmd",
+      callId: "123",
+      status: "done",
+      output: "done output",
+    });
+    const expected = [
+      {
+        type: "tool_result",
+        toolResult: { toolId: "123", output: "done output", status: "success" },
+      },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should extract unknown event with text", () => {
-     const input = JSON.stringify({ event: "unknown", text: "text content" });
-     const expected = [{ type: "log", stream: "stdout", content: "text content" }];
-     expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({ event: "unknown", text: "text content" });
+    const expected = [{ type: "log", stream: "stdout", content: "text content" }];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should return empty array for non json plain text that is not handled", () => {
-      expect(parseAcpMessage("plain text without magic strings")).toEqual([{ type: "log", stream: "stdout", content: "plain text without magic strings" }]);
+    expect(parseAcpMessage("plain text without magic strings")).toEqual([
+      { type: "log", stream: "stdout", content: "plain text without magic strings" },
+    ]);
   });
 
   it("should return empty array if event content string is empty", () => {
-      const input = JSON.stringify({ event: "unknown", content: "  " });
-      expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({ event: "unknown", content: "  " });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 });
 
@@ -582,138 +592,138 @@ describe("parseAcpMessage uncovered coverage 2", () => {
   });
 
   it("should handle error with msg field", () => {
-     const input = JSON.stringify({ type: "error", msg: "error msg" });
-     const expected = [
-        { type: "log", stream: "stderr", content: "error msg" },
-        { type: "error", content: "error msg" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({ type: "error", msg: "error msg" });
+    const expected = [
+      { type: "log", stream: "stderr", content: "error msg" },
+      { type: "error", content: "error msg" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should handle thinking event with content field", () => {
-      const input = JSON.stringify({ type: "thinking", content: "think content" });
-      const expected = [
-        { type: "status", content: "Thinking..." },
-        { type: "log", stream: "stdout", content: "💭 think content" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({ type: "thinking", content: "think content" });
+    const expected = [
+      { type: "status", content: "Thinking..." },
+      { type: "log", stream: "stdout", content: "💭 think content" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 });
 
 describe("parseAcpMessage uncovered coverage 3 (closing braces)", () => {
   it("should cover missing closing braces block branches", () => {
-     // Some of the reported missing lines are just closing braces,
-     // but let's test a cost object missing proper fields
-     const input = JSON.stringify({ type: "cost", usage: {} });
-     expect(parseAcpMessage(input)).toEqual([]);
+    // Some of the reported missing lines are just closing braces,
+    // but let's test a cost object missing proper fields
+    const input = JSON.stringify({ type: "cost", usage: {} });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 
   it("should cover usage without matching properties", () => {
-      const input = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "usage",
-        params: { unknown_prop: 100 },
-      });
-      expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "usage",
+      params: { unknown_prop: 100 },
+    });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 
   it("should return empty array for tool result plain text", () => {
-      expect(parseAcpMessage("type: tool_result")).toEqual([]);
+    expect(parseAcpMessage("type: tool_result")).toEqual([]);
   });
 
   it("should test unknown result with stats but no tokens", () => {
-       const input = JSON.stringify({ type: "result", stats: {} });
-       expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({ type: "result", stats: {} });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 
   it("should test cost object with missing token fields", () => {
-      const input = JSON.stringify({ type: "cost", usage: { random: 10 } });
-      expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({ type: "cost", usage: { random: 10 } });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 });
 
 describe("parseAcpMessage uncovered coverage 4 (more JSON properties)", () => {
   it("should return empty array when method tool/use has no name/tool/function", () => {
-     const input = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "tool/use",
-        params: { },
-      });
-      const expected = [
-        {
-          type: "tool_use",
-          toolUse: { toolId: "", toolName: "unknown", parameters: {} },
-        },
-        { type: "log", stream: "system", content: "[tool] unknown" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tool/use",
+      params: {},
+    });
+    const expected = [
+      {
+        type: "tool_use",
+        toolUse: { toolId: "", toolName: "unknown", parameters: {} },
+      },
+      { type: "log", stream: "system", content: "[tool] unknown" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should handle error in tool result json where error is an object", () => {
-      const input = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "tool/result",
-        params: { error: { msg: "failed" } },
-      });
-      const expected = [
-        {
-          type: "tool_result",
-          toolResult: { toolId: "", output: "", status: "error" },
-        },
-        { type: "log", stream: "stderr", content: "[object Object]" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "tool/result",
+      params: { error: { msg: "failed" } },
+    });
+    const expected = [
+      {
+        type: "tool_result",
+        toolResult: { toolId: "", output: "", status: "error" },
+      },
+      { type: "log", stream: "stderr", content: "[object Object]" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should process JSON RPC 2.0 with null params", () => {
-       const input = JSON.stringify({
-          jsonrpc: "2.0",
-          method: "step_finish",
-          params: null,
-       });
-       expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "step_finish",
+      params: null,
+    });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 
   it("should handle tool_use event where status is undefined", () => {
-      const input = JSON.stringify({
+    const input = JSON.stringify({
+      type: "tool_use",
+      tool: "cmd",
+      callId: "123",
+      input: { cmd: "ls" },
+    });
+    const expected = [
+      {
         type: "tool_use",
-        tool: "cmd",
-        callId: "123",
-        input: { cmd: "ls" },
-      });
-      const expected = [
-        {
-          type: "tool_use",
-          toolUse: { toolId: "123", toolName: "cmd", parameters: { cmd: "ls" } },
-        },
-        { type: "log", stream: "system", content: "[tool] cmd" },
-      ];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+        toolUse: { toolId: "123", toolName: "cmd", parameters: { cmd: "ls" } },
+      },
+      { type: "log", stream: "system", content: "[tool] cmd" },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should process step_finish when params is undefined", () => {
-      const input = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "step_finish"
-      });
-      expect(parseAcpMessage(input)).toEqual([]);
+    const input = JSON.stringify({
+      jsonrpc: "2.0",
+      method: "step_finish",
+    });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 });
 
 describe("parseAcpMessage uncovered coverage 5 (all JSON permutations)", () => {
   it("should cover tool_use with function_call fallback", () => {
     const input = JSON.stringify({
-       type: "function_call",
-       function: "test_tool",
-       id: "1",
-       status: "completed",
-       output: "ok",
+      type: "function_call",
+      function: "test_tool",
+      id: "1",
+      status: "completed",
+      output: "ok",
     });
     const expected = [
       {
         type: "tool_result",
         toolResult: { toolId: "1", output: "ok", status: "success" },
-      }
+      },
     ];
     expect(parseAcpMessage(input)).toEqual(expected as any);
   });
@@ -733,21 +743,23 @@ describe("parseAcpMessage uncovered coverage 5 (all JSON permutations)", () => {
   });
 
   it("should test cost type falling back to parsed self", () => {
-      const input = JSON.stringify({ type: "cost", input_tokens: 1, output_tokens: 2 });
-      const expected = [{ type: "cost", costStats: { type: "cost", input_tokens: 1, output_tokens: 2 } }];
-      expect(parseAcpMessage(input)).toEqual(expected as any);
+    const input = JSON.stringify({ type: "cost", input_tokens: 1, output_tokens: 2 });
+    const expected = [
+      { type: "cost", costStats: { type: "cost", input_tokens: 1, output_tokens: 2 } },
+    ];
+    expect(parseAcpMessage(input)).toEqual(expected as any);
   });
 
   it("should return empty for thinking event missing thought", () => {
-     // Needs to fail the `if (thought && thought.length < 500)` condition
-     const input = JSON.stringify({ type: "thinking" });
-     expect(parseAcpMessage(input)).toEqual([]);
+    // Needs to fail the `if (thought && thought.length < 500)` condition
+    const input = JSON.stringify({ type: "thinking" });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 
   it("should ignore long thinking content", () => {
-      // Create thought larger than 500 characters
-      const longThought = "a".repeat(600);
-      const input = JSON.stringify({ type: "thinking", thought: longThought });
-      expect(parseAcpMessage(input)).toEqual([]);
+    // Create thought larger than 500 characters
+    const longThought = "a".repeat(600);
+    const input = JSON.stringify({ type: "thinking", thought: longThought });
+    expect(parseAcpMessage(input)).toEqual([]);
   });
 });
