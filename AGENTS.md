@@ -24,6 +24,16 @@
 - **Testes**: Excluir testes do Bun (`packages/web/src/utils/*.test.ts`) no `vite.config.ts` (Vitest) e executá-los via `bun test`.
 - **Proibição de Modelos Hardcoded (Trava)**: Nenhum engine de agente pode ter listas estáticas/hardcoded de modelos (ex: `COPILOT_MODELS = [...]`, `staticModels = [...]`). Esta restrição é validada deterministicamente pelo teste unitário em [hardcoded-models.test.ts](file:///d:/Solutions/pessoal/vibe/vibe-code/packages/server/src/agents/engines/hardcoded-models.test.ts). Modelos devem ser carregados dinamicamente via consultas à CLI do respectivo agente, LiteLLM, ou variáveis de ambiente de customização/override (`VIBE_<ENGINE>_MODELS`).
 
+## 3.1 Aprendizados Windows (validado 2026-07-15)
+- **Paths em drives diferentes**: `path.relative(cwd, dir)` entre drives (`D:` vs `C:`) retorna caminho **absoluto** (sem `..`). Qualquer guard "está dentro do repo?" precisa também checar `isAbsolute(rel)` — bug real corrigido no guard de `VIBE_CODE_DATA_DIR` em `packages/server/src/index.ts`.
+- **Argv não preserva newlines**: `Bun.spawn(["bun", "--eval", "<script multi-linha>"])` faz o filho imprimir o help. Em testes, escrever o script em arquivo temporário e rodar `bun <arquivo>` (ver `FakeOpenCodeEngine` em `opencode.test.ts`). Mesmo motivo pelo qual prompts vão via stdin para o OpenCode.
+- **Commit no worktree**: após desestagiar `.vibe-code/`, validar o **index** (`git diff --cached --name-only`), não o working tree; hooks do repo alvo (husky/commitlint) podem rejeitar o commit do orquestrador — fallback `--no-verify` em `git-service.ts::commitAll`.
+- **Locale**: nunca usar `toLocaleString()` sem locale fixo em output comparado por testes (máquinas pt-BR formatam `1.234`). Usar `toLocaleString("en-US")`.
+- **Repo bare deletado com DB `ready`**: `orchestrator.launch` re-clona automaticamente (self-heal) — não assumir que `status=ready` implica bare presente no disco.
+
+## 3.2 Suíte E2E (Playwright)
+- `bun run test:e2e` na raiz. O `playwright.config.ts` sobe server real isolado (porta 3123, data dir em `%TEMP%`, auth desabilitada com env vazias) + Vite (5199) e cria um repo git fixture. Specs em `e2e/` (API smoke + fluxo do board/modal).
+
 ## 4. Operação em Produção (k8s) — Engines, Modelos & Memória
 Aprendizados de homologar o OpenCode rodando dentro do container deployado (`ghcr.io/juninmd/vibe-code`, Debian/Bun). Validado 2026-06-04.
 
