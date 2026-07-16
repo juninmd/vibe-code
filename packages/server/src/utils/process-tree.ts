@@ -1,13 +1,12 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
-
 /**
  * Recursively kills a process and all its child processes.
  * Works on Windows and Unix/Linux/macOS.
  */
 export async function killProcessTree(pid: number): Promise<void> {
+  const execAsync = promisify(exec);
   const isWindows = process.platform === "win32";
 
   if (isWindows) {
