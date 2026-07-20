@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach, mock } from "bun:test";
-import { getWorkspaceContext, requireWorkspaceContext } from "./workspace-context";
-import { createDb, type Db } from "../db";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import type { AuthUser } from "@vibe-code/shared";
 import type { Context } from "hono";
+import { createDb, type Db } from "../db";
+import { getWorkspaceContext, requireWorkspaceContext } from "./workspace-context";
 
 describe("Workspace Context Utilities", () => {
   let db: Db;
@@ -78,13 +78,24 @@ describe("Workspace Context Utilities", () => {
     });
 
     it("should prioritize c.env > header > query > body", async () => {
-      let c = createMockContext({ envWs: "env", header: "header", query: "query", body: { workspace_id: "body" }, method: "POST" });
+      let c = createMockContext({
+        envWs: "env",
+        header: "header",
+        query: "query",
+        body: { workspace_id: "body" },
+        method: "POST",
+      });
       let result = await getWorkspaceContext(c, db, user);
       expect(result?.workspaceId).toBe("env");
 
       // Reset db to avoid cross-workspace access error
       db = createDb(":memory:");
-      c = createMockContext({ header: "header", query: "query", body: { workspace_id: "body" }, method: "POST" });
+      c = createMockContext({
+        header: "header",
+        query: "query",
+        body: { workspace_id: "body" },
+        method: "POST",
+      });
       result = await getWorkspaceContext(c, db, user);
       expect(result?.workspaceId).toBe("header");
 
@@ -186,7 +197,7 @@ describe("Workspace Context Utilities", () => {
         id: "taken",
         name: "Taken",
         slug: "personal",
-        description: "Taken"
+        description: "Taken",
       });
 
       const c = createMockContext({ header: "my-ws" });
