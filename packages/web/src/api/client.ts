@@ -15,6 +15,8 @@ import type {
   Repository,
   RepositoryIssue,
   RuntimeOverview,
+  SessionBoardResponse,
+  SessionSource,
   SettingsResponse,
   SkillEffectiveness,
   SkillsIndex,
@@ -316,6 +318,18 @@ export const api = {
 
   inbox: {
     list: () => request<InboxItem[]>("/inbox"),
+  },
+
+  sessions: {
+    /** Local CLI sessions (OpenCode, Claude Code, Antigravity) as kanban cards. */
+    list: (options: { source?: SessionSource; limit?: number; refresh?: boolean } = {}) => {
+      const params = new URLSearchParams();
+      if (options.source) params.set("source", options.source);
+      if (options.limit !== undefined) params.set("limit", String(options.limit));
+      if (options.refresh) params.set("refresh", "true");
+      const query = params.toString();
+      return request<SessionBoardResponse>(`/sessions${query ? `?${query}` : ""}`);
+    },
   },
 
   engines: {
