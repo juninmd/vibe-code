@@ -20,6 +20,7 @@ import { createReposRouter } from "./api/repos";
 import { createReviewsRouter } from "./api/reviews";
 import { createRunsRouter } from "./api/runs";
 import { createRuntimesRouter } from "./api/runtimes";
+import { createSessionsRouter } from "./api/sessions";
 import { createSettingsRouter } from "./api/settings";
 import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
@@ -31,6 +32,7 @@ import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
+import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
 import { logValidationReport, validateSkills } from "./skills/validator";
@@ -227,6 +229,11 @@ async function serveStatic(_c: import("hono").Context, filePath: string): Promis
   }
 }
 
+// Read-only projection of the local coding-CLI session stores (OpenCode,
+// Claude Code, Antigravity) onto kanban cards. Nothing is spawned or mutated
+// here — the service only scans each CLI's own storage directory.
+const sessionService = new SessionService();
+
 const api = new Hono();
 api.route("/repos", createReposRouter(db, git, hub));
 api.route("/tasks", createTasksRouter(db, orchestrator, git));
@@ -243,6 +250,7 @@ api.route("/agent-templates", createAgentTemplatesRouter(agentTemplates));
 api.route("/inbox", createInboxRouter(db, registry, orchestrator));
 api.route("/labels", createLabelsRouter(db));
 api.route("/prompts", createPromptsRouter(db));
+api.route("/sessions", createSessionsRouter(sessionService));
 
 api.get("/changelog", async (c) => {
   // Try cwd-relative first (works in Docker/production), fallback to dev path

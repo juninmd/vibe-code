@@ -1,11 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  TASK_COMPLEXITY_META,
-  TASK_PRIORITY_META,
-  TASK_TYPE_META,
-  type TaskWithRun,
-} from "@vibe-code/shared";
+import { TASK_PRIORITY_META, type TaskWithRun } from "@vibe-code/shared";
 import { memo, useEffect, useRef, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import type { RetryState } from "../hooks/useRetryQueue";
@@ -185,12 +180,7 @@ function TaskCardComponent({
   const isBlocked = task.status === "blocked";
   const isDone = task.status === "done";
   const hasPR = !!task.prUrl;
-  const hasMetadata = !!(
-    task.tags?.length ||
-    task.taskType ||
-    task.taskComplexity ||
-    task.labels?.length
-  );
+  const hasMetadata = !!(task.tags?.length || task.labels?.length);
 
   let displayCost: number | null = null;
   const run = task.latestRun;
@@ -287,20 +277,6 @@ function TaskCardComponent({
 
           {hasMetadata && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {task.taskType && (
-                <span
-                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${TASK_TYPE_META[task.taskType].bgColor} ${TASK_TYPE_META[task.taskType].textColor}`}
-                >
-                  {TASK_TYPE_META[task.taskType].label}
-                </span>
-              )}
-              {task.taskComplexity && (
-                <span
-                  className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${TASK_COMPLEXITY_META[task.taskComplexity].bgColor} ${TASK_COMPLEXITY_META[task.taskComplexity].textColor}`}
-                >
-                  {TASK_COMPLEXITY_META[task.taskComplexity].icon}
-                </span>
-              )}
               {task.tags?.slice(0, 2).map((tag) => (
                 <span key={tag} className="text-[9px] text-accent-text/70">
                   #{tag}

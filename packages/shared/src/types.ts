@@ -56,141 +56,6 @@ export const TASK_PRIORITY_META: Record<
   },
 };
 
-// ─── Task Type (Compozy-inspired) ─────────────────────────────────────────────
-export type TaskType =
-  | "frontend"
-  | "backend"
-  | "docs"
-  | "test"
-  | "infra"
-  | "refactor"
-  | "chore"
-  | "bugfix";
-
-export const TASK_TYPES: TaskType[] = [
-  "frontend",
-  "backend",
-  "docs",
-  "test",
-  "infra",
-  "refactor",
-  "chore",
-  "bugfix",
-];
-
-export const TASK_TYPE_META: Record<
-  TaskType,
-  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
-> = {
-  frontend: {
-    label: "Frontend",
-    icon: "🎨",
-    textColor: "text-sky-400",
-    bgColor: "bg-sky-500/10",
-    borderColor: "border-sky-500/30",
-  },
-  backend: {
-    label: "Backend",
-    icon: "⚙️",
-    textColor: "text-violet-400",
-    bgColor: "bg-violet-500/10",
-    borderColor: "border-violet-500/30",
-  },
-  docs: {
-    label: "Docs",
-    icon: "📄",
-    textColor: "text-slate-400",
-    bgColor: "bg-slate-500/10",
-    borderColor: "border-slate-500/30",
-  },
-  test: {
-    label: "Test",
-    icon: "🧪",
-    textColor: "text-green-400",
-    bgColor: "bg-green-500/10",
-    borderColor: "border-green-500/30",
-  },
-  infra: {
-    label: "Infra",
-    icon: "🏗️",
-    textColor: "text-orange-400",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/30",
-  },
-  refactor: {
-    label: "Refactor",
-    icon: "♻️",
-    textColor: "text-teal-400",
-    bgColor: "bg-teal-500/10",
-    borderColor: "border-teal-500/30",
-  },
-  chore: {
-    label: "Chore",
-    icon: "🔧",
-    textColor: "text-zinc-400",
-    bgColor: "bg-zinc-500/10",
-    borderColor: "border-zinc-500/30",
-  },
-  bugfix: {
-    label: "Bugfix",
-    icon: "🐛",
-    textColor: "text-red-400",
-    bgColor: "bg-red-500/10",
-    borderColor: "border-red-500/30",
-  },
-};
-
-// ─── Task Complexity (Compozy-inspired) ───────────────────────────────────────
-export type TaskComplexity = "trivial" | "low" | "medium" | "high" | "critical";
-
-export const TASK_COMPLEXITY_LEVELS: TaskComplexity[] = [
-  "trivial",
-  "low",
-  "medium",
-  "high",
-  "critical",
-];
-
-export const TASK_COMPLEXITY_META: Record<
-  TaskComplexity,
-  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
-> = {
-  trivial: {
-    label: "Trivial",
-    icon: "○",
-    textColor: "text-zinc-400",
-    bgColor: "bg-zinc-500/10",
-    borderColor: "border-zinc-500/30",
-  },
-  low: {
-    label: "Low",
-    icon: "◔",
-    textColor: "text-emerald-400",
-    bgColor: "bg-emerald-500/10",
-    borderColor: "border-emerald-500/30",
-  },
-  medium: {
-    label: "Medium",
-    icon: "◑",
-    textColor: "text-amber-400",
-    bgColor: "bg-amber-500/10",
-    borderColor: "border-amber-500/30",
-  },
-  high: {
-    label: "High",
-    icon: "◕",
-    textColor: "text-orange-400",
-    bgColor: "bg-orange-500/10",
-    borderColor: "border-orange-500/30",
-  },
-  critical: {
-    label: "Critical",
-    icon: "●",
-    textColor: "text-red-400",
-    bgColor: "bg-red-500/10",
-    borderColor: "border-red-500/30",
-  },
-};
 export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 export type RunPhase =
   | "setup"
@@ -281,8 +146,6 @@ export interface Task {
   pendingApproval: boolean;
   /** Budget hard-stop limit in dollars. */
   maxCost?: number;
-  taskType?: TaskType | null;
-  taskComplexity?: TaskComplexity | null;
   loopConfig?: LoopConfig;
   createdAt: string;
   updatedAt: string;
@@ -1177,6 +1040,115 @@ export interface EngineEffectiveness {
   avgDurationSecs: number;
   avgBlockers: number;
   prRate: number;
+}
+
+// ─── CLI Sessions → Kanban Cards ─────────────────────────────────────────────
+
+/** Coding CLI whose local session store is read to build cards. */
+export type SessionSource = "opencode" | "claude-code" | "antigravity";
+
+export const SESSION_SOURCES: SessionSource[] = ["opencode", "claude-code", "antigravity"];
+
+export const SESSION_SOURCE_LABELS: Record<SessionSource, string> = {
+  opencode: "OpenCode",
+  "claude-code": "Claude Code",
+  antigravity: "Antigravity",
+};
+
+/** Kanban column a session lands in. Derived from the session's own activity. */
+export type SessionCardStatus = "active" | "idle" | "done" | "failed";
+
+export const SESSION_COLUMNS: SessionCardStatus[] = ["active", "idle", "done", "failed"];
+
+export const SESSION_STATUS_LABELS: Record<SessionCardStatus, string> = {
+  active: "Active",
+  idle: "Idle",
+  done: "Done",
+  failed: "Failed",
+};
+
+export const SESSION_STATUS_META: Record<
+  SessionCardStatus,
+  { label: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  active: {
+    label: "Active",
+    textColor: "text-cyan-400",
+    bgColor: "bg-cyan-500/10",
+    borderColor: "border-cyan-500/30",
+  },
+  idle: {
+    label: "Idle",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  done: {
+    label: "Done",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  failed: {
+    label: "Failed",
+    textColor: "text-red-400",
+    bgColor: "bg-red-500/10",
+    borderColor: "border-red-500/30",
+  },
+};
+
+/**
+ * A CLI session projected onto a kanban card.
+ *
+ * Deliberately minimal: this is everything a card renders and nothing else.
+ * The readers parse full transcripts (message bodies, tool calls and results,
+ * token/cost breakdowns, model and provider metadata, parent/child session
+ * graphs, file paths) to derive these values and then drop all of it — none of
+ * it crosses the API boundary.
+ */
+export interface SessionCard {
+  /** Board-unique id: `${source}:${sessionId}`. */
+  id: string;
+  /** Native session id, as accepted by the CLI's own resume flag. */
+  sessionId: string;
+  source: SessionSource;
+  title: string;
+  status: SessionCardStatus;
+  /** Working directory the session ran in, shortened for display. */
+  project: string;
+  branch: string | null;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Per-source scan result, so the board can explain an empty column. */
+export interface SessionSourceStatus {
+  source: SessionSource;
+  /** True when at least one store directory for this CLI exists on disk. */
+  available: boolean;
+  /** Directories that were scanned (empty when the CLI is not installed). */
+  roots: string[];
+  cards: number;
+  error: string | null;
+}
+
+export interface SessionBoardResponse {
+  cards: SessionCard[];
+  sources: SessionSourceStatus[];
+  scannedAt: string;
+}
+
+/** Command that resumes a card's session in its own CLI. */
+export function sessionResumeCommand(card: Pick<SessionCard, "source" | "sessionId">): string {
+  switch (card.source) {
+    case "opencode":
+      return `opencode --session ${card.sessionId}`;
+    case "claude-code":
+      return `claude --resume ${card.sessionId}`;
+    case "antigravity":
+      return `antigravity --resume ${card.sessionId}`;
+  }
 }
 
 // ─── Vibe-Code v2: Workspaces (Multi-tenant) ─────────────────────────────────

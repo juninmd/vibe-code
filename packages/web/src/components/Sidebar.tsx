@@ -43,6 +43,7 @@ interface SidebarProps {
   onOpenQuickView?: () => void;
   onOpenEngines?: () => void;
   onOpenSchedules?: () => void;
+  onOpenSessions?: () => void;
   connected: boolean;
   apiOk?: boolean;
   repoStats?: Record<string, { total: number; done: number; failed: number; running: number }>;
@@ -71,6 +72,7 @@ export function Sidebar({
   onOpenQuickView: _onOpenQuickView,
   onOpenEngines,
   onOpenSchedules,
+  onOpenSessions,
   connected,
   apiOk = true,
   repoStats,
@@ -461,6 +463,12 @@ export function Sidebar({
         {/* Secondary Navigation */}
         <div className="p-3 space-y-1.5 border-t border-white/5 bg-surface/30 backdrop-blur-md safe-pb">
           <SidebarNavItem
+            icon="sessions"
+            label="Sessions"
+            onClick={runAndClose(onOpenSessions)}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
             icon="inbox"
             label="Inbox"
             onClick={runAndClose(onOpenInbox)}
@@ -565,6 +573,21 @@ function SidebarNavItem({
             aria-label="Inbox"
           >
             <path d="M3 3h10l1 5v5H2V8l1-5ZM2 8h4l1 2h2l1-2h4" />
+          </svg>
+        )}
+        {icon === "sessions" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Sessions"
+          >
+            <rect x="1.5" y="2.5" width="4" height="11" rx="1" />
+            <rect x="6.5" y="2.5" width="4" height="7" rx="1" />
+            <rect x="11.5" y="2.5" width="3" height="9" rx="1" />
           </svg>
         )}
         {icon === "code" && (

@@ -49,6 +49,9 @@ const CommandPalette = lazy(() =>
 const EnginesPanel = lazy(() =>
   import("./components/EnginesPanel").then((m) => ({ default: m.EnginesPanel }))
 );
+const SessionBoard = lazy(() =>
+  import("./components/SessionBoard").then((m) => ({ default: m.SessionBoard }))
+);
 const InboxPanel = lazy(() =>
   import("./components/InboxPanel").then((m) => ({ default: m.InboxPanel }))
 );
@@ -301,6 +304,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
+  const [showSessionBoard, setShowSessionBoard] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFilterBar, _setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -1048,6 +1052,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           setShowChangelog(false);
           return;
         }
+        if (showSessionBoard) {
+          setShowSessionBoard(false);
+          return;
+        }
         if (showEnginesPanel) {
           setShowEnginesPanel(false);
           return;
@@ -1139,6 +1147,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         }
         return;
       }
+      // S — sessions board
+      if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        setShowSessionBoard((v) => !v);
+        return;
+      }
       // E — engines panel
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
@@ -1185,6 +1199,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   }, [
     showCommandPalette,
     showEnginesPanel,
+    showSessionBoard,
     showSchedulesPanel,
     showNewTask,
     showAddRepo,
@@ -1246,6 +1261,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           onOpenQuickView={() => setShowQuickView(true)}
           onOpenEngines={() => setShowEnginesPanel(true)}
           onOpenSchedules={() => setShowSchedulesPanel(true)}
+          onOpenSessions={() => setShowSessionBoard(true)}
           connected={connected}
           apiOk={apiOk}
           isMobile={isMobile}
@@ -1579,6 +1595,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               onSkillClick={handleSkillClick}
               allTasks={tasks}
             />
+          )}
+
+          {showSessionBoard && (
+            <SessionBoard open={showSessionBoard} onClose={() => setShowSessionBoard(false)} />
           )}
 
           {showEnginesPanel && (
