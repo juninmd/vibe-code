@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+- **Dead task metadata fields**: dropped `Task.taskType` / `Task.taskComplexity` and their `TaskType`, `TaskComplexity`, `TASK_TYPES`, `TASK_TYPE_META`, `TASK_COMPLEXITY_LEVELS` and `TASK_COMPLEXITY_META` definitions. Nothing ever wrote them — no DB column, no create/update payload, no server code path — so they only added badges that could never render. `SessionCard` follows the same rule: it carries only the fields a card actually shows.
+
 ### Fixed
 - Fixed task launch failing with `git fetch exit 128` when the bare repo was deleted from disk but the DB still said `ready` — the orchestrator now self-heals by re-cloning.
 - Fixed post-validation `git commit` failing with "nothing to commit" when only `.vibe-code/` harness files changed — commit now checks the staged index, and retries with `--no-verify` when target-repo hooks (husky/commitlint) reject orchestrator commits.
@@ -24,6 +27,7 @@
 - Improved execution timeline semantics by using a real `nav` landmark and removed a non-null assertion from task stage scanning.
 
 ### Added
+- **Session Board (CLI sessions → kanban cards)**: new `GET /api/sessions` plus a `SessionBoard` surface (sidebar entry and `S` shortcut) that reads the local session stores of OpenCode, Claude Code and Antigravity and renders each session as a card in an `active` / `idle` / `done` / `failed` column. Status comes from the CLI's own terminal state when it records one, otherwise from how recently the session was touched (`VIBE_SESSION_ACTIVE_WINDOW_MS`, `VIBE_SESSION_IDLE_WINDOW_MS`). Store locations are overridable via `VIBE_OPENCODE_SESSIONS_DIR`, `VIBE_CLAUDE_SESSIONS_DIR` and `VIBE_ANTIGRAVITY_SESSIONS_DIR`. The scan is read-only — nothing is spawned or written — and clicking a card copies the CLI command that resumes that session.
 - **Base Branch field in the New Task modal**: branches were already fetched from the API but never rendered; the modal now exposes a base-branch selector once a repository is chosen.
 - **E2E + API smoke suite (Playwright)**: `bun run test:e2e` boots an isolated real server (temp data dir, auth disabled) plus Vite, then runs API smoke checks (health, auth, engines, repo→task lifecycle) and browser flows (board load, New Task modal fields, task creation, task detail).
 - **Model hardcoding lock test**: Added a verification test that automatically scans all agent engines to ensure no models are statically hardcoded, enforcing dynamic resolution via CLI, LiteLLM or environment variables.
