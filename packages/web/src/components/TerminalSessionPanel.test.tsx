@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TerminalSessionPanel } from "./TerminalSessionPanel";
 
 describe("TerminalSessionPanel", () => {
-  it("opens terminal session on mount and sends input", () => {
+  it("opens terminal session on mount and sends input", async () => {
     const onWsSend = vi.fn();
 
-    render(<TerminalSessionPanel taskId="task-1" runId="run-1" chunks={[]} onWsSend={onWsSend} />);
+    await act(async () => {
+      render(
+        <TerminalSessionPanel taskId="task-1" runId="run-1" chunks={[]} onWsSend={onWsSend} />
+      );
+    });
 
     expect(onWsSend).toHaveBeenCalledWith({
       type: "terminal_open",
@@ -17,8 +21,13 @@ describe("TerminalSessionPanel", () => {
     });
 
     const input = screen.getByPlaceholderText("Digite comando ou resposta...");
-    fireEvent.change(input, { target: { value: "echo hello" } });
-    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "echo hello" } });
+    });
+
+    await act(async () => {
+      fireEvent.submit(input.closest("form") as HTMLFormElement);
+    });
 
     expect(onWsSend).toHaveBeenCalledWith({
       type: "terminal_input",
