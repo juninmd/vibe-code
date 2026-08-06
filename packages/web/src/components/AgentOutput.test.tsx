@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { AgentLog } from "@vibe-code/shared";
 import { describe, expect, it, vi } from "vitest";
 import { AgentOutput } from "./AgentOutput";
@@ -22,10 +22,12 @@ const logs: AgentLog[] = [
 ];
 
 describe("AgentOutput", () => {
-  it("defaults full-height execution output to raw readable logs", () => {
-    render(
-      <AgentOutput runId="run-1" liveLogs={logs} isRunning onSendInput={vi.fn()} fullHeight />
-    );
+  it("defaults full-height execution output to raw readable logs", async () => {
+    await act(async () => {
+      render(
+        <AgentOutput runId="run-1" liveLogs={logs} isRunning onSendInput={vi.fn()} fullHeight />
+      );
+    });
 
     expect(screen.getByRole("button", { name: "Raw" })).toHaveClass("text-primary");
     expect(screen.getByText(/opencode raw line/)).toBeInTheDocument();

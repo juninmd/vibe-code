@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { TaskWithRun } from "@vibe-code/shared";
 import { describe, expect, it, vi } from "vitest";
@@ -78,37 +78,41 @@ const baseTask: TaskWithRun = {
 };
 
 describe("TaskDetail tabs", () => {
-  function renderDetail(task: TaskWithRun = baseTask) {
-    return render(
-      <TaskDetail
-        task={task}
-        liveLogs={[]}
-        onClose={vi.fn()}
-        onLaunch={vi.fn().mockResolvedValue(undefined)}
-        onCancel={vi.fn().mockResolvedValue(undefined)}
-        onRetry={vi.fn().mockResolvedValue(undefined)}
-        onRetryPR={vi.fn().mockResolvedValue(undefined)}
-        onDelete={vi.fn().mockResolvedValue(undefined)}
-        onSendInput={vi.fn()}
-      />
-    );
+  async function renderDetail(task: TaskWithRun = baseTask) {
+    await act(async () => {
+      render(
+        <TaskDetail
+          task={task}
+          liveLogs={[]}
+          onClose={vi.fn()}
+          onLaunch={vi.fn().mockResolvedValue(undefined)}
+          onCancel={vi.fn().mockResolvedValue(undefined)}
+          onRetry={vi.fn().mockResolvedValue(undefined)}
+          onRetryPR={vi.fn().mockResolvedValue(undefined)}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          onSendInput={vi.fn()}
+        />
+      );
+    });
   }
 
-  it("opens in execution tab for running tasks", () => {
-    renderDetail();
+  it("opens in execution tab for running tasks", async () => {
+    await renderDetail();
     expect(screen.getByText("execution-timeline-mock")).toBeInTheDocument();
     expect(screen.queryByText("Task objective")).not.toBeInTheDocument();
     expect(screen.queryByText("Jump to")).not.toBeInTheDocument();
   });
 
   it("switches to terminal tab when terminal tab is clicked", async () => {
-    renderDetail();
-    await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    await renderDetail();
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    });
     expect(screen.getByText("terminal-session-mock")).toBeInTheDocument();
   });
 
   it("shows real-data presentation readiness on the info tab", async () => {
-    renderDetail({
+    await renderDetail({
       ...baseTask,
       status: "review",
       branchName: "task/task-1-execution-split",
@@ -126,7 +130,9 @@ describe("TaskDetail tabs", () => {
       },
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Info" }));
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Info" }));
+    });
 
     expect(screen.getByText("Task objective")).toBeInTheDocument();
     expect(screen.getByText("Jump to")).toBeInTheDocument();
