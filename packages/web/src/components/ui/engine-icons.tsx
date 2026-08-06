@@ -224,7 +224,37 @@ export function BotIcon({ className = "", size = 16 }: IconProps) {
   );
 }
 
+export function AntigravityIcon({ className = "", size = 16 }: IconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      {/* Orbit mark — a body escaping its ring */}
+      <ellipse cx="12" cy="12" rx="9.5" ry="4.5" transform="rotate(-25 12 12)" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export const ENGINE_META: Record<string, EngineMeta> = {
+  antigravity: {
+    icon: AntigravityIcon,
+    label: "antigravity",
+    color: "text-info",
+    bgColor: "bg-info/15",
+    borderColor: "border-info/30",
+    provider: "Google",
+    install: "",
+    docsUrl: "https://antigravity.google",
+    description: "Antigravity CLI sessions read from the local session store",
+  },
   "claude-code": {
     icon: ClaudeIcon,
     label: "claude-code",

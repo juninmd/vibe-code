@@ -40,18 +40,98 @@ function prepareEnvironment(): string {
   git("add -A");
   git('commit -m "chore: seed fixture repo"');
 
+  seedSessionStores(join(root, "sessions"));
+
   process.env.VIBE_E2E_ROOT = root;
   return root;
+}
+
+/**
+ * Writes a deterministic session store for each coding CLI so the session
+ * board has one card per column without depending on what the machine running
+ * the suite happens to have in its home directory.
+ */
+function seedSessionStores(dir: string): void {
+  const now = Date.now();
+  const MIN = 60_000;
+  const HOUR = 60 * MIN;
+  const write = (file: string, content: string) => {
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, content);
+  };
+  const json = (file: string, value: unknown) => write(file, JSON.stringify(value));
+  const jsonl = (file: string, records: unknown[]) =>
+    write(file, records.map((r) => JSON.stringify(r)).join("\n"));
+
+  // OpenCode — one recently touched session (active) with two messages.
+  const storage = join(dir, "opencode", "storage");
+  json(join(storage, "session", "ses_e2e_active.json"), {
+    id: "ses_e2e_active",
+    title: "E2E opencode active session",
+    directory: "/tmp/e2e-projects/storefront",
+    time: { created: now - 2 * HOUR, updated: now - MIN },
+  });
+  json(join(storage, "message", "ses_e2e_active", "msg_1.json"), { id: "msg_1" });
+  json(join(storage, "message", "ses_e2e_active", "msg_2.json"), { id: "msg_2" });
+  // Sub-agent session — must never surface as a card.
+  json(join(storage, "session", "ses_e2e_child.json"), {
+    id: "ses_e2e_child",
+    parentID: "ses_e2e_active",
+    title: "E2E opencode subagent",
+    time: { created: now - 2 * HOUR, updated: now - MIN },
+  });
+
+  // Claude Code — an idle transcript and one whose last turn is an API error.
+  jsonl(join(dir, "claude", "projects", "-tmp-e2e-projects-api", "e2e-idle.jsonl"), [
+    { type: "summary", summary: "E2E claude idle session" },
+    {
+      type: "user",
+      sessionId: "e2e-idle",
+      cwd: "/tmp/e2e-projects/api",
+      gitBranch: "main",
+      timestamp: new Date(now - 4 * HOUR).toISOString(),
+      message: { role: "user", content: "start" },
+    },
+  ]);
+  jsonl(join(dir, "claude", "projects", "-tmp-e2e-projects-infra", "e2e-failed.jsonl"), [
+    {
+      type: "user",
+      sessionId: "e2e-failed",
+      cwd: "/tmp/e2e-projects/infra",
+      timestamp: new Date(now - 3 * HOUR).toISOString(),
+      message: { role: "user", content: "plan the upgrade" },
+    },
+    {
+      type: "assistant",
+      sessionId: "e2e-failed",
+      isApiErrorMessage: true,
+      timestamp: new Date(now - 3 * HOUR + MIN).toISOString(),
+      message: { role: "assistant", content: "API Error: overloaded" },
+    },
+  ]);
+
+  // Antigravity — a session the CLI itself marked as finished.
+  json(join(dir, "antigravity", "sessions", "e2e-done.json"), {
+    session_id: "e2e-done",
+    name: "E2E antigravity done session",
+    workspacePath: "/tmp/e2e-projects/mobile",
+    created_at: new Date(now - 6 * HOUR).toISOString(),
+    last_active_at: new Date(now - 5 * HOUR).toISOString(),
+    state: "completed",
+    messageCount: 3,
+  });
 }
 
 const E2E_ROOT = prepareEnvironment();
 const DATA_DIR = join(E2E_ROOT, "data");
 const FIXTURE_REPO = join(E2E_ROOT, "fixture-repo");
+const SESSIONS_DIR = join(E2E_ROOT, "sessions");
 
 export const E2E = {
   serverUrl: `http://localhost:${SERVER_PORT}`,
   webUrl: `http://localhost:${WEB_PORT}`,
   fixtureRepo: FIXTURE_REPO,
+  sessionsDir: SESSIONS_DIR,
 };
 
 export default defineConfig({
@@ -66,6 +146,11 @@ export default defineConfig({
     baseURL: E2E.webUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Escape hatch for sandboxed CI images that ship a browser Playwright did
+    // not install itself (`playwright install` is unavailable there).
+    launchOptions: process.env.VIBE_E2E_CHROMIUM
+      ? { executablePath: process.env.VIBE_E2E_CHROMIUM }
+      : {},
   },
   webServer: [
     {
@@ -82,6 +167,10 @@ export default defineConfig({
         GITHUB_OAUTH_CLIENT_SECRET: "",
         VIBE_CODE_API_KEY: "",
         VIBE_CODE_MAX_AGENTS: "2",
+        // Point the session readers at the seeded stores instead of $HOME.
+        VIBE_OPENCODE_SESSIONS_DIR: join(SESSIONS_DIR, "opencode"),
+        VIBE_CLAUDE_SESSIONS_DIR: join(SESSIONS_DIR, "claude", "projects"),
+        VIBE_ANTIGRAVITY_SESSIONS_DIR: join(SESSIONS_DIR, "antigravity", "sessions"),
       },
     },
     {

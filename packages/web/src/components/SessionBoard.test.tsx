@@ -146,10 +146,42 @@ describe("SessionBoard", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("opencode --session ses_1"));
   });
 
-  it("surfaces a scan error", async () => {
+  it("surfaces a scan error and does not claim the machine has no sessions", async () => {
     list.mockRejectedValue(new Error("permission denied"));
     render(<SessionBoard open onClose={() => {}} />);
+
     expect(await screen.findByText("permission denied")).toBeTruthy();
+    expect(screen.getByText("Could not read the session stores")).toBeTruthy();
+    expect(screen.queryByText("No CLI sessions found")).toBeNull();
+  });
+
+  it("names the missing store per CLI when nothing was found", async () => {
+    list.mockResolvedValue({
+      cards: [],
+      sources: [
+        { source: "opencode", available: true, roots: ["/store/opencode"], cards: 0, error: null },
+        { source: "claude-code", available: false, roots: [], cards: 0, error: null },
+        { source: "antigravity", available: false, roots: [], cards: 0, error: null },
+      ],
+      scannedAt: new Date().toISOString(),
+    } satisfies SessionBoardResponse);
+
+    render(<SessionBoard open onClose={() => {}} />);
+
+    expect(await screen.findByText("No CLI sessions found")).toBeTruthy();
+    expect(screen.getByText(/store found \(\/store\/opencode\)/)).toBeTruthy();
+    expect(screen.getByText(/set VIBE_CLAUDE_SESSIONS_DIR/)).toBeTruthy();
+    expect(screen.getByText(/set VIBE_ANTIGRAVITY_SESSIONS_DIR/)).toBeTruthy();
+  });
+
+  it("hides the message counter when a session has no messages yet", async () => {
+    list.mockResolvedValue(board([card({ messageCount: 0 })]));
+    render(<SessionBoard open onClose={() => {}} />);
+
+    const cardEl = (await screen.findByText("Ship the sessions board")).closest(
+      "button"
+    ) as HTMLElement;
+    expect(within(cardEl).queryByText(/msg$/)).toBeNull();
   });
 
   it("does not scan while closed", () => {

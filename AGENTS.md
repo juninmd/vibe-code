@@ -32,7 +32,9 @@
 - **Repo bare deletado com DB `ready`**: `orchestrator.launch` re-clona automaticamente (self-heal) — não assumir que `status=ready` implica bare presente no disco.
 
 ## 3.2 Suíte E2E (Playwright)
-- `bun run test:e2e` na raiz. O `playwright.config.ts` sobe server real isolado (porta 3123, data dir em `%TEMP%`, auth desabilitada com env vazias) + Vite (5199) e cria um repo git fixture. Specs em `e2e/` (API smoke + fluxo do board/modal).
+- `bun run test:e2e` na raiz. O `playwright.config.ts` sobe server real isolado (porta 3123, data dir em `%TEMP%`, auth desabilitada com env vazias) + Vite (5199) e cria um repo git fixture. Specs em `e2e/` (API smoke + fluxo do board/modal + session board).
+- **Session stores fixture**: o `prepareEnvironment()` também escreve stores determinísticos das três CLIs em `<root>/sessions/` e aponta `VIBE_{OPENCODE,CLAUDE,ANTIGRAVITY}_SESSIONS_DIR` para lá, então `e2e/sessions.spec.ts` não depende do `$HOME` da máquina.
+- **Browser pré-instalado**: em imagens de CI onde `playwright install` não roda, exporte `VIBE_E2E_CHROMIUM=/caminho/do/chromium` — o config usa isso como `launchOptions.executablePath`.
 
 ## 4. Operação em Produção (k8s) — Engines, Modelos & Memória
 Aprendizados de homologar o OpenCode rodando dentro do container deployado (`ghcr.io/juninmd/vibe-code`, Debian/Bun). Validado 2026-06-04.
