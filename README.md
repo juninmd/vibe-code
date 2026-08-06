@@ -26,6 +26,7 @@ Hoje o runtime já consegue orquestrar execuções, reviews e PRs. A direção d
 
 Use agentes como Claude Code, Aider ou OpenCode para:
 
+- 🗂️ **Sessões viram cards** — Sessões locais do OpenCode, Claude Code e Antigravity CLI aparecem como cards de kanban, sem precisar lançar nada pelo vibe-code
 - 🎯 **Objetivos Executáveis** — Transforme objetivos em tarefas, milestones, reviews e artifacts auditáveis
 - 🤖 **Automatização Inteligente** — Execute code generation, refactoring, bug fixing e docs com loops de review
 - 🔄 **Multi-Repo** — Trabalhe em vários repositórios simultaneamente
@@ -118,6 +119,25 @@ API:
 ```bash
 GET /api/inbox
 ```
+
+### Sessões de CLI como cards
+
+As sessões que você já criou direto no terminal (OpenCode, Claude Code,
+Antigravity CLI) entram no vibe-code sem import: o servidor lê o store local de
+cada CLI e devolve um card por sessão. Detalhes de coluna, campos e overrides
+estão em [Session Board](#session-board-sessões-de-cli-viram-cards).
+
+API:
+
+```bash
+GET /api/sessions                       # todas as sessões, mais recentes primeiro
+GET /api/sessions?source=claude-code    # filtra por CLI
+GET /api/sessions?limit=50              # limita o número de cards
+GET /api/sessions?refresh=true          # ignora o cache e re-escaneia o disco
+```
+
+Resposta: `{ data: { cards, sources, scannedAt } }`, onde `sources` informa,
+por CLI, se o store foi encontrado e quantos cards vieram dele.
 
 ---
 
@@ -445,6 +465,14 @@ VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/
 VIBE_CODE_DOCS_AUTO_APPLY=true                # Run docs finisher step before PR creation
 VIBE_CODE_PUBLIC_URL=https://vibe.example.com # URL pública para links em notificações externas
 
+# Session board (sessões de CLI → cards). Só defina se a CLI guardar as
+# sessões fora do caminho padrão; aceita lista separada por vírgula.
+# VIBE_OPENCODE_SESSIONS_DIR=~/.local/share/opencode
+# VIBE_CLAUDE_SESSIONS_DIR=~/.claude/projects
+# VIBE_ANTIGRAVITY_SESSIONS_DIR=~/.antigravity/sessions
+VIBE_SESSION_ACTIVE_WINDOW_MS=900000          # ≤ 15min de inatividade => active
+VIBE_SESSION_IDLE_WINDOW_MS=86400000          # > 24h => done
+
 # GitHub (Para criar PRs automaticamente)
 GITHUB_TOKEN=ghp_xxxxx...                     # (required para PRs)
 
@@ -553,6 +581,41 @@ Mensagens enviadas:
 
 ## 🎮 Interface Web — Guia Completo
 
+### Session Board (sessões de CLI viram cards)
+
+Atalho `S`, ou **Sessions** na sidebar.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  ⚡ Active      │  ⏸ Idle        │  ✅ Done      │  ✖ Failed   │
+├──────────────────────────────────────────────────────────────┤
+│ ┌────────────┐  ┌────────────┐   ┌────────────┐              │
+│ │ ◆ opencode │  │ ◆ claude   │   │ ◆ antigrav │              │
+│ │ Ship board │  │ Fix login  │   │ Old run    │              │
+│ │ vibe-code  │  │ api  main  │   │ web        │              │
+│ │ 12 msg 2m  │  │ 4 msg  3h  │   │ 30 msg 2d  │              │
+│ └────────────┘  └────────────┘   └────────────┘              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+O board é uma **projeção read-only**: o servidor apenas lê o diretório de
+sessões de cada CLI (nada é executado nem gravado) e monta um card por sessão.
+
+- **Coluna** — usa o estado terminal que a própria CLI registrou; se não houver,
+  deriva da última atividade: ≤ 15 min → `active`, ≤ 24 h → `idle`, além disso →
+  `done`. Ajustável com `VIBE_SESSION_ACTIVE_WINDOW_MS` / `VIBE_SESSION_IDLE_WINDOW_MS`.
+- **Card** — só carrega o que ele mostra: título, CLI de origem, projeto, branch,
+  nº de mensagens e quando foi tocado pela última vez. Transcrições, tool calls,
+  custo e metadados de provider ficam no leitor e não passam pela API.
+- **Clique no card** — copia o comando que retoma a sessão na CLI de origem
+  (`opencode --session …`, `claude --resume …`, `antigravity --resume …`).
+- **Filtros** — por CLI e por texto (título ou projeto).
+
+Se um CLI guarda sessões fora do caminho padrão, aponte
+`VIBE_OPENCODE_SESSIONS_DIR`, `VIBE_CLAUDE_SESSIONS_DIR` ou
+`VIBE_ANTIGRAVITY_SESSIONS_DIR` para o diretório certo (aceita lista separada
+por vírgula). O rodapé do board indica quais stores não foram encontrados.
+
 ### Kanban Board
 
 ```
@@ -628,6 +691,7 @@ Novidades operacionais do painel:
 
 | Atalho | Ação |
 |--------|------|
+| `S` | Abrir session board (OpenCode / Claude Code / Antigravity) |
 | `E` | Abrir painel de engines |
 | `N` | Nova task |
 | `Ctrl+F` / `Cmd+F` | Buscar nos logs (quando painel aberto) |

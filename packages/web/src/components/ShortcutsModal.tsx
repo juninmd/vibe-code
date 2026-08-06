@@ -7,6 +7,8 @@ const SHORTCUTS = [
   { keys: ["Ctrl", "Shift", "O"], description: "Add repository" },
   { keys: ["Ctrl", "O"], description: "Open in editor" },
   { keys: ["Ctrl", "1-9"], description: "Switch repository (workspace)" },
+  { keys: ["S"], description: "Sessions board (OpenCode / Claude Code / Antigravity)" },
+  { keys: ["E"], description: "AI engines panel" },
   { keys: ["Ctrl", "K"], description: "Command palette" },
   { keys: ["Ctrl", "S"], description: "Export board" },
   { keys: ["Ctrl", "Shift", "C"], description: "Copy path" },

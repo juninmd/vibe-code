@@ -47,16 +47,27 @@ Repository contract entrypoints:
 - **`agents/registry.ts`** — discovers and registers available engines at startup
 - **`agents/orchestrator.ts`** — manages concurrent runs (default max 4), git worktree creation, task lifecycle, and broadcasts WS events
 - **`agents/engines/`** — one file per engine; each spawns the CLI tool via `Bun.spawn` and streams output
+- **`sessions/`** — read-only readers for the local CLI session stores (OpenCode, Claude Code, Antigravity) plus `SessionService`, which projects them onto kanban cards
 - **`db/`** — SQLite via Bun; tables: `repositories`, `tasks`, `agent_runs`, `agent_logs`; WAL mode + foreign keys enabled
 - **`git/git-service.ts`** — clones repos as bare, creates per-task git worktrees under `~/.vibe-code/workspaces/`
 - **`ws/broadcast.ts`** — WebSocket hub; clients subscribe to task updates and receive live logs
-- **`api/`** — REST routes (`/api/repos`, `/api/tasks`, `/api/runs`, `/api/engines`) using Zod validation
+- **`api/`** — REST routes (`/api/repos`, `/api/tasks`, `/api/runs`, `/api/engines`, `/api/sessions`) using Zod validation
 
 ### Web internals (`packages/web/src/`)
 
 - **`api/client.ts`** — typed fetch wrapper over the REST API
-- **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useWebSocket` (with reconnect logic)
-- **`components/`** — `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
+- **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)
+- **`components/`** — `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
+
+### Session board data flow
+
+```text
+GET /api/sessions
+  → SessionService scans each CLI's own storage dir (never spawns anything)
+  → readers parse transcripts and drop everything a card does not show
+  → status derived per session: explicit CLI state, else activity window
+  → SessionBoard groups the cards into active / idle / done / failed
+```
 
 ### Data flow
 
@@ -75,6 +86,14 @@ POST /api/tasks/{id}/launch
 | `PORT` | `3000` |
 | `VIBE_CODE_DATA_DIR` | `~/.vibe-code` |
 | `VIBE_CODE_MAX_AGENTS` | `4` |
+| `VIBE_OPENCODE_SESSIONS_DIR` | `$XDG_DATA_HOME/opencode`, `~/.local/share/opencode` |
+| `VIBE_CLAUDE_SESSIONS_DIR` | `~/.claude/projects` |
+| `VIBE_ANTIGRAVITY_SESSIONS_DIR` | `~/.antigravity/sessions`, `~/.antigravity/cli/sessions`, `~/.config/antigravity/sessions` |
+| `VIBE_SESSION_ACTIVE_WINDOW_MS` | `900000` (15 min — newer than this ⇒ `active`) |
+| `VIBE_SESSION_IDLE_WINDOW_MS` | `86400000` (24 h — older than this ⇒ `done`) |
+
+The three `*_SESSIONS_DIR` variables accept a comma-separated list and are only
+needed when a CLI stores its sessions somewhere other than the defaults.
 
 Data is stored at `~/.vibe-code/`: SQLite DB, bare repos (`repos/`), and task worktrees (`workspaces/`).
 
