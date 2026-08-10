@@ -303,7 +303,7 @@ describe("ConflictResolver", () => {
       const parent = db.tasks.create({
         repoId,
         title: "feat: a finished task",
-        status: "completed",
+        status: "done",
       });
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/1337");
       db.tasks.updateField(parent.id, "branch_name", "feat/finished");
@@ -333,7 +333,7 @@ describe("ConflictResolver", () => {
       const parent = db.tasks.create({
         repoId,
         title: "feat: a finished task without telegram",
-        status: "completed",
+        status: "done",
       });
       const launchTask = db.tasks.getById(parent.id);
       db.settings.set("telegram_enabled", "false");
