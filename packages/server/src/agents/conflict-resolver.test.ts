@@ -297,4 +297,54 @@ describe("ConflictResolver", () => {
       expect(result).toBe(false);
     });
   });
+
+  describe("notifyConflictResolved", () => {
+    it("notifies via Telegram when configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task",
+        status: "done",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/1337");
+      db.tasks.updateField(parent.id, "branch_name", "feat/finished");
+      const launchTask = db.tasks.getById(parent.id);
+
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy-bot");
+      db.settings.set("telegram_chat_id", "dummy-chat");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as any);
+
+      await resolver.notifyConflictResolved(launchTask!);
+
+      expect(fetchSpy).toHaveBeenCalled();
+      const callArgs = fetchSpy.mock.calls[0];
+      expect(callArgs[0]).toContain("https://api.telegram.org/botdummy-bot/sendMessage");
+      expect(callArgs[1]?.body).toContain("Merge conflicts resolved");
+      expect(callArgs[1]?.body).toContain("feat/finished");
+
+      fetchSpy.mockRestore();
+    });
+
+    it("does nothing if Telegram is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task without telegram",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
+      db.settings.set("telegram_enabled", "false");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      await resolver.notifyConflictResolved(launchTask!);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+  });
 });
