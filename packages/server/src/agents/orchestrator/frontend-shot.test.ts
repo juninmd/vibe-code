@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import * as fs from "node:fs";
-import * as fsPromises from "node:fs/promises";
-import * as path from "node:path";
 import * as playwright from "playwright";
 import * as processTree from "../../utils/process-tree";
 
@@ -142,7 +140,7 @@ describe("captureFrontendScreenshotIfNeeded", () => {
 
     const originalConnect = Bun.connect;
     Bun.connect = mock().mockImplementation(() => {
-      return new Promise((resolve, reject) => {
+      return new Promise((_resolve, reject) => {
         reject(new Error("Connection refused"));
       });
     }) as any;
@@ -183,7 +181,7 @@ describe("captureFrontendScreenshotIfNeeded", () => {
     Bun.connect = mock().mockImplementation(() => {
       connectCalls++;
       if (connectCalls > 2) return Promise.resolve(mockConn);
-      return new Promise((resolve, reject) => {
+      return new Promise((_resolve, reject) => {
         reject(new Error("Connection refused"));
       });
     }) as any;

@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import * as honoCookie from "hono/cookie";
-import { getCookie, setCookie } from "hono/cookie";
 import { authMiddleware, authStatus, checkApiKey, createAuthRouter, getCurrentUser } from "./auth";
 import type { Db } from "./db";
 import { createDb } from "./db";

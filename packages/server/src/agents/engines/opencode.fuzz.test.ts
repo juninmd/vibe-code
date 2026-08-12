@@ -257,7 +257,7 @@ describe("OpenCodeEngine.parseLine fuzz", () => {
           .tuple(fc.string({ minLength: 0, maxLength: 50 }), fc.boolean(), fc.boolean())
           .map(([prefix, hasBrace, hasNewline]) => {
             let s = prefix;
-            if (hasBrace) s += "{" + Math.random().toString(36).slice(2);
+            if (hasBrace) s += `{${Math.random().toString(36).slice(2)}`;
             if (Math.random() > 0.5) s += '"unclosed';
             if (hasNewline) s += "\n";
             return s;
