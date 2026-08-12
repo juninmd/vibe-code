@@ -48,7 +48,7 @@ describe("killProcessTree", () => {
     Object.defineProperty(process, "platform", { value: "win32" });
 
     // Mock error condition for taskkill
-    execSpy.mockImplementation((command: any, ...args: any[]) => {
+    execSpy.mockImplementation((_command: any, ...args: any[]) => {
       const cb = args.pop();
       const err = new Error("process already dead");
       (err as any).code = 128;
@@ -74,7 +74,7 @@ describe("killProcessTree", () => {
     Object.defineProperty(process, "platform", { value: "linux" });
 
     let killAttempts = 0;
-    killSpy.mockImplementation((pid: number, signal: string) => {
+    killSpy.mockImplementation((pid: number, _signal: string) => {
       if (pid === -1000 && killAttempts === 0) {
         killAttempts++;
         throw new Error("No such process group");

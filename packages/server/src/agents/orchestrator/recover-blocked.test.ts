@@ -1,7 +1,7 @@
 import { describe, expect, mock, spyOn, test } from "bun:test";
 
 // Mock playwright so frontend-shot doesn't complain about the missing package
-mock.module("playwright", () => ({}));
+mock.module("playwright", () => ({ chromium: {} }));
 
 function makeTask(overrides: Record<string, unknown> = {}) {
   return {
