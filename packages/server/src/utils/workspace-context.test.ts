@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import type { AuthUser } from "@vibe-code/shared";
 import type { Context } from "hono";
 import { createDb, type Db } from "../db";

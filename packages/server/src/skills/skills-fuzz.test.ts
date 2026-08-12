@@ -293,7 +293,7 @@ describe("keywordOverlap fuzz", () => {
         fc.array(fc.string({ minLength: 1, maxLength: 10 }), { maxLength: 10 }),
         (prefix, tokens) => {
           const before = keywordOverlap(prefix, tokens);
-          const extended = prefix + " " + tokens.join(" ");
+          const extended = `${prefix} ${tokens.join(" ")}`;
           const after = keywordOverlap(extended, tokens);
           expect(after).toBeGreaterThanOrEqual(before);
         }

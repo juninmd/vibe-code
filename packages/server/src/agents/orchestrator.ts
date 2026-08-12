@@ -355,7 +355,7 @@ export class Orchestrator {
 
   async triggerScheduled(templateTaskId: string): Promise<AgentRun> {
     const template = this.db.tasks.getById(templateTaskId);
-    if (!template || template.status !== "scheduled") throw new Error("Invalid template task");
+    if (template?.status !== "scheduled") throw new Error("Invalid template task");
 
     if (this.activeCount >= this.maxConcurrent) {
       throw capacityError(this.maxConcurrent);
@@ -477,7 +477,7 @@ export class Orchestrator {
     modelOverride?: string
   ): void {
     const task = this.db.tasks.getById(taskId);
-    if (!task || task.status !== "failed") return;
+    if (task?.status !== "failed") return;
 
     if (AUTO_RETRY_MAX <= 0) {
       this.blockFailedTask(taskId, "Agent failed and automatic retry is disabled.");
@@ -500,7 +500,7 @@ export class Orchestrator {
     const timer = setTimeout(async () => {
       this.retryQueue.delete(taskId);
       const t = this.db.tasks.getById(taskId);
-      if (!t || t.status !== "failed") return;
+      if (t?.status !== "failed") return;
 
       logOrchestratorEvent(
         `Auto-retrying task [${taskId.slice(0, 8)}] (attempt ${attempt}/${AUTO_RETRY_MAX})`
@@ -550,7 +550,7 @@ export class Orchestrator {
 
   private blockFailedTask(taskId: string, reason: string): void {
     const task = this.db.tasks.getById(taskId);
-    if (!task || task.status !== "failed") return;
+    if (task?.status !== "failed") return;
 
     this.cancelRetry(taskId);
     this.retryAttempts.delete(taskId);
@@ -633,7 +633,7 @@ export class Orchestrator {
 
   async unblockTask(taskId: string): Promise<void> {
     const task = this.db.tasks.getById(taskId);
-    if (!task || task.status !== "blocked") return;
+    if (task?.status !== "blocked") return;
     this.db.tasks.update(taskId, { status: "backlog" });
     this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
     await this.sweepBacklog();
