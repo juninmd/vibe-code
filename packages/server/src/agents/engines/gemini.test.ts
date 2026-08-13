@@ -1,4 +1,4 @@
-import { mock, spyOn, describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 let mockAccessSuccess = true;
 let mockMkdirCalled = false;
@@ -24,13 +24,13 @@ mock.module("../litellm-client", () => ({
 
 let killProcessTreeCalled = false;
 mock.module("../../utils/process-tree", () => ({
-  killProcessTree: (pid: number) => {
+  killProcessTree: (_pid: number) => {
     killProcessTreeCalled = true;
   },
 }));
 
-import { GeminiEngine } from "./gemini";
 import type { EngineOptions } from "../engine";
+import { GeminiEngine } from "./gemini";
 
 describe("GeminiEngine", () => {
   let engine: GeminiEngine;
@@ -172,7 +172,7 @@ describe("GeminiEngine", () => {
       });
 
       await engine.listModels();
-      const models2 = await engine.listModels();
+      const _models2 = await engine.listModels();
 
       // spawn should only be called once, so we can verify this by modifying the mock
       spyOn(Bun, "spawn").mockImplementation(() => {
@@ -218,7 +218,7 @@ describe("GeminiEngine", () => {
       });
 
       try {
-        const generator = engine.execute("test prompt", "/workdir", {});
+        const generator = engine.execute("test prompt", "/workdir", { runId: "test", model: "pro" });
         await generator.next();
         expect().fail("Should have thrown");
       } catch (err: any) {
@@ -233,7 +233,7 @@ describe("GeminiEngine", () => {
         yield { type: "log", stream: "system", content: "hello from gemini" };
       });
 
-      spyOn(Bun, "spawn").mockImplementation((args) => {
+      spyOn(Bun, "spawn").mockImplementation((_args) => {
         return {
           exited: Promise.resolve(),
           exitCode: 0,
@@ -260,8 +260,10 @@ describe("GeminiEngine", () => {
     });
 
     it("handles stale process killing", async () => {
-       spyOn(Bun, "spawn").mockImplementation((args) => {
-        if (args[1] === "--version") {
+      spyOn(Bun, "spawn").mockImplementation((args) => {
+        // Handle args if it's an array
+        const argsArray = Array.isArray(args) ? args : (args as any).cmd;
+        if (argsArray && argsArray[1] === "--version") {
           return { exited: Promise.resolve(), exitCode: 0 } as any;
         }
         return {
@@ -278,7 +280,11 @@ describe("GeminiEngine", () => {
 
       // Inject a stale process
       let killed = false;
-      (engine as any).processes.set("stale-run", { kill: () => { killed = true; } });
+      (engine as any).processes.set("stale-run", {
+        kill: () => {
+          killed = true;
+        },
+      });
 
       const generator = engine.execute("test prompt", "/workdir", options);
       await generator.next(); // Starting...
@@ -286,7 +292,8 @@ describe("GeminiEngine", () => {
       await generator.next(); // Process...
 
       // Force generator to finish
-      for await (const _ of generator) {}
+      for await (const _ of generator) {
+      }
 
       expect(killed).toBe(true);
     });
@@ -319,8 +326,12 @@ describe("GeminiEngine", () => {
       let writtenData = "";
       let flushed = false;
       const mockStdin = {
-        write: (data: string) => { writtenData += data; },
-        flush: () => { flushed = true; },
+        write: (data: string) => {
+          writtenData += data;
+        },
+        flush: () => {
+          flushed = true;
+        },
       };
 
       (engine as any).processes.set("input-run", { stdin: mockStdin } as any);
