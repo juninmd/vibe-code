@@ -218,7 +218,10 @@ describe("GeminiEngine", () => {
       });
 
       try {
-        const generator = engine.execute("test prompt", "/workdir", { runId: "test", model: "pro" });
+        const generator = engine.execute("test prompt", "/workdir", {
+          runId: "test",
+          model: "pro",
+        });
         await generator.next();
         expect().fail("Should have thrown");
       } catch (err: any) {
