@@ -15,7 +15,7 @@ describe("killProcessTree", () => {
     debugSpy = spyOn(console, "debug").mockImplementation(() => {});
 
     // We mock promisify directly to bypass the callback hell
-        promisifySpy = spyOn(util, "promisify").mockImplementation(((_fn: any) => {
+    promisifySpy = spyOn(util, "promisify").mockImplementation(((_fn: any) => {
       return async (command: string) => {
         if (command.startsWith("pgrep -P 1000")) {
           return { stdout: "1001\n1002\n" };
