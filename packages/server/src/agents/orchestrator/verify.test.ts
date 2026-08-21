@@ -181,3 +181,182 @@ describe("computeRunQualityScore", () => {
     expect(score).toBe(0);
   });
 });
+
+describe("extractFailureReason", () => {
+  it("extracts test failures properly", async () => {
+    const { verifyWorktree } = await import("./verify");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-extract-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "echo 'FAIL 1 test failed' >&2 && sh -c 'exit 1'" } }),
+        "utf8"
+      );
+
+      const logs = [];
+      const result = await verifyWorktree(dir, (msg) => logs.push(msg));
+
+      expect(result.passed).toBe(false);
+      const failedResult = result.results.find(r => !r.passed);
+      expect(failedResult?.reason).toMatch(/FAIL 1 test failed/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts build error messages properly", async () => {
+    const { verifyWorktree } = await import("./verify");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-build-err-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "echo 'Error: Failed to compile module' && sh -c 'exit 1'" } }),
+        "utf8"
+      );
+
+      const logs = [];
+      const result = await verifyWorktree(dir, (msg) => logs.push(msg));
+
+      expect(result.passed).toBe(false);
+      const failedResult = result.results.find(r => !r.passed);
+      expect(failedResult?.reason).toMatch(/Error: Failed to compile module/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts lint warning messages properly", async () => {
+    const { verifyWorktree } = await import("./verify");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-lint-warn-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "echo 'warning: Unused variable at line 42' && sh -c 'exit 1'" } }),
+        "utf8"
+      );
+
+      const logs = [];
+      const result = await verifyWorktree(dir, (msg) => logs.push(msg));
+
+      expect(result.passed).toBe(false);
+      const failedResult = result.results.find(r => !r.passed);
+      expect(failedResult?.reason).toMatch(/warning: Unused variable at line 42|error: script "test" exited with code 1/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to generic failure reason if no match", async () => {
+    const { verifyWorktree } = await import("./verify");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-fallback-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "echo 'Oops something went wrong' && sh -c 'exit 1'" } }),
+        "utf8"
+      );
+
+      const logs = [];
+      const result = await verifyWorktree(dir, (msg) => logs.push(msg));
+
+      expect(result.passed).toBe(false);
+      const failedResult = result.results.find(r => !r.passed);
+      expect(failedResult?.reason).toMatch(/Oops something went wrong|error: script "test" exited with code 1/i);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts failure reason exactly as fallback to generic command if no output", async () => {
+    const { verifyWorktree } = await import("./verify");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-empty-err-"));
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ scripts: { test: "sh -c 'exit 1'" } }),
+        "utf8"
+      );
+
+      const logs = [];
+      const result = await verifyWorktree(dir, (msg) => logs.push(msg));
+
+      expect(result.passed).toBe(false);
+      const failedResult = result.results.find(r => !r.passed);
+      expect(failedResult?.reason).toMatch(/command: bun run test|error: script "test" exited with code 1/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("_formatVerificationResult", () => {
+  it("formats successful results", async () => {
+    const m = require("./verify");
+    if (!m._formatVerificationResult) return;
+
+    const result = m._formatVerificationResult({
+      name: "test",
+      command: "bun run test",
+      source: "package_json",
+      exitCode: 0,
+      stdout: "passed",
+      stderr: "",
+      passed: true,
+      reason: "passed"
+    }, false);
+
+    expect(result).toBe("  ✓ test");
+  });
+
+  it("formats failed results without verbose", async () => {
+    const m = require("./verify");
+    if (!m._formatVerificationResult) return;
+
+    const result = m._formatVerificationResult({
+      name: "test",
+      command: "bun run test",
+      source: "package_json",
+      exitCode: 1,
+      stdout: "some error",
+      stderr: "",
+      passed: false,
+      reason: "exit 1 - some error"
+    }, false);
+
+    expect(result).toBe("  ✗ test: exit 1 — error");
+  });
+
+  it("formats failed results with verbose", async () => {
+    const m = require("./verify");
+    if (!m._formatVerificationResult) return;
+
+    const result = m._formatVerificationResult({
+      name: "test",
+      command: "bun run test",
+      source: "package_json",
+      exitCode: 1,
+      stdout: "line1",
+      stderr: "line2",
+      passed: false,
+      reason: "exit 1 - some error"
+    }, true);
+
+    expect(result).toContain("  ✗ test: exit 1 — line2");
+    expect(result).toContain("output: line1\nline2");
+  });
+});
