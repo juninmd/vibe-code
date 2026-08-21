@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
+// Mock playwright so frontend-shot doesn't complain about the missing package
+mock.module("playwright", () => ({ chromium: {} }));
+
 import { Orchestrator } from "../orchestrator";
 
 function makeTask(overrides: Record<string, unknown> = {}) {
