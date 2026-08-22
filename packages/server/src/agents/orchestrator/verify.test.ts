@@ -23,7 +23,7 @@ describe("discoverValidationCommands", () => {
       // The parseWorkflowCommands is not mocked so it falls back based on implementation
       expect(commands.length).toBeGreaterThanOrEqual(1);
       expect(
-        commands.every((c) => c.source === "workflow_contract" || c.source === "package_json")
+        commands.every((c) => c.source === "workflow" || c.source === "package_json")
       ).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
