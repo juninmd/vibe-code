@@ -22,9 +22,9 @@ describe("discoverValidationCommands", () => {
       const commands = await discoverValidationCommands(dir);
       // The parseWorkflowCommands is not mocked so it falls back based on implementation
       expect(commands.length).toBeGreaterThanOrEqual(1);
-      expect(
-        commands.every((c) => c.source === "workflow" || c.source === "package_json")
-      ).toBe(true);
+      expect(commands.every((c) => c.source === "workflow" || c.source === "package_json")).toBe(
+        true
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
