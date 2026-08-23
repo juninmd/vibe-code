@@ -1,7 +1,7 @@
-import { describe, expect, test, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { Hono } from "hono";
-import { createReviewsRouter } from "./reviews";
 import { createDb } from "../db";
+import { createReviewsRouter } from "./reviews";
 
 describe("reviews router", () => {
   let db: ReturnType<typeof createDb>;
@@ -89,7 +89,6 @@ describe("reviews router", () => {
     // 9. List issues for round
     const res9 = await app.request(`/reviews/${taskId}/rounds/${roundId}/issues`);
     expect(res9.status).toBe(200);
-
   });
 
   test("error handling", async () => {
