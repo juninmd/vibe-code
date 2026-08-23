@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { autoInstallDependencies, runWorkspaceScripts } from "./executor";
+import { autoInstallDependencies, executeAgent, runWorkspaceScripts } from "./executor";
 
 describe("autoInstallDependencies", () => {
   let spawnSpy: any;
@@ -207,5 +207,38 @@ describe("runWorkspaceScripts", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("executeAgent", () => {
+  it("should fail gracefully if git.getBarePath throws", async () => {
+    const mockGit = {
+      getBarePath: () => Promise.reject(new Error("Git failed")),
+    };
+    const mockRepo = { name: "repo1", url: "http://example.com" };
+    const mockTask = { title: "title" };
+
+    let _sysLogCalled = false;
+    let errorThrown: any = null;
+    try {
+      await executeAgent(
+        mockTask as any,
+        {} as any,
+        {} as any,
+        mockRepo,
+        new AbortController(),
+        {} as any,
+        mockGit as any,
+        {} as any,
+        () => {
+          _sysLogCalled = true;
+        },
+        () => {}
+      );
+    } catch (e) {
+      errorThrown = e;
+    }
+    expect(errorThrown).toBeDefined();
+    expect(errorThrown.message).toBe("Git failed");
   });
 });
