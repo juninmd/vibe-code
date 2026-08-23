@@ -15,7 +15,9 @@ describe("reviews router", () => {
     app = new Hono();
     app.route("/reviews", router);
 
-    const repo = db.repos.create({ name: "test", localPath: "/tmp", url: "http" });
+    db.workspaces.create({ name: "ws1", slug: "ws1" });
+    const ws = db.workspaces.list()[0];
+    const repo = db.repos.create({ url: "http://github.com/test/test", workspaceId: ws.id });
     const task = db.tasks.create({
       repoId: repo.id,
       title: "test task",
