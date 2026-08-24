@@ -402,6 +402,370 @@ describe("POST /api/tasks/:id/retry", () => {
     expect(res.status).toBe(202);
     expect(body.data.id).toBe("run-1");
   });
+
+  it("returns 400 when task is not failed or blocked", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "In progress task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "in_progress" });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_state");
+  });
+
+  it("returns 500 when orchestrator launch fails", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Failed task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "failed" });
+    const orchestrator = makeOrchestrator({
+      launch: async () => {
+        throw new Error("launch error");
+      },
+    });
+
+    const res = await buildApp(db, orchestrator).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("retry_failed");
+  });
+});
+
+describe("POST /api/tasks/:id/preview-prompt", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/preview-prompt", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns fallback prompt when git is not available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task without git", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(false);
+    expect(body.data.prompt).toContain("Task without git");
+  });
+
+  it("returns fallback prompt when repository does not exist", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task with missing repo", repoId: repo.id });
+
+    // Mock db.repos.getById to simulate repo not found without triggering cascade delete
+    const originalGetById = db.repos.getById;
+    db.repos.getById = (id: string) => {
+      if (id === repo.id) return null;
+      return originalGetById(id);
+    };
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(false);
+  });
+
+  it("materializes context correctly when git is available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Materialized task", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/path",
+      createWorktree: async () => "/mock/worktree",
+      removeWorktree: async () => {},
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const res = await app.request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(true);
+    expect(typeof body.data.prompt).toBe("string");
+  });
+});
+
+describe("GET /api/tasks/:id/memory", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/memory");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns task memory and defaults to task scope", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task with memory", repoId: repo.id });
+    db.memories.create({
+      taskId: task.id,
+      scope: "task",
+      content: "some memory content",
+      needsCompaction: false,
+    });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`);
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.scope).toBe("task");
+    expect(body.data.memory.content).toBe("some memory content");
+    expect(body.data.needsCompaction).toBe(false);
+  });
+});
+
+describe("PUT /api/tasks/:id/memory", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/memory", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "task", content: "test" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when scope or content is missing", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "task" }), // missing content
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("bad_request");
+  });
+
+  it("updates memory correctly", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "shared", content: "new shared memory" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.memory.content).toBe("new shared memory");
+    expect(body.data.memory.scope).toBe("shared");
+
+    const mem = db.memories.getByTaskIdAndScope(task.id, "shared");
+    expect(mem?.content).toBe("new shared memory");
+  });
+});
+
+describe("POST /api/tasks/:id/open-editor", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/open-editor", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when no path is available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    // Simulate git and local path missing
+    db.repos.updateStatus(repo.id, "ready", null);
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/open-editor`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("invalid_state");
+  });
+
+  it("returns the path when onlyPath is true", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor?onlyPath=true`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.ok).toBe(true);
+    expect(body.data.path).toBe("/tmp/local/repo");
+  });
+
+  it("spawns editor and returns path", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    // Stub Bun.spawn
+    const originalSpawn = Bun.spawn;
+    let spawnCalled = false;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      spawnCalled = true;
+      return { unref: () => {} };
+    }) as any;
+
+    try {
+      const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor`, {
+        method: "POST",
+      });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.ok).toBe(true);
+      expect(body.data.path).toBe("/tmp/local/repo");
+      expect(spawnCalled).toBe(true);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("returns 500 when editor fails to spawn", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      throw new Error("Spawn error");
+    }) as any;
+
+    try {
+      const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor`, {
+        method: "POST",
+      });
+      const body = await res.json();
+      expect(res.status).toBe(500);
+      expect(body.error).toBe("editor_failed");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
+
+describe("GET /api/tasks/:id/download", () => {
+  it("returns 503 if git is not available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/download`);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("unavailable");
+  });
+
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/download");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when task has no branch", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id }); // branchName is null
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/download`);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_state");
+  });
+
+  it("returns 500 when git archive fails", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.tasks.updateField(task.id, "branch_name", "feat/my-branch");
+
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/bare",
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      return {
+        exited: Promise.resolve(1),
+        stderr: new Blob(["git archive failed"]).stream(),
+      };
+    }) as any;
+
+    try {
+      const res = await app.request(`/api/tasks/${task.id}/download`);
+      expect(res.status).toBe(500);
+      expect((await res.json()).error).toBe("archive_failed");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("returns the zip buffer when git archive succeeds", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.tasks.updateField(task.id, "branch_name", "feat/my-branch");
+
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/bare",
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const { writeFileSync } = await import("node:fs");
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((cmd: string[], _opts: any) => {
+      // Create a dummy file at the output path so Bun.file() succeeds
+      const outPathIndex = cmd.indexOf("-o") + 1;
+      const tmpPath = cmd[outPathIndex];
+      if (tmpPath) {
+        writeFileSync(tmpPath, "mock-zip-content");
+      }
+      return {
+        exited: Promise.resolve(0),
+      };
+    }) as any;
+
+    try {
+      const res = await app.request(`/api/tasks/${task.id}/download`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("application/zip");
+      const text = await res.text();
+      expect(text).toBe("mock-zip-content");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
 });
 
 describe("DELETE /api/tasks/:id", () => {
