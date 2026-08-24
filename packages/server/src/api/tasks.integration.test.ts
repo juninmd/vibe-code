@@ -515,7 +515,12 @@ describe("GET /api/tasks/:id/memory", () => {
     const db = makeDb();
     const repo = seedRepo(db);
     const task = db.tasks.create({ title: "Task with memory", repoId: repo.id });
-    db.memories.create({ taskId: task.id, scope: "task", content: "some memory content", needsCompaction: false });
+    db.memories.create({
+      taskId: task.id,
+      scope: "task",
+      content: "some memory content",
+      needsCompaction: false,
+    });
 
     const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`);
     const body = await res.json();
@@ -621,7 +626,7 @@ describe("POST /api/tasks/:id/open-editor", () => {
     // Stub Bun.spawn
     const originalSpawn = Bun.spawn;
     let spawnCalled = false;
-    Bun.spawn = ((cmd: string[], opts: any) => {
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
       spawnCalled = true;
       return { unref: () => {} };
     }) as any;
@@ -647,7 +652,7 @@ describe("POST /api/tasks/:id/open-editor", () => {
     db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
 
     const originalSpawn = Bun.spawn;
-    Bun.spawn = ((cmd: string[], opts: any) => {
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
       throw new Error("Spawn error");
     }) as any;
 
@@ -707,7 +712,7 @@ describe("GET /api/tasks/:id/download", () => {
     app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
 
     const originalSpawn = Bun.spawn;
-    Bun.spawn = ((cmd: string[], opts: any) => {
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
       return {
         exited: Promise.resolve(1),
         stderr: new Blob(["git archive failed"]).stream(),
@@ -739,12 +744,12 @@ describe("GET /api/tasks/:id/download", () => {
     const { writeFileSync } = await import("node:fs");
 
     const originalSpawn = Bun.spawn;
-    Bun.spawn = ((cmd: string[], opts: any) => {
+    Bun.spawn = ((cmd: string[], _opts: any) => {
       // Create a dummy file at the output path so Bun.file() succeeds
       const outPathIndex = cmd.indexOf("-o") + 1;
       const tmpPath = cmd[outPathIndex];
       if (tmpPath) {
-         writeFileSync(tmpPath, "mock-zip-content");
+        writeFileSync(tmpPath, "mock-zip-content");
       }
       return {
         exited: Promise.resolve(0),
