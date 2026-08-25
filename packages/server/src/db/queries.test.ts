@@ -37,7 +37,7 @@ describe("Repository queries", () => {
     const db = makeDb();
     db.repos.create({ url: "https://github.com/a/r1.git" });
     db.repos.create({ url: "https://github.com/b/r2.git" });
-    expect(db.repos.list().length).toBe(2);
+    expect(db.repos.list()).toHaveLength(2);
   });
 
   it("extracts repo name from bare URL", () => {
@@ -109,16 +109,16 @@ describe("Database queries with repo and task", () => {
     });
 
     it("lists all tasks", () => {
-      expect(db.tasks.list().length).toBe(1); // One created in beforeEach
+      expect(db.tasks.list()).toHaveLength(1); // One created in beforeEach
       db.tasks.create({ title: "Task 2", repoId });
-      expect(db.tasks.list().length).toBe(2);
+      expect(db.tasks.list()).toHaveLength(2);
     });
 
     it("lists tasks filtered by repo", () => {
       const otherRepoId = seedRepo(db, "https://github.com/other/repo.git").id;
       db.tasks.create({ title: "Other", repoId: otherRepoId });
       const mine = db.tasks.list(repoId);
-      expect(mine.length).toBe(1);
+      expect(mine).toHaveLength(1);
       expect(mine[0].title).toBe("Task");
     });
 
@@ -196,7 +196,7 @@ describe("Database queries with repo and task", () => {
 
     it("listByTask returns all runs for a task", () => {
       db.runs.create(taskId, "aider");
-      expect(db.runs.listByTask(taskId).length).toBe(2);
+      expect(db.runs.listByTask(taskId)).toHaveLength(2);
     });
 
     it("returns null for latest run of task with no runs", () => {
@@ -211,7 +211,7 @@ describe("Database queries with repo and task", () => {
       db.logs.create(runId, "stdout", "Hello world");
       db.logs.create(runId, "stderr", "Error message");
       const logs = db.logs.listByRun(runId);
-      expect(logs.length).toBe(2);
+      expect(logs).toHaveLength(2);
       expect(logs[0].content).toBe("Hello world");
       expect(logs[0].stream).toBe("stdout");
       expect(logs[1].stream).toBe("stderr");
@@ -227,7 +227,7 @@ describe("Database queries with repo and task", () => {
     });
 
     it("returns empty array for run with no logs", () => {
-      expect(db.logs.listByRun(runId).length).toBe(0);
+      expect(db.logs.listByRun(runId)).toHaveLength(0);
     });
 
     it("supports all stream types", () => {
@@ -294,7 +294,7 @@ describe("Database queries with repo and task", () => {
     it("listDue returns schedules due", () => {
       db.schedules.upsert(taskId, "0 * * * *", null, "2020-01-01T00:00:00Z");
       const due = db.schedules.listDue();
-      expect(due.length).toBe(1);
+      expect(due).toHaveLength(1);
       expect(due[0].taskId).toBe(taskId);
     });
 
@@ -308,7 +308,7 @@ describe("Database queries with repo and task", () => {
     it("remove deletes a schedule", () => {
       db.schedules.upsert(taskId, "0 * * * *", null, "2024-01-01T00:00:00Z");
       db.schedules.remove(taskId);
-      expect(db.schedules.listAll().length).toBe(0);
+      expect(db.schedules.listAll()).toHaveLength(0);
     });
 
     it("disableExpired disables expired schedules", () => {
@@ -343,7 +343,7 @@ describe("Database queries with repo and task", () => {
         content: "found issue",
       });
       const list = db.findings.listByRepo(repoId);
-      expect(list.length).toBe(1);
+      expect(list).toHaveLength(1);
       expect(list[0].content).toBe("found issue");
     });
 
@@ -371,7 +371,7 @@ describe("Database queries with repo and task", () => {
         content: "found issue",
       });
       const recent = db.findings.getRecentByRepo(repoId);
-      expect(recent.length).toBe(1);
+      expect(recent).toHaveLength(1);
     });
   });
 
@@ -423,7 +423,7 @@ describe("Database queries with repo and task", () => {
         prCreated: false,
       });
       const stats = db.metrics.skillEffectiveness();
-      expect(stats.length).toBe(2);
+      expect(stats).toHaveLength(2);
       const reactStats = stats.find((s) => s.name === "React");
       expect(reactStats?.totalRuns).toBe(2);
       expect(reactStats?.successRate).toBe(50.0);
@@ -462,7 +462,7 @@ describe("Database queries with repo and task", () => {
         prCreated: true,
       });
       const stats = db.metrics.engineEffectiveness();
-      expect(stats.length).toBe(2);
+      expect(stats).toHaveLength(2);
       const opencodeStats = stats.find((s) => s.engine === "opencode");
       expect(opencodeStats?.avgDurationSecs).toBe(2);
     });
@@ -690,7 +690,7 @@ describe("Additional queries coverage", () => {
       expect(unchanged?.title).toBe("Test");
 
       db.reviewIssues.removeByRoundId(round.id);
-      expect(db.reviewIssues.listByRoundId(round.id).length).toBe(0);
+      expect(db.reviewIssues.listByRoundId(round.id)).toHaveLength(0);
     });
   });
 
@@ -699,24 +699,24 @@ describe("Additional queries coverage", () => {
       const l1 = db.labels.create({ repoId, name: "l1", color: "#f00" });
       const l2 = db.labels.create({ repoId, name: "l2", color: "#0f0" });
 
-      expect(db.labels.listByRepo(repoId).length).toBe(2);
+      expect(db.labels.listByRepo(repoId)).toHaveLength(2);
       expect(db.labels.getById(l1.id)?.name).toBe("l1");
 
       const up = db.labels.update(l1.id, "l1-up", "#111");
       expect(up?.name).toBe("l1-up");
 
       db.labels.addTaskLabel(taskId, l1.id);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(1);
 
       db.labels.setTaskLabels(taskId, [l1.id, l2.id]);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(2);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(2);
 
       const counts = db.labels.getByRepoWithCounts(repoId);
-      expect(counts.length).toBe(2);
+      expect(counts).toHaveLength(2);
       expect(counts.find((c) => c.id === l1.id)?.taskCount).toBe(1);
 
       db.labels.removeTaskLabel(taskId, l1.id);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(1);
 
       db.labels.remove(l1.id);
       expect(db.labels.getById(l1.id)).toBeNull();
@@ -869,7 +869,7 @@ describe("Additional queries coverage", () => {
       expect(unchanged?.title).toBe("Test");
 
       db.reviewIssues.removeByRoundId(round.id);
-      expect(db.reviewIssues.listByRoundId(round.id).length).toBe(0);
+      expect(db.reviewIssues.listByRoundId(round.id)).toHaveLength(0);
     });
   });
 
@@ -878,24 +878,24 @@ describe("Additional queries coverage", () => {
       const l1 = db.labels.create({ repoId, name: "l1", color: "#f00" });
       const l2 = db.labels.create({ repoId, name: "l2", color: "#0f0" });
 
-      expect(db.labels.listByRepo(repoId).length).toBe(2);
+      expect(db.labels.listByRepo(repoId)).toHaveLength(2);
       expect(db.labels.getById(l1.id)?.name).toBe("l1");
 
       const up = db.labels.update(l1.id, "l1-up", "#111");
       expect(up?.name).toBe("l1-up");
 
       db.labels.addTaskLabel(taskId, l1.id);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(1);
 
       db.labels.setTaskLabels(taskId, [l1.id, l2.id]);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(2);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(2);
 
       const counts = db.labels.getByRepoWithCounts(repoId);
-      expect(counts.length).toBe(2);
+      expect(counts).toHaveLength(2);
       expect(counts.find((c) => c.id === l1.id)?.taskCount).toBe(1);
 
       db.labels.removeTaskLabel(taskId, l1.id);
-      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+      expect(db.labels.getTaskLabels(taskId)).toHaveLength(1);
 
       db.labels.remove(l1.id);
       expect(db.labels.getById(l1.id)).toBeNull();
