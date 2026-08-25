@@ -201,20 +201,13 @@ function TaskCardComponent({
   }
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag and drop wrapper
+    // biome-ignore lint/a11y/useKeyWithClickEvents: drag and drop wrapper
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      role="button"
-      aria-label={`Task: ${task.title}`}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick(task);
-        }
-      }}
       onClick={() => onClick(task)}
       className={`group relative rounded-lg cursor-grab active:cursor-grabbing transition-all duration-300 overflow-hidden ${
         selected ? "ring-2 ring-danger/50" : ""

@@ -144,13 +144,13 @@ describe("E2E Homologation — full task lifecycle", () => {
   });
 
   it("STEP 2: task can be launched via orchestrator", async () => {
-    const task = db.tasks.getById(taskId)!;
+    const task = db.tasks.getById(taskId) as any;
     await orchestrator.launch(task);
 
     // Wait for the mock engine to process
     await Bun.sleep(200);
 
-    const updated = db.tasks.getById(taskId)!;
+    const updated = db.tasks.getById(taskId) as any;
     console.log(`[STEP 2] Task status after launch: ${updated.status}`);
     // Task was launched — status no longer backlog (it ran, even if verification failed in test env)
     expect(updated.status).not.toBe("backlog");

@@ -732,7 +732,6 @@ describe("Additional queries coverage", () => {
   });
 });
 
-
 describe("Additional queries coverage", () => {
   let db: Db;
   let repoId: string;
@@ -770,7 +769,7 @@ describe("Additional queries coverage", () => {
         dependsOn: ["t1", "t2"],
         pendingApproval: true,
         maxCost: 10,
-        priority: "high"
+        priority: "high",
       });
       expect(updated?.description).toBe("new_desc");
       expect(db.tasks.update(taskId, {})?.description).toBe("new_desc");
@@ -819,7 +818,11 @@ describe("Additional queries coverage", () => {
     });
 
     it("incrementLoopAttempt works", () => {
-      const res = db.raw.prepare("INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id").get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+      const res = db.raw
+        .prepare(
+          "INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        )
+        .get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
       db.tasks.incrementLoopAttempt(res.id);
       expect(db.tasks.getById(res.id)?.loopConfig?.currentAttempt).toBe(2);
     });
@@ -827,7 +830,11 @@ describe("Additional queries coverage", () => {
 
   describe("Task queries loopConfig", () => {
     it("maps loopConfig properly if loop_enabled is true", () => {
-      const res = db.raw.prepare("INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id").get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+      const res = db.raw
+        .prepare(
+          "INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        )
+        .get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
 
       const fetched = db.tasks.getById(res.id);
       expect(fetched?.loopConfig).toBeDefined();
@@ -849,7 +856,14 @@ describe("Additional queries coverage", () => {
   describe("ReviewIssue update un-covered paths", () => {
     it("returns existing row when updates is empty", () => {
       const round = db.reviewRounds.create({ taskId: taskId, roundNumber: 1 });
-      const issue = db.reviewIssues.create({ taskId: taskId, roundId: round.id, persona: "Test", title: "Test", content: "Test", severity: "low" });
+      const issue = db.reviewIssues.create({
+        taskId: taskId,
+        roundId: round.id,
+        persona: "Test",
+        title: "Test",
+        content: "Test",
+        severity: "low",
+      });
 
       const unchanged = db.reviewIssues.update(issue.id, {});
       expect(unchanged?.title).toBe("Test");
@@ -878,7 +892,7 @@ describe("Additional queries coverage", () => {
 
       const counts = db.labels.getByRepoWithCounts(repoId);
       expect(counts.length).toBe(2);
-      expect(counts.find(c => c.id === l1.id)?.taskCount).toBe(1);
+      expect(counts.find((c) => c.id === l1.id)?.taskCount).toBe(1);
 
       db.labels.removeTaskLabel(taskId, l1.id);
       expect(db.labels.getTaskLabels(taskId).length).toBe(1);
