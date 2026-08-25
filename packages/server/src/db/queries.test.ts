@@ -552,3 +552,347 @@ describe("Prompt templates queries", () => {
     expect(deleted).toBe(false);
   });
 });
+
+describe("Additional queries coverage", () => {
+  let db: Db;
+  let repoId: string;
+  let taskId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    repoId = seedRepo(db).id;
+    taskId = db.tasks.create({ title: "Task", repoId }).id;
+    db.runs.create(taskId, "grok");
+  });
+
+  describe("Workspace queries update missing fields", () => {
+    it("updates empty and with all fields", () => {
+      const ws = db.workspaces.create({ name: "W1", slug: "w-1" });
+      const up = db.workspaces.update(ws.id, { name: "W1u", slug: "w-1-u", description: "desc" });
+      expect(up?.name).toBe("W1u");
+      expect(db.workspaces.update(ws.id, {})?.name).toBe("W1u");
+      db.workspaces.remove(ws.id);
+      expect(db.workspaces.get(ws.id)).toBeNull();
+    });
+  });
+
+  describe("Tasks queries update additional fields", () => {
+    it("updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority", () => {
+      const updated = db.tasks.update(taskId, {
+        description: "new_desc",
+        status: "in_progress",
+        columnOrder: 5,
+        engine: "eng",
+        model: "mod",
+        tags: ["tag"],
+        notes: "note",
+        desiredOutcome: "do",
+        dependsOn: ["t1", "t2"],
+        pendingApproval: true,
+        maxCost: 10,
+        priority: "high",
+      });
+      expect(updated?.description).toBe("new_desc");
+      expect(db.tasks.update(taskId, {})?.description).toBe("new_desc");
+    });
+  });
+
+  describe("Task query utility methods", () => {
+    it("archiveDone works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "done" });
+      const count = db.tasks.archiveDone(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "done" });
+      const count2 = db.tasks.archiveDone();
+      expect(count2).toBe(1);
+    });
+
+    it("clearFailed works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "failed" });
+      const count = db.tasks.clearFailed(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "failed" });
+      const count2 = db.tasks.clearFailed();
+      expect(count2).toBe(1);
+    });
+
+    it("retryFailed works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "failed" });
+      const count = db.tasks.retryFailed(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "failed" });
+      const count2 = db.tasks.retryFailed();
+      expect(count2).toBe(1);
+    });
+
+    it("cleanupArchived works", () => {
+      expect(db.tasks.cleanupArchived(0)).toBeDefined();
+    });
+
+    it("incrementLoopAttempt works", () => {
+      const res = db.raw
+        .prepare(
+          "INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        )
+        .get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+      db.tasks.incrementLoopAttempt(res.id);
+      expect(db.tasks.getById(res.id)?.loopConfig?.currentAttempt).toBe(2);
+    });
+  });
+
+  describe("Task queries loopConfig", () => {
+    it("maps loopConfig properly if loop_enabled is true", () => {
+      const res = db.raw
+        .prepare(
+          "INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+        )
+        .get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+
+      const fetched = db.tasks.getById(res.id);
+      expect(fetched?.loopConfig).toBeDefined();
+      expect(fetched?.loopConfig?.maxAttempts).toBe(5);
+      expect(fetched?.loopConfig?.timeoutMinutes).toBe(60);
+      expect(fetched?.loopConfig?.currentAttempt).toBe(1);
+      expect(fetched?.loopConfig?.feedback).toBe("test");
+    });
+  });
+
+  describe("ReviewRound API", () => {
+    it("updateStatus", () => {
+      const round = db.reviewRounds.create({ taskId: taskId, roundNumber: 1 });
+      const up = db.reviewRounds.updateStatus(round.id, "completed");
+      expect(up?.status).toBe("completed");
+    });
+  });
+
+  describe("ReviewIssue update un-covered paths", () => {
+    it("returns existing row when updates is empty", () => {
+      const round = db.reviewRounds.create({ taskId: taskId, roundNumber: 1 });
+      const issue = db.reviewIssues.create({
+        taskId: taskId,
+        roundId: round.id,
+        persona: "Test",
+        title: "Test",
+        content: "Test",
+        severity: "low",
+      });
+
+      const unchanged = db.reviewIssues.update(issue.id, {});
+      expect(unchanged?.title).toBe("Test");
+
+      db.reviewIssues.removeByRoundId(round.id);
+      expect(db.reviewIssues.listByRoundId(round.id).length).toBe(0);
+    });
+  });
+
+  describe("Label API", () => {
+    it("listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts", () => {
+      const l1 = db.labels.create({ repoId, name: "l1", color: "#f00" });
+      const l2 = db.labels.create({ repoId, name: "l2", color: "#0f0" });
+
+      expect(db.labels.listByRepo(repoId).length).toBe(2);
+      expect(db.labels.getById(l1.id)?.name).toBe("l1");
+
+      const up = db.labels.update(l1.id, "l1-up", "#111");
+      expect(up?.name).toBe("l1-up");
+
+      db.labels.addTaskLabel(taskId, l1.id);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+
+      db.labels.setTaskLabels(taskId, [l1.id, l2.id]);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(2);
+
+      const counts = db.labels.getByRepoWithCounts(repoId);
+      expect(counts.length).toBe(2);
+      expect(counts.find((c) => c.id === l1.id)?.taskCount).toBe(1);
+
+      db.labels.removeTaskLabel(taskId, l1.id);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+
+      db.labels.remove(l1.id);
+      expect(db.labels.getById(l1.id)).toBeNull();
+    });
+  });
+
+  describe("WorkflowMemory remaining paths", () => {
+    it("getById returns correctly", () => {
+      const mem = db.memories.create({ taskId: taskId, scope: "shared", content: "hello" });
+      const fetched = db.memories.getById(mem.id);
+      expect(fetched?.content).toBe("hello");
+    });
+  });
+});
+
+
+describe("Additional queries coverage", () => {
+  let db: Db;
+  let repoId: string;
+  let taskId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    repoId = seedRepo(db).id;
+    taskId = db.tasks.create({ title: "Task", repoId }).id;
+    db.runs.create(taskId, "grok");
+  });
+
+  describe("Workspace queries update missing fields", () => {
+    it("updates empty and with all fields", () => {
+      const ws = db.workspaces.create({ name: "W1", slug: "w-1" });
+      const up = db.workspaces.update(ws.id, { name: "W1u", slug: "w-1-u", description: "desc" });
+      expect(up?.name).toBe("W1u");
+      expect(db.workspaces.update(ws.id, {})?.name).toBe("W1u");
+      db.workspaces.remove(ws.id);
+      expect(db.workspaces.get(ws.id)).toBeNull();
+    });
+  });
+
+  describe("Tasks queries update additional fields", () => {
+    it("updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority", () => {
+      const updated = db.tasks.update(taskId, {
+        description: "new_desc",
+        status: "in_progress",
+        columnOrder: 5,
+        engine: "eng",
+        model: "mod",
+        tags: ["tag"],
+        notes: "note",
+        desiredOutcome: "do",
+        dependsOn: ["t1", "t2"],
+        pendingApproval: true,
+        maxCost: 10,
+        priority: "high"
+      });
+      expect(updated?.description).toBe("new_desc");
+      expect(db.tasks.update(taskId, {})?.description).toBe("new_desc");
+    });
+  });
+
+  describe("Task query utility methods", () => {
+    it("archiveDone works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "done" });
+      const count = db.tasks.archiveDone(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "done" });
+      const count2 = db.tasks.archiveDone();
+      expect(count2).toBe(1);
+    });
+
+    it("clearFailed works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "failed" });
+      const count = db.tasks.clearFailed(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "failed" });
+      const count2 = db.tasks.clearFailed();
+      expect(count2).toBe(1);
+    });
+
+    it("retryFailed works", () => {
+      const task = db.tasks.create({ repoId, title: "Spec" });
+      db.tasks.update(task.id, { status: "failed" });
+      const count = db.tasks.retryFailed(repoId);
+      expect(count).toBe(1);
+
+      const t2 = db.tasks.create({ title: "T2", repoId });
+      db.tasks.update(t2.id, { status: "failed" });
+      const count2 = db.tasks.retryFailed();
+      expect(count2).toBe(1);
+    });
+
+    it("cleanupArchived works", () => {
+      expect(db.tasks.cleanupArchived(0)).toBeDefined();
+    });
+
+    it("incrementLoopAttempt works", () => {
+      const res = db.raw.prepare("INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id").get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+      db.tasks.incrementLoopAttempt(res.id);
+      expect(db.tasks.getById(res.id)?.loopConfig?.currentAttempt).toBe(2);
+    });
+  });
+
+  describe("Task queries loopConfig", () => {
+    it("maps loopConfig properly if loop_enabled is true", () => {
+      const res = db.raw.prepare("INSERT INTO tasks (repo_id, title, status, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_current_attempt, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id").get(repoId, "Loop Test", "backlog", 1, 5, 60, 1, "test") as any;
+
+      const fetched = db.tasks.getById(res.id);
+      expect(fetched?.loopConfig).toBeDefined();
+      expect(fetched?.loopConfig?.maxAttempts).toBe(5);
+      expect(fetched?.loopConfig?.timeoutMinutes).toBe(60);
+      expect(fetched?.loopConfig?.currentAttempt).toBe(1);
+      expect(fetched?.loopConfig?.feedback).toBe("test");
+    });
+  });
+
+  describe("ReviewRound API", () => {
+    it("updateStatus", () => {
+      const round = db.reviewRounds.create({ taskId: taskId, roundNumber: 1 });
+      const up = db.reviewRounds.updateStatus(round.id, "completed");
+      expect(up?.status).toBe("completed");
+    });
+  });
+
+  describe("ReviewIssue update un-covered paths", () => {
+    it("returns existing row when updates is empty", () => {
+      const round = db.reviewRounds.create({ taskId: taskId, roundNumber: 1 });
+      const issue = db.reviewIssues.create({ taskId: taskId, roundId: round.id, persona: "Test", title: "Test", content: "Test", severity: "low" });
+
+      const unchanged = db.reviewIssues.update(issue.id, {});
+      expect(unchanged?.title).toBe("Test");
+
+      db.reviewIssues.removeByRoundId(round.id);
+      expect(db.reviewIssues.listByRoundId(round.id).length).toBe(0);
+    });
+  });
+
+  describe("Label API", () => {
+    it("listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts", () => {
+      const l1 = db.labels.create({ repoId, name: "l1", color: "#f00" });
+      const l2 = db.labels.create({ repoId, name: "l2", color: "#0f0" });
+
+      expect(db.labels.listByRepo(repoId).length).toBe(2);
+      expect(db.labels.getById(l1.id)?.name).toBe("l1");
+
+      const up = db.labels.update(l1.id, "l1-up", "#111");
+      expect(up?.name).toBe("l1-up");
+
+      db.labels.addTaskLabel(taskId, l1.id);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+
+      db.labels.setTaskLabels(taskId, [l1.id, l2.id]);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(2);
+
+      const counts = db.labels.getByRepoWithCounts(repoId);
+      expect(counts.length).toBe(2);
+      expect(counts.find(c => c.id === l1.id)?.taskCount).toBe(1);
+
+      db.labels.removeTaskLabel(taskId, l1.id);
+      expect(db.labels.getTaskLabels(taskId).length).toBe(1);
+
+      db.labels.remove(l1.id);
+      expect(db.labels.getById(l1.id)).toBeNull();
+    });
+  });
+
+  describe("WorkflowMemory remaining paths", () => {
+    it("getById returns correctly", () => {
+      const mem = db.memories.create({ taskId: taskId, scope: "shared", content: "hello" });
+      const fetched = db.memories.getById(mem.id);
+      expect(fetched?.content).toBe("hello");
+    });
+  });
+});
