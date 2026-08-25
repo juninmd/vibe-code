@@ -1114,7 +1114,7 @@ export function createFindingsQueries(db: Database) {
         return mapFinding(
           db
             .prepare<FindingRow, [string]>("SELECT * FROM review_findings WHERE id = ?")
-            .get(existing.id)!
+            .get(existing.id) as FindingRow
         );
       }
 
