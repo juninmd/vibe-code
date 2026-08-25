@@ -318,7 +318,7 @@ describe("ConflictResolver", () => {
         json: async () => ({ ok: true }),
       } as any);
 
-      await resolver.notifyConflictResolved(launchTask!);
+      await resolver.notifyConflictResolved(launchTask as any);
 
       expect(fetchSpy).toHaveBeenCalled();
       const callArgs = fetchSpy.mock.calls[0];
@@ -340,7 +340,7 @@ describe("ConflictResolver", () => {
 
       const fetchSpy = spyOn(globalThis, "fetch");
 
-      await resolver.notifyConflictResolved(launchTask!);
+      await resolver.notifyConflictResolved(launchTask as any);
 
       expect(fetchSpy).not.toHaveBeenCalled();
 

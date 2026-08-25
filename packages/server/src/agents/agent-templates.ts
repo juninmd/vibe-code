@@ -52,7 +52,7 @@ export class AgentTemplateRegistry {
   }
 
   list(): AgentTemplate[] {
-    return this.order.map((slug) => this.bySlug.get(slug)!);
+    return this.order.map((slug) => this.bySlug.get(slug) as AgentTemplate);
   }
 
   get(slug: string): AgentTemplate | undefined {
