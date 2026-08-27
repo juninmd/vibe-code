@@ -14,6 +14,7 @@ describe("Orchestrator - edge cases", () => {
     };
 
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("task-1", {
       runId: "run-1",
       taskId: "task-1",
@@ -45,6 +46,7 @@ describe("Orchestrator - edge cases", () => {
 
     const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any);
     const abortController = new AbortController();
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("task-1", {
       runId: "run-1",
       taskId: "task-1",
@@ -59,7 +61,10 @@ describe("Orchestrator - edge cases", () => {
     }
 
     expect(abortController.signal.aborted).toBe(true);
-    expect(orch["activeRuns"].has("task-1")).toBe(false);
+    expect(
+      // biome-ignore lint/complexity/useLiteralKeys: private access
+      orch["activeRuns"].has("task-1")
+    ).toBe(false);
   });
 
   it("sweepBacklog catches errors from launch and continues", async () => {
@@ -137,6 +142,7 @@ describe("Orchestrator - edge cases", () => {
       },
     };
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any, 5);
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("t-1", {
       runId: "r-1",
       taskId: "t-1",
@@ -154,6 +160,7 @@ describe("Orchestrator - edge cases", () => {
     const orch = new Orchestrator(mockDb as any, {} as any, { get: () => null } as any, {} as any);
     expect(orch.sendInput("t-missing", "input")).toBe(false);
 
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("t-active", {
       runId: "r-1",
       taskId: "t-active",
@@ -166,6 +173,7 @@ describe("Orchestrator - edge cases", () => {
   it("getRetryQueueSnapshot returns the snapshot correctly", () => {
     const mockDb = { tasks: { list: mock().mockReturnValue([]) } };
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["retryQueue"].set("t-1", {
       attempt: 2,
       dueAt: Date.now() + 10000,
@@ -182,12 +190,14 @@ describe("Orchestrator - edge cases", () => {
   it("getActiveRunEngines returns mapping of active runs", () => {
     const mockDb = { tasks: { list: mock().mockReturnValue([]) } };
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("t-1", {
       runId: "r-1",
       taskId: "t-1",
       engineName: "engineA",
       abort: new AbortController(),
     });
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("t-2", {
       runId: "r-2",
       taskId: "t-2",
@@ -217,12 +227,14 @@ describe("Orchestrator - edge cases", () => {
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
 
     spyOn(orch, "cancel").mockResolvedValue(undefined);
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("task-1", {
       runId: "run-1",
       taskId: "task-1",
       engineName: "mock",
       abort: new AbortController(),
     });
+    // biome-ignore lint/complexity/useLiteralKeys: private access
     orch["activeRuns"].set("task-2", {
       runId: "run-2",
       taskId: "task-2",
