@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { describe, expect, it, mock, spyOn, afterAll, beforeEach } from "bun:test";
 import { testClient } from "hono/testing";
 // Mock orchestrator helpers
 import * as taskPlan from "../agents/orchestrator/task-plan";
@@ -81,6 +81,18 @@ describe("Tasks Router (unit)", () => {
   spyOn(accessControl, "enforceTaskAccess").mockImplementation(() => null);
 
   const router = createTasksRouter(mockDb as any, mockOrchestrator, mockGitService);
+
+  beforeEach(() => {
+    spyOn(accessControl, "resolveAccessContext").mockImplementation(async () => {
+      return { ok: true, context: { workspaceId: "ws-1", userId: "u-1", authEnabled: true }, error: undefined };
+    });
+    spyOn(accessControl, "enforceRepoAccess").mockImplementation(() => null);
+    spyOn(accessControl, "enforceTaskAccess").mockImplementation(() => null);
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
 
   it("POST /archive-done archives tasks", async () => {
     const res = await router.request("/archive-done?repo_id=r-1", { method: "POST" });
