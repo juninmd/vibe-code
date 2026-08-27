@@ -336,12 +336,12 @@ describe("_formatVerificationResult", () => {
         stdout: "some error",
         stderr: "",
         passed: false,
-        reason: "exit 1 - some error",
+        reason: "exit 1 — error",
       },
       false
     );
 
-    expect(result).toBe("  ✗ test: exit 1 - some error");
+    expect(result).toBe("  ✗ test: exit 1 — error");
   });
 
   it("formats failed results with verbose", async () => {
@@ -357,12 +357,12 @@ describe("_formatVerificationResult", () => {
         stdout: "line1",
         stderr: "line2",
         passed: false,
-        reason: "exit 1 - some error",
+        reason: "exit 1 — error",
       },
       true
     );
 
-    expect(result).toContain("  ✗ test: exit 1 - some error");
+    expect(result).toContain("  ✗ test: exit 1 — line2");
     expect(result).toContain("output: line1\nline2");
   });
 });

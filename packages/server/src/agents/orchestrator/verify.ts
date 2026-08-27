@@ -54,7 +54,7 @@ function normalizeCommandLines(block: string): string[] {
     .filter((line) => line.length > 0 && !line.startsWith("#"));
 }
 
-function parseWorkflowCommands(workflowText: string): ValidationCommand[] {
+export function parseWorkflowCommands(workflowText: string): ValidationCommand[] {
   const headingIndex = workflowText.indexOf(WORKFLOW_QUALITY_GATE_HEADING);
   if (headingIndex < 0) return [];
 
@@ -76,7 +76,7 @@ function detectPackageManagerScriptCommand(scriptName: string, packageManager?: 
   return `bun run ${scriptName}`;
 }
 
-function parsePackageJsonCommands(packageJsonText: string): ValidationCommand[] {
+export function parsePackageJsonCommands(packageJsonText: string): ValidationCommand[] {
   const parsed = JSON.parse(packageJsonText) as {
     packageManager?: string;
     scripts?: Record<string, string>;
@@ -295,7 +295,7 @@ function extractFailureReasonRaw(
 }
 
 /** Extract a human-readable failure reason from a ValidationCommandResult */
-function extractFailureReason(result: ValidationCommandResult): string {
+export function extractFailureReason(result: ValidationCommandResult): string {
   const { command, exitCode, stdout, stderr } = result;
 
   if (exitCode === 0) return "passed";
@@ -333,7 +333,10 @@ function extractFailureReason(result: ValidationCommandResult): string {
   return `exit ${exitCode} (command: ${command})`;
 }
 
-function _formatVerificationResult(result: ValidationCommandResult, verbose: boolean): string {
+export function _formatVerificationResult(
+  result: ValidationCommandResult,
+  verbose: boolean
+): string {
   if (result.passed) {
     return `  ✓ ${result.name}`;
   }

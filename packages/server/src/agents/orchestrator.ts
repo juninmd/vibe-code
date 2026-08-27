@@ -339,8 +339,12 @@ export class Orchestrator {
     }
 
     active.abort.abort();
-    const engine = this.registry.get(active.engineName);
-    if (engine) engine.abort(active.runId);
+    try {
+      const engine = this.registry.get(active.engineName);
+      if (engine) engine.abort(active.runId);
+    } catch (err) {
+      console.error(`[orchestrator] Error aborting engine for task ${taskId}:`, err);
+    }
 
     this.db.runs.updateStatus(active.runId, "cancelled", { finished_at: new Date().toISOString() });
     const task = this.db.tasks.update(taskId, { status: "backlog" });
