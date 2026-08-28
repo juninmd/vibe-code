@@ -22,7 +22,7 @@ describe("auth utilities", () => {
   afterEach(() => {
     delete process.env.VIBE_CODE_API_KEY;
     delete process.env.GITHUB_OAUTH_CLIENT_ID;
-    process.env.VIBE_CODE_API_KEY="x";
+    process.env.VIBE_CODE_API_KEY = "x";
     delete process.env.GITHUB_OAUTH_CLIENT_SECRET;
     delete process.env.NODE_ENV;
     delete process.env.VIBE_CODE_PUBLIC_URL;
@@ -131,7 +131,7 @@ describe("auth utilities", () => {
     const c = createMockContext();
     c.json = mock().mockReturnValue({ status: 401 });
 
-    const result = await middleware(c, next);
+    const _result = await middleware(c, next);
     expect(next).not.toHaveBeenCalled();
     expect(c.json).toHaveBeenCalled();
   });
@@ -221,7 +221,8 @@ describe("createAuthRouter - GitHub Auth", () => {
     const req = new Request("http://localhost/github/callback?code=abc&state=mystate");
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: "bad token" }) }) as any;
+    globalThis.fetch = async () =>
+      ({ ok: false, status: 401, json: async () => ({ error: "bad token" }) }) as any;
 
     try {
       const res = await router.request(req);
@@ -242,7 +243,7 @@ describe("createAuthRouter - GitHub Auth", () => {
       },
       settings: {
         set: mock(),
-      }
+      },
     };
     const router = createAuthRouter(db as any);
     const req = new Request("http://localhost/github/callback?code=abc&state=mystate");
@@ -252,7 +253,10 @@ describe("createAuthRouter - GitHub Auth", () => {
       if (url.toString().includes("access_token")) {
         return { ok: true, json: async () => ({ access_token: "mock_access_token" }) } as any;
       }
-      return { ok: true, json: async () => ({ id: 123, login: "testuser", name: "Test User", avatar_url: "url" }) } as any;
+      return {
+        ok: true,
+        json: async () => ({ id: 123, login: "testuser", name: "Test User", avatar_url: "url" }),
+      } as any;
     };
 
     try {
@@ -277,7 +281,10 @@ describe("createAuthRouter - GitHub Auth", () => {
       if (url.toString().includes("access_token")) {
         return { ok: true, json: async () => ({ access_token: "mock_access_token" }) } as any;
       }
-      return { ok: true, json: async () => ({ id: 123, login: "testuser", name: "Test User", avatar_url: "url" }) } as any;
+      return {
+        ok: true,
+        json: async () => ({ id: 123, login: "testuser", name: "Test User", avatar_url: "url" }),
+      } as any;
     };
 
     try {
@@ -295,7 +302,7 @@ describe("createAuthRouter - GitHub Auth", () => {
     const db = {
       raw: {
         prepare: mock().mockReturnValue({ run: mock() }),
-      }
+      },
     };
     const router = createAuthRouter(db as any);
     const req = new Request("http://localhost/logout", { method: "POST" });
@@ -310,15 +317,17 @@ describe("auth utilities internal functions", () => {
     // In auth.ts `authStatus` calls `getCurrentUser` which calls `getSession` and then `mapSession`.
     const db = {
       raw: {
-        query: mock().mockReturnValue({ get: mock().mockReturnValue({
-          github_id: "123",
-          username: "testuser",
-          display_name: null,
-          avatar_url: null,
-          access_token: "token",
-          expires_at: new Date().toISOString()
-        }) })
-      }
+        query: mock().mockReturnValue({
+          get: mock().mockReturnValue({
+            github_id: "123",
+            username: "testuser",
+            display_name: null,
+            avatar_url: null,
+            access_token: "token",
+            expires_at: new Date().toISOString(),
+          }),
+        }),
+      },
     };
     spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid-token");
     const status = authStatus(db as any, createMockContext());
@@ -326,7 +335,7 @@ describe("auth utilities internal functions", () => {
       githubId: "123",
       username: "testuser",
       displayName: undefined,
-      avatarUrl: undefined
+      avatarUrl: undefined,
     });
   });
 });

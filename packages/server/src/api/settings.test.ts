@@ -117,7 +117,7 @@ describe("PUT /api/settings", () => {
         autoSweep: true,
         telegramBotToken: "bot_token",
         telegramChatId: "chat_id",
-        telegramEnabled: true
+        telegramEnabled: true,
       }),
     });
 
@@ -150,10 +150,10 @@ describe("GET /api/settings", () => {
 
     const res = await app.request("/api/settings");
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
 
-    expect(body.data.github.token).toBe("•".repeat(15) + "cret");
-    expect(body.data.apiKeys.gemini.token).toBe("•".repeat(13) + "cret");
+    expect(body.data.github.token).toBe(`${"•".repeat(15)}cret`);
+    expect(body.data.apiKeys.gemini.token).toBe(`${"•".repeat(13)}cret`);
   });
 });
 
@@ -163,7 +163,7 @@ describe("POST /api/settings/test/telegram", () => {
     const app = buildApp(db);
     const res = await app.request("/api/settings/test/telegram", { method: "POST" });
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(false);
     expect(json.data.error).toBe("Bot token and Chat ID are required");
   });
@@ -179,11 +179,10 @@ describe("POST /api/settings/test/telegram", () => {
     // We expect ok to be false
     const res = await app.request("/api/settings/test/telegram", { method: "POST" });
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(false);
   });
 });
-
 
 describe("PUT /api/settings - Edge cases", () => {
   it("ignores unspecified fields", async () => {
@@ -251,8 +250,10 @@ describe("PUT /api/settings - provider user fetching", () => {
     const db = makeDb();
     const mockProvider = {
       get: () => ({
-        getUser: async () => { throw new Error("fetch error"); }
-      })
+        getUser: async () => {
+          throw new Error("fetch error");
+        },
+      }),
     };
     const app = buildApp(db, mockProvider as any);
 
@@ -276,8 +277,8 @@ describe("PUT /api/settings - provider user fetching", () => {
     db.settings.set("github_username", "olduser");
     const mockProvider = {
       get: () => ({
-        getUser: async () => ({ username: "newuser" })
-      })
+        getUser: async () => ({ username: "newuser" }),
+      }),
     };
     const app = buildApp(db, mockProvider as any);
 
@@ -311,7 +312,7 @@ describe("POST /api/settings/test/telegram - valid request", () => {
     try {
       const res = await app.request("/api/settings/test/telegram", { method: "POST" });
       expect(res.status).toBe(200);
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       expect(json.data.ok).toBe(true);
     } finally {
       globalThis.fetch = originalFetch;
@@ -326,12 +327,13 @@ describe("POST /api/settings/test/telegram - valid request", () => {
     const app = buildApp(db);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false, status: 400, text: async () => "Bad Request" }) as any;
+    globalThis.fetch = async () =>
+      ({ ok: false, status: 400, text: async () => "Bad Request" }) as any;
 
     try {
       const res = await app.request("/api/settings/test/telegram", { method: "POST" });
       expect(res.status).toBe(200);
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       expect(json.data.ok).toBe(false);
       expect(json.data.error).toBe("Telegram API error 400: Bad Request");
     } finally {
@@ -348,12 +350,14 @@ describe("POST /api/settings/test/telegram - catch block", () => {
     const app = buildApp(db);
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => { throw new Error("Network error"); }) as any;
+    globalThis.fetch = (async () => {
+      throw new Error("Network error");
+    }) as any;
 
     try {
       const res = await app.request("/api/settings/test/telegram", { method: "POST" });
       expect(res.status).toBe(200);
-      const json = await res.json() as any;
+      const json = (await res.json()) as any;
       expect(json.data.ok).toBe(false);
       expect(json.data.error).toBe("Network error");
     } finally {
@@ -367,27 +371,37 @@ describe("POST /api/settings/test/:provider", () => {
     const app = buildApp(db);
     const res = await app.request("/api/settings/test/github", { method: "POST" });
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(false);
     expect(json.data.error).toBe("Provider registry not available");
   });
 
   it("handles valid provider", async () => {
     const db = makeDb();
-    const app = buildApp(db, { get: () => ({ getUser: async () => ({ username: "testuser" }) }), getToken: () => "token" });
+    const app = buildApp(db, {
+      get: () => ({ getUser: async () => ({ username: "testuser" }) }),
+      getToken: () => "token",
+    });
     const res = await app.request("/api/settings/test/github", { method: "POST" });
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(true);
     expect(json.data.username).toBe("testuser");
   });
 
   it("handles provider failure", async () => {
     const db = makeDb();
-    const app = buildApp(db, { get: () => ({ getUser: async () => { throw new Error("fetch failed"); } }), getToken: () => "token" });
+    const app = buildApp(db, {
+      get: () => ({
+        getUser: async () => {
+          throw new Error("fetch failed");
+        },
+      }),
+      getToken: () => "token",
+    });
     const res = await app.request("/api/settings/test/github", { method: "POST" });
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(false);
   });
 });
@@ -399,7 +413,7 @@ describe("GET /api/settings/litellm/health", () => {
     // We expect it to return ok: false because there's no actual LiteLLM running during the test
     const res = await app.request("/api/settings/litellm/health");
     expect(res.status).toBe(200);
-    const json = await res.json() as any;
+    const json = (await res.json()) as any;
     expect(json.data.ok).toBe(false);
   });
 });
@@ -414,9 +428,9 @@ describe("PUT /api/settings - Masked MCP Logic", () => {
         type: "local",
         command: ["npx", "something"],
         environment: {
-          API_KEY: "original_api_key_value"
-        }
-      }
+          API_KEY: "original_api_key_value",
+        },
+      },
     };
     db.settings.set("mcp_servers", JSON.stringify(initialMcp));
 
@@ -426,16 +440,16 @@ describe("PUT /api/settings - Masked MCP Logic", () => {
           type: "local",
           command: ["npx", "something"],
           environment: {
-            API_KEY: "••••••••••••value"
-          }
-        }
-      }
+            API_KEY: "••••••••••••value",
+          },
+        },
+      },
     };
 
     const res = await app.request("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(putPayload)
+      body: JSON.stringify(putPayload),
     });
 
     expect(res.status).toBe(200);
