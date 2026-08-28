@@ -1,5 +1,4 @@
 import { afterAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { testClient } from "hono/testing";
 // Mock orchestrator helpers
 import * as taskPlan from "../agents/orchestrator/task-plan";
 
@@ -438,7 +437,7 @@ describe("Tasks Router (unit)", () => {
 
   it("GET /:id returns 404 if not found", async () => {
     spyOn(accessControl, "enforceTaskAccess").mockImplementationOnce(() => null);
-    mockDb.tasks.getById.mockImplementation((id: string) => {
+    mockDb.tasks.getById.mockImplementation((_id: string) => {
       return null;
     });
     const res = await router.request("/t-unknown");

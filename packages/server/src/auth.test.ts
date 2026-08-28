@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as honoCookie from "hono/cookie";
 import { authMiddleware, authStatus, checkApiKey, createAuthRouter, getCurrentUser } from "./auth";
 
@@ -14,6 +14,11 @@ function createMockContext(headers: Record<string, string> = {}, url = "http://l
 }
 
 describe("auth utilities", () => {
+  beforeEach(() => {
+    delete process.env.VIBE_CODE_API_KEY;
+    delete process.env.GITHUB_OAUTH_CLIENT_ID;
+    delete process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  });
   afterEach(() => {
     delete process.env.VIBE_CODE_API_KEY;
     delete process.env.GITHUB_OAUTH_CLIENT_ID;
