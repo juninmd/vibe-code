@@ -2,7 +2,7 @@
  * Integration tests for the repos API router.
  * Uses a real SQLite :memory: database and a stubbed GitService/BroadcastHub.
  */
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { Hono } from "hono";
 import { createDb } from "../db";
 import type { GitService } from "../git/git-service";
@@ -59,6 +59,43 @@ describe("GET /api/repos", () => {
     const res = await buildApp(db).request("/api/repos");
     const body = await res.json();
     expect(body.data).toHaveLength(2);
+  });
+
+  it("adopts legacy repos with null workspace_id", async () => {
+    const db = makeDb();
+    // First, ensure the workspace exists so the foreign key constraint passes
+    db.workspaces.create({
+      id: "ws-legacy-adopt",
+      name: "Legacy Workspace",
+      slug: "legacy-workspace",
+      description: "Test workspace",
+    });
+    const repo = db.repos.create({ url: "https://github.com/org/repo-legacy.git" });
+    // Manually force workspace_id to null
+    db.raw.prepare("UPDATE repositories SET workspace_id = NULL WHERE id = ?").run(repo.id);
+
+    // Mock resolveAccessContext
+    const security = await import("../security/access-control");
+    const spy = spyOn(security, "resolveAccessContext").mockResolvedValue({
+      ok: true,
+      context: {
+        authEnabled: true,
+        userId: "user1",
+        workspaceId: "ws-legacy-adopt",
+      },
+    });
+
+    const app = new Hono();
+    app.route("/api/repos", createReposRouter(db, makeGit(), makeHub()));
+
+    const res = await app.request("/api/repos");
+    expect(res.status).toBe(200);
+
+    const check = db.raw
+      .prepare("SELECT workspace_id FROM repositories WHERE id = ?")
+      .get(repo.id) as any;
+    expect(check.workspace_id).toBe("ws-legacy-adopt");
+    spy.mockRestore();
   });
 });
 
