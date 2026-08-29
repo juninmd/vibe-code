@@ -242,6 +242,21 @@ describe("createAuthRouter", () => {
     fetchSpy.mockRestore();
   });
 
+  function setupGitHubCallbackMocks() {
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
+    const fetchSpy = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
+          { status: 200 }
+        )
+      );
+    return fetchSpy;
+  }
+
   it("GET /github/callback succeeds and creates session", async () => {
     const db = {
       raw: {
@@ -253,18 +268,8 @@ describe("createAuthRouter", () => {
     };
     const router = createAuthRouter(db as any);
     const req = new Request("http://localhost/github/callback?code=foo&state=valid");
-    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
 
-    const fetchSpy = spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
-          { status: 200 }
-        )
-      );
+    const fetchSpy = setupGitHubCallbackMocks();
 
     const res = await router.request(req);
     expect(res.status).toBe(302);
@@ -279,18 +284,8 @@ describe("createAuthRouter", () => {
     process.env.GITHUB_ALLOWED_USERS = "user2,user3";
     const router = createAuthRouter({} as any);
     const req = new Request("http://localhost/github/callback?code=foo&state=valid");
-    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
 
-    const fetchSpy = spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
-          { status: 200 }
-        )
-      );
+    const fetchSpy = setupGitHubCallbackMocks();
 
     const res = await router.request(req);
     expect(res.status).toBe(403);
