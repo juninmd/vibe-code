@@ -1,11 +1,15 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { runBaselineCheck } from "./baseline-check";
 
+// Using mock.module at the top level
+mock.module("node:fs/promises", () => ({
+  access: mock(() => Promise.resolve()),
+  readFile: mock(() => Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }))),
+}));
+
 describe("runBaselineCheck", () => {
   let spawnSpy: ReturnType<typeof spyOn>;
-  let accessSpy: ReturnType<typeof spyOn>;
-  let readFileSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     // Enable baseline check
@@ -20,21 +24,18 @@ describe("runBaselineCheck", () => {
       } as any;
     });
 
-    accessSpy = spyOn(fs, "access").mockImplementation(async () => {});
+    // Reset mocks
+    (fs.access as any).mockReset();
+    (fs.access as any).mockImplementation(() => Promise.resolve());
 
-    readFileSpy = spyOn(fs, "readFile").mockImplementation(async () => {
-      return JSON.stringify({
-        scripts: {
-          typecheck: "tsc --noEmit",
-        },
-      }) as any;
-    });
+    (fs.readFile as any).mockReset();
+    (fs.readFile as any).mockImplementation(() =>
+      Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }))
+    );
   });
 
   afterEach(() => {
     spawnSpy.mockRestore();
-    accessSpy.mockRestore();
-    readFileSpy.mockRestore();
     delete process.env.VIBE_CODE_SKIP_BASELINE_CHECK;
   });
 
@@ -48,13 +49,11 @@ describe("runBaselineCheck", () => {
       details: "Skipped via VIBE_CODE_SKIP_BASELINE_CHECK",
     });
 
-    expect(accessSpy).not.toHaveBeenCalled();
+    expect(fs.access as any).not.toHaveBeenCalled();
   });
 
   test("skips if no runner is detected (no package.json or Makefile)", async () => {
-    accessSpy.mockImplementation(async () => {
-      throw new Error("ENOENT");
-    });
+    (fs.access as any).mockImplementation(() => Promise.reject(new Error("ENOENT")));
 
     const result = await runBaselineCheck("/wt");
 
@@ -66,7 +65,7 @@ describe("runBaselineCheck", () => {
   });
 
   test("detects make and runs make typecheck", async () => {
-    accessSpy.mockImplementation(async (filepath: string) => {
+    (fs.access as any).mockImplementation(async (filepath: string) => {
       if (filepath.endsWith("package.json")) throw new Error("ENOENT");
       // Allow Makefile
     });
@@ -82,7 +81,7 @@ describe("runBaselineCheck", () => {
   });
 
   test("detects package.json but skips if no typecheck script", async () => {
-    readFileSpy.mockImplementation(async () => {
+    (fs.readFile as any).mockImplementation(async () => {
       return JSON.stringify({
         scripts: {
           test: "jest",
@@ -100,7 +99,7 @@ describe("runBaselineCheck", () => {
   });
 
   test("detects type-check script in package.json", async () => {
-    readFileSpy.mockImplementation(async () => {
+    (fs.readFile as any).mockImplementation(async () => {
       return JSON.stringify({
         scripts: {
           "type-check": "tsc --noEmit",
@@ -136,12 +135,12 @@ describe("runBaselineCheck", () => {
   });
 
   test("handles JSON parse error gracefully", async () => {
-    readFileSpy.mockImplementation(async () => {
+    (fs.readFile as any).mockImplementation(async () => {
       return "invalid json";
     });
 
     // Should fall back to checking Makefile
-    accessSpy.mockImplementation(async (filepath: string) => {
+    (fs.access as any).mockImplementation(async (filepath: string) => {
       if (filepath.endsWith("Makefile")) throw new Error("ENOENT");
     });
 
