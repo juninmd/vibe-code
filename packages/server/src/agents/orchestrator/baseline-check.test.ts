@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { runBaselineCheck } from "./baseline-check";
 
@@ -29,7 +29,9 @@ describe("runBaselineCheck", () => {
     (fs.access as any).mockImplementation(() => Promise.resolve());
 
     (fs.readFile as any).mockReset();
-    (fs.readFile as any).mockImplementation(() => Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } })));
+    (fs.readFile as any).mockImplementation(() =>
+      Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }))
+    );
   });
 
   afterEach(() => {
