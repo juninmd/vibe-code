@@ -301,25 +301,25 @@ export function extractFailureReason(result: ValidationCommandResult): string {
   if (exitCode === 0) return "passed";
 
   const testMatch =
-    stderr.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i) ||
-    stdout.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i);
+    (stderr && stderr.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i)) ||
+    (stdout && stdout.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i));
   if (testMatch) {
     const snippet = testMatch[0].slice(0, 500);
     return `exit ${exitCode} — ${snippet.replace(/\n/g, " ").trim()}`;
   }
 
   const buildMatch =
-    stderr.match(/(error[^:]+:[^\n]+)/i) ||
-    stdout.match(/(error[^:]+:[^\n]+)/i) ||
-    stderr.match(/(Error:[^\n]+)/i) ||
-    stdout.match(/(Error:[^\n]+)/i);
+    (stderr && stderr.match(/(error[^:]+:[^\n]+)/i)) ||
+    (stdout && stdout.match(/(error[^:]+:[^\n]+)/i)) ||
+    (stderr && stderr.match(/(Error:[^\n]+)/i)) ||
+    (stdout && stdout.match(/(Error:[^\n]+)/i));
   if (buildMatch) {
     return `exit ${exitCode} — ${buildMatch[0].slice(0, 200)}`;
   }
 
   const lintMatch =
-    stderr.match(/(warning|error)[\s\S]*?at line \d+/i) ||
-    stdout.match(/(warning|error)[\s\S]*?at line \d+/i);
+    (stderr && stderr.match(/(warning|error)[\s\S]*?at line \d+/i)) ||
+    (stdout && stdout.match(/(warning|error)[\s\S]*?at line \d+/i));
   if (lintMatch) {
     return `exit ${exitCode} — ${lintMatch[0].slice(0, 200)}`;
   }
