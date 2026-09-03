@@ -187,9 +187,13 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
 
-    const branches = await git.listRemoteBranches(repo);
-    const sorted = [repo.defaultBranch, ...branches.filter((b) => b !== repo.defaultBranch)];
-    return c.json({ data: sorted });
+    try {
+      const branches = await git.listRemoteBranches(repo);
+      const sorted = [repo.defaultBranch, ...branches.filter((b) => b !== repo.defaultBranch)];
+      return c.json({ data: sorted });
+    } catch (err: any) {
+      return c.json({ error: "git_error", message: err.message }, 500);
+    }
   });
 
   router.delete("/:id/local-clone", async (c) => {

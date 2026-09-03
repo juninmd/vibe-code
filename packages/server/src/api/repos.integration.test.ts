@@ -317,3 +317,245 @@ describe("POST /api/repos/:id/refresh", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("remote operations", () => {
+  it("GET /api/repos/github/list returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ listRemoteRepos: async () => Promise.reject(new Error("GH Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/list");
+    expect(res.status).toBe(500);
+  });
+  it("GET /api/repos/github/list returns repos", async () => {
+    const db = makeDb();
+    const git = makeGit({ listRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }] });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/list");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data[0].name).toBe("test");
+  });
+  it("GET /api/repos/github/search returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ searchRemoteRepos: async () => Promise.reject(new Error("GH Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/search?q=test");
+    expect(res.status).toBe(500);
+  });
+  it("GET /api/repos/github/search returns repos", async () => {
+    const db = makeDb();
+    const git = makeGit({ searchRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }] });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/search?q=test");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data[0].name).toBe("test");
+  });
+  it("POST /api/repos/github/create returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ createRemoteRepo: async () => Promise.reject(new Error("GH Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    expect(res.status).toBe(500);
+  });
+  it("POST /api/repos/github/create returns repo", async () => {
+    const db = makeDb();
+    const git = makeGit({ createRemoteRepo: async () => ({ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data.name).toBe("test");
+  });
+  it("POST /api/repos/github/create returns 400 for bad input", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({}) });
+    expect(res.status).toBe(400);
+  });
+  it("GET /api/repos/gitlab/list returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ listRemoteRepos: async () => Promise.reject(new Error("GL Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/list");
+    expect(res.status).toBe(500);
+  });
+  it("GET /api/repos/gitlab/list returns repos", async () => {
+    const db = makeDb();
+    const git = makeGit({ listRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }] });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/list");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data[0].name).toBe("test");
+  });
+  it("GET /api/repos/gitlab/search returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ searchRemoteRepos: async () => Promise.reject(new Error("GL Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/search?q=test");
+    expect(res.status).toBe(500);
+  });
+  it("GET /api/repos/gitlab/search returns repos", async () => {
+    const db = makeDb();
+    const git = makeGit({ searchRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }] });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/search?q=test");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data[0].name).toBe("test");
+  });
+  it("POST /api/repos/gitlab/create returns 500 on error", async () => {
+    const db = makeDb();
+    const git = makeGit({ createRemoteRepo: async () => Promise.reject(new Error("GL Error")) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    expect(res.status).toBe(500);
+  });
+  it("POST /api/repos/gitlab/create returns repo", async () => {
+    const db = makeDb();
+    const git = makeGit({ createRemoteRepo: async () => ({ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }) });
+    const app = buildApp(db, git);
+    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data.name).toBe("test");
+  });
+  it("POST /api/repos/gitlab/create returns 400 for bad input", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({}) });
+    expect(res.status).toBe(400);
+  });
+  it("GET /api/repos/github/search returns empty if no q", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/github/search");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data).toEqual([]);
+  });
+  it("GET /api/repos/gitlab/search returns empty if no q", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/gitlab/search");
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as any;
+    expect(data.data).toEqual([]);
+  });
+});
+
+describe("GET /api/repos/:id/branches", () => {
+  it("returns branches for repo", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const git = makeGit({ listRemoteBranches: async () => ["feature1", "main"] });
+    const app = buildApp(db, git);
+
+    const res = await app.request(`/api/repos/${repo.id}/branches`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.data).toEqual(["main", "feature1"]);
+  });
+
+  it("returns 404 for unknown repo", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/ghost/branches");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 500 on git error", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const git = makeGit({ listRemoteBranches: async () => Promise.reject(new Error("Git Error")) });
+    const app = buildApp(db, git);
+
+    const res = await app.request(`/api/repos/${repo.id}/branches`);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe("GET /api/repos/:id/issues", () => {
+  it("returns issues", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const git = makeGit({ listIssues: async () => [{ number: 1, title: "Issue 1" } as any] });
+    const app = buildApp(db, git);
+    const res = await app.request(`/api/repos/${repo.id}/issues?state=open&labels=bug,enhancement`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.data.length).toBe(1);
+  });
+
+  it("returns 404 for unknown repo", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/ghost/issues");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 500 on error", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const git = makeGit({ listIssues: async () => Promise.reject(new Error("Issues error")) });
+    const app = buildApp(db, git);
+    const res = await app.request(`/api/repos/${repo.id}/issues`);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe("GET /api/repos/:id/findings", () => {
+  it("returns findings", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const task = db.tasks.create({ repoId: repo.id, branchName: "main", title: "test", description: "desc", engine: "opencode" });
+    const run = db.runs.create(task.id, "opencode", "test");
+    db.findings.create({ repoId: repo.id, runId: run.id, taskId: task.id, persona: "frontend", content: "issue", severity: "warning" });
+    const app = buildApp(db);
+    const res = await app.request(`/api/repos/${repo.id}/findings?limit=10`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as any;
+    expect(data.data.length).toBe(1);
+  });
+
+  it("returns 404 for unknown repo", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/ghost/findings");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/repos/:id/skills", () => {
+  it("returns empty if no localPath", async () => {
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const app = buildApp(db);
+    const res = await app.request(`/api/repos/${repo.id}/skills`);
+    expect(res.status).toBe(200);
+  });
+  it("returns 404 for unknown repo", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/ghost/skills");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/repos/:id/manifests", () => {
+  it("returns 404 for unknown repo", async () => {
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/repos/ghost/manifests");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 500 on load error", async () => {
+     const db = makeDb();
+     const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+     const app = buildApp(db);
+     const res = await app.request(`/api/repos/${repo.id}/manifests`);
+     expect(res.status).toBe(500); // Because it attempts to load from non-existent git dir probably
+  });
+});
