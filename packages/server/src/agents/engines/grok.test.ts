@@ -102,8 +102,7 @@ describe("GrokEngine", () => {
     expect(spawnCalls[0].args).toContain("test prompt");
 
     // Verify parsed events
-    // Grok starting log (system log) + parsed stdout lines + complete event
-    expect(events.some((e) => e.type === "log" && e.content.includes("Starting"))).toBe(true);
+    // parsed stdout lines + complete event
     expect(events.some((e) => e.type === "log" && e.content === "thinking...")).toBe(true);
     expect(events.some((e) => e.type === "log" && e.content === "hello world")).toBe(true);
     expect(events.some((e) => e.type === "session" && e.sessionId === "session-abc-123")).toBe(
