@@ -328,7 +328,17 @@ describe("remote operations", () => {
   });
   it("GET /api/repos/github/list returns repos", async () => {
     const db = makeDb();
-    const git = makeGit({ listRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }] });
+    const git = makeGit({
+      listRemoteRepos: async () => [
+        {
+          name: "test",
+          url: "https://github.com/test/test",
+          description: "",
+          isPrivate: false,
+          provider: "github",
+        },
+      ],
+    });
     const app = buildApp(db, git);
     const res = await app.request("/api/repos/github/list");
     expect(res.status).toBe(200);
@@ -344,7 +354,17 @@ describe("remote operations", () => {
   });
   it("GET /api/repos/github/search returns repos", async () => {
     const db = makeDb();
-    const git = makeGit({ searchRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }] });
+    const git = makeGit({
+      searchRemoteRepos: async () => [
+        {
+          name: "test",
+          url: "https://github.com/test/test",
+          description: "",
+          isPrivate: false,
+          provider: "github",
+        },
+      ],
+    });
     const app = buildApp(db, git);
     const res = await app.request("/api/repos/github/search?q=test");
     expect(res.status).toBe(200);
@@ -355,14 +375,27 @@ describe("remote operations", () => {
     const db = makeDb();
     const git = makeGit({ createRemoteRepo: async () => Promise.reject(new Error("GH Error")) });
     const app = buildApp(db, git);
-    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    const res = await app.request("/api/repos/github/create", {
+      method: "POST",
+      body: JSON.stringify({ name: "test" }),
+    });
     expect(res.status).toBe(500);
   });
   it("POST /api/repos/github/create returns repo", async () => {
     const db = makeDb();
-    const git = makeGit({ createRemoteRepo: async () => ({ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://github.com", provider: "github" }) });
+    const git = makeGit({
+      createRemoteRepo: async () => ({
+        name: "test",
+        url: "https://github.com/test/test",
+        description: "",
+        isPrivate: false,
+      }),
+    });
     const app = buildApp(db, git);
-    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    const res = await app.request("/api/repos/github/create", {
+      method: "POST",
+      body: JSON.stringify({ name: "test" }),
+    });
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
     expect(data.data.name).toBe("test");
@@ -370,7 +403,10 @@ describe("remote operations", () => {
   it("POST /api/repos/github/create returns 400 for bad input", async () => {
     const db = makeDb();
     const app = buildApp(db);
-    const res = await app.request("/api/repos/github/create", { method: "POST", body: JSON.stringify({}) });
+    const res = await app.request("/api/repos/github/create", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
     expect(res.status).toBe(400);
   });
   it("GET /api/repos/gitlab/list returns 500 on error", async () => {
@@ -382,7 +418,17 @@ describe("remote operations", () => {
   });
   it("GET /api/repos/gitlab/list returns repos", async () => {
     const db = makeDb();
-    const git = makeGit({ listRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }] });
+    const git = makeGit({
+      listRemoteRepos: async () => [
+        {
+          name: "test",
+          url: "https://gitlab.com/test/test",
+          description: "",
+          isPrivate: false,
+          provider: "gitlab",
+        },
+      ],
+    });
     const app = buildApp(db, git);
     const res = await app.request("/api/repos/gitlab/list");
     expect(res.status).toBe(200);
@@ -398,7 +444,17 @@ describe("remote operations", () => {
   });
   it("GET /api/repos/gitlab/search returns repos", async () => {
     const db = makeDb();
-    const git = makeGit({ searchRemoteRepos: async () => [{ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }] });
+    const git = makeGit({
+      searchRemoteRepos: async () => [
+        {
+          name: "test",
+          url: "https://gitlab.com/test/test",
+          description: "",
+          isPrivate: false,
+          provider: "gitlab",
+        },
+      ],
+    });
     const app = buildApp(db, git);
     const res = await app.request("/api/repos/gitlab/search?q=test");
     expect(res.status).toBe(200);
@@ -409,14 +465,27 @@ describe("remote operations", () => {
     const db = makeDb();
     const git = makeGit({ createRemoteRepo: async () => Promise.reject(new Error("GL Error")) });
     const app = buildApp(db, git);
-    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    const res = await app.request("/api/repos/gitlab/create", {
+      method: "POST",
+      body: JSON.stringify({ name: "test" }),
+    });
     expect(res.status).toBe(500);
   });
   it("POST /api/repos/gitlab/create returns repo", async () => {
     const db = makeDb();
-    const git = makeGit({ createRemoteRepo: async () => ({ id: "1", name: "test", fullName: "test/test", htmlUrl: "https://gitlab.com", provider: "gitlab" }) });
+    const git = makeGit({
+      createRemoteRepo: async () => ({
+        name: "test",
+        url: "https://gitlab.com/test/test",
+        description: "",
+        isPrivate: false,
+      }),
+    });
     const app = buildApp(db, git);
-    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({ name: "test" }) });
+    const res = await app.request("/api/repos/gitlab/create", {
+      method: "POST",
+      body: JSON.stringify({ name: "test" }),
+    });
     expect(res.status).toBe(200);
     const data = (await res.json()) as any;
     expect(data.data.name).toBe("test");
@@ -424,7 +493,10 @@ describe("remote operations", () => {
   it("POST /api/repos/gitlab/create returns 400 for bad input", async () => {
     const db = makeDb();
     const app = buildApp(db);
-    const res = await app.request("/api/repos/gitlab/create", { method: "POST", body: JSON.stringify({}) });
+    const res = await app.request("/api/repos/gitlab/create", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
     expect(res.status).toBe(400);
   });
   it("GET /api/repos/github/search returns empty if no q", async () => {
@@ -454,7 +526,7 @@ describe("GET /api/repos/:id/branches", () => {
 
     const res = await app.request(`/api/repos/${repo.id}/branches`);
     expect(res.status).toBe(200);
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     expect(data.data).toEqual(["main", "feature1"]);
   });
 
@@ -484,7 +556,7 @@ describe("GET /api/repos/:id/issues", () => {
     const app = buildApp(db, git);
     const res = await app.request(`/api/repos/${repo.id}/issues?state=open&labels=bug,enhancement`);
     expect(res.status).toBe(200);
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     expect(data.data.length).toBe(1);
   });
 
@@ -509,13 +581,26 @@ describe("GET /api/repos/:id/findings", () => {
   it("returns findings", async () => {
     const db = makeDb();
     const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
-    const task = db.tasks.create({ repoId: repo.id, branchName: "main", title: "test", description: "desc", engine: "opencode" });
-    const run = db.runs.create(task.id, "opencode", "test");
-    db.findings.create({ repoId: repo.id, runId: run.id, taskId: task.id, persona: "frontend", content: "issue", severity: "warning" });
+    const task = db.tasks.create({
+      repoId: repo.id,
+      title: "test",
+      description: "desc",
+      engine: "opencode",
+    });
+    db.tasks.updateField(task.id, "branch_name", "main");
+    const run = db.runs.create(task.id, "opencode");
+    db.findings.create({
+      repoId: repo.id,
+      runId: run.id,
+      taskId: task.id,
+      persona: "frontend",
+      content: "issue",
+      severity: "warning",
+    });
     const app = buildApp(db);
     const res = await app.request(`/api/repos/${repo.id}/findings?limit=10`);
     expect(res.status).toBe(200);
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
     expect(data.data.length).toBe(1);
   });
 
@@ -552,10 +637,10 @@ describe("GET /api/repos/:id/manifests", () => {
   });
 
   it("returns 500 on load error", async () => {
-     const db = makeDb();
-     const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
-     const app = buildApp(db);
-     const res = await app.request(`/api/repos/${repo.id}/manifests`);
-     expect(res.status).toBe(500); // Because it attempts to load from non-existent git dir probably
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const app = buildApp(db);
+    const res = await app.request(`/api/repos/${repo.id}/manifests`);
+    expect(res.status).toBe(500); // Because it attempts to load from non-existent git dir probably
   });
 });
