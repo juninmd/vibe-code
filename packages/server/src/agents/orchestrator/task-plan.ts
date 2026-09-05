@@ -22,7 +22,7 @@ function uniqueLines(lines: string[]): string[] {
   return result;
 }
 
-function extractCandidateSteps(task: Task): string[] {
+export function extractCandidateSteps(task: Task): string[] {
   const sources = [task.plannerSpec, task.goal, task.desiredOutcome, task.description]
     .filter((value): value is string => Boolean(value?.trim()))
     .join("\n");
@@ -51,7 +51,7 @@ function extractCandidateSteps(task: Task): string[] {
   ];
 }
 
-function inferTaskType(text: string): string {
+export function inferTaskType(text: string): string {
   const lower = text.toLowerCase();
   if (/(ui|ux|component|css|layout|screen|page|react|frontend)/.test(lower)) return "frontend";
   if (/(test|assert|coverage|vitest|integration|e2e)/.test(lower)) return "test";
@@ -79,7 +79,7 @@ function isPreparationNode(step: string): boolean {
   return /(clarify|analy[sz]e|prepare|audit|inspect|map|triage)/i.test(step);
 }
 
-function buildPlanNodes(_task: Task, steps: string[]): TaskExecutionPlanNode[] {
+export function buildPlanNodes(_task: Task, steps: string[]): TaskExecutionPlanNode[] {
   const effectiveSteps = steps.slice(0, MAX_PLAN_NODES);
   const prepIds: string[] = [];
   const executionIds: string[] = [];
