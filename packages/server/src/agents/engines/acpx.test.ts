@@ -154,7 +154,7 @@ describe("AcpxEngine", () => {
     const mockProc = {
       kill: () => {
         killCalled = true;
-      }
+      },
     };
     (engine as any).processes.set("run-123", mockProc);
     engine.abort("run-123");
@@ -178,8 +178,8 @@ describe("AcpxEngine", () => {
         },
         flush: () => {
           flushed = true;
-        }
-      }
+        },
+      },
     };
     (engine as any).processes.set("run-123", mockProc);
     const result = engine.sendInput("run-123", "test input");

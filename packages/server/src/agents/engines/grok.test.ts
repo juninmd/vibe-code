@@ -118,7 +118,7 @@ describe("GrokEngine", () => {
     const mockProc = {
       kill: () => {
         killCalled = true;
-      }
+      },
     };
     (engine as any).processes.set("run-456", mockProc);
     engine.abort("run-456");
@@ -142,8 +142,8 @@ describe("GrokEngine", () => {
         },
         flush: () => {
           flushed = true;
-        }
-      }
+        },
+      },
     };
     (engine as any).processes.set("run-456", mockProc);
     const result = engine.sendInput("run-456", "test input grok");
