@@ -147,4 +147,54 @@ describe("AcpxEngine", () => {
     expect(events.some((e) => e.type === "error" && e.content === "Something failed")).toBe(true);
     expect(events.some((e) => e.type === "complete" && e.exitCode === 0)).toBe(true);
   });
+
+  it("abort kills the process and deletes from map", () => {
+    const engine = new AcpxEngine();
+    let killCalled = false;
+    const mockProc = {
+      kill: () => {
+        killCalled = true;
+      },
+    };
+    (engine as any).processes.set("run-123", mockProc);
+    engine.abort("run-123");
+    expect(killCalled).toBe(true);
+    expect((engine as any).processes.has("run-123")).toBe(false);
+  });
+
+  it("abort does nothing if runId not found", () => {
+    const engine = new AcpxEngine();
+    expect(() => engine.abort("missing-run")).not.toThrow();
+  });
+
+  it("sendInput writes to stdin if available", () => {
+    const engine = new AcpxEngine();
+    let written = "";
+    let flushed = false;
+    const mockProc = {
+      stdin: {
+        write: (str: string) => {
+          written = str;
+        },
+        flush: () => {
+          flushed = true;
+        },
+      },
+    };
+    (engine as any).processes.set("run-123", mockProc);
+    const result = engine.sendInput("run-123", "test input");
+    expect(result).toBe(true);
+    expect(written).toBe("test input\n");
+    expect(flushed).toBe(true);
+  });
+
+  it("sendInput returns false if process not found or stdin missing", () => {
+    const engine = new AcpxEngine();
+    const result = engine.sendInput("missing-run", "test input");
+    expect(result).toBe(false);
+
+    (engine as any).processes.set("run-no-stdin", {});
+    const result2 = engine.sendInput("run-no-stdin", "test input");
+    expect(result2).toBe(false);
+  });
 });
