@@ -111,12 +111,11 @@ describe("buildValidationRepairPrompt", () => {
             stderr: "err",
             exitCode: 1,
             name: "validation",
+            source: "detected",
+            reason: "Mock failure",
           },
         ],
-        blockers: [],
-        score: 0,
-        validationOutput: "out",
-      },
+      } as any,
       "Memory string"
     );
     expect(prompt).toContain("It failed");
