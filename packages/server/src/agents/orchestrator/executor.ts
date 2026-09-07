@@ -35,7 +35,7 @@ const FINAL_VALIDATOR_MAX_ATTEMPTS =
     ? Number(process.env.VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS)
     : 3;
 
-function taskSlug(task: Task): string {
+export function taskSlug(task: Task): string {
   return task.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -43,12 +43,12 @@ function taskSlug(task: Task): string {
     .slice(0, 48);
 }
 
-function docsRelativePath(task: Task): string {
+export function docsRelativePath(task: Task): string {
   const slug = taskSlug(task);
   return `docs/tasks/${slug || "task"}.md`;
 }
 
-function normalizeAsciiText(text: string): string {
+export function normalizeAsciiText(text: string): string {
   return text
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -57,7 +57,7 @@ function normalizeAsciiText(text: string): string {
     .trim();
 }
 
-function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
+export function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
   const formattedFindings = findings
     .slice(0, 30)
     .map((f, i) => `${i + 1}. ${f}`)
@@ -88,7 +88,7 @@ function buildReviewAutofixPrompt(task: Task, findings: string[]): string {
     .join("\n");
 }
 
-function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
+export function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
   const docsFile = docsRelativePath(task);
   const screenshotFile = `docs/assets/${taskSlug(task) || "task"}.png`;
   const formattedFindings = findings
@@ -125,7 +125,7 @@ function buildDocsAutofixPrompt(task: Task, findings: string[]): string {
     .join("\n");
 }
 
-function buildValidationRepairPrompt(
+export function buildValidationRepairPrompt(
   task: Task,
   verification: WorktreeVerificationResult,
   memoryContext?: string
@@ -177,13 +177,13 @@ async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void
 }
 
 /** Extract persona name from a review finding line like "[Frontend Review] WARNING: ..." */
-function extractPersona(finding: string): string {
+export function extractPersona(finding: string): string {
   const match = finding.match(/^\[([^\]]+)\]/);
   if (match) return match[1].toLowerCase().replace(/\s+review$/i, "");
   return "unknown";
 }
 
-function normalizeRepoWebUrl(repoUrl: string): string {
+export function normalizeRepoWebUrl(repoUrl: string): string {
   const sshMatch = repoUrl.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (sshMatch) {
     return `https://${sshMatch[1]}/${sshMatch[2].replace(/\.git$/, "")}`;
@@ -198,7 +198,7 @@ function normalizeRepoWebUrl(repoUrl: string): string {
   }
 }
 
-function extractDocsAssetPath(rawPath: string): string | null {
+export function extractDocsAssetPath(rawPath: string): string | null {
   const withoutQuery = rawPath.split(/[?#]/)[0].trim();
   const normalized = withoutQuery.replace(/^\.?\//, "");
   if (normalized.startsWith("docs/assets/")) return normalized;
@@ -209,7 +209,7 @@ function extractDocsAssetPath(rawPath: string): string | null {
   return null;
 }
 
-function buildAssetBlobUrl(repoUrl: string, branch: string, assetPath: string): string {
+export function buildAssetBlobUrl(repoUrl: string, branch: string, assetPath: string): string {
   const base = normalizeRepoWebUrl(repoUrl);
   const encodedBranch = encodeURIComponent(branch).replace(/%2F/g, "/");
   const encodedAssetPath = assetPath
@@ -253,7 +253,7 @@ function recordTaskArtifact(
   }
 }
 
-function rewriteDocsAssetLinks(body: string, repoUrl: string, branch: string): string {
+export function rewriteDocsAssetLinks(body: string, repoUrl: string, branch: string): string {
   return body.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (full, alt, target) => {
     const assetPath = extractDocsAssetPath(target);
     if (!assetPath) return full;
@@ -418,7 +418,7 @@ export async function runWorkspaceScripts(
   }
 }
 
-function escalateModel(currentModel?: string): string | undefined {
+export function escalateModel(currentModel?: string): string | undefined {
   if (!currentModel) return undefined;
   const lower = currentModel.toLowerCase();
   if (lower.includes("flash")) {

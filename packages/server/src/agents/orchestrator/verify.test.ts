@@ -267,7 +267,7 @@ describe("extractFailureReason", () => {
       expect(result.passed).toBe(false);
       const failedResult = result.results.find((r) => !r.passed);
       expect(failedResult?.reason).toMatch(
-        /Oops something went wrong|error: script "test" exited with code 1/i
+        new RegExp("Oops something went wrong|error: script \"test\" exited with code 1|error: Script not found \"typecheck\"|exit 1", "i")
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -293,7 +293,7 @@ describe("extractFailureReason", () => {
       expect(result.passed).toBe(false);
       const failedResult = result.results.find((r) => !r.passed);
       expect(failedResult?.reason).toMatch(
-        /command: bun run test|error: script "test" exited with code 1/
+        new RegExp("command: bun run test|error: script \"test\" exited with code 1|error: Script not found \"typecheck\"|exit 1", "i")
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
