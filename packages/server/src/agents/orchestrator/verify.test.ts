@@ -67,12 +67,12 @@ describe("discoverValidationCommands - extra", () => {
     try {
       await writeFile(
         join(dir, "Makefile"),
-        "test:\n\tjest\nlint:\n\teslint .\nbuild:\n\tvite build\n",
+        "test:\n\tjest\nlint:\n\teslint .\nbuild:\n\tvite build\nvalidate:\n\tvalidate\n",
         "utf8"
       );
 
       const commands = await discoverValidationCommands(dir);
-      expect(commands.map((c) => c.command)).toEqual(["make test", "make lint"]);
+      expect(commands.map((c) => c.command)).toEqual(["make test", "make lint", "make validate"]);
       expect(commands.every((c) => c.source === "detected")).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
