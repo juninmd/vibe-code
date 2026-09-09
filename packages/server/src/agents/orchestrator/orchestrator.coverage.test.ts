@@ -1,9 +1,7 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 // Mock playwright so frontend-shot doesn't complain about the missing package
 mock.module("playwright", () => ({ chromium: {} }));
-
-import { Orchestrator } from "../orchestrator";
 
 function makeTask(overrides: Record<string, unknown> = {}) {
   return {
@@ -25,32 +23,50 @@ function makeTask(overrides: Record<string, unknown> = {}) {
   };
 }
 
+let mockDb: any;
+let mockRegistry: any;
+let mockHub: any;
+
+import { Orchestrator } from "../orchestrator";
+
 describe("Orchestrator additional coverage", () => {
+  beforeEach(() => {
+    mockDb = {
+      tasks: {
+        getById: mock(),
+        list: mock(),
+        update: mock(),
+        incrementLoopAttempt: mock(),
+        listChildren: mock(),
+      },
+      runs: {
+        getLatestByTask: mock(),
+        updateStatus: mock(),
+      },
+      logs: { create: mock() },
+    };
+    mockRegistry = { get: mock() };
+    mockHub = { broadcastAll: mock(), broadcastToTask: mock() };
+  });
+
   afterEach(() => {
     mock.restore();
   });
 
   test("triggerScheduled rejects non-scheduled tasks", async () => {
     const task = makeTask({ status: "in_progress" });
-    const mockDb = {
-      tasks: {
-        getById: mock().mockReturnValue(task),
-      },
-    };
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any, 2);
+    mockDb.tasks.getById.mockReturnValue(task);
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
 
     await expect(orch.triggerScheduled(task.id)).rejects.toThrow("Invalid template task");
   });
 
   test("triggerScheduled respects concurrency limit", async () => {
     const task = makeTask({ status: "scheduled" });
-    const mockDb = {
-      tasks: {
-        getById: mock().mockReturnValue(task),
-        list: mock().mockReturnValue([{ id: "t1" }, { id: "t2" }]),
-      },
-    };
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any, 1);
+    mockDb.tasks.getById.mockReturnValue(task);
+    mockDb.tasks.list.mockReturnValue([{ id: "t1" }, { id: "t2" }]);
+
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 1);
     (orch as any).activeRuns.set("t1", {});
 
     await expect(orch.triggerScheduled(task.id)).rejects.toThrow("Max concurrent agents reached");
@@ -58,14 +74,10 @@ describe("Orchestrator additional coverage", () => {
 
   test("triggerScheduled throws if already running", async () => {
     const template = makeTask({ id: "template-1", status: "scheduled" });
-    const mockDb = {
-      tasks: {
-        getById: mock().mockReturnValue(template),
-        list: mock().mockReturnValue([]),
-      },
-    };
+    mockDb.tasks.getById.mockReturnValue(template);
+    mockDb.tasks.list.mockReturnValue([]);
 
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any, 2);
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
     (orch as any).activeRuns.set("template-1", { taskId: "template-1" });
 
     await expect(orch.triggerScheduled(template.id)).rejects.toThrow("already running");
@@ -74,9 +86,7 @@ describe("Orchestrator additional coverage", () => {
   test("sendInput handles active run", () => {
     const activeRun = { runId: "r1", taskId: "t1", engineName: "e1" };
     const mockEngine = { sendInput: mock().mockReturnValue(true) };
-    const mockRegistry = { get: mock().mockReturnValue(mockEngine) };
-    const mockDb = { logs: { create: mock() } };
-    const mockHub = { broadcastToTask: mock() };
+    mockRegistry.get.mockReturnValue(mockEngine);
 
     const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
     (orch as any).activeRuns.set("t1", activeRun);
@@ -93,7 +103,7 @@ describe("Orchestrator additional coverage", () => {
   });
 
   test("sendInput returns false if no active run", () => {
-    const orch = new Orchestrator({} as any, {} as any, {} as any, {} as any, 2);
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
     const result = orch.sendInput("nonexistent", "input text");
     expect(result).toBe(false);
   });
@@ -111,25 +121,17 @@ describe("Orchestrator additional coverage", () => {
     const task = makeTask({ id: "t1", status: "failed", notes: "" });
     let t1Status = "failed";
 
-    const mockDb = {
-      tasks: {
-        getById: mock().mockImplementation(() => task),
-        update: mock().mockImplementation((id: string, data: Record<string, unknown>) => {
-          if (id === "t1" && data.status) {
-            t1Status = data.status as string;
-            task.status = data.status as string;
-          }
-          return { id, ...data };
-        }),
-      },
-      runs: {
-        getLatestByTask: mock().mockReturnValue({ errorMessage: "some error" }),
-      },
-    };
+    mockDb.tasks.getById.mockImplementation(() => task);
+    mockDb.tasks.update.mockImplementation((id: string, data: Record<string, unknown>) => {
+      if (id === "t1" && data.status) {
+        t1Status = data.status as string;
+        task.status = data.status as string;
+      }
+      return { id, ...data };
+    });
+    mockDb.runs.getLatestByTask.mockReturnValue({ errorMessage: "some error" });
 
-    const mockHub = { broadcastAll: mock() };
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
-
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 1);
     orch.launch = mock().mockResolvedValue({});
 
     (orch as any).maybeScheduleRetry("t1");
@@ -154,24 +156,14 @@ describe("Orchestrator additional coverage", () => {
     const task = makeTask({ id: "t1", status: "failed", notes: "" });
     let t1Status = "failed";
 
-    const mockDb = {
-      tasks: {
-        getById: mock().mockImplementation(() => task),
-        update: mock().mockImplementation((id: string, data: Record<string, unknown>) => {
-          if (id === "t1" && data.status) t1Status = data.status as string;
-          return { id, ...data };
-        }),
-      },
-      runs: {
-        getLatestByTask: mock().mockReturnValue({ errorMessage: "some error" }),
-      },
-    };
+    mockDb.tasks.getById.mockImplementation(() => task);
+    mockDb.tasks.update.mockImplementation((id: string, data: Record<string, unknown>) => {
+      if (id === "t1" && data.status) t1Status = data.status as string;
+      return { id, ...data };
+    });
+    mockDb.runs.getLatestByTask.mockReturnValue({ errorMessage: "some error" });
 
-    const mockHub = { broadcastAll: mock() };
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
-
-    // Default AUTO_RETRY_MAX is 2 if not set by env, but if it is 0, it blocks immediately.
-    // If it's > 0, we can force a block by setting retry attempts arbitrarily high:
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 1);
     (orch as any).retryAttempts.set("t1", 999);
 
     (orch as any).maybeScheduleRetry("t1");
@@ -188,29 +180,19 @@ describe("Orchestrator additional coverage", () => {
 
     let t1Status = "in_progress";
 
-    const mockDb = {
-      tasks: {
-        getById: mock().mockImplementation((id: string) => {
-          if (id === "t1") return task;
-          if (id === "t-child") return childTask;
-          return null;
-        }),
-        update: mock().mockImplementation((id: string, data: Record<string, unknown>) => {
-          if (id === "t1" && data.status) t1Status = data.status as string;
-          return { id, ...data };
-        }),
-        listChildren: mock().mockImplementation((id: string) => {
-          if (id === "t1") return [childTask];
-          return [];
-        }),
-      },
-      runs: {
-        updateStatus: mock(),
-      },
-    };
-
-    const mockHub = { broadcastAll: mock() };
-    const mockRegistry = { get: mock() };
+    mockDb.tasks.getById.mockImplementation((id: string) => {
+      if (id === "t1") return task;
+      if (id === "t-child") return childTask;
+      return null;
+    });
+    mockDb.tasks.update.mockImplementation((id: string, data: Record<string, unknown>) => {
+      if (id === "t1" && data.status) t1Status = data.status as string;
+      return { id, ...data };
+    });
+    mockDb.tasks.listChildren.mockImplementation((id: string) => {
+      if (id === "t1") return [childTask];
+      return [];
+    });
 
     const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
 
@@ -223,15 +205,10 @@ describe("Orchestrator additional coverage", () => {
     const task2 = makeTask({ id: "t2", priority: "medium" });
     const task3 = makeTask({ id: "t3", priority: "low" });
 
-    const mockDb = {
-      tasks: {
-        list: mock().mockReturnValue([task1, task2, task3]),
-        update: mock(),
-      },
-    };
-    const mockHub = { broadcastAll: mock() };
+    mockDb.tasks.list.mockReturnValue([task1, task2, task3]);
+    mockDb.tasks.update.mockClear();
 
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 2);
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
     await orch.recoverInProgressTasks();
 
     expect(mockDb.tasks.update).toHaveBeenCalledWith("t1", { status: "blocked" });
@@ -246,22 +223,29 @@ describe("Orchestrator additional coverage", () => {
   test("unblockTask works correctly", async () => {
     const task = makeTask({ id: "t1", status: "blocked" });
 
-    const mockDb = {
-      tasks: {
-        getById: mock().mockReturnValue(task),
-        update: mock(),
-        list: mock().mockReturnValue([]),
-      },
-    };
-    const mockHub = { broadcastAll: mock() };
+    mockDb.tasks.getById.mockReturnValue(task);
+    mockDb.tasks.list.mockReturnValue([]);
+    mockDb.tasks.update.mockClear();
 
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 2);
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
     orch.sweepBacklog = mock().mockResolvedValue(undefined);
 
     await orch.unblockTask("t1");
 
     expect(mockDb.tasks.update).toHaveBeenCalledWith("t1", { status: "backlog" });
     expect(orch.sweepBacklog).toHaveBeenCalled();
+  });
+
+  test("unblockTask does nothing if task is not blocked", async () => {
+    const task = makeTask({ id: "t1", status: "in_progress" });
+    mockDb.tasks.getById.mockReturnValue(task);
+    mockDb.tasks.update.mockClear();
+
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 2);
+
+    await orch.unblockTask("t1");
+
+    expect(mockDb.tasks.update).not.toHaveBeenCalled();
   });
 
   test("checkLoopAndRelaunch handles loop logic successfully", async () => {
@@ -280,20 +264,14 @@ describe("Orchestrator additional coverage", () => {
       loopConfig: { enabled: true, currentAttempt: 0, maxAttempts: 3 },
     });
 
-    const mockDb = {
-      tasks: {
-        getById: mock().mockImplementation(() => task),
-        incrementLoopAttempt: mock(),
-        update: mock().mockImplementation((id: string, data: Record<string, unknown>) => {
-          if (id === "t1" && data.status) task.status = data.status as string;
-          return { id, ...data };
-        }),
-      },
-    };
+    mockDb.tasks.getById.mockImplementation(() => task);
+    mockDb.tasks.incrementLoopAttempt.mockClear();
+    mockDb.tasks.update.mockImplementation((id: string, data: Record<string, unknown>) => {
+      if (id === "t1" && data.status) task.status = data.status as string;
+      return { id, ...data };
+    });
 
-    const mockHub = { broadcastAll: mock() };
-    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, mockHub as any, 1);
-
+    const orch = new Orchestrator(mockDb as any, {} as any, mockRegistry as any, mockHub as any, 1);
     orch.launch = mock().mockResolvedValue({});
 
     (orch as any).checkLoopAndRelaunch("t1");
