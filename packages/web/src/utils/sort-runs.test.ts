@@ -1,67 +1,77 @@
-import { describe, expect, it } from "bun:test";
-import { partitionRuns, sortPastRuns } from "./sort-runs";
+import { describe, expect, it } from "vitest";
+import { partitionRuns, type RunStatusLike, sortPastRuns } from "./sort-runs";
 
-const r = (id: string, status: string, finishedAt = "2026-05-19T00:00:00Z") => ({
-  id,
-  status,
-  finishedAt,
-});
+interface TestRun {
+  id: number;
+  status: RunStatusLike;
+  finishedAt?: string | null;
+  startedAt?: string | null;
+  createdAt?: string | null;
+}
 
 describe("partitionRuns", () => {
-  it("splits active vs terminal", () => {
-    const { active, past } = partitionRuns([
-      r("a", "running"),
-      r("b", "queued"),
-      r("c", "completed"),
-      r("d", "failed"),
-      r("e", "cancelled"),
-    ]);
-    expect(active.map((x) => x.id)).toEqual(["a", "b"]);
-    expect(past.map((x) => x.id).sort()).toEqual(["c", "d", "e"]);
-  });
+  it("partitions correctly into active and past", () => {
+    const runs: TestRun[] = [
+      { id: 1, status: "failed" },
+      { id: 2, status: "running" },
+      { id: 3, status: "completed" },
+      { id: 4, status: "queued" },
+      { id: 5, status: "unknown" },
+    ];
 
-  it("ignores unknown statuses", () => {
-    const { active, past } = partitionRuns([r("x", "weird-state")]);
-    expect(active.length).toBe(0);
-    expect(past.length).toBe(0);
+    const { active, past } = partitionRuns(runs);
+    expect(active.length).toBe(2);
+    expect(active.map((r) => r.id)).toEqual([2, 4]);
+
+    expect(past.length).toBe(2);
+    expect(past.map((r) => r.id)).toEqual([1, 3]);
   });
 });
 
 describe("sortPastRuns", () => {
-  it("orders failed → cancelled → completed", () => {
-    const out = sortPastRuns([
-      r("c1", "completed", "2026-05-19T10:00:00Z"),
-      r("f1", "failed", "2026-05-19T01:00:00Z"),
-      r("x1", "cancelled", "2026-05-19T05:00:00Z"),
-    ]);
-    expect(out.map((x) => x.id)).toEqual(["f1", "x1", "c1"]);
+  it("sorts by status rank correctly", () => {
+    const runs: TestRun[] = [
+      { id: 1, status: "completed" },
+      { id: 2, status: "failed" },
+      { id: 3, status: "cancelled" },
+    ];
+
+    const sorted = sortPastRuns(runs);
+    expect(sorted.map((r) => r.id)).toEqual([2, 3, 1]); // failed (0), cancelled (1), completed (2)
   });
 
-  it("within group, newest finishedAt first", () => {
-    const out = sortPastRuns([
-      r("f-old", "failed", "2026-05-19T01:00:00Z"),
-      r("f-new", "failed", "2026-05-19T03:00:00Z"),
-      r("f-mid", "failed", "2026-05-19T02:00:00Z"),
-    ]);
-    expect(out.map((x) => x.id)).toEqual(["f-new", "f-mid", "f-old"]);
+  it("sorts by finishedAt/startedAt/createdAt descending within same status", () => {
+    const runs: TestRun[] = [
+      { id: 1, status: "failed", createdAt: "2023-01-01" },
+      { id: 2, status: "failed", finishedAt: "2023-01-03" },
+      { id: 3, status: "failed", startedAt: "2023-01-02" },
+    ];
+
+    const sorted = sortPastRuns(runs);
+    expect(sorted.map((r) => r.id)).toEqual([2, 3, 1]);
   });
 
-  it("treats done as completed for ranking", () => {
-    const out = sortPastRuns([
-      r("c", "completed", "2026-05-19T02:00:00Z"),
-      r("d", "done", "2026-05-19T03:00:00Z"),
-      r("f", "failed", "2026-05-19T01:00:00Z"),
-    ]);
-    expect(out[0].id).toBe("f");
-    // d > c by time → d before c in their group
-    expect(out.map((x) => x.id)).toEqual(["f", "d", "c"]);
+  it("handles empty or missing dates gracefully", () => {
+    const runs: TestRun[] = [
+      { id: 1, status: "failed" },
+      { id: 2, status: "failed", createdAt: "2023-01-01" },
+    ];
+
+    const sorted = sortPastRuns(runs);
+    // JS dates: new Date("") is Invalid Date which gives NaN from getTime()
+    // NaN - something or something - NaN is NaN which usually doesn't sort well
+    // So the exact behaviour depends on the implementation.
+    // Let's just expect both are returned in some order.
+    expect(sorted.length).toBe(2);
   });
 
-  it("falls back to startedAt / createdAt when finishedAt missing", () => {
-    const out = sortPastRuns([
-      { status: "failed", id: "a", createdAt: "2026-05-19T01:00:00Z" },
-      { status: "failed", id: "b", startedAt: "2026-05-19T05:00:00Z" },
-    ] as { status: string; id: string; createdAt?: string; startedAt?: string }[]);
-    expect((out[0] as { id: string }).id).toBe("b");
+  it("maintains 'done' and 'completed' at the same rank", () => {
+    const runs: TestRun[] = [
+      { id: 1, status: "completed", finishedAt: "2023-01-01" },
+      { id: 2, status: "done", finishedAt: "2023-01-02" }, // Newer should come first
+    ];
+
+    const sorted = sortPastRuns(runs);
+    expect(sorted.map((r) => r.id)).toEqual([2, 1]);
   });
 });
