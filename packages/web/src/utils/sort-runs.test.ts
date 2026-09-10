@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { partitionRuns, sortPastRuns } from "./sort-runs";
 
 describe("partitionRuns", () => {
@@ -13,10 +13,10 @@ describe("partitionRuns", () => {
 
     const { active, past } = partitionRuns(runs as any);
     expect(active.length).toBe(2);
-    expect(active.map(r => r.id)).toEqual([2, 4]);
+    expect(active.map((r) => r.id)).toEqual([2, 4]);
 
     expect(past.length).toBe(2);
-    expect(past.map(r => r.id)).toEqual([1, 3]);
+    expect(past.map((r) => r.id)).toEqual([1, 3]);
   });
 });
 
@@ -29,7 +29,7 @@ describe("sortPastRuns", () => {
     ];
 
     const sorted = sortPastRuns(runs as any);
-    expect(sorted.map(r => r.id)).toEqual([2, 3, 1]); // failed (0), cancelled (1), completed (2)
+    expect(sorted.map((r) => r.id)).toEqual([2, 3, 1]); // failed (0), cancelled (1), completed (2)
   });
 
   it("sorts by finishedAt/startedAt/createdAt descending within same status", () => {
@@ -40,7 +40,7 @@ describe("sortPastRuns", () => {
     ];
 
     const sorted = sortPastRuns(runs as any);
-    expect(sorted.map(r => r.id)).toEqual([2, 3, 1]);
+    expect(sorted.map((r) => r.id)).toEqual([2, 3, 1]);
   });
 
   it("handles empty or missing dates gracefully", () => {
@@ -64,6 +64,6 @@ describe("sortPastRuns", () => {
     ];
 
     const sorted = sortPastRuns(runs as any);
-    expect(sorted.map(r => r.id)).toEqual([2, 1]);
+    expect(sorted.map((r) => r.id)).toEqual([2, 1]);
   });
 });

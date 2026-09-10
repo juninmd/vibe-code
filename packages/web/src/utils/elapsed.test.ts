@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { formatElapsedSecs, formatElapsedMs } from "./elapsed";
+import { describe, expect, it } from "vitest";
+import { formatElapsedMs, formatElapsedSecs } from "./elapsed";
 
 describe("formatElapsedSecs", () => {
   it("formats seconds correctly", () => {

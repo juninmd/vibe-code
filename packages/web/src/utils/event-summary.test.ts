@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { shortenPath, summarizeToolInput } from "./event-summary";
 
 describe("shortenPath", () => {
@@ -13,7 +13,9 @@ describe("shortenPath", () => {
   });
 
   it("truncates paths with more than 3 segments", () => {
-    expect(shortenPath("packages/server/src/agents/engines/opencode.ts")).toBe(".../engines/opencode.ts");
+    expect(shortenPath("packages/server/src/agents/engines/opencode.ts")).toBe(
+      ".../engines/opencode.ts"
+    );
     expect(shortenPath("a/b/c/d.js")).toBe(".../c/d.js");
   });
 
@@ -49,13 +51,13 @@ describe("summarizeToolInput", () => {
   it("falls back to command and truncates long ones", () => {
     const longCmd = "a".repeat(150);
     expect(summarizeToolInput({ command: "ls -la" })).toBe("ls -la");
-    expect(summarizeToolInput({ cmd: longCmd })).toBe("a".repeat(120) + "...");
+    expect(summarizeToolInput({ cmd: longCmd })).toBe(`${"a".repeat(120)}...`);
   });
 
   it("falls back to prompt and truncates long ones", () => {
     const longPrompt = "p".repeat(150);
     expect(summarizeToolInput({ prompt: "hello" })).toBe("hello");
-    expect(summarizeToolInput({ prompt: longPrompt })).toBe("p".repeat(120) + "...");
+    expect(summarizeToolInput({ prompt: longPrompt })).toBe(`${"p".repeat(120)}...`);
   });
 
   it("falls back to skill or name", () => {
