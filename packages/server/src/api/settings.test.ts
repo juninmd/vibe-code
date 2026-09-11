@@ -160,3 +160,31 @@ describe("Settings API - Additional coverage", () => {
     expect(body.data.error).toContain("Provider registry not available");
   });
 });
+
+describe("Settings API - Additional provider logic part 2", () => {
+  it("POST /api/settings/test/:provider handles missing registry gracefully", async () => {
+    const db = makeDb();
+    const app = new Hono();
+    // Intentionally pass undefined for registry
+    app.route("/api/settings", createSettingsRouter(db, undefined as any));
+
+    const res = await app.request("/api/settings/test/github", { method: "POST" });
+    const body = await res.json();
+    expect(body.data.ok).toBe(false);
+    expect(body.data.error).toContain("Provider registry not available");
+  });
+
+  it("GET /api/settings sets github token if token not set but env var present", async () => {
+    const originalEnv = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = "env_gh_token_mock";
+
+    const db = makeDb();
+    const app = buildApp(db);
+    const res = await app.request("/api/settings");
+    const body = await res.json();
+
+    expect(body.data.github.tokenSet).toBe(true);
+
+    process.env.GITHUB_TOKEN = originalEnv;
+  });
+});
