@@ -1,7 +1,4 @@
 import { describe, expect, it, mock, spyOn } from "bun:test";
-
-mock.module("playwright", () => ({ chromium: {} }));
-
 import * as fsPromises from "node:fs/promises";
 import {
   autoInstallDependencies,
@@ -11,6 +8,7 @@ import {
   buildValidationRepairPrompt,
   docsRelativePath,
   escalateModel,
+  executeAgent,
   extractDocsAssetPath,
   extractPersona,
   normalizeAsciiText,
@@ -19,6 +17,11 @@ import {
   runWorkspaceScripts,
   taskSlug,
 } from "./executor";
+import * as EvaluatorMod from "./evaluator";
+import * as ReviewMod from "./review";
+import * as VerifyMod from "./verify";
+
+mock.module("playwright", () => ({ chromium: {} }));
 
 describe("executor helper functions", () => {
   describe("taskSlug", () => {
@@ -180,9 +183,6 @@ describe("executeAgent (integration mock)", () => {
   it("throws if max concurrent agents is exceeded", async () => {
     const { Orchestrator } = await import("../orchestrator");
     const orch = new Orchestrator({} as any, {} as any, {} as any, {} as any, 1);
-    // We can't spyOn a getter, so we'll construct a scenario where launch throws
-    // We need to bypass the actual launch logic since we just want to trigger the check.
-    // But launch is what throws. We'll set activeRuns.size via internal map.
     (orch as any).activeRuns.set("t1", {});
     (orch as any).db = { tasks: { list: () => [] } };
 
