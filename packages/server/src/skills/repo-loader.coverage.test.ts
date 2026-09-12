@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, spyOn, afterEach } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import { RepoSkillsLoader } from "./repo-loader";
 
@@ -8,7 +8,7 @@ describe("RepoSkillsLoader", () => {
   });
 
   test("loadWorktreeManifests loads successfully when files exist", async () => {
-    spyOn(fs, "readFile").mockImplementation(async (path: any, options?: any) => {
+    spyOn(fs, "readFile").mockImplementation(async (path: any, _options?: any) => {
       if (path.toString().includes("AGENTS.md")) return "agents content" as any;
       if (path.toString().includes("CLAUDE.md")) return "claude content" as any;
       throw new Error("ENOENT");
@@ -24,10 +24,12 @@ describe("RepoSkillsLoader", () => {
 
   test("loadManifestsFromGit loads from bare repo", async () => {
     const loader = new RepoSkillsLoader("/tmp/repo");
-    const execGitSpy = spyOn(loader as any, "execGit").mockImplementation(async (barePath: string, args: string[]) => {
-      if (args.includes("HEAD:AGENTS.md")) return "git agents content";
-      throw new Error("Not found");
-    });
+    const execGitSpy = spyOn(loader as any, "execGit").mockImplementation(
+      async (_barePath: string, args: string[]) => {
+        if (args.includes("HEAD:AGENTS.md")) return "git agents content";
+        throw new Error("Not found");
+      }
+    );
 
     const manifests = await loader.loadManifestsFromGit("/tmp/bare");
     expect(manifests["AGENTS.md"]).toBe("git agents content");
@@ -49,6 +51,8 @@ describe("RepoSkillsLoader", () => {
 
   test("getFileContent throws on path traversal", async () => {
     const loader = new RepoSkillsLoader("/tmp/repo");
-    expect(loader.getFileContent("../../../etc/passwd")).rejects.toThrow("Access denied: path outside repo skills directory");
+    expect(loader.getFileContent("../../../etc/passwd")).rejects.toThrow(
+      "Access denied: path outside repo skills directory"
+    );
   });
 });
