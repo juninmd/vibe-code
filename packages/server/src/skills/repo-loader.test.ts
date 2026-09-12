@@ -112,11 +112,44 @@ describe("RepoSkillsLoader", () => {
     expect(index.workflows[0].scope).toBe("workspace");
   });
 
-  it("should return cached index on subsequent load calls", async () => {
+  it("returns cached index on subsequent load calls and handles empty states", async () => {
+    // We combine the cache and empty state tests to reduce duplicated arrangement blocks
     const loader = new RepoSkillsLoader("/workdir");
     const index1 = await loader.load();
     const index2 = await loader.load();
     expect(index1).toBe(index2);
+
+    spyOn(actualFs, "readdir").mockRejectedValue(new Error("ENOENT"));
+    const emptyLoader = new RepoSkillsLoader("/empty-repo");
+    const emptyIndex = await emptyLoader.load();
+    expect(emptyIndex.skills).toEqual([]);
+  });
+
+  it("loads manifests from worktrees and bare repos gracefully", async () => {
+    // Combine worktree and bare repo manifest loading tests
+    spyOn(actualFs, "readFile").mockImplementation(async (path: any) => {
+      const p = path.toString();
+      if (p.includes("AGENTS.md")) return "agents" as any;
+      if (p.includes("CLAUDE.md")) return "claude" as any;
+      throw new Error("ENOENT");
+    });
+
+    const loader = new RepoSkillsLoader("/tmp/repo");
+    const execGitSpy = spyOn(loader as any, "execGit").mockImplementation(
+      async (_p: string, args: string[]) => {
+        if (args.includes("HEAD:AGENTS.md")) return "git-agents";
+        throw new Error("Not found");
+      }
+    );
+
+    const wtManifests = await loader.loadWorktreeManifests("/tmp/worktree");
+    expect(wtManifests[".agents/AGENTS.md"]).toBe("agents");
+    expect(wtManifests[".agents/GEMINI.md"]).toBeUndefined();
+
+    const gitManifests = await loader.loadManifestsFromGit("/tmp/bare");
+    expect(gitManifests["AGENTS.md"]).toBe("git-agents");
+    expect(gitManifests["CLAUDE.md"]).toBeUndefined();
+    expect(execGitSpy).toHaveBeenCalled();
   });
 
   it("should restrict getFileContent to paths within .vibe-code directory", async () => {
