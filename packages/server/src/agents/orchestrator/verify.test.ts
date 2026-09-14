@@ -49,6 +49,7 @@ describe("discoverValidationCommands", () => {
       );
 
       const commands = await discoverValidationCommands(dir);
+      // parsePackageJsonCommands extracts in this order: lint, typecheck, test, build
       expect(commands.map((command) => command.command)).toEqual([
         "bun run lint",
         "bun run test",
