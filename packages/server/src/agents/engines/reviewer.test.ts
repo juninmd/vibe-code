@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 
-describe.skip("reviewer engine", () => {
+describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
   });
@@ -19,13 +19,13 @@ describe.skip("reviewer engine", () => {
     const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
       return {
-        stdout: new Blob(["WARNING: Some issue\nBLOCKER: critical issue"]).stream(),
+        stdout: new Blob(["WARNING: Some issue\nBLOCKER: critical issue\n"]).stream(),
         stderr: new Blob([""]).stream(),
         exited: Promise.resolve(0),
       } as any;
@@ -59,13 +59,13 @@ describe.skip("reviewer engine", () => {
     const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
       return {
-        stdout: new Blob(["LGTM"]).stream(),
+        stdout: new Blob(["LGTM\n"]).stream(),
         stderr: new Blob([""]).stream(),
         exited: Promise.resolve(0),
       } as any;
@@ -95,14 +95,14 @@ describe.skip("reviewer engine", () => {
     const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
       return {
         stdout: new Blob([""]).stream(),
-        stderr: new Blob(["Command failed"]).stream(),
+        stderr: new Blob(["Command failed\n"]).stream(),
         exited: Promise.resolve(1),
       } as any;
     });
