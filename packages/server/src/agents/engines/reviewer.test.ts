@@ -1,10 +1,19 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 
 describe("reviewer engine", () => {
+  const originalSpawn = Bun.spawn;
+
+  beforeEach(() => {
+    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-123");
+    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
+    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
     mock.restore();
+    Bun.spawn = originalSpawn;
   });
 
   test("PERSONA_LABELS exists", () => {
@@ -12,11 +21,7 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles successful gemini execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-123");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    Bun.spawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
           stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
@@ -29,7 +34,7 @@ describe("reviewer engine", () => {
         stderr: new Blob([""]).stream(),
         exited: Promise.resolve(0),
       } as any;
-    });
+    }) as any;
 
     const result = await runPersonaReview({
       persona: "security",
@@ -52,11 +57,7 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles successful claude execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-456");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    Bun.spawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
           stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
@@ -69,7 +70,7 @@ describe("reviewer engine", () => {
         stderr: new Blob([""]).stream(),
         exited: Promise.resolve(0),
       } as any;
-    });
+    }) as any;
 
     const result = await runPersonaReview({
       persona: "frontend",
@@ -88,11 +89,7 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles execution failure", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-789");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    Bun.spawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
           stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
@@ -105,7 +102,7 @@ describe("reviewer engine", () => {
         stderr: new Blob(["Command failed\n"]).stream(),
         exited: Promise.resolve(1),
       } as any;
-    });
+    }) as any;
 
     const result = await runPersonaReview({
       persona: "backend",
