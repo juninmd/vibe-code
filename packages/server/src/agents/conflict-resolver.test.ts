@@ -11,6 +11,8 @@ type Db = ReturnType<typeof createDb>;
 
 const { Orchestrator } = await import("./orchestrator");
 
+
+mock.module('playwright', () => ({ chromium: {} }));
 mock.module("./orchestrator/review", () => ({
   REVIEW_ENABLED: false,
   REVIEW_STRICT: false,
@@ -247,6 +249,85 @@ describe("ConflictResolver", () => {
       expect(launch).toHaveBeenCalledTimes(1);
       expect((launch.mock.calls as any)[0]?.[0].branchName).toBe("feat/launch-branch");
     });
+
+
+
+
+
+
+
+    it("skips if github_token is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: missing token",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/16");
+      db.tasks.updateField(parent.id, "branch_name", "feat/missing-token");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      // Clear environment variable if any
+      const originalEnvToken = process.env.GITHUB_TOKEN;
+      delete process.env.GITHUB_TOKEN;
+
+      // Clear token in db
+      db.settings.set("github_token", "");
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // restore
+      if (originalEnvToken) process.env.GITHUB_TOKEN = originalEnvToken;
+      fetchSpy.mockRestore();
+    });
+
+    it("skips if no candidates are active", async () => {
+      // Create only inactive tasks
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: inactive",
+        status: "done",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/17");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("catches errors thrown during task check loop", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: throws error",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce(() => {
+        throw new Error("Network error during check");
+      });
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+
+      const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+      await resolver.check();
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy.mock.calls[0][0]).toContain("Error checking task");
+
+      fetchSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+
   });
 
   describe("isPRConflicting — GitHub API parsing", () => {
@@ -298,7 +379,110 @@ describe("ConflictResolver", () => {
     });
   });
 
+
+
+    it("handles telegram error during createConflictResolutionTask gracefully", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: telegram fail",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
+      db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+        if (typeof url === 'string' && url.includes('github.com')) {
+          return { ok: true, json: async () => ({ mergeable: false }) } as any;
+        }
+        if (typeof url === 'string' && url.includes('api.telegram.org')) {
+          throw new Error("Telegram failure");
+        }
+        return { ok: true, json: async () => ({}) } as any;
+      });
+
+      db.settings.set("github_token", "test-token");
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy");
+      db.settings.set("telegram_chat_id", "dummy");
+
+      const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(consoleWarnSpy).toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+    });
+
+    it("handles telegram error during notifyConflictResolved gracefully", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: telegram fail notify",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
+
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy");
+      db.settings.set("telegram_chat_id", "dummy");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(new Error("Telegram network error"));
+      const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(consoleWarnSpy).toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
+    });
+
   describe("notifyConflictResolved", () => {
+    it("returns early if telegram is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task without telegram",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
+      db.settings.set("telegram_enabled", "false");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+
+    it("returns early if repo is missing in notifyConflictResolved but continues if valid", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: missing repo test",
+        status: "done",
+      });
+      const repoSpy = spyOn(db.repos, 'getById').mockReturnValue(null as any);
+      const launchTask = db.tasks.getById(parent.id);
+
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy-bot");
+      db.settings.set("telegram_chat_id", "dummy-chat");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as any);
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).toHaveBeenCalled(); // It should fallback to task.repoId if repo is missing in Telegram message
+      fetchSpy.mockRestore();
+      repoSpy.mockRestore();
+    });
+
     it("notifies via Telegram when configured", async () => {
       const parent = db.tasks.create({
         repoId,
