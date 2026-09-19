@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 
-describe.skip("reviewer engine", () => {
+describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
   });
@@ -16,11 +16,11 @@ describe.skip("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const _mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -42,6 +42,7 @@ describe.skip("reviewer engine", () => {
       litellmKey: "",
       litellmBaseUrl: "",
       nativeGeminiKey: "fake-key",
+      _spawnMock: _mockSpawn,
     });
 
     expect(result.persona).toBe("security");
@@ -56,11 +57,11 @@ describe.skip("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const _mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -80,6 +81,7 @@ describe.skip("reviewer engine", () => {
       reviewEngine: "claude",
       litellmKey: "litellm-key",
       litellmBaseUrl: "http://litellm",
+      _spawnMock: _mockSpawn,
     });
 
     expect(result.persona).toBe("frontend");
@@ -92,11 +94,11 @@ describe.skip("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const _mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -116,6 +118,7 @@ describe.skip("reviewer engine", () => {
       reviewEngine: "claude",
       litellmKey: "",
       litellmBaseUrl: "",
+      _spawnMock: _mockSpawn,
     });
 
     expect(result.hasBlocker).toBe(true);
