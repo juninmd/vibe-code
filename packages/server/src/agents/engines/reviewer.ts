@@ -87,9 +87,13 @@ const PERSONA_LABELS: Record<ReviewPersona, string> = {
 };
 
 /** Get the git diff for all changes on the current branch vs the base branch. */
-async function getWorktreeDiff(worktreePath: string, defaultBranch: string): Promise<string> {
+async function getWorktreeDiff(
+  worktreePath: string,
+  defaultBranch: string,
+  spawnFn: any
+): Promise<string> {
   try {
-    const proc = Bun.spawn(["git", "diff", `${defaultBranch}...HEAD`], {
+    const proc = spawnFn(["git", "diff", `${defaultBranch}...HEAD`], {
       cwd: worktreePath,
       stdout: "pipe",
       stderr: "pipe",
@@ -110,6 +114,7 @@ async function getWorktreeDiff(worktreePath: string, defaultBranch: string): Pro
  * Returns a stream of text lines and whether any BLOCKER was found.
  */
 export async function runPersonaReview(opts: {
+  _spawnMock?: any;
   persona: ReviewPersona;
   worktreePath: string;
   taskTitle: string;
@@ -136,7 +141,8 @@ export async function runPersonaReview(opts: {
     nativeAnthropicKey,
   } = opts;
 
-  const diff = await getWorktreeDiff(worktreePath, defaultBranch);
+  const spawnFn = opts._spawnMock || Bun.spawn;
+  const diff = await getWorktreeDiff(worktreePath, defaultBranch, spawnFn);
   const label = PERSONA_LABELS[persona];
   const runtime = pickReviewRuntime(reviewEngine);
 
@@ -219,7 +225,7 @@ export async function runPersonaReview(opts: {
             return env;
           })();
 
-    const proc = Bun.spawn(args, {
+    const proc = spawnFn(args, {
       cwd: worktreePath,
       stdout: "pipe",
       stderr: "pipe",
