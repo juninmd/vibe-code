@@ -11,8 +11,14 @@ describe("reviewer engine", () => {
     expect(PERSONA_LABELS.frontend).toBe("Frontend");
   });
 
-  test("runPersonaReview handles successful gemini execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-123");
+  async function executeReviewTest(
+    persona: any,
+    stdoutData: string,
+    stderrData: string,
+    exitCode: number,
+    reviewEngine = "claude"
+  ) {
+    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-test");
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
@@ -25,26 +31,35 @@ describe("reviewer engine", () => {
         } as any;
       }
       return {
-        stdout: new Blob(["WARNING: Some issue\nBLOCKER: critical issue"]).stream(),
-        stderr: new Blob([""]).stream(),
-        exited: Promise.resolve(0),
+        stdout: new Blob([stdoutData]).stream(),
+        stderr: new Blob([stderrData]).stream(),
+        exited: Promise.resolve(exitCode),
       } as any;
     });
 
-    const result = await runPersonaReview({
-      persona: "security",
+    return runPersonaReview({
+      persona,
       worktreePath: "/tmp/worktree",
       taskTitle: "Test task",
       taskDescription: "Description",
       defaultBranch: "main",
-      reviewEngine: "gemini",
-      reviewModel: "gemini-1.5-pro",
-      litellmKey: "",
-      litellmBaseUrl: "",
-      nativeGeminiKey: "fake-key",
+      reviewEngine,
+      reviewModel: reviewEngine === "gemini" ? "gemini-1.5-pro" : undefined,
+      litellmKey: reviewEngine === "claude" ? "litellm-key" : "",
+      litellmBaseUrl: reviewEngine === "claude" ? "http://litellm" : "",
+      nativeGeminiKey: reviewEngine === "gemini" ? "fake-key" : undefined,
       _spawnMock: _mockSpawn,
     });
+  }
 
+  test("runPersonaReview handles successful gemini execution", async () => {
+    const result = await executeReviewTest(
+      "security",
+      "WARNING: Some issue\nBLOCKER: critical issue\n",
+      "",
+      0,
+      "gemini"
+    );
     expect(result.persona).toBe("security");
     expect(result.hasBlocker).toBe(true);
     expect(result.content).toContain("INFO: [reviewer:gemini]");
@@ -53,74 +68,14 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles successful claude execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-456");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = mock().mockImplementation((args: any) => {
-      if (args[0] === "git") {
-        return {
-          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
-          stderr: new Blob([""]).stream(),
-          exited: Promise.resolve(0),
-        } as any;
-      }
-      return {
-        stdout: new Blob(["LGTM"]).stream(),
-        stderr: new Blob([""]).stream(),
-        exited: Promise.resolve(0),
-      } as any;
-    });
-
-    const result = await runPersonaReview({
-      persona: "frontend",
-      worktreePath: "/tmp/worktree",
-      taskTitle: "Frontend task",
-      taskDescription: "",
-      defaultBranch: "main",
-      reviewEngine: "claude",
-      litellmKey: "litellm-key",
-      litellmBaseUrl: "http://litellm",
-      _spawnMock: _mockSpawn,
-    });
-
+    const result = await executeReviewTest("frontend", "LGTM\n", "", 0, "claude");
     expect(result.persona).toBe("frontend");
     expect(result.hasBlocker).toBe(false);
     expect(result.content).toBe("LGTM");
   });
 
   test("runPersonaReview handles execution failure", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-789");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = mock().mockImplementation((args: any) => {
-      if (args[0] === "git") {
-        return {
-          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
-          stderr: new Blob([""]).stream(),
-          exited: Promise.resolve(0),
-        } as any;
-      }
-      return {
-        stdout: new Blob([""]).stream(),
-        stderr: new Blob(["Command failed"]).stream(),
-        exited: Promise.resolve(1),
-      } as any;
-    });
-
-    const result = await runPersonaReview({
-      persona: "backend",
-      worktreePath: "/tmp/worktree",
-      taskTitle: "Backend task",
-      taskDescription: "",
-      defaultBranch: "main",
-      reviewEngine: "claude",
-      litellmKey: "",
-      litellmBaseUrl: "",
-      _spawnMock: _mockSpawn,
-    });
-
+    const result = await executeReviewTest("backend", "", "Command failed\n", 1, "claude");
     expect(result.hasBlocker).toBe(true);
     expect(result.content).toContain(
       "BLOCKER: [reviewer] Backend review failed (claude) with exit code 1"
