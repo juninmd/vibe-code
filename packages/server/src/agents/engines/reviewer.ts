@@ -87,7 +87,11 @@ const PERSONA_LABELS: Record<ReviewPersona, string> = {
 };
 
 /** Get the git diff for all changes on the current branch vs the base branch. */
-async function getWorktreeDiff(worktreePath: string, defaultBranch: string, spawnFn: any): Promise<string> {
+async function getWorktreeDiff(
+  worktreePath: string,
+  defaultBranch: string,
+  spawnFn: any
+): Promise<string> {
   try {
     const proc = spawnFn(["git", "diff", `${defaultBranch}...HEAD`], {
       cwd: worktreePath,

@@ -18,30 +18,32 @@ function makeHub() {
 
 describe.skip("runReviewPipeline", () => {
   it("runs the review pipeline for all personas and extracts findings", async () => {
-    const runPersonaReviewSpy = spyOn(reviewerModule, "runPersonaReview").mockImplementation(async ({ persona }) => {
-      if (persona === "frontend") {
-        return {
-          persona,
-          content: "BLOCKER: accessibility issue\nINFO: nice code",
-          hasBlocker: true,
-        };
+    const runPersonaReviewSpy = spyOn(reviewerModule, "runPersonaReview").mockImplementation(
+      async ({ persona }) => {
+        if (persona === "frontend") {
+          return {
+            persona,
+            content: "BLOCKER: accessibility issue\nINFO: nice code",
+            hasBlocker: true,
+          };
+        }
+        if (persona === "backend") {
+          return {
+            persona,
+            content: "WARNING: possible N+1 query",
+            hasBlocker: false,
+          };
+        }
+        if (persona === "docs") {
+          return {
+            persona,
+            content: "WARNING: missing README update",
+            hasBlocker: false,
+          };
+        }
+        return { persona, content: "LGTM", hasBlocker: false };
       }
-      if (persona === "backend") {
-        return {
-          persona,
-          content: "WARNING: possible N+1 query",
-          hasBlocker: false,
-        };
-      }
-      if (persona === "docs") {
-        return {
-          persona,
-          content: "WARNING: missing README update",
-          hasBlocker: false,
-        };
-      }
-      return { persona, content: "LGTM", hasBlocker: false };
-    });
+    );
 
     const task = { id: "t1", title: "Test", description: "Test desc" } as any;
     const run = { id: "r1" } as any;
