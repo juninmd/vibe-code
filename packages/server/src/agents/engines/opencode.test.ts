@@ -722,7 +722,13 @@ describe("execute: heartbeat", () => {
 describe("OpenCodeEngine prepareWorkdir", () => {
   it("returns empty array by default", async () => {
     const engine = new OpenCodeEngine();
-    const result = await engine.prepareWorkdir("/tmp/fake", { skills: [], rules: [], workflow: null, agents: [], projectInstructions: null });
+    const result = await engine.prepareWorkdir("/tmp/fake", {
+      skills: [],
+      rules: [],
+      workflow: null,
+      agents: [],
+      projectInstructions: null,
+    });
     expect(result).toEqual([]);
   });
 });
