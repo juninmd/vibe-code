@@ -34,7 +34,8 @@ describe("discoverValidationCommands", () => {
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-"));
     try {
       // Mock node_modules existence
-      await writeFile(join(dir, "node_modules"), "", "utf8");
+      const fs = require("node:fs");
+      fs.mkdirSync(join(dir, "node_modules"));
       await writeFile(
         join(dir, "package.json"),
         JSON.stringify({

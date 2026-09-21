@@ -296,6 +296,19 @@ describe("ConflictResolver", () => {
       const result = await (resolver as any).isPRConflicting("https://gitlab.com/x/y/mr/1", "tk");
       expect(result).toBe(false);
     });
+
+    it("returns false if github API request fails", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: false,
+      } as any);
+
+      const result = await (resolver as any).isPRConflicting(
+        "https://github.com/owner/repo/pull/4",
+        "token"
+      );
+      expect(result).toBe(false);
+      fetchSpy.mockRestore();
+    });
   });
 
   describe("notifyConflictResolved", () => {

@@ -719,6 +719,136 @@ describe("execute: heartbeat", () => {
 
 // ─── execute: auto-free selection ──────────────────────────────────────────────
 
+describe("OpenCodeEngine prepareWorkdir", () => {
+  it("returns empty array by default", async () => {
+    const engine = new OpenCodeEngine();
+    const result = await engine.prepareWorkdir("/tmp/fake", {
+      skills: [],
+      rules: [],
+      workflow: null,
+      agents: [],
+      projectInstructions: null,
+    });
+    expect(result).toEqual([]);
+  });
+});
+
+import { resolveOpencodeNativeFromShim } from "./opencode";
+
+describe("resolveOpencodeNativeFromShim", () => {
+  it("returns null if shimPath does not end in .cmd", () => {
+    expect(resolveOpencodeNativeFromShim("/usr/bin/opencode")).toBeNull();
+  });
+
+  it("returns native path if stat succeeds for an architecture candidate", () => {
+    const statMock = (path: string) => (path.includes("opencode-windows-x64") ? ({} as any) : null);
+    const result = resolveOpencodeNativeFromShim("C:\\npm\\opencode.cmd", "x64", statMock);
+    expect(result?.replace(/\\/g, "/")).toMatch(
+      /node_modules\/opencode-ai\/node_modules\/opencode-windows-x64\/bin\/opencode\.exe$/
+    );
+  });
+
+  it("returns native path for arm64 candidate", () => {
+    const statMock = (path: string) =>
+      path.includes("opencode-windows-arm64") ? ({} as any) : null;
+    const result = resolveOpencodeNativeFromShim("C:\\npm\\opencode.cmd", "arm64", statMock);
+    expect(result?.replace(/\\/g, "/")).toMatch(
+      /node_modules\/opencode-ai\/node_modules\/opencode-windows-arm64\/bin\/opencode\.exe$/
+    );
+  });
+
+  it("returns null if stat fails for all candidates", () => {
+    const statMock = () => null;
+    expect(resolveOpencodeNativeFromShim("C:\\npm\\opencode.cmd", "x64", statMock)).toBeNull();
+  });
+});
+
+describe("OpenCodeEngine buildCommandArgs", () => {
+  it("includes extra args from VIBE_OPENCODE_EXTRA_ARGS if present", () => {
+    const originalEnv = process.env.VIBE_OPENCODE_EXTRA_ARGS;
+    try {
+      process.env.VIBE_OPENCODE_EXTRA_ARGS = "--foo --bar";
+      class TestEngine extends OpenCodeEngine {
+        public testBuild(model: string, workdir: string) {
+          return this.buildCommandArgs(model, workdir, "session-123");
+        }
+      }
+      const engine = new TestEngine();
+      const args = engine.testBuild("my-model", "/tmp/work");
+      expect(args).toContain("--foo");
+      expect(args).toContain("--bar");
+      expect(args).toContain("--session");
+      expect(args).toContain("session-123");
+    } finally {
+      process.env.VIBE_OPENCODE_EXTRA_ARGS = originalEnv;
+    }
+  });
+});
+
+describe("OpenCodeEngine getVersion and isAvailable", () => {
+  let originalSpawn: any;
+  beforeEach(() => {
+    originalSpawn = Bun.spawn;
+  });
+  afterEach(() => {
+    Bun.spawn = originalSpawn;
+  });
+
+  it("isAvailable returns true on success", async () => {
+    Bun.spawn = mock(() => ({
+      exited: Promise.resolve(),
+      exitCode: 0,
+    })) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.isAvailable()).toBe(true);
+  });
+
+  it("isAvailable returns false on failure", async () => {
+    Bun.spawn = mock(() => ({
+      exited: Promise.resolve(),
+      exitCode: 1,
+    })) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.isAvailable()).toBe(false);
+  });
+
+  it("isAvailable returns false on exception", async () => {
+    Bun.spawn = mock(() => {
+      throw new Error("spawn ENOENT");
+    }) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.isAvailable()).toBe(false);
+  });
+
+  it("getVersion returns version text on success", async () => {
+    Bun.spawn = mock(() => ({
+      exited: Promise.resolve(),
+      exitCode: 0,
+      stdout: new Response("opencode version 1.2.3\n").body,
+    })) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.getVersion()).toBe("opencode version 1.2.3");
+  });
+
+  it("getVersion returns null on failure", async () => {
+    Bun.spawn = mock(() => ({
+      exited: Promise.resolve(),
+      exitCode: 1,
+      stdout: new Response("").body,
+    })) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.getVersion()).toBeNull();
+  });
+
+  it("getVersion returns null on exception", async () => {
+    Bun.spawn = mock(() => {
+      throw new Error("spawn ENOENT");
+    }) as any;
+    const engine = new OpenCodeEngine();
+    expect(await engine.getVersion()).toBeNull();
+  });
+});
+
 describe("OpenCodeEngine auto-free selection", () => {
   it("selects a free model from listing", async () => {
     const originalSpawn = Bun.spawn;
