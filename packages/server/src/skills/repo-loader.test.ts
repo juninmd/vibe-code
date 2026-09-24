@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
-import * as actualFs from "node:fs/promises";
 import * as child_process from "node:child_process";
+import * as actualFs from "node:fs/promises";
 import { RepoSkillsLoader } from "./repo-loader";
 
 const originalReaddir = actualFs.readdir;
@@ -233,7 +233,7 @@ describe("RepoSkillsLoader", () => {
     });
 
     it("should safely handle readdir errors by returning empty arrays", async () => {
-      const loader = new RepoSkillsLoader("/workdir/trigger-readdir-error");
+      const _loader = new RepoSkillsLoader("/workdir/trigger-readdir-error");
       // The basePath will now be /workdir/trigger-readdir-error/.vibe-code
       // Wait, let's just make the loader base path point to the exact trigger
       const customLoader = new RepoSkillsLoader("/some-path");
@@ -249,7 +249,7 @@ describe("RepoSkillsLoader", () => {
 
     it("should handle files with no frontmatter", async () => {
       // Expose the parseFrontmatter equivalent behavior by adding a mock file response
-      spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+      spyOn(actualFs, "readdir").mockImplementation((async (path, _options) => {
         const dir = path as string;
         const normalized = normalizePath(dir);
         if (normalized.endsWith("/.vibe-code/workflows")) {
@@ -258,7 +258,7 @@ describe("RepoSkillsLoader", () => {
         return [];
       }) as typeof actualFs.readdir);
 
-      spyOn(actualFs, "readFile").mockImplementation((async (path, options) => {
+      spyOn(actualFs, "readFile").mockImplementation((async (path, _options) => {
         const normalized = normalizePath(path as string);
         if (normalized.endsWith("no-frontmatter.prompt.md")) {
           return "just text without frontmatter";
@@ -277,15 +277,15 @@ describe("RepoSkillsLoader", () => {
 
       expect(index.workflows.length).toBe(2); // The two above
 
-      const noFm = index.workflows.find(w => w.name === "no-frontmatter");
+      const noFm = index.workflows.find((w) => w.name === "no-frontmatter");
       expect(noFm).toBeDefined();
 
-      const missingEnd = index.workflows.find(w => w.name === "missing-end-frontmatter");
+      const missingEnd = index.workflows.find((w) => w.name === "missing-end-frontmatter");
       expect(missingEnd).toBeDefined();
     });
 
     it("should parse frontmatter with unquoted and quoted strings correctly", async () => {
-      spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+      spyOn(actualFs, "readdir").mockImplementation((async (path, _options) => {
         const dir = path as string;
         if (normalizePath(dir).endsWith("/.vibe-code/workflows")) {
           return ["quotes.prompt.md"];
@@ -293,7 +293,7 @@ describe("RepoSkillsLoader", () => {
         return [];
       }) as typeof actualFs.readdir);
 
-      spyOn(actualFs, "readFile").mockImplementation((async (path, options) => {
+      spyOn(actualFs, "readFile").mockImplementation((async (path, _options) => {
         if (normalizePath(path as string).endsWith("quotes.prompt.md")) {
           return "---\nname: 'Single Quotes'\ndescription: \"Double Quotes\"\n---\nbody";
         }
@@ -303,7 +303,7 @@ describe("RepoSkillsLoader", () => {
       const loader = new RepoSkillsLoader("/workdir");
       const index = await loader.load();
 
-      const quoted = index.workflows.find(w => w.name === "Single Quotes");
+      const quoted = index.workflows.find((w) => w.name === "Single Quotes");
       expect(quoted).toBeDefined();
       expect(quoted?.description).toBe("Double Quotes");
     });
