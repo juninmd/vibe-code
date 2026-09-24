@@ -169,7 +169,7 @@ describe("RepoSkillsLoader", () => {
   describe("loadManifestsFromGit", () => {
     it("should load available manifest files using git cat-file", async () => {
       const loader = new RepoSkillsLoader("/workdir");
-      const execSpy = spyOn(child_process, "exec").mockImplementation((cmd: string, cb: any) => {
+      const execSpy = spyOn(child_process, "exec").mockImplementation(((cmd: string, cb: any) => {
         if (cmd.includes("AGENTS.md")) {
           cb(null, "git agents content", "");
         } else if (cmd.includes("CLAUDE.md")) {
@@ -178,7 +178,7 @@ describe("RepoSkillsLoader", () => {
           cb(new Error("not found"), "", "");
         }
         return {} as any;
-      });
+      }) as any);
 
       const manifests = await loader.loadManifestsFromGit("/bare/repo");
 
