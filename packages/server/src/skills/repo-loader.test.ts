@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as actualFs from "node:fs/promises";
+import * as child_process from "node:child_process";
 import { RepoSkillsLoader } from "./repo-loader";
 
 const originalReaddir = actualFs.readdir;
@@ -25,6 +26,9 @@ beforeEach(() => {
     }
     if (normalized.endsWith("/.vibe-code/workflows")) {
       return ["my-workflow.prompt.md"];
+    }
+    if (normalized.endsWith("trigger-readdir-error")) {
+      throw new Error("readdir error");
     }
     return originalReaddir(path, options as never);
   }) as typeof actualFs.readdir);
@@ -71,6 +75,33 @@ broken frontmatter
 name: Bad
 ---
 bad`;
+    }
+    if (normalized.endsWith("no-frontmatter.md")) {
+      return `just text without frontmatter`;
+    }
+    if (normalized.endsWith("missing-end-frontmatter.md")) {
+      return `---
+name: Missing end
+and the content continues but never ends`;
+    }
+    if (normalized.endsWith(".agents/AGENTS.md")) {
+      return `Agents worktree content`;
+    }
+    if (normalized.endsWith(".agents/CLAUDE.md")) {
+      throw new Error("File not found");
+    }
+    // Added files to handle the "unreadable" skip cases in safeReaddir loop
+    if (normalized.endsWith("skills/bad-skill/SKILL.md")) {
+      throw new Error("cannot read skill file");
+    }
+    if (normalized.endsWith("rules/bad-rule.instructions.md")) {
+      throw new Error("cannot read rule file");
+    }
+    if (normalized.endsWith("agents/bad-agent.agent.md")) {
+      throw new Error("cannot read agent file");
+    }
+    if (normalized.endsWith("workflows/bad-workflow.prompt.md")) {
+      throw new Error("cannot read workflow file");
     }
 
     return originalReadFile(path, options as never);
@@ -133,5 +164,148 @@ describe("RepoSkillsLoader", () => {
     expect(loader.getFileContent("../../../etc/passwd")).rejects.toThrow(
       "Access denied: path outside repo skills directory"
     );
+  });
+
+  describe("loadManifestsFromGit", () => {
+    it("should load available manifest files using git cat-file", async () => {
+      const loader = new RepoSkillsLoader("/workdir");
+      const execSpy = spyOn(child_process, "exec").mockImplementation((cmd: string, cb: any) => {
+        if (cmd.includes("AGENTS.md")) {
+          cb(null, "git agents content", "");
+        } else if (cmd.includes("CLAUDE.md")) {
+          cb(null, "git claude content", "");
+        } else {
+          cb(new Error("not found"), "", "");
+        }
+        return {} as any;
+      });
+
+      const manifests = await loader.loadManifestsFromGit("/bare/repo");
+
+      expect(manifests["AGENTS.md"]).toBe("git agents content");
+      expect(manifests["CLAUDE.md"]).toBe("git claude content");
+      expect(manifests["GEMINI.md"]).toBeUndefined(); // Missing file should be skipped
+
+      execSpy.mockRestore();
+    });
+  });
+
+  describe("loadWorktreeManifests", () => {
+    it("should load available manifest files from .agents/ directory", async () => {
+      const loader = new RepoSkillsLoader("/workdir");
+
+      const manifests = await loader.loadWorktreeManifests("/workdir");
+
+      expect(manifests[".agents/AGENTS.md"]).toBe("Agents worktree content");
+      expect(manifests[".agents/CLAUDE.md"]).toBeUndefined(); // Read failure should be skipped
+    });
+  });
+
+  describe("Edge cases and error handling", () => {
+    it("should skip unreadable files when loading index", async () => {
+      // Temporarily override the mock for this test to yield both good and bad files
+      spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+        const dir = path as string;
+        const normalized = normalizePath(dir);
+        if (normalized.endsWith("/.vibe-code/skills")) {
+          return ["my-skill", "bad-skill"];
+        }
+        if (normalized.endsWith("/.vibe-code/rules")) {
+          return ["my-rule.instructions.md", "bad-rule.instructions.md"];
+        }
+        if (normalized.endsWith("/.vibe-code/agents")) {
+          return ["my-agent.agent.md", "bad-agent.agent.md"];
+        }
+        if (normalized.endsWith("/.vibe-code/workflows")) {
+          return ["my-workflow.prompt.md", "bad-workflow.prompt.md"];
+        }
+        return originalReaddir(path, options as never);
+      }) as typeof actualFs.readdir);
+
+      const loader = new RepoSkillsLoader("/workdir");
+      const index = await loader.load();
+
+      // Only the good items should be loaded
+      expect(index.skills.length).toBe(1);
+      expect(index.rules.length).toBe(1);
+      expect(index.agents.length).toBe(1);
+      expect(index.workflows.length).toBe(1);
+    });
+
+    it("should safely handle readdir errors by returning empty arrays", async () => {
+      const loader = new RepoSkillsLoader("/workdir/trigger-readdir-error");
+      // The basePath will now be /workdir/trigger-readdir-error/.vibe-code
+      // Wait, let's just make the loader base path point to the exact trigger
+      const customLoader = new RepoSkillsLoader("/some-path");
+      (customLoader as any).basePath = "/workdir/trigger-readdir-error";
+
+      const index = await customLoader.load();
+
+      expect(index.skills).toEqual([]);
+      expect(index.rules).toEqual([]);
+      expect(index.agents).toEqual([]);
+      expect(index.workflows).toEqual([]);
+    });
+
+    it("should handle files with no frontmatter", async () => {
+      // Expose the parseFrontmatter equivalent behavior by adding a mock file response
+      spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+        const dir = path as string;
+        const normalized = normalizePath(dir);
+        if (normalized.endsWith("/.vibe-code/workflows")) {
+          return ["no-frontmatter.prompt.md", "missing-end-frontmatter.prompt.md"];
+        }
+        return [];
+      }) as typeof actualFs.readdir);
+
+      spyOn(actualFs, "readFile").mockImplementation((async (path, options) => {
+        const normalized = normalizePath(path as string);
+        if (normalized.endsWith("no-frontmatter.prompt.md")) {
+          return "just text without frontmatter";
+        }
+        if (normalized.endsWith("missing-end-frontmatter.prompt.md")) {
+          return "---\nname: Missing end\nand the content continues but never ends";
+        }
+        if (normalized.endsWith("unquoted.prompt.md")) {
+          return "---\nname: 'Single Quotes'\ndescription: \"Double Quotes\"\n---\nbody";
+        }
+        return "";
+      }) as typeof actualFs.readFile);
+
+      const loader = new RepoSkillsLoader("/workdir");
+      const index = await loader.load();
+
+      expect(index.workflows.length).toBe(2); // The two above
+
+      const noFm = index.workflows.find(w => w.name === "no-frontmatter");
+      expect(noFm).toBeDefined();
+
+      const missingEnd = index.workflows.find(w => w.name === "missing-end-frontmatter");
+      expect(missingEnd).toBeDefined();
+    });
+
+    it("should parse frontmatter with unquoted and quoted strings correctly", async () => {
+      spyOn(actualFs, "readdir").mockImplementation((async (path, options) => {
+        const dir = path as string;
+        if (normalizePath(dir).endsWith("/.vibe-code/workflows")) {
+          return ["quotes.prompt.md"];
+        }
+        return [];
+      }) as typeof actualFs.readdir);
+
+      spyOn(actualFs, "readFile").mockImplementation((async (path, options) => {
+        if (normalizePath(path as string).endsWith("quotes.prompt.md")) {
+          return "---\nname: 'Single Quotes'\ndescription: \"Double Quotes\"\n---\nbody";
+        }
+        return "";
+      }) as typeof actualFs.readFile);
+
+      const loader = new RepoSkillsLoader("/workdir");
+      const index = await loader.load();
+
+      const quoted = index.workflows.find(w => w.name === "Single Quotes");
+      expect(quoted).toBeDefined();
+      expect(quoted?.description).toBe("Double Quotes");
+    });
   });
 });
