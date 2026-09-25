@@ -25,7 +25,7 @@ describe("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((cmd: string[], _opts?: any) => {
+    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((options: any) => { const cmd = Array.isArray(options) ? options : options.cmd;
       if (cmd[0] === "git") {
         return {
           stdout: {
@@ -89,7 +89,7 @@ describe("reviewer engine", () => {
     });
 
     const origResponse = global.Response;
-    spyOn(global, "Response").mockImplementation((body: any) => {
+    spyOn(global, "Response" as any).mockImplementation(((body: any) => {
       if (body && typeof body.getReader === "function") {
         return {
           text: async () => {
@@ -105,7 +105,8 @@ describe("reviewer engine", () => {
         } as any;
       }
       return new origResponse(body);
-    });
+    }) as any);
+
 
     const result = await runPersonaReview({
       persona: "security",
@@ -131,7 +132,7 @@ describe("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((cmd: string[], _opts?: any) => {
+    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((options: any) => { const cmd = Array.isArray(options) ? options : options.cmd;
       if (cmd[0] === "git") {
         return {
           stdout: {
@@ -192,7 +193,7 @@ describe("reviewer engine", () => {
     });
 
     const origResponse = global.Response;
-    spyOn(global, "Response").mockImplementation((body: any) => {
+    spyOn(global, "Response" as any).mockImplementation(((body: any) => {
       if (body && typeof body.getReader === "function") {
         return {
           text: async () => {
@@ -208,7 +209,8 @@ describe("reviewer engine", () => {
         } as any;
       }
       return new origResponse(body);
-    });
+    }) as any);
+
 
     const result = await runPersonaReview({
       persona: "frontend",
@@ -231,7 +233,7 @@ describe("reviewer engine", () => {
     spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
     spyOn(fsPromises, "rm").mockResolvedValue(undefined);
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((cmd: string[], _opts?: any) => {
+    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((options: any) => { const cmd = Array.isArray(options) ? options : options.cmd;
       if (cmd[0] === "git") {
         return {
           stdout: {
@@ -288,7 +290,7 @@ describe("reviewer engine", () => {
     });
 
     const origResponse = global.Response;
-    spyOn(global, "Response").mockImplementation((body: any) => {
+    spyOn(global, "Response" as any).mockImplementation(((body: any) => {
       if (body && typeof body.getReader === "function") {
         return {
           text: async () => {
@@ -304,7 +306,8 @@ describe("reviewer engine", () => {
         } as any;
       }
       return new origResponse(body);
-    });
+    }) as any);
+
 
     const result = await runPersonaReview({
       persona: "backend",
