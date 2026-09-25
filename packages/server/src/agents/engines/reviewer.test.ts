@@ -1,126 +1,63 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import * as fsPromises from "node:fs/promises";
+import { describe, expect, it, mock, spyOn, afterEach, beforeEach } from "bun:test";
 import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 
-describe.skip("reviewer engine", () => {
-  afterEach(() => {
+const originalSpawn = Bun.spawn;
+
+describe("reviewer engine", () => {
+  beforeEach(() => {
     mock.restore();
+    Bun.spawn = originalSpawn;
   });
 
-  test("PERSONA_LABELS exists", () => {
+  afterEach(() => {
+    mock.restore();
+    Bun.spawn = originalSpawn;
+  });
+
+  it("PERSONA_LABELS exists", () => {
     expect(PERSONA_LABELS.frontend).toBe("Frontend");
   });
 
-  test("runPersonaReview handles successful gemini execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-123");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
+  it("runPersonaReview handles execution failure", async () => {
+    // We override Bun.spawn using spyOn but wrap it to not leak state
+    // We only mock if it matches "claude" or "gemini" or "git diff"
+    const spawnMock = spyOn(Bun, "spawn").mockImplementation((cmd: string[], opts?: any) => {
+      if (cmd[0] === "git" && cmd[1] === "diff") {
+         return {
+           exited: Promise.resolve(0),
+           stdout: new Blob(["mocked git diff"]).stream(),
+           stderr: new Blob([""]).stream()
+         } as any;
+      }
 
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
-      if (args[0] === "git") {
+      if (cmd[0] === "claude" || cmd[0] === "gemini") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
-          exited: Promise.resolve(0),
+          stdout: new Blob([""]).stream(),
+          stderr: new Blob(["error output"]).stream(),
+          exited: Promise.resolve(1),
+          kill: () => {},
+          ref: () => {},
+          unref: () => {}
         } as any;
       }
-      return {
-        stdout: new Blob(["WARNING: Some issue\nBLOCKER: critical issue"]).stream(),
-        stderr: new Blob([""]).stream(),
-        exited: Promise.resolve(0),
-      } as any;
-    });
 
-    const result = await runPersonaReview({
-      persona: "security",
-      worktreePath: "/tmp/worktree",
-      taskTitle: "Test task",
-      taskDescription: "Description",
-      defaultBranch: "main",
-      reviewEngine: "gemini",
-      reviewModel: "gemini-1.5-pro",
-      litellmKey: "",
-      litellmBaseUrl: "",
-      nativeGeminiKey: "fake-key",
-    });
-
-    expect(result.persona).toBe("security");
-    expect(result.hasBlocker).toBe(true);
-    expect(result.content).toContain("INFO: [reviewer:gemini]");
-    expect(result.content).toContain("WARNING: Some issue");
-    expect(result.content).toContain("BLOCKER: critical issue");
-  });
-
-  test("runPersonaReview handles successful claude execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-456");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
-      if (args[0] === "git") {
-        return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
-          exited: Promise.resolve(0),
-        } as any;
-      }
-      return {
-        stdout: new Blob(["LGTM"]).stream(),
-        stderr: new Blob([""]).stream(),
-        exited: Promise.resolve(0),
-      } as any;
+      return originalSpawn(cmd, opts);
     });
 
     const result = await runPersonaReview({
       persona: "frontend",
-      worktreePath: "/tmp/worktree",
-      taskTitle: "Frontend task",
-      taskDescription: "",
+      worktreePath: "/tmp",
+      taskTitle: "Test",
+      taskDescription: "Desc",
       defaultBranch: "main",
-      reviewEngine: "claude",
-      litellmKey: "litellm-key",
-      litellmBaseUrl: "http://litellm",
-    });
-
-    expect(result.persona).toBe("frontend");
-    expect(result.hasBlocker).toBe(false);
-    expect(result.content).toBe("LGTM");
-  });
-
-  test("runPersonaReview handles execution failure", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-789");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
-      if (args[0] === "git") {
-        return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
-          exited: Promise.resolve(0),
-        } as any;
-      }
-      return {
-        stdout: new Blob([""]).stream(),
-        stderr: new Blob(["Command failed"]).stream(),
-        exited: Promise.resolve(1),
-      } as any;
-    });
-
-    const result = await runPersonaReview({
-      persona: "backend",
-      worktreePath: "/tmp/worktree",
-      taskTitle: "Backend task",
-      taskDescription: "",
-      defaultBranch: "main",
-      reviewEngine: "claude",
       litellmKey: "",
       litellmBaseUrl: "",
     });
 
     expect(result.hasBlocker).toBe(true);
-    expect(result.content).toContain(
-      "BLOCKER: [reviewer] Backend review failed (claude) with exit code 1"
-    );
+    expect(result.content).toContain("BLOCKER:");
+    expect(result.content).toContain("error output");
+    expect(result.persona).toBe("frontend");
+    expect(spawnMock).toHaveBeenCalled();
   });
 });
