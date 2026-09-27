@@ -1,3 +1,4 @@
+import { spyOn } from 'bun:test';
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
@@ -723,7 +724,7 @@ describe("OpenCodeEngine auto-free selection", () => {
   it("selects a free model from listing", async () => {
     const originalSpawn = Bun.spawn;
     try {
-      Bun.spawn = mock((cmd: string[], options?: any) => {
+      spyOn(Bun, "spawn").mockImplementation(((cmd: string[], options?: any) => {
         if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
           return {
             exited: Promise.resolve(),
@@ -732,20 +733,20 @@ describe("OpenCodeEngine auto-free selection", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-      }) as any;
+        }) as any);
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
       expect(model).toBe("opencode/model-a-free");
     } finally {
-      Bun.spawn = originalSpawn;
+      mock.restore();
     }
   });
 
   it("falls back to auto-free on command error", async () => {
     const originalSpawn = Bun.spawn;
     try {
-      Bun.spawn = mock((cmd: string[], options?: any) => {
+      spyOn(Bun, "spawn").mockImplementation(((cmd: string[], options?: any) => {
         if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
           return {
             exited: Promise.resolve(),
@@ -754,13 +755,13 @@ describe("OpenCodeEngine auto-free selection", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-      }) as any;
+        }) as any);
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
       expect(model).toBe(DEFAULT_OPENCODE_MODEL);
     } finally {
-      Bun.spawn = originalSpawn;
+      mock.restore();
     }
   });
 });
@@ -769,7 +770,7 @@ describe("OpenCodeEngine model listing", () => {
   it("returns fallback models when external providers list nothing", async () => {
     const originalSpawn = Bun.spawn;
     try {
-      Bun.spawn = mock((cmd: string[], options?: any) => {
+      spyOn(Bun, "spawn").mockImplementation(((cmd: string[], options?: any) => {
         if (cmd[0].endsWith("opencode") || cmd[0].includes("opencode") || cmd[1] === "models") {
           return {
             exited: Promise.resolve(),
@@ -779,7 +780,7 @@ describe("OpenCodeEngine model listing", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-      }) as any;
+        }) as any);
 
       const engine = new OpenCodeEngine();
       const models = await engine.listModels();
@@ -787,7 +788,7 @@ describe("OpenCodeEngine model listing", () => {
       expect(models).toContain("auto-free");
       expect(models.length).toBeGreaterThan(0);
     } finally {
-      Bun.spawn = originalSpawn;
+      mock.restore();
     }
   });
 });
