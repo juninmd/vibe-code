@@ -1,11 +1,23 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
+// Using mock.module at the top level
+import * as originalFs from "node:fs/promises";
 import { runBaselineCheck } from "./baseline-check";
 
-// Using mock.module at the top level
 mock.module("node:fs/promises", () => ({
-  access: mock(() => Promise.resolve()),
-  readFile: mock(() => Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }))),
+  ...originalFs,
+  access: mock((p: string, mode: any) => {
+    if (p && typeof p === "string" && p.includes("/tmp/wt")) {
+      return Promise.resolve();
+    }
+    return originalFs.access(p, mode);
+  }),
+  readFile: mock((p: string, o: any) => {
+    if (p && typeof p === "string" && p.includes("/tmp/wt")) {
+      return Promise.resolve(JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }));
+    }
+    return originalFs.readFile(p, o);
+  }),
 }));
 
 describe("runBaselineCheck", () => {
