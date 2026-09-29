@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 
-describe.skip("reviewer engine", () => {
+describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
   });

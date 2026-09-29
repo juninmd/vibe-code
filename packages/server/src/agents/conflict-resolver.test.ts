@@ -11,12 +11,6 @@ type Db = ReturnType<typeof createDb>;
 
 const { Orchestrator } = await import("./orchestrator");
 
-mock.module("./orchestrator/review", () => ({
-  REVIEW_ENABLED: false,
-  REVIEW_STRICT: false,
-  runReviewPipeline: async () => ({ blockers: [], actionableFindings: [], docsFindings: [] }),
-}));
-
 function makeHub(): BroadcastHub {
   return {
     broadcastAll: () => {},
