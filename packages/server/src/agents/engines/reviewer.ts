@@ -87,9 +87,9 @@ const PERSONA_LABELS: Record<ReviewPersona, string> = {
 };
 
 /** Get the git diff for all changes on the current branch vs the base branch. */
-async function getWorktreeDiff(worktreePath: string, defaultBranch: string): Promise<string> {
+async function getWorktreeDiff(worktreePath: string, defaultBranch: string, spawn: typeof Bun.spawn = Bun.spawn): Promise<string> {
   try {
-    const proc = Bun.spawn(["git", "diff", `${defaultBranch}...HEAD`], {
+    const proc = spawn(["git", "diff", `${defaultBranch}...HEAD`], {
       cwd: worktreePath,
       stdout: "pipe",
       stderr: "pipe",
@@ -121,6 +121,7 @@ export async function runPersonaReview(opts: {
   litellmBaseUrl: string;
   nativeGeminiKey?: string;
   nativeAnthropicKey?: string;
+  spawn?: typeof Bun.spawn;
 }): Promise<ReviewEvent> {
   const {
     persona,
@@ -134,9 +135,10 @@ export async function runPersonaReview(opts: {
     litellmBaseUrl,
     nativeGeminiKey,
     nativeAnthropicKey,
+    spawn = Bun.spawn,
   } = opts;
 
-  const diff = await getWorktreeDiff(worktreePath, defaultBranch);
+  const diff = await getWorktreeDiff(worktreePath, defaultBranch, spawn);
   const label = PERSONA_LABELS[persona];
   const runtime = pickReviewRuntime(reviewEngine);
 
@@ -219,7 +221,7 @@ export async function runPersonaReview(opts: {
             return env;
           })();
 
-    const proc = Bun.spawn(args, {
+    const proc = spawn(args, {
       cwd: worktreePath,
       stdout: "pipe",
       stderr: "pipe",

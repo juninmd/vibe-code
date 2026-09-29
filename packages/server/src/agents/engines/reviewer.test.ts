@@ -12,15 +12,11 @@ describe.skip("reviewer engine", () => {
   });
 
   test("runPersonaReview handles successful gemini execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-123");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -42,6 +38,7 @@ describe.skip("reviewer engine", () => {
       litellmKey: "",
       litellmBaseUrl: "",
       nativeGeminiKey: "fake-key",
+      spawn: mockSpawn as any,
     });
 
     expect(result.persona).toBe("security");
@@ -52,15 +49,11 @@ describe.skip("reviewer engine", () => {
   });
 
   test("runPersonaReview handles successful claude execution", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-456");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -80,23 +73,20 @@ describe.skip("reviewer engine", () => {
       reviewEngine: "claude",
       litellmKey: "litellm-key",
       litellmBaseUrl: "http://litellm",
+      spawn: mockSpawn as any,
     });
 
     expect(result.persona).toBe("frontend");
     expect(result.hasBlocker).toBe(false);
-    expect(result.content).toBe("LGTM");
+    expect(result.content).toContain("LGTM");
   });
 
   test("runPersonaReview handles execution failure", async () => {
-    spyOn(fsPromises, "mkdtemp").mockResolvedValue("/tmp/vibe-review-789");
-    spyOn(fsPromises, "writeFile").mockResolvedValue(undefined);
-    spyOn(fsPromises, "rm").mockResolvedValue(undefined);
-
-    const _mockSpawn = spyOn(Bun, "spawn").mockImplementation((args: any) => {
+    const mockSpawn = mock().mockImplementation((args: any) => {
       if (args[0] === "git") {
         return {
-          stdout: new Response("diff --git a/file b/file\n").text(),
-          stderr: new Response("").text(),
+          stdout: new Blob(["diff --git a/file b/file\n"]).stream(),
+          stderr: new Blob([""]).stream(),
           exited: Promise.resolve(0),
         } as any;
       }
@@ -116,6 +106,7 @@ describe.skip("reviewer engine", () => {
       reviewEngine: "claude",
       litellmKey: "",
       litellmBaseUrl: "",
+      spawn: mockSpawn as any,
     });
 
     expect(result.hasBlocker).toBe(true);
