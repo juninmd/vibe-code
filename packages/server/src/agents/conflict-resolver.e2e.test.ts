@@ -4,15 +4,9 @@
  * Flow: Create task → Launch with mock engine → Running → Review → Done → PR created
  * Covers the conflict-resolution tag UI contract and the push safety contract.
  */
-import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createDb } from "../db";
 import type { BroadcastHub } from "../ws/broadcast";
-
-mock.module("./orchestrator/review", () => ({
-  REVIEW_ENABLED: false,
-  REVIEW_STRICT: false,
-  runReviewPipeline: async () => ({ blockers: [], actionableFindings: [], docsFindings: [] }),
-}));
 
 const { Orchestrator } = await import("./orchestrator");
 
