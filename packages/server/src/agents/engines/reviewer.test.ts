@@ -16,7 +16,7 @@ describe("reviewer engine", () => {
 
   test("runPersonaReview handles successful gemini execution", async () => {
     let passedArgs: string[] = [];
-    const spawnMock = (args: string[], options: any) => {
+    const spawnMock = (args: string[], _options: any) => {
       passedArgs = args;
       if (args[0] === "git") {
         return createMockProcess("diff --git a/file.txt b/file.txt", "");
@@ -43,12 +43,14 @@ describe("reviewer engine", () => {
     expect(result.persona).toBe("frontend");
     expect(result.hasBlocker).toBe(false);
     expect(result.content).toContain("INFO: looks good");
-    expect(result.content).toContain("INFO: [reviewer:gemini] Running with IDE-related env removed");
+    expect(result.content).toContain(
+      "INFO: [reviewer:gemini] Running with IDE-related env removed"
+    );
   });
 
   test("runPersonaReview handles successful claude execution", async () => {
     let passedArgs: string[] = [];
-    const spawnMock = (args: string[], options: any) => {
+    const spawnMock = (args: string[], _options: any) => {
       passedArgs = args;
       if (args[0] === "git") {
         return createMockProcess("diff --git a/file.txt b/file.txt", "");
@@ -75,9 +77,9 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles execution failure", async () => {
-    let passedArgs: string[] = [];
-    const spawnMock = (args: string[], options: any) => {
-      passedArgs = args;
+    let _passedArgs: string[] = [];
+    const spawnMock = (args: string[], _options: any) => {
+      _passedArgs = args;
       if (args[0] === "git") {
         return createMockProcess("diff --git a/file.txt b/file.txt", "");
       }
