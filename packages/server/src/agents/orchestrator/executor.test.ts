@@ -8,7 +8,6 @@ import {
   buildValidationRepairPrompt,
   docsRelativePath,
   escalateModel,
-  executeAgent,
   extractDocsAssetPath,
   extractPersona,
   normalizeAsciiText,
@@ -17,9 +16,6 @@ import {
   runWorkspaceScripts,
   taskSlug,
 } from "./executor";
-import * as EvaluatorMod from "./evaluator";
-import * as ReviewMod from "./review";
-import * as VerifyMod from "./verify";
 
 mock.module("playwright", () => ({ chromium: {} }));
 
