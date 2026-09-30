@@ -82,7 +82,7 @@ export function parsePackageJsonCommands(packageJsonText: string): ValidationCom
     scripts?: Record<string, string>;
   };
   const scripts = parsed.scripts ?? {};
-  const orderedNames = ["lint", "typecheck", "test", "build"].filter((name) => scripts[name]);
+  const orderedNames = ["lint", "test", "build"].filter((name) => scripts[name]);
 
   return orderedNames.map((name) => ({
     name,
@@ -167,27 +167,11 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
     const packageJsonText = await readFile(join(wtPath, PACKAGE_JSON_FILE), "utf8");
     const packageJsonCommands = parsePackageJsonCommands(packageJsonText);
     if (packageJsonCommands.length > 0) {
-      // Ensure node_modules exist before running package scripts
-      const hasModules = await access(join(wtPath, "node_modules"))
-        .then(() => true)
-        .catch(() => false);
-      if (!hasModules) {
-        const parsed = JSON.parse(packageJsonText) as { packageManager?: string };
-        const installCmd = parsed.packageManager?.startsWith("pnpm")
-          ? "pnpm install --frozen-lockfile"
-          : parsed.packageManager?.startsWith("yarn")
-            ? "yarn install --frozen-lockfile"
-            : "bun install";
-        return [
-          { name: "install", command: installCmd, source: "package_json" as const },
-          ...packageJsonCommands,
-        ];
+        return packageJsonCommands;
       }
-      return packageJsonCommands;
+    } catch {
+      // Unsupported repository shape.
     }
-  } catch {
-    // Unsupported repository shape.
-  }
 
   // Try to detect additional commands
   const additional = await detectAdditionalCommands(wtPath);
