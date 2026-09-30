@@ -16,8 +16,12 @@ describe("reviewer engine", () => {
     expect(PERSONA_LABELS.frontend).toBe("Frontend");
   });
 
-  const getSpawnMock = (stdoutContent: string, stderrContent: string = "", exitCode: number = 0) => {
-    return mock((args: string[], options: any) => {
+  const getSpawnMock = (
+    stdoutContent: string,
+    stderrContent: string = "",
+    exitCode: number = 0
+  ) => {
+    return mock((args: string[], _options: any) => {
       // Mock for `git diff`
       if (args[0] === "git" && args[1] === "diff") {
         return {
@@ -52,7 +56,9 @@ describe("reviewer engine", () => {
 
     expect(result.persona).toBe("frontend");
     expect(result.hasBlocker).toBe(false);
-    expect(result.content).toContain("INFO: [reviewer:gemini] Running with IDE-related env removed");
+    expect(result.content).toContain(
+      "INFO: [reviewer:gemini] Running with IDE-related env removed"
+    );
     expect(result.content).toContain("Line 1");
     expect(result.content).toContain("Line 2");
   });
@@ -95,6 +101,8 @@ describe("reviewer engine", () => {
     expect(result.hasBlocker).toBe(true);
     expect(result.content).toContain("Standard output");
     expect(result.content).toContain("INFO: [reviewer:claude:stderr] Fatal error");
-    expect(result.content).toContain("BLOCKER: [reviewer] Security review failed (claude) with exit code 1: Fatal error");
+    expect(result.content).toContain(
+      "BLOCKER: [reviewer] Security review failed (claude) with exit code 1: Fatal error"
+    );
   });
 });
