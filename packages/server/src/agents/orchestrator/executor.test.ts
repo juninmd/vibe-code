@@ -1,5 +1,6 @@
 import { describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsPromises from "node:fs/promises";
+import * as EvaluatorMod from "./evaluator";
 import {
   autoInstallDependencies,
   buildAssetBlobUrl,
@@ -17,7 +18,6 @@ import {
   runWorkspaceScripts,
   taskSlug,
 } from "./executor";
-import * as EvaluatorMod from "./evaluator";
 import * as ReviewMod from "./review";
 import * as VerifyMod from "./verify";
 
