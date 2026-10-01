@@ -1,0 +1,1448 @@
+$ bun test src --timeout 15000 --coverage
+bun test v1.2.14 (6a363a38)
+
+src/auth.test.ts:
+(pass) auth utilities > checkApiKey returns false when NO VIBE_CODE_API_KEY is set [0.27ms]
+(pass) auth utilities > checkApiKey correctly validates api key from authorization header [0.31ms]
+(pass) auth utilities > checkApiKey correctly validates api key from query string [0.07ms]
+(pass) auth utilities > authStatus returns false when auth is disabled [0.12ms]
+(pass) auth utilities > authStatus returns true when API key is enabled [0.08ms]
+(pass) auth utilities > getCurrentUser returns null when no cookie [0.16ms]
+(pass) auth utilities > isAuthEnabled returns true when github oauth is configured [0.07ms]
+(pass) auth utilities > authMiddleware calls next when auth disabled [0.34ms]
+(pass) auth utilities > authMiddleware calls next if checkApiKey passes [0.14ms]
+(pass) auth utilities > authMiddleware calls next if user exists [0.62ms]
+(pass) auth utilities > authMiddleware returns 401 when only API key is configured but none is provided [0.22ms]
+(pass) auth utilities > authMiddleware returns 401 on unauthorized access [0.18ms]
+(pass) auth utilities > isSecureCookie returns correctly based on environment and protocol [0.39ms]
+(pass) auth utilities > publicBaseUrl returns correctly based on environment and protocol [0.07ms]
+(pass) createAuthRouter > GET /me returns auth status [4.41ms]
+(pass) createAuthRouter > GET /github/callback returns 400 on invalid state [2.59ms]
+(pass) createAuthRouter > GET /github/callback returns 500 on fetch error [1.46ms]
+(pass) createAuthRouter > GET /github/callback succeeds and creates session [1.43ms]
+(pass) createAuthRouter > GET /github/callback returns 403 if user not in allowlist [0.90ms]
+(pass) createAuthRouter > GET /github/start returns 503 when auth is not configured [0.76ms]
+(pass) createAuthRouter > GET /github/start redirects when auth is configured [0.84ms]
+(pass) createAuthRouter > POST /logout clears session and cookie [0.76ms]
+
+src/agents/agent-templates.test.ts:
+(pass) AgentTemplateRegistry > loads all curated templates [0.06ms]
+(pass) AgentTemplateRegistry > templates have required fields [0.15ms]
+(pass) AgentTemplateRegistry > returns known slugs [0.06ms]
+(pass) agent-templates router > GET / lists templates [2.00ms]
+(pass) agent-templates router > GET /:slug returns template [0.51ms]
+(pass) agent-templates router > GET /:slug returns 404 for unknown [0.18ms]
+
+src/agents/conflict-resolver.test.ts:
+[conflict-resolver] PR conflict detected for task f935699948a73534: https://github.com/owner/test-repo/pull/42
+[conflict-resolver] Created conflict task f772af02725b08d4 for parent f935699948a73534
+[conflict-resolver] Task queued (no slots): this.registry.getFirstAvailable is not a function. (In 'this.registry.getFirstAvailable()', 'this.registry.getFirstAvailable' is undefined)
+(pass) ConflictResolver > conflict detection — prompt safety > generated prompt contains git push --force-with-lease [6.61ms]
+(pass) ConflictResolver > conflict detection — prompt safety > does not create duplicate conflict tasks when one is already in_progress [1.62ms]
+(pass) ConflictResolver > conflict detection — prompt safety > skips check when called within CONFLICT_CHECK_INTERVAL_MS [0.24ms]
+[conflict-resolver] PR conflict detected for task 51e79c8cd3cb7fe3: https://github.com/owner/test-repo/pull/7
+[conflict-resolver] Created conflict task 0076043ce4d6d30f for parent 51e79c8cd3cb7fe3
+[conflict-resolver] Task queued (no slots): Engine "claude-code" not found or unavailable
+(pass) ConflictResolver > conflict task structure > child task reuses parent branch and engine [2.40ms]
+[conflict-resolver] PR conflict detected for task 83dc996121ea85bb: https://github.com/owner/test-repo/pull/11
+[conflict-resolver] Created conflict task aaadb2198a00fa21 for parent 83dc996121ea85bb
+[conflict-resolver] Task queued (no slots): this.registry.getFirstAvailable is not a function. (In 'this.registry.getFirstAvailable()', 'this.registry.getFirstAvailable' is undefined)
+(pass) ConflictResolver > conflict task structure > child task title references parent title [2.51ms]
+[conflict-resolver] PR conflict detected for task 89f9e343a649f722: https://github.com/owner/test-repo/pull/12
+[conflict-resolver] Created conflict task 865e61073ff3c9c3 for parent 89f9e343a649f722
+[conflict-resolver] Launched conflict task 865e61073ff3c9c3
+(pass) ConflictResolver > conflict task structure > launches conflict task with the persisted PR branch [2.21ms]
+[conflict-resolver] No GitHub token — skipping PR conflict check
+(pass) ConflictResolver > conflict task structure > skips if github_token is not configured [1.07ms]
+(pass) ConflictResolver > conflict task structure > skips if no candidates are active [0.88ms]
+(pass) ConflictResolver > conflict task structure > catches errors thrown during task check loop [1.30ms]
+(pass) ConflictResolver > isPRConflicting — GitHub API parsing > detects conflict via mergeable=false [0.32ms]
+(pass) ConflictResolver > isPRConflicting — GitHub API parsing > detects conflict via mergeable_state=dirty [0.34ms]
+(pass) ConflictResolver > isPRConflicting — GitHub API parsing > returns false for clean PR [0.31ms]
+(pass) ConflictResolver > isPRConflicting — GitHub API parsing > returns false for non-GitHub URL [0.20ms]
+(pass) ConflictResolver > isPRConflicting — GitHub API parsing > returns false if github API request fails [0.25ms]
+(pass) ConflictResolver > notifyConflictResolved > returns early if telegram is not configured [1.13ms]
+(pass) ConflictResolver > notifyConflictResolved > returns early if repo is missing in notifyConflictResolved but continues if valid [1.22ms]
+(pass) ConflictResolver > notifyConflictResolved > notifies via Telegram when configured [1.26ms]
+(pass) ConflictResolver > notifyConflictResolved > does nothing if Telegram is not configured [0.88ms]
+[conflict-resolver] PR conflict detected for task 6898977f2eb44899: https://github.com/owner/test-repo/pull/19
+[conflict-resolver] Created conflict task 9925b2e3ef825ba2 for parent 6898977f2eb44899
+[conflict-resolver] Task queued (no slots): this.registry.getFirstAvailable is not a function. (In 'this.registry.getFirstAvailable()', 'this.registry.getFirstAvailable' is undefined)
+(pass) ConflictResolver > handles telegram error during createConflictResolutionTask gracefully [2.38ms]
+(pass) ConflictResolver > handles telegram error during notifyConflictResolved gracefully [0.96ms]
+
+src/agents/conflict-resolver.smoke.test.ts:
+[smoke] Server not reachable at http://localhost:3002 — skipping live tests
+(pass) ConflictResolver E2E smoke (live server) > server is reachable [2.08ms]
+(pass) ConflictResolver E2E smoke (live server) > creates a conflict-resolution task with correct tags and status [0.24ms]
+(pass) ConflictResolver E2E smoke (live server) > conflict task is retrievable and appears in the board [0.15ms]
+(pass) ConflictResolver E2E smoke (live server) > conflict prompt in conflict-resolver.ts uses --force-with-lease and not bare --force [0.83ms]
+
+src/agents/orchestrator.test.ts:
+(pass) Orchestrator - edge cases > getActiveRunDetails handles invalid stateSnapshot gracefully [0.43ms]
+[orchestrator] Error aborting engine for task task-1: 37 |       runs: { updateStatus: mock() },
+38 |     };
+39 |     const mockHub = { broadcastAll: mock() };
+40 |     const mockEngine = {
+41 |       abort: mock().mockImplementation(() => {
+42 |         throw new Error("abort error");
+                   ^
+error: abort error
+      at <anonymous> (/app/packages/server/src/agents/orchestrator.test.ts:42:15)
+      at cancel (/app/packages/server/src/agents/orchestrator.ts:344:26)
+      at cancel (/app/packages/server/src/agents/orchestrator.ts:322:16)
+      at <anonymous> (/app/packages/server/src/agents/orchestrator.test.ts:58:18)
+      at <anonymous> (/app/packages/server/src/agents/orchestrator.test.ts:30:80)
+
+(pass) Orchestrator - edge cases > cancel deletes the active run and aborts even if engine fails to abort [1.13ms]
+(pass) Orchestrator - edge cases > sweepBacklog catches errors from launch and continues [0.51ms]
+[2m[10:17:52][0m [90m[orchestrator][0m [33m! Task [t-1] launch blocked: task total cost ($1.1000) is at or above maxCost limit ($1.0000)[0m
+(pass) Orchestrator - edge cases > launch throws when task limit is reached via maxCost check [0.69ms]
+(pass) Orchestrator - edge cases > triggerScheduled throws if template task is not scheduled [0.42ms]
+(pass) Orchestrator - edge cases > triggerScheduled throws if capacity is exceeded [0.25ms]
+(pass) Orchestrator - edge cases > triggerScheduled throws if derived task already running [0.47ms]
+(pass) Orchestrator - edge cases > sendInput returns false if task not active or engine missing [0.21ms]
+(pass) Orchestrator - edge cases > getRetryQueueSnapshot returns the snapshot correctly [0.22ms]
+(pass) Orchestrator - edge cases > getActiveRunEngines returns mapping of active runs [0.14ms]
+(pass) Orchestrator - edge cases > setMaxConcurrent sets limits [0.09ms]
+[orchestrator] Shutdown signal received. Terminating all active process trees...
+(pass) Orchestrator - edge cases > shutdown triggers cancel for all active runs [0.53ms]
+
+src/agents/acp-parser.test.ts:
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse session/started [2.60ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse session/resumed [0.08ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/use [0.09ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/call with name/arguments [0.10ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/result success [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/result error [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse cost/usage [0.04ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse error [0.04ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage stdout [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage stderr [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage system [0.03ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse progress [0.08ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_start [0.04ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_finish with tokens [14.18ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_finish without tokens [0.10ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse question [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse thinking [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should return empty array for unhandled JSON-RPC method [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:text [0.05ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:session [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:result [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:cost [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse total_tokens directly [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use pending [0.08ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use completed [0.10ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use completed with exitCode [0.08ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use failed [0.10ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:thinking [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:error [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:question [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:progress [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:step_start [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:step_finish with tokens [0.16ms]
+(pass) parseAcpMessage > Direct Event Objects > should extract unknown event content [0.10ms]
+(pass) parseAcpMessage > Plain Text Fallback > should handle valid plain text [0.93ms]
+(pass) parseAcpMessage > Plain Text Fallback > should ignore noise starting with DEBUG [0.13ms]
+(pass) parseAcpMessage > Plain Text Fallback > should ignore noise starting with TRACE [0.05ms]
+(pass) parseAcpMessage > Plain Text Fallback > should extract session ID from noise [0.07ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured INFO lines for llm model [0.13ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured INFO lines for tool [0.14ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured ERROR lines [0.08ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured WARN lines [0.06ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: thinking plain text [0.05ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: tool_use plain text [0.04ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: tool_result plain text [0.03ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process event: plain text [0.03ms]
+(pass) parseAcpMessage > should return empty array for empty string [0.03ms]
+(pass) parseAcpMessage uncovered coverage > should process init event type [0.05ms]
+(pass) parseAcpMessage uncovered coverage > should process function_call_request [0.06ms]
+(pass) parseAcpMessage uncovered coverage > should process tool status active [0.07ms]
+(pass) parseAcpMessage uncovered coverage > should parse step_complete event type [0.17ms]
+(pass) parseAcpMessage uncovered coverage > should parse result without token usage to empty array [0.11ms]
+(pass) parseAcpMessage uncovered coverage > should process tool with done status [0.08ms]
+(pass) parseAcpMessage uncovered coverage > should extract unknown event with text [0.15ms]
+(pass) parseAcpMessage uncovered coverage > should return empty array for non json plain text that is not handled [0.09ms]
+(pass) parseAcpMessage uncovered coverage > should return empty array if event content string is empty [0.06ms]
+(pass) parseAcpMessage uncovered coverage 2 > should process session method with missing params [0.04ms]
+(pass) parseAcpMessage uncovered coverage 2 > should parse window/logMessage with other type [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should parse step_finish with tokens nested object [0.14ms]
+(pass) parseAcpMessage uncovered coverage 2 > should extract tokens from usage for cost event [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should return empty array for result with no valid stats [0.07ms]
+(pass) parseAcpMessage uncovered coverage 2 > should handle error with msg field [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should handle thinking event with content field [0.09ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should cover missing closing braces block branches [0.05ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should cover usage without matching properties [0.04ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should return empty array for tool result plain text [0.04ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should test unknown result with stats but no tokens [0.03ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should test cost object with missing token fields [0.03ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should return empty array when method tool/use has no name/tool/function [0.05ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should handle error in tool result json where error is an object [0.07ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should process JSON RPC 2.0 with null params [0.03ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should handle tool_use event where status is undefined [0.07ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should process step_finish when params is undefined [0.04ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should cover tool_use with function_call fallback [0.07ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should return empty string if result without proper token stats [0.03ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should process error event type with 'error event' literal [0.05ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should test cost type falling back to parsed self [0.05ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should return empty for thinking event missing thought [0.04ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should ignore long thinking content [0.32ms]
+
+src/agents/litellm-client.test.ts:
+(pass) Litellm Client > getLiteLLMBaseUrl > returns env LITELLM_BASE_URL over dbBaseUrl [0.11ms]
+(pass) Litellm Client > getLiteLLMBaseUrl > returns dbBaseUrl if env LITELLM_BASE_URL is not set [0.03ms]
+(pass) Litellm Client > getLiteLLMBaseUrl > returns default url if neither env nor db base url are set [0.02ms]
+(pass) Litellm Client > getMasterKey internally > throws if LITELLM_MASTER_KEY is not set when calling generateVirtualKey [0.50ms]
+(pass) Litellm Client > generateVirtualKey > generates and returns virtual key [0.32ms]
+(pass) Litellm Client > generateVirtualKey > falls back to token if key or token_id are missing [0.18ms]
+(pass) Litellm Client > generateVirtualKey > throws if response is not ok [0.25ms]
+(pass) Litellm Client > generateVirtualKey > throws if json has unexpected shape [0.15ms]
+(pass) Litellm Client > deleteVirtualKey > deletes virtual key successfully [0.28ms]
+(pass) Litellm Client > deleteVirtualKey > logs warning if response is not ok [0.20ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns true if health check is ok [0.31ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns false if health check is not ok [0.16ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns false if fetch throws [0.14ms]
+(pass) Litellm Client > listLiteLLMModels > lists models successfully using default base url [0.49ms]
+(pass) Litellm Client > listLiteLLMModels > lists models successfully using provided base url [0.23ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if response is not ok [0.11ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if fetch throws [0.15ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if data is missing [0.24ms]
+
+src/agents/conflict-resolver.e2e.test.ts:
+[STEP 1] Task created: e85275fc18d8eef6
+(pass) E2E Homologation — full task lifecycle > STEP 1: task is created with correct fields [2.39ms]
+[2m[10:17:52][0m [90m[orchestrator][0m [33m! Bare repo missing on disk for "vibe-code" (/tmp/e2e-bare); re-cloning[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ Launching task "docs: add HOMOLOG.md for E2E validation" [e85275fc] engine=opencode model=claude-sonnet-4-6 repo=vibe-code[0m
+
+[2m[10:17:52][0m [90m[[34me85275fc[90m][0m [1m[32m▶ AGENT STARTED[0m engine=[36mopencode[0m model=[35mclaude-sonnet-4-6[0m repo=[34mvibe-code[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=setup engine=opencode[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=worktree_ready engine=opencode[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ context_bundle_built skills=0 memories=0 workflow=none[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=generating engine=opencode[0m
+[2m[10:17:52][0m [90m[[34me85275fc[90m][0m [37m│ Analyzing codebase...[0m
+[2m[10:17:52][0m [90m[[34me85275fc[90m][0m [37m│ Adding a small doc improvement to README.[0m
+[2m[10:17:52][0m [90m[[34me85275fc[90m][0m [37m│ File written. Task complete.[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:17:52][0m [90m[[34me85275fc[90m][0m [31m[1m✗ AGENT FAILED[0m [2mVerification failed: unable to discover validation commands from WORKFLOW.md or package.json[0m
+
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ Task [e85275fc] scheduled for auto-retry 1/2 in 10s (reason: failed)[0m
+[STEP 2] Task status after launch: failed
+(pass) E2E Homologation — full task lifecycle > STEP 2: task can be launched via orchestrator [217.74ms]
+[STEP 3] WS events emitted: 30 total
+(pass) E2E Homologation — full task lifecycle > STEP 3: WS broadcast events were emitted during execution [0.29ms]
+[STEP 4] Agent runs recorded: 1
+(pass) E2E Homologation — full task lifecycle > STEP 4: agent run was recorded in the database [0.27ms]
+[conflict-resolver] PR conflict detected for task 7b601e25047c7bad: https://github.com/juninmd/vibe-code/pull/99
+[conflict-resolver] Created conflict task c574ced27a13e616 for parent 7b601e25047c7bad
+[2m[10:17:52][0m [90m[orchestrator][0m [33m! Bare repo missing on disk for "vibe-code" (/tmp/e2e-bare); re-cloning[0m
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ Launching task "fix(conflicts): resolve merge conflicts for "feat:" [c574ced2] engine=opencode model=default repo=vibe-code[0m
+
+[2m[10:17:52][0m [90m[[34mc574ced2[90m][0m [1m[32m▶ AGENT STARTED[0m engine=[36mopencode[0m model=[35mauto-free[0m repo=[34mvibe-code[0m
+[2m[10:17:52][0m [90m[[34mc574ced2[90m][0m [31m[1m✗ AGENT FAILED[0m [2mgit.fetchRepo is not a function. (In 'git.fetchRepo(barePath)', 'git.fetchRepo' is undefined)[0m
+
+[conflict-resolver] Launched conflict task c574ced27a13e616
+[STEP 5] Conflict task created: c574ced27a13e616
+[STEP 5] Prompt safety verified: --force-with-lease ✓, no bare --force ✓
+[2m[10:17:52][0m [90m[orchestrator][0m [36m◆ Task [c574ced2] scheduled for auto-retry 1/2 in 10s (reason: failed)[0m
+(pass) E2E Homologation — full task lifecycle > STEP 5: conflict-resolution task created by ConflictResolver has correct structure [5.49ms]
+[STEP 6] TaskCard UI contract verified ✓
+(pass) E2E Homologation — full task lifecycle > STEP 6: TaskCard conflict-resolution styling contract is correct (static check) [0.58ms]
+[STEP 7] TaskDetail UI contract verified ✓
+(pass) E2E Homologation — full task lifecycle > STEP 7: TaskDetail conflict aura contract is correct (static check) [1.05ms]
+
+src/agents/stream-process.test.ts:
+(pass) streamProcess > stdout streaming > yields stdout lines as log events [20.66ms]
+(pass) streamProcess > stdout streaming > streams carriage-return progress lines in real time [41.58ms]
+(pass) streamProcess > stdout streaming > does not emit empty lines [18.39ms]
+(pass) streamProcess > stderr streaming > yields stderr lines as stderr log events [41.61ms]
+(pass) streamProcess > exit code handling — critical bug fix > does NOT yield type:error for non-zero exit code [18.30ms]
+(pass) streamProcess > exit code handling — critical bug fix > yields type:log stream:stderr with exit message for non-zero exit [18.68ms]
+(pass) streamProcess > exit code handling — critical bug fix > does NOT yield exit error log for exit code 0 [18.56ms]
+(pass) streamProcess > complete event > yields type:complete with exitCode 0 on success [19.00ms]
+(pass) streamProcess > complete event > yields type:complete with correct exit code for non-zero [18.27ms]
+(pass) streamProcess > complete event > always yields complete even when process writes output then fails [20.29ms]
+(pass) streamProcess > parseLine callback > applies parseLine transformer to stdout lines [18.22ms]
+(pass) streamProcess > parseLine callback > parseLine returning empty array produces no events for that line [19.31ms]
+(pass) streamProcess > abort signal > stops streaming when aborted [23.32ms]
+
+src/agents/memory-service.test.ts:
+(pass) MemoryService > ranks current task memory ahead of ancestor memory and reflection artifacts [15.34ms]
+(pass) MemoryService > compacts oversized memories when appending run summaries [13.68ms]
+
+src/agents/orchestrator-fuzz.test.ts:
+(pass) normalizeAsciiText fuzz > never throws for any string input [25.36ms]
+(pass) normalizeAsciiText fuzz > never returns null [11.81ms]
+(pass) normalizeAsciiText fuzz > result contains only ASCII printable chars, \n, \r, \t [12.09ms]
+(pass) normalizeAsciiText fuzz > is idempotent — applying twice yields same result [11.76ms]
+(pass) normalizeAsciiText fuzz > normalized length is never longer than input [11.27ms]
+(pass) taskSlug fuzz > never throws for any string input [12.71ms]
+(pass) taskSlug fuzz > returns only lowercase alphanumeric or hyphens [11.33ms]
+(pass) taskSlug fuzz > never starts or ends with a hyphen [12.89ms]
+(pass) taskSlug fuzz > never exceeds 48 characters [9.21ms]
+(pass) taskSlug fuzz > is idempotent — applying twice yields same slug [8.42ms]
+(pass) filterCustomArgs fuzz > never throws for any args array [31.23ms]
+(pass) filterCustomArgs fuzz > never returns null (always an array) [34.32ms]
+(pass) filterCustomArgs fuzz > never mutates the original array [34.79ms]
+(pass) filterCustomArgs fuzz > removes blocked with-value flags and their following value [20.00ms]
+(pass) filterCustomArgs fuzz > removes blocked standalone flags but keeps the next value [19.95ms]
+(pass) filterCustomArgs fuzz > passes non-blocked args through unchanged [37.22ms]
+(pass) filterCustomArgs fuzz > catches inline '=' format for blocked with-value flags [18.54ms]
+(pass) filterCustomArgs fuzz > returns [] for undefined or empty args [0.15ms]
+(pass) resolveMaxAgents fuzz > always returns an integer >= 1 for any inputs [9.08ms]
+(pass) resolveMaxAgents fuzz > returns at least 1 even for negative or zero values [4.04ms]
+(pass) resolveMaxAgents fuzz > never exceeds env value when stored > 0 [4.08ms]
+(pass) resolveMaxAgents fuzz > yields the same result for string and number inputs [4.08ms]
+(pass) getHeartbeatIntervalMs fuzz > always returns a positive number [0.98ms]
+(pass) getHeartbeatIntervalMs fuzz > returns 30000 when env is not set [0.10ms]
+(pass) getHeartbeatIntervalMs fuzz > returns the exact env value when set to a positive integer [0.69ms]
+(pass) getHeartbeatIntervalMs fuzz > returns 30000 when env is set to a non-positive or invalid value [0.74ms]
+(pass) splitBufferedLines fuzz > always returns {lines: string[], rest: string} [9.59ms]
+(pass) splitBufferedLines fuzz > lines never contain \n or \r [14.00ms]
+(pass) splitBufferedLines fuzz > for input without \n, rest equals the input [9.25ms]
+(pass) splitBufferedLines fuzz > splits multiple \n into multiple lines [37.15ms]
+(pass) splitBufferedLines fuzz > preserves content after last \n as rest [19.90ms]
+(pass) splitBufferedLines fuzz > handles \r\n and standalone \r as line breaks [21.70ms]
+(pass) splitBufferedLines fuzz > empty buffer returns empty lines and empty rest [0.11ms]
+
+src/config/max-agents.test.ts:
+(pass) resolveMaxAgents > uses the env default when no stored value exists [1.77ms]
+(pass) resolveMaxAgents > caps a stored value by the env cap [0.10ms]
+(pass) resolveMaxAgents > preserves a lower stored value under the env cap [0.02ms]
+(pass) resolveMaxAgents > ignores invalid values [0.02ms]
+
+src/db/queries.test.ts:
+(pass) Repository queries > creates a repo in pending status by default [11.15ms]
+(pass) Repository queries > updates status to ready with local path [11.16ms]
+(pass) Repository queries > lists all repos [10.84ms]
+(pass) Repository queries > extracts repo name from bare URL [10.86ms]
+(pass) Repository queries > extracts repo name from URL [10.80ms]
+(pass) Database queries with repo and task > Task queries > creates task with backlog status [0.43ms]
+(pass) Database queries with repo and task > Task queries > creates task with description [0.39ms]
+(pass) Database queries with repo and task > Task queries > creates and updates goal alignment fields [0.70ms]
+(pass) Database queries with repo and task > Task queries > creates task with engine preference [0.42ms]
+(pass) Database queries with repo and task > Task queries > lists all tasks [0.73ms]
+(pass) Database queries with repo and task > Task queries > lists tasks filtered by repo [0.54ms]
+(pass) Database queries with repo and task > Task queries > updates task status [0.33ms]
+(pass) Database queries with repo and task > Task queries > updates specific fields via updateField [0.29ms]
+(pass) Database queries with repo and task > Task queries > updateField sets branch_name [0.32ms]
+(pass) Database queries with repo and task > Task queries > deletes task [0.39ms]
+(pass) Database queries with repo and task > Task queries > returns null for non-existent task [0.11ms]
+(pass) Database queries with repo and task > AgentRun queries > creates a run in queued status [0.14ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to running with started_at [0.38ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to completed with exit_code [0.36ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to failed with error_message [0.39ms]
+(pass) Database queries with repo and task > AgentRun queries > getLatestByTask returns the most recently created run [0.18ms]
+(pass) Database queries with repo and task > AgentRun queries > listByTask returns all runs for a task [0.18ms]
+(pass) Database queries with repo and task > AgentRun queries > returns null for latest run of task with no runs [0.76ms]
+(pass) Database queries with repo and task > AgentLog queries > creates and retrieves logs for a run [0.35ms]
+(pass) Database queries with repo and task > AgentLog queries > logs are ordered by insertion (id ASC) [0.22ms]
+(pass) Database queries with repo and task > AgentLog queries > returns empty array for run with no logs [0.16ms]
+(pass) Database queries with repo and task > AgentLog queries > supports all stream types [0.33ms]
+(pass) Database queries with repo and task > Artifact queries > upserts and lists task artifacts [0.51ms]
+(pass) Database queries with repo and task > Task schedules queries > upsert creates a new schedule [0.41ms]
+(pass) Database queries with repo and task > Task schedules queries > upsert updates an existing schedule [0.43ms]
+(pass) Database queries with repo and task > Task schedules queries > setEnabled enables and disables [0.43ms]
+(pass) Database queries with repo and task > Task schedules queries > listDue returns schedules due [0.42ms]
+(pass) Database queries with repo and task > Task schedules queries > updateAfterRun updates nextRunAt [0.38ms]
+(pass) Database queries with repo and task > Task schedules queries > remove deletes a schedule [0.39ms]
+(pass) Database queries with repo and task > Task schedules queries > disableExpired disables expired schedules [0.37ms]
+(pass) Database queries with repo and task > Findings queries > create creates a finding [0.40ms]
+(pass) Database queries with repo and task > Findings queries > listByRepo lists findings [0.49ms]
+(pass) Database queries with repo and task > Findings queries > resolve resolves a finding [0.51ms]
+(pass) Database queries with repo and task > Findings queries > getRecentByRepo returns unresolved findings from last 30 days [0.41ms]
+(pass) Database queries with repo and task > Metrics queries > create creates a metric [0.35ms]
+(pass) Database queries with repo and task > Metrics queries > skillEffectiveness returns stats [0.86ms]
+(pass) Database queries with repo and task > Metrics queries > engineEffectiveness returns stats [0.65ms]
+(pass) Settings queries > get returns default null if key not found [0.12ms]
+(pass) Settings queries > set sets a value and get retrieves it [0.18ms]
+(pass) Settings queries > set overrides existing value [0.15ms]
+(pass) Prompt templates queries > listAll returns predefined templates [0.37ms]
+(pass) Prompt templates queries > getById returns a template [0.44ms]
+(pass) Prompt templates queries > create creates a custom template [0.37ms]
+(pass) Prompt templates queries > update updates a custom template [0.60ms]
+(pass) Prompt templates queries > delete removes a custom template [0.44ms]
+(pass) Prompt templates queries > cannot update or delete a builtin template [0.27ms]
+(pass) Additional queries coverage > Workspace queries update missing fields > updates empty and with all fields [0.99ms]
+(pass) Additional queries coverage > Tasks queries update additional fields > updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority [0.50ms]
+(pass) Additional queries coverage > Task query utility methods > archiveDone works [1.36ms]
+(pass) Additional queries coverage > Task query utility methods > clearFailed works [1.77ms]
+(pass) Additional queries coverage > Task query utility methods > retryFailed works [1.45ms]
+(pass) Additional queries coverage > Task query utility methods > cleanupArchived works [0.36ms]
+(pass) Additional queries coverage > Task query utility methods > incrementLoopAttempt works [0.44ms]
+(pass) Additional queries coverage > Task queries loopConfig > maps loopConfig properly if loop_enabled is true [0.38ms]
+(pass) Additional queries coverage > ReviewRound API > updateStatus [0.41ms]
+(pass) Additional queries coverage > ReviewIssue update un-covered paths > returns existing row when updates is empty [0.94ms]
+(pass) Additional queries coverage > Label API > listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts [1.59ms]
+(pass) Additional queries coverage > WorkflowMemory remaining paths > getById returns correctly [0.32ms]
+(pass) Additional queries coverage > Workspace queries update missing fields > updates empty and with all fields [0.60ms]
+(pass) Additional queries coverage > Tasks queries update additional fields > updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority [0.46ms]
+(pass) Additional queries coverage > Task query utility methods > archiveDone works [1.21ms]
+(pass) Additional queries coverage > Task query utility methods > clearFailed works [1.87ms]
+(pass) Additional queries coverage > Task query utility methods > retryFailed works [1.44ms]
+(pass) Additional queries coverage > Task query utility methods > cleanupArchived works [0.39ms]
+(pass) Additional queries coverage > Task query utility methods > incrementLoopAttempt works [0.40ms]
+(pass) Additional queries coverage > Task queries loopConfig > maps loopConfig properly if loop_enabled is true [0.37ms]
+(pass) Additional queries coverage > ReviewRound API > updateStatus [0.34ms]
+(pass) Additional queries coverage > ReviewIssue update un-covered paths > returns existing row when updates is empty [0.51ms]
+(pass) Additional queries coverage > Label API > listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts [1.16ms]
+(pass) Additional queries coverage > WorkflowMemory remaining paths > getById returns correctly [0.42ms]
+
+src/db/index.test.ts:
+(pass) Database index > creates db and applies migrations [95.92ms]
+(pass) Database index > migrates from old schema [104.49ms]
+
+src/api/sessions.integration.test.ts:
+(pass) GET /api/sessions > returns every local CLI session as a card [8.65ms]
+(pass) GET /api/sessions > filters by source [4.70ms]
+(pass) GET /api/sessions > applies the limit [2.23ms]
+(pass) GET /api/sessions > rejects an unknown source [1.35ms]
+(pass) GET /api/sessions > rejects a non-numeric limit [0.63ms]
+
+src/api/settings.test.ts:
+(pass) Settings API - MCP integration > GET /api/settings defaults to providing github MCP config if github token is present [17.67ms]
+(pass) Settings API - MCP integration > PUT /api/settings preserves unmasked secrets when updating settings with masked values [14.14ms]
+(pass) Settings API - Additional coverage > PUT /api/settings handles additional fields [11.61ms]
+(pass) Settings API - Additional coverage > POST /api/settings/test/telegram returns 400ish/ok:false if missing credentials [13.17ms]
+(pass) Settings API - Additional coverage > POST /api/settings/test/:provider returns ok:false if provider missing token [10.76ms]
+(pass) Settings API - Additional provider logic part 2 > POST /api/settings/test/:provider handles missing registry gracefully [10.64ms]
+(pass) Settings API - Additional provider logic part 2 > GET /api/settings sets github token if token not set but env var present [10.88ms]
+
+src/api/tasks.test.ts:
+(pass) Tasks Router (unit) > POST /archive-done archives tasks [4.89ms]
+(pass) Tasks Router (unit) > POST /clear-failed clears failed tasks [0.46ms]
+(pass) Tasks Router (unit) > POST /retry-failed retries failed tasks [0.59ms]
+(pass) Tasks Router (unit) > POST /:id/cancel cancels task [0.36ms]
+(pass) Tasks Router (unit) > POST /:id/cancel handles cancel errors [0.23ms]
+(pass) Tasks Router (unit) > POST /:id/plan handles invalid payload [1.23ms]
+(pass) Tasks Router (unit) > POST /:id/plan successfully materializes plan [0.37ms]
+(pass) Tasks Router (unit) > POST /:id/plan successfully returns unmaterialized plan [0.24ms]
+(pass) Tasks Router (unit) > POST /bulk/from-issues returns 400 on invalid payload [1.18ms]
+(pass) Tasks Router (unit) > POST /bulk/from-issues returns 404 if repo not found [1.22ms]
+(pass) Tasks Router (unit) > POST /bulk/from-issues creates tasks successfully [0.37ms]
+(pass) Tasks Router (unit) > GET / returns tasks with run info including costStats mapping [1.49ms]
+(pass) Tasks Router (unit) > GET / returns 403 on authorization failure [0.31ms]
+(pass) Tasks Router (unit) > GET / returns 403 on fallback auth failure [0.21ms]
+(pass) Tasks Router (unit) > GET / with repo_id enforces access [0.24ms]
+(pass) Tasks Router (unit) > GET /poll handles auth failures [0.65ms]
+(pass) Tasks Router (unit) > GET /poll with repo_id enforces access [0.34ms]
+(pass) Tasks Router (unit) > POST / returns 400 on invalid payload [2.26ms]
+(pass) Tasks Router (unit) > POST / returns 404 if repo not found [0.26ms]
+(pass) Tasks Router (unit) > POST / returns 201 on valid payload [0.28ms]
+(pass) Tasks Router (unit) > PATCH /:id returns 400 on invalid payload [1.67ms]
+(pass) Tasks Router (unit) > PATCH /:id returns 404 when task not found [0.40ms]
+(pass) Tasks Router (unit) > PATCH /:id successfully updates task [0.43ms]
+(pass) Tasks Router (unit) > DELETE /:id returns 404 when task not found [0.25ms]
+(pass) Tasks Router (unit) > POST /:id/clone returns 404 when task not found [0.32ms]
+(pass) Tasks Router (unit) > POST /:id/clone clones the task [0.30ms]
+(pass) Tasks Router (unit) > POST /:id/launch returns 403 on auth failure [0.68ms]
+(pass) Tasks Router (unit) > POST /:id/unblock returns 400 when task not blocked [0.38ms]
+(pass) Tasks Router (unit) > POST /:id/unblock returns 500 when orchestrator fails [0.22ms]
+(pass) Tasks Router (unit) > GET /:id returns task data with related info [0.53ms]
+(pass) Tasks Router (unit) > GET /:id returns 404 if not found [0.23ms]
+(pass) Tasks Router (unit) > GET /:id returns 403 on auth error [0.19ms]
+(pass) Tasks Router (unit) > GET /:id returns 403 if task access enforced fails [0.16ms]
+(pass) Tasks Router (unit) > POST /:id/launch returns 400 if task is not in a valid state to launch [0.30ms]
+(pass) Tasks Router (unit) > POST /:id/launch handles capacity limit errors gracefully [0.91ms]
+(pass) Tasks Router (unit) > POST /:id/launch handles normal launch errors gracefully [0.33ms]
+(pass) Tasks Router (unit) > GET /:id/children returns children [0.24ms]
+(pass) Tasks Router (unit) > GET /:id/children returns 404 if parent not found [0.19ms]
+(pass) Tasks Router (unit) > POST /bulk/from-issues creates tasks and returns data [0.38ms]
+(pass) Tasks Router (unit) > POST /:id/preview-prompt returns 404 if task not found [0.77ms]
+(pass) Tasks Router (unit) > POST /:id/preview-prompt returns prompt when repository found [5.42ms]
+(pass) Tasks Router (unit) > POST /:id/approve/request broadcasts request [0.54ms]
+(pass) Tasks Router (unit) > GET /:id/approve/status returns status [0.22ms]
+(pass) Tasks Router (unit) > POST /:id/approve/reject rejects request [0.17ms]
+(pass) Tasks Router (unit) > POST /:id/approve approves request [0.40ms]
+(pass) Tasks Router (unit) > POST /:id/approve returns 400 if not pending [0.16ms]
+(pass) Tasks Router (unit) > POST /:id/retry-pr returns 404 if not found [0.31ms]
+(pass) Tasks Router (unit) > POST /:id/retry-pr returns 400 if not in review state [0.14ms]
+(pass) Tasks Router (unit) > POST /:id/retry-pr successfully retries PR [0.32ms]
+(pass) Tasks Router (unit) > POST /:id/retry-pr handles orchestrator error [0.31ms]
+(pass) Tasks Router (unit) > GET /:id/runs returns runs for a task [0.49ms]
+(pass) Tasks Router (unit) > GET /:id/artifacts returns artifacts for a task [0.32ms]
+(pass) Tasks Router (unit) > GET /:id/artifacts returns 404 if task not found [0.19ms]
+(pass) Tasks Router (unit) > GET /:id/schedule returns schedule [0.21ms]
+(pass) Tasks Router (unit) > PUT /:id/schedule upserts schedule [3.43ms]
+(pass) Tasks Router (unit) > PUT /:id/schedule handles bad cron [0.55ms]
+(pass) Tasks Router (unit) > DELETE /:id/schedule removes schedule [0.20ms]
+(pass) Tasks Router (unit) > POST /:id/schedule/toggle toggles schedule [0.41ms]
+(pass) Tasks Router (unit) > POST /:id/schedule/run-now runs scheduled task [0.58ms]
+(pass) Tasks Router (unit) > GET /:id/diff returns diff summary [0.72ms]
+(pass) Tasks Router (unit) > GET /:id/diff/file returns file patch [0.67ms]
+(pass) Tasks Router (unit) > GET /:id/matched-skills returns matched skills [0.30ms]
+
+src/api/tasks.integration.test.ts:
+(pass) GET /api/tasks > returns empty data array when no tasks exist [16.09ms]
+(pass) GET /api/tasks > returns tasks list [12.80ms]
+(pass) GET /api/tasks > returns task-level token and session summary across runs [15.31ms]
+(pass) GET /api/tasks > filters tasks by repo_id [12.97ms]
+(pass) GET /api/tasks > returns aggregated polling payload with tasks and focused task/log deltas [12.89ms]
+(pass) GET /api/tasks > returns empty focused details when focused task is not found [13.47ms]
+(pass) POST /api/tasks > creates a task and returns 201 [11.64ms]
+(pass) POST /api/tasks > accepts delegated task fields [12.38ms]
+(pass) POST /api/tasks > returns 400 when title is missing [12.76ms]
+(pass) POST /api/tasks > returns 400 when repoId is missing [11.65ms]
+(pass) POST /api/tasks > returns 404 when repo does not exist [11.52ms]
+(pass) GET /api/tasks/:id > returns a task by id [14.04ms]
+(pass) GET /api/tasks/:id > returns 404 for unknown task [11.70ms]
+(pass) GET /api/tasks/:id > builds and materializes a task plan [16.43ms]
+(pass) PATCH /api/tasks/:id > updates the task title [13.89ms]
+(pass) PATCH /api/tasks/:id > updates the task status [11.90ms]
+(pass) PATCH /api/tasks/:id > accepts blocked as a task status [12.18ms]
+(pass) PATCH /api/tasks/:id > returns 404 for unknown task [12.95ms]
+(pass) POST /api/tasks/:id/launch > returns 429 with a user-friendly message when capacity is full [12.18ms]
+(pass) POST /api/tasks/:id/retry > allows retrying a blocked task [13.28ms]
+(pass) POST /api/tasks/:id/retry > returns 400 when task is not failed or blocked [13.24ms]
+(pass) POST /api/tasks/:id/retry > returns 500 when orchestrator launch fails [12.16ms]
+(pass) POST /api/tasks/:id/preview-prompt > returns 404 for unknown task [11.08ms]
+(pass) POST /api/tasks/:id/preview-prompt > returns fallback prompt when git is not available [13.36ms]
+(pass) POST /api/tasks/:id/preview-prompt > returns fallback prompt when repository does not exist [12.58ms]
+(pass) POST /api/tasks/:id/preview-prompt > materializes context correctly when git is available [32.63ms]
+(pass) GET /api/tasks/:id/memory > returns 404 for unknown task [12.53ms]
+(pass) GET /api/tasks/:id/memory > returns task memory and defaults to task scope [12.57ms]
+(pass) PUT /api/tasks/:id/memory > returns 404 for unknown task [12.72ms]
+(pass) PUT /api/tasks/:id/memory > returns 400 when scope or content is missing [14.15ms]
+(pass) PUT /api/tasks/:id/memory > updates memory correctly [12.93ms]
+(pass) POST /api/tasks/:id/open-editor > returns 404 for unknown task [11.79ms]
+(pass) POST /api/tasks/:id/open-editor > returns 400 when no path is available [13.64ms]
+(pass) POST /api/tasks/:id/open-editor > returns the path when onlyPath is true [12.56ms]
+(pass) POST /api/tasks/:id/open-editor > spawns editor and returns path [13.33ms]
+(pass) POST /api/tasks/:id/open-editor > returns 500 when editor fails to spawn [12.56ms]
+(pass) GET /api/tasks/:id/download > returns 503 if git is not available [12.70ms]
+(pass) GET /api/tasks/:id/download > returns 404 for unknown task [11.82ms]
+(pass) GET /api/tasks/:id/download > returns 400 when task has no branch [11.89ms]
+(pass) GET /api/tasks/:id/download > returns 500 when git archive fails [12.82ms]
+(pass) GET /api/tasks/:id/download > returns the zip buffer when git archive succeeds [17.36ms]
+(pass) DELETE /api/tasks/:id > deletes a task [14.60ms]
+(pass) DELETE /api/tasks/:id > returns 404 for unknown task [11.41ms]
+
+src/api/reviews.integration.test.ts:
+(pass) reviews router > list rounds and issues [6.32ms]
+(pass) reviews router > error handling [1.23ms]
+
+src/api/runs.integration.test.ts:
+(pass) GET /api/runs/:id/logs > returns all logs for a run [16.10ms]
+(pass) GET /api/runs/:id/logs > supports incremental reads using after [13.02ms]
+(pass) GET /api/runs/:id/logs > returns not_found when run does not exist [10.78ms]
+
+src/api/repos.integration.test.ts:
+(pass) GET /api/repos > returns empty data array when no repos exist [15.64ms]
+(pass) GET /api/repos > returns existing repos [10.82ms]
+(pass) GET /api/repos > adopts legacy repos with null workspace_id [13.02ms]
+(pass) POST /api/repos > creates a repo and returns 201 with cloning status [13.19ms]
+(pass) POST /api/repos > returns 400 for invalid URL [11.20ms]
+(pass) POST /api/repos > accepts a local Git path as a repository source [12.60ms]
+(pass) POST /api/repos > returns 400 when url field is missing [11.53ms]
+(pass) POST /api/repos > returns 409 when repo already exists [11.25ms]
+(pass) GET /api/repos/:id > returns a repo by id [11.32ms]
+(pass) GET /api/repos/:id > returns 404 for unknown repo [11.45ms]
+(pass) DELETE /api/repos/:id > deletes a repo and returns ok [15.81ms]
+(pass) DELETE /api/repos/:id > returns 409 when a task is in progress for the repo [12.71ms]
+(pass) DELETE /api/repos/:id > returns 404 for unknown repo [11.17ms]
+(pass) DELETE /api/repos/:id/local-clone > removes the local clone and resets the repo to pending [12.16ms]
+(pass) DELETE /api/repos/:id/local-clone > returns 400 when the repo has no local clone [11.40ms]
+(pass) DELETE /api/repos/:id/local-clone > returns 409 when a task is in progress for the repo [11.22ms]
+(pass) POST /api/repos/local-clones/purge > purges local clones for idle repos and skips busy or missing ones [12.99ms]
+(pass) POST /api/repos/local-clones/purge > returns 400 without explicit confirmation [11.44ms]
+(pass) POST /api/repos/:id/refresh > resets repo status to pending [10.92ms]
+(pass) POST /api/repos/:id/refresh > returns 404 for unknown repo [10.85ms]
+(pass) remote operations > GET /api/repos/github/list returns 500 on error [11.03ms]
+(pass) remote operations > GET /api/repos/github/list returns repos [11.74ms]
+(pass) remote operations > GET /api/repos/github/search returns 500 on error [11.00ms]
+(pass) remote operations > GET /api/repos/github/search returns repos [10.75ms]
+(pass) remote operations > POST /api/repos/github/create returns 500 on error [11.44ms]
+(pass) remote operations > POST /api/repos/github/create returns repo [12.24ms]
+(pass) remote operations > POST /api/repos/github/create returns 400 for bad input [10.92ms]
+(pass) remote operations > GET /api/repos/gitlab/list returns 500 on error [11.11ms]
+(pass) remote operations > GET /api/repos/gitlab/list returns repos [11.99ms]
+(pass) remote operations > GET /api/repos/gitlab/search returns 500 on error [11.93ms]
+(pass) remote operations > GET /api/repos/gitlab/search returns repos [10.86ms]
+(pass) remote operations > POST /api/repos/gitlab/create returns 500 on error [12.53ms]
+(pass) remote operations > POST /api/repos/gitlab/create returns repo [10.87ms]
+(pass) remote operations > POST /api/repos/gitlab/create returns 400 for bad input [11.33ms]
+(pass) remote operations > GET /api/repos/github/search returns empty if no q [10.73ms]
+(pass) remote operations > GET /api/repos/gitlab/search returns empty if no q [12.17ms]
+(pass) GET /api/repos/:id/branches > returns branches for repo [12.93ms]
+(pass) GET /api/repos/:id/branches > returns 404 for unknown repo [10.82ms]
+(pass) GET /api/repos/:id/branches > returns 500 on git error [11.14ms]
+(pass) GET /api/repos/:id/issues > returns issues [12.71ms]
+(pass) GET /api/repos/:id/issues > returns 404 for unknown repo [10.76ms]
+(pass) GET /api/repos/:id/issues > returns 500 on error [10.86ms]
+(pass) GET /api/repos/:id/findings > returns findings [12.97ms]
+(pass) GET /api/repos/:id/findings > returns 404 for unknown repo [11.23ms]
+(pass) GET /api/repos/:id/skills > returns empty if no localPath [10.99ms]
+(pass) GET /api/repos/:id/skills > returns 404 for unknown repo [11.45ms]
+(pass) GET /api/repos/:id/manifests > returns 404 for unknown repo [11.41ms]
+(pass) GET /api/repos/:id/manifests > returns 500 on load error [10.79ms]
+
+src/utils/process-tree.test.ts:
+(pass) killProcessTree > windows platform runs taskkill [0.68ms]
+(pass) killProcessTree > windows platform gracefully handles taskkill error [0.39ms]
+(pass) killProcessTree > unix platform attempts process group kill first [0.16ms]
+(pass) killProcessTree > unix platform falls back to recursive pgrep and kill if group kill fails [0.32ms]
+(pass) killProcessTree > unix platform logs debug on fallback execution error [0.22ms]
+
+src/utils/fuzz.test.ts:
+(pass) killProcessTree PID validation fuzz > only positive integers are valid PIDs [6.26ms]
+(pass) killProcessTree PID validation fuzz > taskkill command never throws for any integer PID [4.76ms]
+(pass) killProcessTree PID validation fuzz > negative, zero, and non-integer values are rejected [1.12ms]
+(pass) BroadcastHub WsClient management fuzz > client starts with empty subscribedTasks [15.92ms]
+(pass) BroadcastHub WsClient management fuzz > subscribing adds, unsubscribing removes [12.92ms]
+(pass) BroadcastHub WsClient management fuzz > subscribing same task twice is idempotent [6.85ms]
+(pass) BroadcastHub WsClient management fuzz > unsubscribing non-subscribed task never throws [11.74ms]
+(pass) BroadcastHub WsClient management fuzz > any string can be used as taskId for subscribe/unsubscribe [7.25ms]
+(pass) isAuthEnabled fuzz > always returns a boolean for any env/setting combination [4.15ms]
+(pass) isAuthEnabled fuzz > returns false when setting is exactly 'false' regardless of env [1.48ms]
+(pass) isAuthEnabled fuzz > returns true when both GitHub OAuth env vars are set and setting is not 'false' [5.51ms]
+(pass) isAuthEnabled fuzz > returns true when VIBE_CODE_API_KEY is set and setting is not 'false' [3.78ms]
+(pass) canAccessRepoInWorkspace fuzz > always returns a boolean for any repo/workspace combination [12.30ms]
+(pass) canAccessRepoInWorkspace fuzz > returns true when repo.workspaceId matches workspaceId [3.09ms]
+(pass) canAccessRepoInWorkspace fuzz > returns false when repo.workspaceId differs from workspaceId [5.37ms]
+(pass) canAccessRepoInWorkspace fuzz > returns false when repo is null [4.94ms]
+(pass) splitBufferedLines fuzz > never throws for any string input [20.69ms]
+(pass) splitBufferedLines fuzz > normalizes \r\n and \r to \n, output lines never contain \r [5.52ms]
+(pass) splitBufferedLines fuzz > total lines content + rest equals normalized input [5.52ms]
+(pass) splitBufferedLines fuzz > last incomplete line is always returned as rest (not in lines) [6.86ms]
+(pass) splitBufferedLines fuzz > handles all-whitespace, empty, and special characters without throwing [1.76ms]
+(pass) parsePositiveInt fuzz > for any input, returns null or a positive integer [9.75ms]
+(pass) parsePositiveInt fuzz > parses positive integer strings correctly [1.97ms]
+(pass) parsePositiveInt fuzz > '0', negative strings, and non-numeric strings return null [0.59ms]
+(pass) parsePositiveInt fuzz > NaN, undefined, null, Infinity, -Infinity all return null [0.47ms]
+(pass) parsePositiveInt fuzz > string with leading/trailing whitespace still parses when number is valid [1.99ms]
+
+src/utils/workspace-context.test.ts:
+(pass) Workspace Context Utilities > getWorkspaceContext > should return null if user is null [0.71ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "env-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "env-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from c.env.workspaceId [0.97ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "header-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "header-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from header x-workspace-id [0.52ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "query-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "query-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from query workspace_id [0.47ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "body-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "body-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from body json in non-GET request [0.68ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-testuser",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should ignore invalid JSON body [0.59ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "env",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "env",
+}
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "header",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "header",
+}
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "query",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "query",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should prioritize c.env > header > query > body [22.38ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-testuser",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should auto-assign and create default workspace if none provided [0.62ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should use existing auto-assigned workspace if none provided [0.45ms]
+[workspace-context] ❌ SECURITY: User attempting cross-workspace access {
+  username: "testuser",
+  authorizedWs: "my-ws",
+  requestedWs: "other-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should return null for cross-workspace access attempt [0.46ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should call ensureWorkspaceExists and create base slug if available [0.59ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should call ensureWorkspaceExists and create suffixed slug if base slug is taken [0.70ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should do nothing in ensureWorkspaceExists if workspace already exists [0.58ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "---",
+  workspaceId: "my-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "---",
+  workspaceId: "my-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should fallback to 'personal' if slugify results in empty string [0.68ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "---",
+  workspaceId: "my-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "---",
+  workspaceId: "my-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should fallback to 'personal' with suffix if slugify results in empty string and personal is taken [0.89ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "ws-1",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-1",
+}
+(pass) Workspace Context Utilities > requireWorkspaceContext > should return workspaceId on success [0.72ms]
+[workspace-context] ❌ SECURITY: User attempting cross-workspace access {
+  username: "testuser",
+  authorizedWs: "my-ws",
+  requestedWs: "other-ws",
+}
+(pass) Workspace Context Utilities > requireWorkspaceContext > should return null on failure (e.g., cross-workspace) [0.30ms]
+
+src/ws/event-dedup.test.ts:
+(pass) EventDedup > delivers first occurrence, drops repeats [2.40ms]
+(pass) EventDedup > treats empty/undefined id as always-deliver (no dedup) [0.08ms]
+(pass) EventDedup > evicts oldest id once capacity exceeded (FIFO) [0.07ms]
+(pass) EventDedup > clear() resets the buffer [0.14ms]
+
+src/sessions/session-service.test.ts:
+(pass) deriveStatus > an explicit terminal state from the CLI wins over activity [0.12ms]
+(pass) deriveStatus > falls back to how recently the session was touched [0.12ms]
+(pass) ClaudeCodeSessionReader > projects a transcript onto the fields a card needs [8.47ms]
+(pass) ClaudeCodeSessionReader > prefers the summary record and skips slash-command envelopes [2.71ms]
+(pass) ClaudeCodeSessionReader > marks a transcript whose last turn is an API error as failed [2.14ms]
+(pass) ClaudeCodeSessionReader > tolerates truncated lines from a session still being written [2.22ms]
+(pass) ClaudeCodeSessionReader > ignores directories with no transcripts [0.76ms]
+(pass) OpenCodeSessionReader > reads sessions from either storage layout and counts messages [2.44ms]
+(pass) OpenCodeSessionReader > skips sub-agent sessions [4.65ms]
+(pass) OpenCodeSessionReader > treats a recorded completion time as done [1.19ms]
+(pass) AntigravitySessionReader > reads a session object regardless of field naming [1.09ms]
+(pass) AntigravitySessionReader > unwraps a `{ sessions: [...] }` container [0.93ms]
+(pass) AntigravitySessionReader > folds a JSONL event log into a single session [2.84ms]
+(pass) AntigravitySessionReader > ignores files that carry no session at all [1.16ms]
+(pass) SessionService > merges every CLI into one board, newest first [6.22ms]
+(pass) SessionService > reports a source as unavailable when its store is absent [0.74ms]
+(pass) SessionService > cards expose only the projected fields [1.76ms]
+(pass) SessionService > filters by source and honours the limit [2.71ms]
+(pass) SessionService > serves repeat reads from cache within the TTL [2.26ms]
+(pass) SessionService > a failing reader degrades to an error on its own source [0.75ms]
+
+src/notifications/telegram.test.ts:
+(pass) createTelegramNotifier > uses env credentials when db settings are empty [2.12ms]
+(pass) createTelegramNotifier > sends through Telegram using env credentials [0.34ms]
+
+src/security/access-control.test.ts:
+(pass) access-control > denies repo access when repo is not mapped and legacy fallback is off [0.21ms]
+(pass) access-control > allows access when repo is mapped to workspace [0.13ms]
+[security] Mapped previously unowned repo to workspace {
+  repoId: "a917189749536b94",
+  workspaceId: "ws-1",
+  userId: "alice",
+}
+(pass) access-control > claims an unmapped legacy repo for the current workspace [0.34ms]
+(pass) access-control > does not claim a repo already mapped to another workspace [0.19ms]
+(pass) access-control > enforces task and run ownership via repo mapping [0.39ms]
+(pass) access-control > redacts worktree path from external run serialization by default [0.17ms]
+
+src/git/git-fuzz.test.ts:
+(pass) getRepoOwnerAndName fuzz > never throws for any arbitrary string [19.95ms]
+(pass) getRepoOwnerAndName fuzz > never returns empty string for non-empty input [9.90ms]
+(pass) getRepoOwnerAndName fuzz > preserves owner/repo for https://github.com URLs [42.74ms]
+(pass) getRepoOwnerAndName fuzz > strips .git suffix from URLs [35.72ms]
+(pass) getRepoOwnerAndName fuzz > parses SSH format git@github.com:owner/repo [41.71ms]
+(pass) getRepoOwnerAndName fuzz > returns whole URL when no pattern matches [5.24ms]
+(pass) GitService.gitEnv fuzz > never throws regardless of process.env shape [137.83ms]
+(pass) GitService.gitEnv fuzz > always returns a non-null object [143.57ms]
+(pass) GitService.gitEnv fuzz > always sets GIT_TERMINAL_PROMPT to 0 [144.26ms]
+(pass) GitService.gitEnv fuzz > increments GIT_CONFIG_COUNT when pre-existing [3.55ms]
+(pass) getCollisionSafeName fuzz > never throws for any URL string [35.71ms]
+(pass) getCollisionSafeName fuzz > never contains path separator (/) in output for any URL [44.68ms]
+(pass) URL format parsing fuzz > never throws for HTTPS URLs with arbitrary paths [7.73ms]
+(pass) URL format parsing fuzz > never throws for SSH git@ URLs with arbitrary names [58.98ms]
+(pass) URL format parsing fuzz > handles auth tokens embedded in URLs [81.86ms]
+(pass) URL format parsing fuzz > handles protocol-relative URLs [37.18ms]
+(pass) URL format parsing fuzz > handles git:// protocol URLs [41.96ms]
+(pass) branch name sanitization fuzz > no valid branch name contains whitespace or git-problematic chars [37.58ms]
+(pass) branch name sanitization fuzz > isValidBranchName matches realistic branch names [42.29ms]
+(pass) branch name sanitization fuzz > isValidBranchName rejects branch names with git-problematic chars [0.56ms]
+(pass) path combination fuzz > never throws combining repo base + name + branch [35.53ms]
+(pass) path combination fuzz > getCollisionSafeName output is safe to use in file paths [4.97ms]
+(pass) getBarePath fuzz > never throws for any repoName, even without URL [6.37ms]
+
+src/git/git-service.test.ts:
+(pass) GitService.gitEnv > adds safe.directory without pre-existing config [2.70ms]
+(pass) GitService.gitEnv > preserves existing config and appends safe.directory [0.23ms]
+(pass) GitService.getRepoOwnerAndName > parses HTTPS GitHub URL [0.10ms]
+(pass) GitService.getRepoOwnerAndName > parses HTTPS URL with .git suffix [0.03ms]
+(pass) GitService.getRepoOwnerAndName > parses SSH URL [0.02ms]
+(pass) GitService.getRepoOwnerAndName > parses URL with nested org name [0.02ms]
+(pass) GitService.hasCommitsAhead > returns false when no new commits since base [4.24ms]
+(pass) GitService.hasCommitsAhead > returns true after adding a new commit on the feature branch [16.87ms]
+(pass) GitService.hasCommitsAhead > returns false when baseBranch is fast-forwarded to the same commit [6.97ms]
+(pass) GitService.hasChanges > returns false on clean working tree [4.80ms]
+(pass) GitService.hasChanges > returns true after creating a new file [4.49ms]
+(pass) Git integration operations > init() creates repos and workspaces directories [0.53ms]
+(pass) Git integration operations > cloneRepo() clones seed dir to a bare repo [29.56ms]
+(pass) Git integration operations > fetchRepo() populates remote-tracking branches in the bare repo [20.07ms]
+(pass) Git integration operations > getBarePath() matches cloneRepo bare path [0.06ms]
+(pass) Git integration operations > listBranches() returns empty array on a fresh bare clone [16.55ms]
+(pass) Git integration operations > detectDefaultBranch() detects main [8.95ms]
+(pass) Git integration operations > isRepoSource() accepts a local Git repository path [9.00ms]
+(pass) Git integration operations > isRepoSource() rejects a non-repository source [7.83ms]
+(pass) Git integration operations > detectDefaultBranch() falls back to main on failure [7.71ms]
+(pass) Git integration operations > createWorktree() creates a linked worktree [32.74ms]
+(pass) Git integration operations > syncWithBase() refreshes origin/main before rebasing [54.94ms]
+(pass) Git integration operations > branchExists() returns true for new-branch and false for fake [8.82ms]
+(pass) Git integration operations > commitAll() commits new files [33.38ms]
+(pass) Git integration operations > push() pushes branch to origin [28.44ms]
+(pass) Git integration operations > checkout() changes checked out branch [8.74ms]
+(pass) Git integration operations > diffSummary() and diffFileContent() return changes [14.84ms]
+Switched to a new branch 'branch2'
+(pass) Git integration operations > diffSummary() parses modified and deleted correctly [76.09ms]
+(pass) Git integration operations > removeWorktree() removes worktree [4.18ms]
+(pass) Git integration operations > removeWorktree() falls back to manual cleanup if git fails [8.90ms]
+(pass) Git integration operations > deleteLocalRepo() removes workspace and bare dirs [2.45ms]
+
+src/git/git-service.lock.test.ts:
+(pass) GitService per-repo lock > serializes concurrent mutations on the same bare path [41.87ms]
+(pass) GitService per-repo lock > runs different bare paths concurrently [21.54ms]
+
+src/terminal/terminal-fuzz.test.ts:
+(pass) TerminalSessionService internal logic (fuzz) > resolveShellCommand never throws for any platform or shell env [10.39ms]
+(pass) TerminalSessionService internal logic (fuzz) > resolveShellCommand returns string[] with at least 1 element [7.09ms]
+(pass) TerminalSessionService internal logic (fuzz) > resolveShellCommand first element is always a non-empty string [6.93ms]
+(pass) TerminalSessionService internal logic (fuzz) > resolveShellCommand on win32 always returns powershell.exe -NoLogo [2.08ms]
+(pass) TerminalSessionService internal logic (fuzz) > resolveShellCommand on non-win32 returns the trimmed shell env when set [2.57ms]
+(pass) TerminalSessionService internal logic (fuzz) > sendInput rejects strings over 4096 bytes with payload_too_large [1.65ms]
+(pass) TerminalSessionService internal logic (fuzz) > sendInput accepts exactly 4096 bytes (borderline) when window is fresh [0.42ms]
+(pass) TerminalSessionService internal logic (fuzz) > sendInput accepts any input under or equal to 4096 bytes with fresh window [3.30ms]
+(pass) TerminalSessionService internal logic (fuzz) > cumulative bytes > 16384 in same window returns rate_limited [9.54ms]
+(pass) TerminalSessionService internal logic (fuzz) > rate limit window resets after 1000ms has elapsed [1.72ms]
+(pass) TerminalSessionService internal logic (fuzz) > empty string (0 bytes) is always accepted regardless of window state [2.33ms]
+(pass) TerminalSessionService internal logic (fuzz) > byteLength of generated input always matches expected size for ASCII [3.41ms]
+(pass) TerminalSessionService internal logic (fuzz) > resize clamps cols to >= 20 and rows to >= 5 for any numeric input [4.16ms]
+(pass) TerminalSessionService internal logic (fuzz) > resize preserves values already at or above minimums [4.13ms]
+(pass) TerminalSessionService internal logic (fuzz) > resize handles special numeric values without throwing [2.63ms]
+(pass) TerminalSessionService internal logic (fuzz) > signal correctly maps the 3 valid TerminalSignal values [0.62ms]
+(pass) TerminalSessionService internal logic (fuzz) > signal treats any unrecognized value as SIGHUP fallback [8.83ms]
+
+src/skills/matcher.test.ts:
+(pass) matcher > should match skills, rules, agents, and workflows based on task description and workdir [4.19ms]
+(pass) matcher > should match workflow if mentioned in task [0.45ms]
+(pass) matcher > should return top 5 rules if workdir cannot be read or no extensions [0.27ms]
+(pass) matcher > should handle large amount of matched skills by trimming character count [1.34ms]
+(pass) matcher > should handle large amount of matched skills by trimming character count (skills) [1.31ms]
+(pass) matcher > prefers historically effective skills when lexical overlap is tied [0.70ms]
+
+src/skills/skills-fuzz.test.ts:
+(pass) tokenize fuzz > never throws for any string [24.04ms]
+(pass) tokenize fuzz > always returns string[] [11.10ms]
+(pass) tokenize fuzz > never contains tokens shorter than 3 chars [10.72ms]
+(pass) tokenize fuzz > never contains tokens with chars outside a-z0-9_+#.- [10.68ms]
+(pass) tokenize fuzz > never returns null or undefined elements [10.93ms]
+(pass) tokenize fuzz > returns empty array for input with no words > 2 chars [4.31ms]
+(pass) tokenize fuzz > deduplicates identical tokens [9.07ms]
+(pass) tokenize fuzz > is idempotent (applying twice yields same result) [7.89ms]
+(pass) keywordOverlap fuzz > never throws for any valid input [56.06ms]
+(pass) keywordOverlap fuzz > returns non-negative integer [42.60ms]
+(pass) keywordOverlap fuzz > returns 0 for empty tokens array [2.24ms]
+(pass) keywordOverlap fuzz > returns tokens.length when all tokens are in text [180.06ms]
+(pass) keywordOverlap fuzz > is monotonically increasing when text is extended with matching content [21.82ms]
+(pass) matchRules fuzz > never throws for any input [87.35ms]
+(pass) matchRules fuzz > falls back to first 5 rules when fileExtensions is empty [30.66ms]
+(pass) matchRules fuzz > returns all rules when all have missing applyTo pattern (non-empty extensions) [24.88ms]
+(pass) glob extraction fuzz > extracts extensions from {ts,tsx,js} pattern [22.05ms]
+(pass) glob extraction fuzz > extracts single extension from *.ext pattern [7.63ms]
+(pass) glob extraction fuzz > returns null for patterns with no glob match [2.43ms]
+(pass) metricBonus fuzz > never throws for any input [59.84ms]
+(pass) metricBonus fuzz > returns object with score number and optional reason string [55.23ms]
+(pass) metricBonus fuzz > score is never negative [54.41ms]
+(pass) metricBonus fuzz > returns score 0 and no reason when metrics are undefined [2.32ms]
+(pass) metricBonus fuzz > returns score 0 and no reason when metrics array is empty [2.18ms]
+(pass) metricBonus fuzz > returns score > 0 with reason only when quality is high enough [297.01ms]
+(pass) metricBonus fuzz > score is deterministic for the same inputs [97.47ms]
+(pass) resolveDependencies fuzz > never throws for any input [92.82ms]
+(pass) resolveDependencies fuzz > never returns null [89.30ms]
+(pass) resolveDependencies fuzz > result includes all initial selections [34.53ms]
+(pass) resolveDependencies fuzz > no duplicates in result [54.66ms]
+(pass) resolveDependencies fuzz > order is deterministic for the same inputs [45.21ms]
+(pass) resolveDependencies fuzz > discards dangling dependency references without error [16.26ms]
+(pass) trimToBudget fuzz > total chars never exceeds 8000 after trimming [33.31ms]
+(pass) trimToBudget fuzz > trimming preserves order [36.01ms]
+(pass) trimToBudget fuzz > returns all entries when total fits within budget [3.36ms]
+
+src/skills/registry.test.ts:
+(pass) SkillRegistryService > installs assets as pending review and activates them after approval [4.87ms]
+(pass) SkillRegistryService > builds hygiene reports from registry, memories, and failed dependencies [18.86ms]
+
+src/skills/repo-loader.test.ts:
+(pass) RepoSkillsLoader > loadManifestsFromGit > should load available manifest files using git cat-file [0.88ms]
+(pass) RepoSkillsLoader > loadWorktreeManifests > should load available manifest files from .agents/ directory [1.36ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should skip unreadable files when loading index [2.27ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should safely handle readdir errors by returning empty arrays [0.44ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should handle files with no frontmatter [0.49ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should parse frontmatter with unquoted and quoted strings correctly [0.35ms]
+(pass) RepoSkillsLoader > should load skills, rules, agents, and workflows from .vibe-code directory [0.51ms]
+(pass) RepoSkillsLoader > returns cached index on subsequent load calls and handles empty states [0.43ms]
+(pass) RepoSkillsLoader > loads manifests from worktrees and bare repos gracefully [0.61ms]
+(pass) RepoSkillsLoader > should restrict getFileContent to paths within .vibe-code directory [0.27ms]
+
+src/agents/orchestrator/verify.coverage.test.ts:
+(pass) verify utils > formatVerificationResult with long stdout/stderr correctly truncates [2.54ms]
+(pass) verify utils > extractFailureReason with missing runner/command should fallback [0.08ms]
+(pass) verify utils > verifyWorktreeParallel abort signal correctly handles failure [1.65ms]
+
+src/agents/orchestrator/pr-retry.test.ts:
+(pass) retryPR > throws if task not found [0.84ms]
+(pass) retryPR > throws if task not in review status [0.19ms]
+(pass) retryPR > throws if task has no branch associated [0.15ms]
+(pass) retryPR > throws if repository not found [0.18ms]
+(pass) retryPR > throws if no run found for this task [0.14ms]
+(pass) retryPR > throws if engine not found [0.12ms]
+(pass) retryPR > successfully retries PR, updates db and broadcasts [0.39ms]
+(pass) retryPR > uses defaultBranch if task baseBranch is missing [0.20ms]
+(pass) retryPR > uses barePath from git if localPath is missing [0.15ms]
+(pass) retryPR > throws error if git operations fail, but still tries to clean up [0.38ms]
+(pass) retryPR > ignores error if cleanup fails [0.17ms]
+
+src/agents/orchestrator/frontend-shot.test.ts:
+(pass) captureFrontendScreenshotIfNeeded > does nothing if package.json does not exist [1.18ms]
+(pass) captureFrontendScreenshotIfNeeded > does nothing if package.json is invalid JSON [0.62ms]
+(pass) captureFrontendScreenshotIfNeeded > skips screenshot if Electron app is detected [0.16ms]
+(pass) captureFrontendScreenshotIfNeeded > skips screenshot if no frontend dependency is detected [0.23ms]
+(pass) captureFrontendScreenshotIfNeeded > skips screenshot if no dev/start script is detected [0.13ms]
+(pass) captureFrontendScreenshotIfNeeded > fails gracefully when dev server process cannot be spawned [0.31ms]
+(pass) captureFrontendScreenshotIfNeeded > fails gracefully when no listening port is detected (timeout) [1.99ms]
+(pass) captureFrontendScreenshotIfNeeded > captures screenshot when frontend is detected and dev server starts [0.71ms]
+
+src/agents/orchestrator/review.test.ts:
+(pass) runReviewPipeline > runs the review pipeline for all personas and extracts findings [1.81ms]
+
+src/agents/orchestrator/task-plan.test.ts:
+(pass) task-plan tests > extractCandidateSteps > extracts from bullet points [0.29ms]
+(pass) task-plan tests > extractCandidateSteps > extracts from sentences if no bullets are present [0.18ms]
+(pass) task-plan tests > extractCandidateSteps > returns default fallback steps if nothing else matches [0.09ms]
+(pass) task-plan tests > inferTaskType > infers frontend [0.03ms]
+(pass) task-plan tests > inferTaskType > infers test [0.02ms]
+(pass) task-plan tests > inferTaskType > infers docs [0.02ms]
+(pass) task-plan tests > inferTaskType > infers infra [0.03ms]
+(pass) task-plan tests > inferTaskType > infers refactor [0.02ms]
+(pass) task-plan tests > inferTaskType > infers bugfix [0.02ms]
+(pass) task-plan tests > inferTaskType > infers chore [0.02ms]
+(pass) task-plan tests > inferTaskType > infers backend by default [0.02ms]
+(pass) task-plan tests > buildPlanNodes > handles preparation and terminal nodes correctly [0.20ms]
+(pass) task-plan tests > buildPlanNodes > handles multiple sequential preparation and execution nodes [0.15ms]
+(pass) task-plan tests > materializeTaskExecutionPlan > returns existing children if force is false [0.11ms]
+(pass) task-plan tests > materializeTaskExecutionPlan > creates tasks correctly when distributing budget [0.27ms]
+
+src/agents/orchestrator/verify.test.ts:
+(pass) discoverValidationCommands > prefers WORKFLOW.md quality gate commands when present [2.02ms]
+(pass) discoverValidationCommands > falls back to package.json scripts when no workflow contract exists [1.25ms]
+(pass) discoverValidationCommands - extra > detects validation commands from Makefile when package.json is missing [1.24ms]
+(pass) discoverValidationCommands - extra > detects validation commands from README.md bash blocks [1.12ms]
+(pass) discoverValidationCommands - extra > throws an error when no validation commands can be discovered [3.17ms]
+(pass) computeRunQualityScore > reduces score for retries and review findings [0.24ms]
+(pass) computeRunQualityScore > clamps score to the 0..100 range [0.05ms]
+(pass) extractFailureReason > extracts test failures properly [320.45ms]
+(pass) extractFailureReason > extracts build error messages properly [311.34ms]
+(pass) extractFailureReason > extracts lint warning messages properly [313.12ms]
+(pass) extractFailureReason > falls back to generic failure reason if no match [311.72ms]
+(pass) extractFailureReason > extracts failure reason exactly as fallback to generic command if no output [318.99ms]
+(pass) _formatVerificationResult > formats successful results [0.30ms]
+(pass) _formatVerificationResult > formats failed results without verbose [0.15ms]
+(pass) _formatVerificationResult > formats failed results with verbose [0.17ms]
+(pass) verifyWorktreeParallel > runs commands in parallel and returns results [0.08ms]
+(pass) verifyWorktreeParallel > handles failing commands in parallel execution [0.04ms]
+
+src/agents/orchestrator/executor.test.ts:
+(pass) executor helper functions > taskSlug > slugifies titles correctly [0.12ms]
+(pass) executor helper functions > docsRelativePath > returns correct path [0.07ms]
+(pass) executor helper functions > normalizeAsciiText > removes diacritics and special characters [0.14ms]
+(pass) executor helper functions > escalateModel > escalates correctly [0.13ms]
+(pass) executor helper functions > autoInstallDependencies > skips if no package.json [0.30ms]
+(pass) executor helper functions > runWorkspaceScripts > skips if no config file exists [0.25ms]
+(pass) buildReviewAutofixPrompt > builds prompt using task info and findings [0.18ms]
+(pass) buildDocsAutofixPrompt > builds prompt with task info and docs location [0.21ms]
+(pass) buildValidationRepairPrompt > builds prompt with failure info [0.34ms]
+(pass) extractPersona > extracts persona correctly [0.15ms]
+(pass) normalizeRepoWebUrl > normalizes ssh and https URLs [0.16ms]
+(pass) extractDocsAssetPath > extracts docs paths correctly [0.11ms]
+(pass) buildAssetBlobUrl > builds blob url based on provider [0.16ms]
+(pass) rewriteDocsAssetLinks > rewrites local markdown links to absolute blob urls [0.14ms]
+[2m[10:18:01][0m [90m[orchestrator][0m [33m! Max concurrent agents reached (1)[0m
+(pass) executeAgent (integration mock) > throws if max concurrent agents is exceeded [0.53ms]
+
+src/agents/orchestrator/baseline-check.test.ts:
+(pass) runBaselineCheck > skips if VIBE_CODE_SKIP_BASELINE_CHECK is true [0.15ms]
+(pass) runBaselineCheck > skips if no runner is detected (no package.json or Makefile) [0.28ms]
+(pass) runBaselineCheck > detects make and runs make typecheck [1.22ms]
+(pass) runBaselineCheck > detects package.json but skips if no typecheck script [0.44ms]
+(pass) runBaselineCheck > detects type-check script in package.json [0.52ms]
+(pass) runBaselineCheck > fails if runner command fails [0.33ms]
+(pass) runBaselineCheck > handles JSON parse error gracefully [0.34ms]
+(pass) runBaselineCheck > handles spawn errors gracefully [0.25ms]
+(pass) runBaselineCheck > truncates output to last 10 lines [0.45ms]
+(pass) runBaselineCheck > runner process handles exit timeout (or unresolved exited) [0.50ms]
+
+src/agents/orchestrator/evaluator.test.ts:
+(pass) runPostRunEvaluator > returns null if disabled [0.28ms]
+(pass) runPostRunEvaluator > returns null if diff is empty [0.69ms]
+(pass) runPostRunEvaluator > returns evaluation result on success [0.78ms]
+(pass) runPostRunEvaluator > returns null if fetch fails [0.39ms]
+(pass) runPostRunEvaluator > returns null if fetch throws [0.29ms]
+(pass) runPostRunEvaluator > handles invalid JSON response [0.38ms]
+(pass) runPostRunEvaluator > handles missing properties in valid JSON response, bounds score [0.43ms]
+(pass) runPostRunEvaluator > passes if score >= threshold and pass not explicitly false [0.33ms]
+(pass) runPostRunEvaluator > handles truncated diff logic [0.59ms]
+(pass) runPostRunEvaluator > handles git failure [0.21ms]
+
+src/agents/orchestrator/orchestrator.coverage.test.ts:
+(pass) Orchestrator additional coverage > triggerScheduled rejects non-scheduled tasks [0.34ms]
+(pass) Orchestrator additional coverage > triggerScheduled respects concurrency limit [0.20ms]
+(pass) Orchestrator additional coverage > triggerScheduled throws if already running [0.15ms]
+(pass) Orchestrator additional coverage > sendInput handles active run [0.19ms]
+(pass) Orchestrator additional coverage > sendInput returns false if no active run [0.05ms]
+[2m[10:18:01][0m [90m[orchestrator][0m [36m◆ Task [t1] scheduled for auto-retry 1/2 in 10s (reason: failed)[0m
+[2m[10:18:01][0m [90m[orchestrator][0m [36m◆ Auto-retrying task [t1] (attempt 1/2)[0m
+(pass) Orchestrator additional coverage > maybeScheduleRetry executes retry logic successfully [0.70ms]
+[2m[10:18:01][0m [90m[orchestrator][0m [33m! Task [t1] blocked: Agent failed after 2 automatic retry attempt(s).[0m
+(pass) Orchestrator additional coverage > maybeScheduleRetry exceeds max retries and blocks task [0.52ms]
+(pass) Orchestrator additional coverage > cancel method covers un-active run properly [0.63ms]
+[2m[10:18:01][0m [90m[orchestrator][0m [36m◆ Recovered 3 orphaned tasks: 2 promoted to backlog, 1 remain blocked[0m
+(pass) Orchestrator additional coverage > recoverInProgressTasks promotes top maxConcurrent tasks to backlog [0.58ms]
+(pass) Orchestrator additional coverage > unblockTask works correctly [0.41ms]
+(pass) Orchestrator additional coverage > unblockTask does nothing if task is not blocked [0.13ms]
+[2m[10:18:01][0m [90m[orchestrator][0m [36m◆ [ralph-loop] Relaunching task [t1] (attempt 1/3)[0m
+(pass) Orchestrator additional coverage > checkLoopAndRelaunch handles loop logic successfully [0.50ms]
+
+src/agents/orchestrator/event-handler.test.ts:
+(pass) handleAgentEvent > run not found scenarios > handles events when run is missing without crashing [0.21ms]
+(pass) handleAgentEvent > handles log event correctly [0.13ms]
+(pass) handleAgentEvent > handles error event correctly [0.11ms]
+(pass) handleAgentEvent > handles status event correctly [0.15ms]
+(pass) handleAgentEvent > handles cost event correctly [0.20ms]
+(pass) handleAgentEvent > handles session event correctly [0.13ms]
+(pass) handleAgentEvent > handles tool_use event correctly [0.13ms]
+(pass) handleAgentEvent > handles tool_result event correctly [0.12ms]
+
+src/agents/orchestrator/prompt.test.ts:
+(pass) prompt tests > buildPrompt > builds prompt with task title and description [0.17ms]
+(pass) prompt tests > buildPrompt > builds prompt with task goal and desired outcome [0.08ms]
+(pass) prompt tests > buildPrompt > builds prompt with memory context [0.18ms]
+(pass) prompt tests > appendRuntimeContextHints > appends hints without planner spec [0.05ms]
+(pass) prompt tests > appendRuntimeContextHints > appends hints with planner spec [0.04ms]
+(pass) prompt tests > buildContextAsync > handles full context loading [4.52ms]
+
+src/agents/orchestrator/planner.test.ts:
+(pass) runPlannerIfNeeded > returns null if explicitly disabled [0.39ms]
+(pass) runPlannerIfNeeded > returns null if description is long enough [0.11ms]
+(pass) runPlannerIfNeeded > returns spec and writes to file on success [0.64ms]
+(pass) runPlannerIfNeeded > returns null if fetch fails [0.17ms]
+(pass) runPlannerIfNeeded > returns null if fetch throws [0.27ms]
+(pass) runPlannerIfNeeded > returns null if writeFile throws [0.21ms]
+(pass) runPlannerIfNeeded > handles empty descriptions properly in the prompt [0.17ms]
+
+src/agents/engines/reviewer.test.ts:
+(pass) reviewer engine > PERSONA_LABELS exists [0.03ms]
+
+# Unhandled error between tests
+-------------------------------
+ 5 | // The core issue in Bun's module mocking is causing test parallelism to bleed,
+ 6 | // so testing this module's integration with spawn separately manually is better suited
+ 7 | describe("reviewer engine", () => {
+ 8 |   afterEach(() => {
+ 9 |     mock.restore();
+10 |     Bun.spawn = originalSpawn;
+                     ^
+ReferenceError: originalSpawn is not defined
+      at <anonymous> (/app/packages/server/src/agents/engines/reviewer.test.ts:10:17)
+-------------------------------
+
+(skip) reviewer engine > runPersonaReview handles successful gemini execution
+(skip) reviewer engine > runPersonaReview handles successful claude execution
+(skip) reviewer engine > runPersonaReview handles execution failure
+
+src/agents/engines/stderr-tail.test.ts:
+(pass) StderrTail > forwards every chunk and trims tail [2.15ms]
+(pass) StderrTail > bounds buffer to maxBytes from the end [0.08ms]
+(pass) StderrTail > returns empty tail when nothing written [0.02ms]
+(pass) withAgentStderr > appends labeled stderr when non-empty [0.06ms]
+(pass) withAgentStderr > passes msg through when tail empty [0.07ms]
+
+src/agents/engines/opencode.cache-tokens.test.ts:
+(pass) step_finish cache token accumulation > emits cost event with cache.read mapped to costStats.cached [4.00ms]
+(pass) step_finish cache token accumulation > emits cost event without cache when not provided [0.15ms]
+(pass) step_finish cache token accumulation > skips cost when all token fields are zero [0.08ms]
+
+src/agents/engines/gemini.trust.test.ts:
+(pass) Gemini env injection > defaults GEMINI_CLI_TRUST_WORKSPACE=true to bypass folder-trust gate [2.64ms]
+(pass) Gemini env injection > caller env wins over default [0.10ms]
+(pass) Gemini env injection > strips IDE binding env vars to avoid Gemini IDE client lock-in [0.08ms]
+
+src/agents/engines/opencode.replay.test.ts:
+(pass) OpenCodeEngine replay fixtures > replays the real write-guard flow captured from the CLI [4.35ms]
+
+src/agents/engines/acpx.test.ts:
+(pass) AcpxEngine > isAvailable returns true on success [2.29ms]
+(pass) AcpxEngine > isAvailable returns false on failure [0.10ms]
+(pass) AcpxEngine > getVersion returns version string [0.44ms]
+(pass) AcpxEngine > listModels returns models [0.47ms]
+(pass) AcpxEngine > execute runs acpx and handles all acpx.* event types [7.11ms]
+(pass) AcpxEngine > abort kills the process and deletes from map [0.12ms]
+(pass) AcpxEngine > abort does nothing if runId not found [0.05ms]
+(pass) AcpxEngine > sendInput writes to stdin if available [0.19ms]
+(pass) AcpxEngine > sendInput returns false if process not found or stdin missing [0.04ms]
+
+src/agents/engines/opencode.shim-resolver.test.ts:
+(pass) resolveOpencodeNativeFromShim > returns null when path is not a .cmd shim [0.15ms]
+(pass) resolveOpencodeNativeFromShim > prefers x64 native binary when present on x64 [0.11ms]
+(pass) resolveOpencodeNativeFromShim > falls back to x64-baseline when x64 missing [0.05ms]
+(pass) resolveOpencodeNativeFromShim > prefers arm64 binary on arm64 host [0.04ms]
+(pass) resolveOpencodeNativeFromShim > returns null when no candidate package is installed [0.03ms]
+
+src/agents/engines/blocked-args.test.ts:
+(pass) filterCustomArgs > returns empty for undefined [1.65ms]
+(pass) filterCustomArgs > passes through allowed args [0.15ms]
+(pass) filterCustomArgs > strips with-value blocked flag and its value [0.03ms]
+(pass) filterCustomArgs > strips with-value blocked flag in inline form [0.04ms]
+(pass) filterCustomArgs > strips standalone blocked flag without consuming next arg [0.02ms]
+(pass) filterCustomArgs > invokes onBlock callback per blocked flag [0.07ms]
+
+src/agents/engines/opencode.fuzz.test.ts:
+(pass) humanizeStderr fuzz > never throws for any arbitrary string [30.35ms]
+(pass) humanizeStderr fuzz > never returns empty string (only null or non-empty) [15.97ms]
+(pass) humanizeStderr fuzz > suppresses DEBUG/TRACE prefix regardless of surrounding text [8.50ms]
+(pass) humanizeStderr fuzz > suppresses DBG prefix when followed by whitespace [8.14ms]
+(pass) humanizeStderr fuzz > surfaces plain non-matching text [9.64ms]
+(pass) humanizeStderr fuzz > handles JSON-like strings without throwing [39.05ms]
+(pass) humanizeStderr fuzz > suppresses JSON with debug/trace/verbose level [9.05ms]
+(pass) humanizeStderr fuzz > handles stderr lines with special characters gracefully [4.86ms]
+(pass) isFreeOpencodeModel fuzz > always returns a boolean for any string input [11.26ms]
+(pass) isFreeOpencodeModel fuzz > returns true for auto-free regardless of case context [0.08ms]
+(pass) isFreeOpencodeModel fuzz > returns false for named non-free provider models [0.02ms]
+(pass) isFreeOpencodeModel fuzz > returns true for any model ending in -free [7.16ms]
+(pass) isFreeOpencodeModel fuzz > returns false for premium models [0.47ms]
+(pass) DEFAULT_OPENCODE_MODEL invariant > default model passes free model filter [0.04ms]
+(pass) DEFAULT_OPENCODE_MODEL invariant > all fallback models pass free model filter [0.07ms]
+(pass) DEFAULT_OPENCODE_MODEL invariant > LITELLM_ANTHROPIC_COMPAT_MODEL is NOT in free models (it's a proxy route) [0.03ms]
+(pass) OpenCodeEngine.parseLine fuzz > never throws for any arbitrary string input [31.17ms]
+(pass) OpenCodeEngine.parseLine fuzz > returns an array of AgentEvent (never null/undefined) [10.82ms]
+(pass) OpenCodeEngine.parseLine fuzz > handles random JSON structures gracefully [31.47ms]
+(pass) OpenCodeEngine.parseLine fuzz > handles deeply nested braces and strings [17.68ms]
+(pass) OpenCodeEngine.parseLine fuzz > handles malformed JSON with mixed content [7.19ms]
+(pass) OpenCodeEngine.parseLine fuzz > parses valid events correctly regardless of surrounding whitespace [11.22ms]
+(pass) OpenCodeEngine.parseLine fuzz > accumulates tokens correctly with random step_finish sequences [7.30ms]
+(pass) OPENCODE_FALLBACK_MODELS invariant fuzz > all fallback models are non-empty [0.09ms]
+(pass) OPENCODE_FALLBACK_MODELS invariant fuzz > no fallback model contains whitespace [0.07ms]
+(pass) resolveOpencodeBinary invariants > returns a non-empty string [0.05ms]
+(pass) OPENCODE_BLOCKED_ARGS fuzz > all blocked args start with -- [0.07ms]
+(pass) OPENCODE_BLOCKED_ARGS fuzz > all blocked args have mode with-value or standalone [0.04ms]
+(pass) opencode model listing fuzz > isFreeOpencodeModel returns true for any string ending in -free [18.40ms]
+(pass) opencode model listing fuzz > isFreeOpencodeModel returns true for auto-free [0.08ms]
+(pass) opencode model listing fuzz > isFreeOpencodeModel returns false for empty string [0.03ms]
+(pass) opencode model listing fuzz > DEFAULT_OPENCODE_MODEL matches OPENCODE_FALLBACK_MODELS [0.02ms]
+(pass) humanizeStderr structured log fuzz > handles ISO date with varying timezone offsets [0.97ms]
+(pass) humanizeStderr structured log fuzz > suppresses INFO for non-llm services [0.92ms]
+(pass) humanizeStderr structured log fuzz > surfaces WARN/ERROR structured lines with non-striped content [1.22ms]
+(pass) humanizeStderr structured log fuzz > returns null for JSON with session/provider keywords [0.68ms]
+(pass) humanizeStderr structured log fuzz > surfaces JSON with error message content [2.99ms]
+(pass) humanizeToolCall edge cases fuzz > matches tool names case-insensitively [0.17ms]
+(pass) humanizeToolCall edge cases fuzz > handles tool names with special characters [18.47ms]
+(pass) parseLine JSON-RPC fuzz > handles JSON-RPC session/started [0.30ms]
+(pass) parseLine JSON-RPC fuzz > handles JSON-RPC tool/use [0.10ms]
+(pass) parseLine JSON-RPC fuzz > handles JSON-RPC tool/result [0.08ms]
+(pass) parseLine JSON-RPC fuzz > handles JSON-RPC error method [0.07ms]
+(pass) parseLine JSON-RPC fuzz > handles JSON-RPC cost method with token stats [0.08ms]
+(pass) parseLine token accumulation invariants > accumulators never go backwards [6.25ms]
+
+src/agents/engines/opencode.test.ts:
+(pass) humanizeStderr > returns null for empty lines [0.09ms]
+(pass) humanizeStderr > suppresses DEBUG/TRACE/INF/DBG prefixed lines [0.16ms]
+(pass) humanizeStderr > suppresses OpenCode INFO structured log lines (all services by default) [0.09ms]
+(pass) humanizeStderr > suppresses INFO for non-meaningful services [0.05ms]
+(pass) humanizeStderr > surfaces llm service INFO with modelID [0.10ms]
+(pass) humanizeStderr > passes through plain unrecognised text [0.05ms]
+(pass) humanizeStderr > suppresses JSON with debug level [0.08ms]
+(pass) humanizeStderr > returns message from non-debug JSON [0.05ms]
+(pass) humanizeStderr > serializes object-shaped stderr messages instead of [object Object] [0.06ms]
+(pass) OpenCodeEngine.parseLine > parses a text event into a stdout log [0.10ms]
+(pass) OpenCodeEngine.parseLine > parses a tool_use calling event into status + log [0.16ms]
+(pass) OpenCodeEngine.parseLine > parses a step_start event into Working... status [0.09ms]
+(pass) OpenCodeEngine.parseLine > parses a thinking event into Thinking... status [0.12ms]
+(pass) OpenCodeEngine.parseLine > parses an error event into a stderr log [0.08ms]
+(pass) OpenCodeEngine.parseLine > returns empty array for unknown event types (heartbeat noise) [0.06ms]
+(pass) OpenCodeEngine.parseLine > handles non-JSON plain text lines [0.13ms]
+(pass) OpenCodeEngine.parseLine > ignores lines starting with { that are invalid JSON [0.05ms]
+(pass) OpenCodeEngine.parseLine > handles JSON content containing braces and quotes correctly (brace counting) [0.09ms]
+(pass) OpenCodeEngine.parseLine > surfaces tool failures with error message [0.15ms]
+(pass) OpenCodeEngine.parseLine > handles multiple JSON objects on a single line [0.08ms]
+(pass) OpenCodeEngine.parseLine > handles deeply nested braces and escaped quotes in strings [0.07ms]
+(pass) OpenCodeEngine.parseLine > parses progress events into status + system log [0.14ms]
+(pass) OpenCodeEngine.parseLine > parses step_finish with token usage [0.11ms]
+(pass) OpenCodeEngine.parseLine > humanizes various tool calls correctly [0.33ms]
+(pass) OpenCodeEngine.parseLine > humanizes tool results correctly [0.45ms]
+(pass) OpenCodeEngine.parseLine > emits a tool label before completed tool output [0.17ms]
+(pass) OpenCodeEngine.parseLine > parses real 'text' event correctly (contract snapshot) [0.11ms]
+(pass) OpenCodeEngine.parseLine > parses real 'tool_use' (bash) event correctly (contract snapshot) [0.19ms]
+(pass) OpenCodeEngine.parseLine > parses real 'step_finish' (tokens) event correctly (contract snapshot) [0.14ms]
+(pass) OpenCodeEngine.parseLine > parses interactive question events correctly [0.13ms]
+(pass) OpenCodeEngine.parseLine > accumulates tokens and cost cumulatively across multiple step_finish events [0.24ms]
+(pass) OpenCodeEngine.buildCommand > passes correct base arguments without prompt (prompt sent via stdin) [0.47ms]
+(pass) OpenCodeEngine.buildCommand > includes --session when resumeSessionId is provided [0.12ms]
+(pass) OpenCodeEngine.buildCommand > uses pipe stdin mode on all platforms (stdin is closed immediately on Windows) [0.09ms]
+(pass) execute: opencode.json lifecycle > creates opencode.json in isolated directory and configures XDG_CONFIG_HOME [48.10ms]
+(pass) execute: opencode.json lifecycle > deletes the isolated config directory and leaves workspace clean after execution [47.42ms]
+(pass) execute: complete event > always emits a complete event as the last event [18.65ms]
+(pass) execute: complete event > complete event has exitCode 0 for a successful process [18.79ms]
+(pass) execute: complete event > complete event carries correct non-zero exitCode [18.77ms]
+(pass) execute: complete event > emits a stderr log for non-zero exit [18.73ms]
+(pass) execute: complete event > does NOT emit exit log for exit code 0 [18.57ms]
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Auto-retrying task [e85275fc] (attempt 1/2)[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [33m! Bare repo missing on disk for "vibe-code" (/tmp/e2e-bare); re-cloning[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Launching task "docs: add HOMOLOG.md for E2E validation" [e85275fc] engine=opencode model=claude-sonnet-4-6 repo=vibe-code[0m
+
+[2m[10:18:02][0m [90m[[34me85275fc[90m][0m [1m[32m▶ AGENT STARTED[0m engine=[36mopencode[0m model=[35mclaude-sonnet-4-6[0m repo=[34mvibe-code[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=setup engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=worktree_ready engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ context_bundle_built skills=0 memories=6 workflow=none[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=generating engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Auto-retrying task [c574ced2] (attempt 1/2)[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [33m! Bare repo missing on disk for "vibe-code" (/tmp/e2e-bare); re-cloning[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Launching task "fix(conflicts): resolve merge conflicts for "feat:" [c574ced2] engine=opencode model=default repo=vibe-code[0m
+
+[2m[10:18:02][0m [90m[[34mc574ced2[90m][0m [1m[32m▶ AGENT STARTED[0m engine=[36mopencode[0m model=[35mauto-free[0m repo=[34mvibe-code[0m
+[2m[10:18:02][0m [90m[[34mc574ced2[90m][0m [31m[1m✗ AGENT FAILED[0m [2mgit.fetchRepo is not a function. (In 'git.fetchRepo(barePath)', 'git.fetchRepo' is undefined)[0m
+
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Task [c574ced2] scheduled for auto-retry 2/2 in 20s (reason: failed)[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [31m✗ validation_failed command='bun install' exit_code=1 artifact=run:721ccb9bf3ff936e:validation:1[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=fixing engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+(pass) execute: real-time streaming > yields stdout events BEFORE the process exits [443.15ms]
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ harness_phase_started task=e85275fc phase=validating engine=opencode[0m
+[2m[10:18:02][0m [90m[orchestrator][0m [31m✗ validation_failed command='bun install' exit_code=1 artifact=run:721ccb9bf3ff936e:validation:2[0m
+[2m[10:18:02][0m [90m[[34me85275fc[90m][0m [31m[1m✗ AGENT FAILED[0m [2mDeterministic validation failed after 3 attempts (install=failed(1))[0m
+
+[2m[10:18:02][0m [90m[orchestrator][0m [36m◆ Task [e85275fc] scheduled for auto-retry 2/2 in 20s (reason: failed)[0m
+(pass) execute: real-time streaming > yields multiple events incrementally during execution [244.82ms]
+(pass) execute: real-time streaming > does not duplicate events (each event appears exactly once) [95.42ms]
+(pass) execute: real-time streaming > delivers events written right before process exits [43.86ms]
+(pass) execute: stderr passthrough > surfaces plain text stderr lines [42.63ms]
+(pass) execute: stderr passthrough > suppresses OpenCode INFO structured log lines from stderr [42.81ms]
+(pass) execute: abort signal > resolves (does not hang) when the signal is aborted [53.34ms]
+(pass) execute: heartbeat > emits a 'Still running' system log during a long process [321.43ms]
+(pass) OpenCodeEngine prepareWorkdir > returns empty array by default [0.32ms]
+(pass) resolveOpencodeNativeFromShim > returns null if shimPath does not end in .cmd [0.08ms]
+(pass) resolveOpencodeNativeFromShim > returns native path if stat succeeds for an architecture candidate [0.35ms]
+(pass) resolveOpencodeNativeFromShim > returns native path for arm64 candidate [0.17ms]
+(pass) resolveOpencodeNativeFromShim > returns null if stat fails for all candidates [0.12ms]
+(pass) OpenCodeEngine buildCommandArgs > includes extra args from VIBE_OPENCODE_EXTRA_ARGS if present [0.29ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns true on success [0.31ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns false on failure [0.19ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns false on exception [0.18ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns version text on success [0.45ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns null on failure [0.28ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns null on exception [0.21ms]
+(pass) OpenCodeEngine auto-free selection > selects a free model from listing [0.46ms]
+(pass) OpenCodeEngine auto-free selection > falls back to auto-free on command error [0.27ms]
+(pass) OpenCodeEngine model listing > returns fallback models when external providers list nothing [1.12ms]
+(pass) OpenCodeEngine MCP configuration > serializes options.mcpServers into opencode.json [36.14ms]
+
+src/agents/engines/opencode.advanced.test.ts:
+(pass) OpenCodeEngine Advanced Contract Tests > surfaces non-zero exit code even if status is 'completed' (snapshot real) [2.21ms]
+(pass) OpenCodeEngine Advanced Contract Tests > handles complex file writing contract (write tool) [0.18ms]
+
+src/agents/engines/grok.test.ts:
+(pass) GrokEngine > isAvailable returns true on success [0.36ms]
+(pass) GrokEngine > isAvailable returns false on failure [0.30ms]
+(pass) GrokEngine > getVersion returns version string [0.39ms]
+(pass) GrokEngine > listModels returns grok-build [0.75ms]
+(pass) GrokEngine > execute runs grok CLI and yields events from streaming json stdout [1.94ms]
+(pass) GrokEngine > abort kills the process and deletes from map [0.12ms]
+(pass) GrokEngine > abort does nothing if runId not found [0.05ms]
+(pass) GrokEngine > sendInput writes to stdin if available [0.13ms]
+(pass) GrokEngine > sendInput returns false if process not found or stdin missing [0.04ms]
+
+src/agents/engines/heartbeat.test.ts:
+(pass) heartbeat > getHeartbeatIntervalMs > returns default 30000 when env not set [1.81ms]
+(pass) heartbeat > getHeartbeatIntervalMs > returns env value if set [0.09ms]
+(pass) heartbeat > withHeartbeat > yields events without heartbeat if they arrive quickly [0.37ms]
+(pass) heartbeat > withHeartbeat > yields heartbeat if events are delayed [151.00ms]
+(pass) heartbeat > withHeartbeat > stops when source finishes [0.49ms]
+(pass) heartbeat > withHeartbeat > aborts when signal is aborted [201.51ms]
+
+src/agents/engines/hardcoded-models.test.ts:
+(pass) Agent Engines hardcoded models verification > Engine aider.ts does not contain static/hardcoded model lists [0.30ms]
+(pass) Agent Engines hardcoded models verification > Engine claude-code.ts does not contain static/hardcoded model lists [0.02ms]
+(pass) Agent Engines hardcoded models verification > Engine opencode.fixtures.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine kiro-cli.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine reviewer.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine gemini.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine opencode.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine pi.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine copilot.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine codex.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine openclaw.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine grok.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine ampcode.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine kimi.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine cursor-agent.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine acpx.ts does not contain static/hardcoded model lists
+(pass) Agent Engines hardcoded models verification > Engine hermes.ts does not contain static/hardcoded model lists
+
+src/agents/engines/gemini.test.ts:
+(pass) GeminiEngine > isAvailable and hasCli > returns true when CLI is available [0.61ms]
+(pass) GeminiEngine > isAvailable and hasCli > returns false when CLI is not available [0.18ms]
+(pass) GeminiEngine > isAvailable and hasCli > returns false when command resolution fails [0.22ms]
+(pass) GeminiEngine > getVersion > returns version string on success [0.45ms]
+(pass) GeminiEngine > getVersion > returns null on non-zero exit code [0.14ms]
+(pass) GeminiEngine > getVersion > returns null on throw [0.15ms]
+(pass) GeminiEngine > listModels > returns models from CLI and litellm [0.98ms]
+(pass) GeminiEngine > listModels > falls back to default models if CLI returns nothing [0.44ms]
+(pass) GeminiEngine > listModels > uses cached models on subsequent calls [0.25ms]
+(pass) GeminiEngine > getSetupIssue > returns null if available [0.18ms]
+(pass) GeminiEngine > getSetupIssue > returns error message if not available [0.12ms]
+(pass) GeminiEngine > prepareWorkdir > creates .gemini directory and writes config.json [0.43ms]
+(pass) GeminiEngine > execute > throws error if CLI is not installed [1.06ms]
+(pass) GeminiEngine > execute > yields events and parses acp message [0.59ms]
+(pass) GeminiEngine > execute > handles stale process killing [0.59ms]
+(pass) GeminiEngine > abort > kills the process tree if process exists [11.49ms]
+(pass) GeminiEngine > abort > does nothing if process does not exist [0.05ms]
+(pass) GeminiEngine > sendInput > writes to stdin if available [0.20ms]
+(pass) GeminiEngine > sendInput > returns false if process or stdin not available [0.04ms]
+
+3 tests skipped:
+(skip) reviewer engine > runPersonaReview handles successful gemini execution
+(skip) reviewer engine > runPersonaReview handles successful claude execution
+(skip) reviewer engine > runPersonaReview handles execution failure
+--------------------------------------------|---------|---------|-------------------
+File                                        | % Funcs | % Lines | Uncovered Line #s
+--------------------------------------------|---------|---------|-------------------
+All files                                   |   88.10 |   91.63 |
+ src/agents/acp-parser.ts                   |  100.00 |   98.33 | 133,160,235,358-359
+ src/agents/agent-templates.ts              |  100.00 |  100.00 |
+ src/agents/conflict-resolver.ts            |  100.00 |  100.00 |
+ src/agents/engines/acpx.ts                 |   85.71 |  100.00 |
+ src/agents/engines/blocked-args.ts         |  100.00 |  100.00 |
+ src/agents/engines/gemini.ts               |   92.31 |  100.00 |
+ src/agents/engines/grok.ts                 |   85.71 |  100.00 |
+ src/agents/engines/heartbeat.ts            |   90.00 |  100.00 |
+ src/agents/engines/opencode.fixtures.ts    |  100.00 |  100.00 |
+ src/agents/engines/opencode.ts             |   79.37 |   96.62 | 198-201,228-238,306-307,749-755,759-767
+ src/agents/engines/reviewer.ts             |    0.00 |    9.86 | 19-21,90-107,116-286
+ src/agents/engines/stderr-tail.ts          |  100.00 |  100.00 |
+ src/agents/litellm-client.ts               |   84.62 |  100.00 |
+ src/agents/memory-service.ts               |   92.59 |   84.54 | 165-185,290-300
+ src/agents/orchestrator.ts                 |   85.45 |   93.57 | 82-83,309-310,353-356,407-414,418-433
+ src/agents/orchestrator/baseline-check.ts  |   84.62 |  100.00 |
+ src/agents/orchestrator/contract-layers.ts |  100.00 |  100.00 |
+ src/agents/orchestrator/evaluator.ts       |  100.00 |  100.00 |
+ src/agents/orchestrator/event-handler.ts   |  100.00 |  100.00 |
+ src/agents/orchestrator/executor.ts        |   60.87 |   52.53 | 196,226,228,266-287,300-301,303-311,313-320,323-333,335-337,339-340,342-345,347-348,375,377-380,382-390,392-394,396-401,403-405,407-408,410-416,427-428,477-483,487-497,603,617-620,639-640,642-647,649-650,652-657,659-660,670-678,697-701,726-729,744-753,798-806,816-819,822-829,874-884,897,904-923,943,951,968-969,976-998,1000-1004,1006-1014,1016,1018-1034,1045,1069-1071,1109-1115,1130-1131,1138-1163,1165-1169,1171-1179,1181,1183-1199,1210,1219,1221,1224-1239,1241,1243-1261,1263-1278,1280-1289,1291-1298,1300,1302-1306,1308,1310-1311,1313-1339,1342-1354,1357-1368,1371-1382,1385,1387-1412,1414-1415,1417-1418,1420-1422,1424-1430,1432,1434-1457,1459-1460,1462-1468,1470-1482,1484,1486-1488,1490-1507,1511-1512,1515-1524,1526-1527,1529-1534,1536-1544,1546-1547,1549-1574,1576-1587,1589-1602,1605-1612,1614-1618,1621-1642,1674,1799-1800
+ src/agents/orchestrator/frontend-shot.ts   |   37.50 |   98.57 | 71
+ src/agents/orchestrator/harness-context.ts |  100.00 |   98.80 |
+ src/agents/orchestrator/planner.ts         |  100.00 |  100.00 |
+ src/agents/orchestrator/pr-retry.ts        |  100.00 |  100.00 |
+ src/agents/orchestrator/prompt.ts          |   90.91 |   91.19 | 152-157,163-169,175-180,277-282,293-296
+ src/agents/orchestrator/review.ts          |    0.00 |    3.64 | 17-107,112-126
+ src/agents/orchestrator/task-plan.ts       |  100.00 |   96.67 | 95-96,105-108
+ src/agents/orchestrator/terminal-logger.ts |  100.00 |   80.68 | 33-40,42,50-57
+ src/agents/orchestrator/verify.ts          |   85.29 |   89.29 | 45,50-53,61-63,65-69,280,285,291,317,324,331,374,376-380,429-430,432-437
+ src/agents/stream-process.ts               |   84.62 |   96.46 | 76,109-111
+ src/api/agent-templates.ts                 |  100.00 |  100.00 |
+ src/api/repos.ts                           |   97.56 |   94.06 | 78-80,90,315-320,336-341
+ src/api/reviews.ts                         |  100.00 |   94.74 | 45,61,95,119,121,137
+ src/api/runs.ts                            |  100.00 |   88.00 | 15-17
+ src/api/sessions.ts                        |  100.00 |   93.33 | 33-34
+ src/api/settings.ts                        |   90.91 |   83.22 | 151,157-163,174-180,273-291,301-311,317-319
+ src/api/tasks.ts                           |   91.58 |   94.05 | 249,260-268,292,305,589-592,595-602,613-617,733-735,768-769,777-779,842-844,900,927-929,945-946,950-951,992-993,1029-1030,1045-1046
+ src/auth.ts                                |  100.00 |   99.53 |
+ src/config/max-agents.ts                   |  100.00 |  100.00 |
+ src/db/index.ts                            |  100.00 |  100.00 |
+ src/db/queries.ts                          |   94.93 |   95.85 | 591-593,721,742,757-760,859-860,930-931,934-935,938-939,942-943,988-991,1114-1118,1542-1547,1741-1745,1758-1764
+ src/db/schema.ts                           |  100.00 |   92.54 | 123,212-216,218-221
+ src/git/git-service.ts                     |   80.52 |   73.79 | 56-63,266-285,311-388,403-406,414-417
+ src/notifications/telegram.ts              |  100.00 |   94.29 | 56-57
+ src/security/access-control.ts             |  100.00 |   79.61 | 81-84,98,100-111,113-119,135-141
+ src/sessions/readers/antigravity.ts        |   88.24 |   97.59 | 231-234
+ src/sessions/readers/claude-code.ts        |   72.73 |   92.38 | 40-43,155-158
+ src/sessions/readers/opencode.ts           |   90.00 |   82.81 | 102-112
+ src/sessions/session-service.ts            |  100.00 |  100.00 |
+ src/sessions/util.ts                       |   95.24 |   94.79 | 8,31,40,56
+ src/skills/matcher.ts                      |   92.31 |   94.94 | 178-179,185,251-256,296-299
+ src/skills/registry.ts                     |   90.63 |   89.16 | 206-227
+ src/skills/repo-loader.ts                  |   85.71 |  100.00 |
+ src/utils/process-tree.ts                  |  100.00 |   96.15 |
+ src/utils/workspace-context.ts             |  100.00 |  100.00 |
+ src/ws/event-dedup.ts                      |  100.00 |  100.00 |
+ ../shared/src/index.ts                     |  100.00 |  100.00 |
+ ../shared/src/types.ts                     |    0.00 |   93.27 | 1143-1149
+--------------------------------------------|---------|---------|-------------------
+
+ 992 pass
+ 3 skip
+ 0 fail
+ 1 error
+ 133615 expect() calls
+Ran 995 tests across 64 files. [12.70s]
+error: script "test" exited with code 1

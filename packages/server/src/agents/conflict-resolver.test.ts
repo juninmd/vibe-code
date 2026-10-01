@@ -11,7 +11,8 @@ type Db = ReturnType<typeof createDb>;
 
 const { Orchestrator } = await import("./orchestrator");
 
-mock.module("playwright", () => ({ chromium: {} }));
+
+mock.module('playwright', () => ({ chromium: {} }));
 mock.module("./orchestrator/review", () => ({
   REVIEW_ENABLED: false,
   REVIEW_STRICT: false,
@@ -249,6 +250,12 @@ describe("ConflictResolver", () => {
       expect((launch.mock.calls as any)[0]?.[0].branchName).toBe("feat/launch-branch");
     });
 
+
+
+
+
+
+
     it("skips if github_token is not configured", async () => {
       const parent = db.tasks.create({
         repoId,
@@ -303,9 +310,9 @@ describe("ConflictResolver", () => {
       });
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
 
-      const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce((() => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce(() => {
         throw new Error("Network error during check");
-      }) as any);
+      });
 
       db.settings.set("github_token", "test-token");
       (resolver as any).lastCheckAt = 0;
@@ -320,6 +327,7 @@ describe("ConflictResolver", () => {
       fetchSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     });
+
   });
 
   describe("isPRConflicting — GitHub API parsing", () => {
@@ -384,65 +392,65 @@ describe("ConflictResolver", () => {
     });
   });
 
-  it("handles telegram error during createConflictResolutionTask gracefully", async () => {
-    const parent = db.tasks.create({
-      repoId,
-      title: "feat: telegram fail",
-      status: "review",
+
+
+    it("handles telegram error during createConflictResolutionTask gracefully", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: telegram fail",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
+      db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+        if (typeof url === 'string' && url.includes('github.com')) {
+          return { ok: true, json: async () => ({ mergeable: false }) } as any;
+        }
+        if (typeof url === 'string' && url.includes('api.telegram.org')) {
+          throw new Error("Telegram failure");
+        }
+        return { ok: true, json: async () => ({}) } as any;
+      });
+
+      db.settings.set("github_token", "test-token");
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy");
+      db.settings.set("telegram_chat_id", "dummy");
+
+      const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(consoleWarnSpy).toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
     });
-    db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
-    db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url: any) => {
-      if (typeof url === "string" && url.includes("github.com")) {
-        return { ok: true, json: async () => ({ mergeable: false }) } as any;
-      }
-      if (typeof url === "string" && url.includes("api.telegram.org")) {
-        throw new Error("Telegram failure");
-      }
-      return { ok: true, json: async () => ({}) } as any;
-    }) as any);
+    it("handles telegram error during notifyConflictResolved gracefully", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: telegram fail notify",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
 
-    db.settings.set("github_token", "test-token");
-    db.settings.set("telegram_enabled", "true");
-    db.settings.set("telegram_bot_token", "dummy");
-    db.settings.set("telegram_chat_id", "dummy");
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy");
+      db.settings.set("telegram_chat_id", "dummy");
 
-    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+      const fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(new Error("Telegram network error"));
+      const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
 
-    (resolver as any).lastCheckAt = 0;
-    await resolver.check();
+      await resolver.notifyConflictResolved(launchTask as any);
 
-    expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalled();
 
-    fetchSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-  });
-
-  it("handles telegram error during notifyConflictResolved gracefully", async () => {
-    const parent = db.tasks.create({
-      repoId,
-      title: "feat: telegram fail notify",
-      status: "done",
+      fetchSpy.mockRestore();
+      consoleWarnSpy.mockRestore();
     });
-    const launchTask = db.tasks.getById(parent.id);
-
-    db.settings.set("telegram_enabled", "true");
-    db.settings.set("telegram_bot_token", "dummy");
-    db.settings.set("telegram_chat_id", "dummy");
-
-    const fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(
-      new Error("Telegram network error")
-    );
-    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
-
-    await resolver.notifyConflictResolved(launchTask as any);
-
-    expect(consoleWarnSpy).toHaveBeenCalled();
-
-    fetchSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-  });
 
   describe("notifyConflictResolved", () => {
     it("returns early if telegram is not configured", async () => {
@@ -469,7 +477,7 @@ describe("ConflictResolver", () => {
         title: "feat: missing repo test",
         status: "done",
       });
-      const repoSpy = spyOn(db.repos, "getById").mockReturnValue(null as any);
+      const repoSpy = spyOn(db.repos, 'getById').mockReturnValue(null as any);
       const launchTask = db.tasks.getById(parent.id);
 
       db.settings.set("telegram_enabled", "true");
