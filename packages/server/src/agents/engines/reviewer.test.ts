@@ -7,7 +7,6 @@ import { PERSONA_LABELS } from "./reviewer";
 describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
-    Bun.spawn = originalSpawn;
   });
 
   test("PERSONA_LABELS exists", () => {
