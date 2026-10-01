@@ -140,7 +140,6 @@ export async function runPersonaReview(opts: {
     litellmBaseUrl,
     nativeGeminiKey,
     nativeAnthropicKey,
-    spawn = Bun.spawn,
   } = opts;
 
   const spawnFn = opts._spawnMock || Bun.spawn;
