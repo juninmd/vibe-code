@@ -404,10 +404,10 @@ describe("ConflictResolver", () => {
       db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-        if (typeof url === 'string' && url.includes('github.com')) {
+        if (typeof url === "string" && url.includes("github.com")) {
           return { ok: true, json: async () => ({ mergeable: false }) } as any;
         }
-        if (typeof url === 'string' && url.includes('api.telegram.org')) {
+        if (typeof url === "string" && url.includes("api.telegram.org")) {
           throw new Error("Telegram failure");
         }
         return { ok: true, json: async () => ({}) } as any;
