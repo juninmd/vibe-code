@@ -7,6 +7,7 @@ import { PERSONA_LABELS } from "./reviewer";
 describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
+    Bun.spawn = originalSpawn;
   });
 
   test("PERSONA_LABELS exists", () => {
@@ -14,7 +15,7 @@ describe("reviewer engine", () => {
   });
 
   // Skipped execution specs to prevent Bun.spawn parallel pollution
-  test("runPersonaReview handles successful gemini execution", async () => {});
-  test("runPersonaReview handles successful claude execution", async () => {});
-  test("runPersonaReview handles execution failure", async () => {});
+  test.skip("runPersonaReview handles successful gemini execution", async () => {});
+  test.skip("runPersonaReview handles successful claude execution", async () => {});
+  test.skip("runPersonaReview handles execution failure", async () => {});
 });
