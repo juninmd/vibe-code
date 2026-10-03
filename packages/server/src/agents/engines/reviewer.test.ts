@@ -20,11 +20,13 @@ describe("reviewer engine", () => {
       stderr: new Blob([]).stream(),
       exited: Promise.resolve(0),
     };
-    const spawnMock = mock().mockReturnValueOnce({
-      stdout: new Blob(["dummy diff"]).stream(),
-      stderr: new Blob([]).stream(),
-      exited: Promise.resolve(0),
-    }).mockReturnValueOnce(mockProc);
+    const spawnMock = mock()
+      .mockReturnValueOnce({
+        stdout: new Blob(["dummy diff"]).stream(),
+        stderr: new Blob([]).stream(),
+        exited: Promise.resolve(0),
+      })
+      .mockReturnValueOnce(mockProc);
 
     const result = await runPersonaReview({
       _spawnMock: spawnMock,
@@ -43,7 +45,13 @@ describe("reviewer engine", () => {
     expect(result.hasBlocker).toBe(true);
     expect(result.content).toContain("BLOCKER: found issue");
     expect(spawnMock).toHaveBeenCalledTimes(2);
-    expect(spawnMock.mock.calls[1][0]).toEqual(["gemini", "-m", "gemini-1.5-pro", "-p", expect.stringContaining("@")]);
+    expect(spawnMock.mock.calls[1][0]).toEqual([
+      "gemini",
+      "-m",
+      "gemini-1.5-pro",
+      "-p",
+      expect.stringContaining("@"),
+    ]);
   });
 
   test("runPersonaReview handles successful claude execution", async () => {
@@ -53,11 +61,13 @@ describe("reviewer engine", () => {
       stderr: new Blob(["INFO: [reviewer:claude:stderr] using proxy"]).stream(),
       exited: Promise.resolve(0),
     };
-    const spawnMock = mock().mockReturnValueOnce({
-      stdout: new Blob(["dummy diff"]).stream(),
-      stderr: new Blob([]).stream(),
-      exited: Promise.resolve(0),
-    }).mockReturnValueOnce(mockProc);
+    const spawnMock = mock()
+      .mockReturnValueOnce({
+        stdout: new Blob(["dummy diff"]).stream(),
+        stderr: new Blob([]).stream(),
+        exited: Promise.resolve(0),
+      })
+      .mockReturnValueOnce(mockProc);
 
     const result = await runPersonaReview({
       _spawnMock: spawnMock,
@@ -76,7 +86,12 @@ describe("reviewer engine", () => {
     expect(result.content).toContain("LGTM");
     expect(result.content).toContain("INFO: [reviewer:claude:stderr] using proxy");
     expect(spawnMock).toHaveBeenCalledTimes(2);
-    expect(spawnMock.mock.calls[1][0]).toEqual(["claude", "--print", "-p", expect.stringContaining("@")]);
+    expect(spawnMock.mock.calls[1][0]).toEqual([
+      "claude",
+      "--print",
+      "-p",
+      expect.stringContaining("@"),
+    ]);
   });
 
   test("runPersonaReview handles execution failure", async () => {
@@ -86,11 +101,13 @@ describe("reviewer engine", () => {
       stderr: new Blob(["Command failed"]).stream(),
       exited: Promise.resolve(1),
     };
-    const spawnMock = mock().mockReturnValueOnce({
-      stdout: new Blob(["dummy diff"]).stream(),
-      stderr: new Blob([]).stream(),
-      exited: Promise.resolve(0),
-    }).mockReturnValueOnce(mockProc);
+    const spawnMock = mock()
+      .mockReturnValueOnce({
+        stdout: new Blob(["dummy diff"]).stream(),
+        stderr: new Blob([]).stream(),
+        exited: Promise.resolve(0),
+      })
+      .mockReturnValueOnce(mockProc);
 
     const result = await runPersonaReview({
       _spawnMock: spawnMock,
@@ -106,6 +123,8 @@ describe("reviewer engine", () => {
 
     expect(result.persona).toBe("security");
     expect(result.hasBlocker).toBe(true);
-    expect(result.content).toContain("BLOCKER: [reviewer] Security review failed (claude) with exit code 1: Command failed");
+    expect(result.content).toContain(
+      "BLOCKER: [reviewer] Security review failed (claude) with exit code 1: Command failed"
+    );
   });
 });
