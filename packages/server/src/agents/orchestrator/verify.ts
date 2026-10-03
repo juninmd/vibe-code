@@ -72,7 +72,7 @@ export function parseWorkflowCommands(workflowText: string): ValidationCommand[]
 function detectPackageManagerScriptCommand(scriptName: string, packageManager?: string): string {
   if (packageManager?.startsWith("pnpm")) return `pnpm ${scriptName}`;
   if (packageManager?.startsWith("yarn")) return `yarn ${scriptName}`;
-return `npm run ${scriptName}`;
+  return `npm run ${scriptName}`;
 }
 
 export function parsePackageJsonCommands(packageJsonText: string): ValidationCommand[] {
