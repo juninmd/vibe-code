@@ -1,5 +1,4 @@
-import { spyOn } from 'bun:test';
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -863,7 +862,7 @@ describe("OpenCodeEngine auto-free selection", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-        }) as any);
+      }) as any);
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
@@ -885,7 +884,7 @@ describe("OpenCodeEngine auto-free selection", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-        }) as any);
+      }) as any);
 
       const engine = new OpenCodeEngine();
       const model = await engine.selectFreeModel();
@@ -910,7 +909,7 @@ describe("OpenCodeEngine model listing", () => {
           } as any;
         }
         return originalSpawn(cmd, options);
-        }) as any);
+      }) as any);
 
       const engine = new OpenCodeEngine();
       const models = await engine.listModels();
@@ -941,7 +940,7 @@ describe("OpenCodeEngine MCP configuration", () => {
         _workdir: string,
         _resumeSessionId?: string
       ): string[] {
-        return ["bun", scriptPath];
+        return [process.execPath, scriptPath];
       }
     }
 
