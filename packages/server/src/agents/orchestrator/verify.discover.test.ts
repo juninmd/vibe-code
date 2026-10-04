@@ -22,7 +22,8 @@ describe("discoverValidationCommands - package.json", () => {
       );
 
       const commands = await discoverValidationCommands(dir);
-      expect(commands.map((c) => c.command)).toEqual(["bun install",
+      expect(commands.map((c) => c.command)).toEqual([
+        "bun install",
         "bun run lint",
         "bun run test",
         "bun run build",
