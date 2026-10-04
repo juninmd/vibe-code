@@ -31,7 +31,7 @@ describe("executor - autoInstallDependencies", () => {
 
   test("uses bun install if bun.lock exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock((_argv: string[]) => ({
+    const mockSpawn = mock(() => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -40,12 +40,12 @@ describe("executor - autoInstallDependencies", () => {
 
     await autoInstallDependencies("/tmp/bun-proj", (m) => logs.push(m));
     expect(logs).toContain("Detecting package manager for dependency installation...");
-    expect(mockSpawn.mock.calls[0][0]).toEqual(["bun", "install"]);
+    expect((mockSpawn as any).mock.calls[0][0]).toEqual(["bun", "install"]);
   });
 
   test("uses pnpm install if pnpm-lock.yaml exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock((_argv: string[]) => ({
+    const mockSpawn = mock(() => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -53,12 +53,12 @@ describe("executor - autoInstallDependencies", () => {
     Bun.spawn = mockSpawn as any;
 
     await autoInstallDependencies("/tmp/pnpm-proj", (m) => logs.push(m));
-    expect(mockSpawn.mock.calls[0][0]).toEqual(["pnpm", "install"]);
+    expect((mockSpawn as any).mock.calls[0][0]).toEqual(["pnpm", "install"]);
   });
 
   test("uses npm install if package-lock.json exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock((_argv: string[]) => ({
+    const mockSpawn = mock(() => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -66,12 +66,12 @@ describe("executor - autoInstallDependencies", () => {
     Bun.spawn = mockSpawn as any;
 
     await autoInstallDependencies("/tmp/npm-proj", (m) => logs.push(m));
-    expect(mockSpawn.mock.calls[0][0]).toEqual(["npm", "install"]);
+    expect((mockSpawn as any).mock.calls[0][0]).toEqual(["npm", "install"]);
   });
 
   test("falls back to bun install", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock((_argv: string[]) => ({
+    const mockSpawn = mock(() => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -79,7 +79,7 @@ describe("executor - autoInstallDependencies", () => {
     Bun.spawn = mockSpawn as any;
 
     await autoInstallDependencies("/tmp/no-lock", (m) => logs.push(m));
-    expect(mockSpawn.mock.calls[0][0]).toEqual(["bun", "install"]);
+    expect((mockSpawn as any).mock.calls[0][0]).toEqual(["bun", "install"]);
   });
 
   test("handles installation failure", async () => {
