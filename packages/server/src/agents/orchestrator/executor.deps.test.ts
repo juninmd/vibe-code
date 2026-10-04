@@ -31,7 +31,7 @@ describe("executor - autoInstallDependencies", () => {
 
   test("uses bun install if bun.lock exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock(() => ({
+    const mockSpawn = mock((_argv: string[]) => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -45,7 +45,7 @@ describe("executor - autoInstallDependencies", () => {
 
   test("uses pnpm install if pnpm-lock.yaml exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock(() => ({
+    const mockSpawn = mock((_argv: string[]) => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -58,7 +58,7 @@ describe("executor - autoInstallDependencies", () => {
 
   test("uses npm install if package-lock.json exists", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock(() => ({
+    const mockSpawn = mock((_argv: string[]) => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),
@@ -71,7 +71,7 @@ describe("executor - autoInstallDependencies", () => {
 
   test("falls back to bun install", async () => {
     const logs: string[] = [];
-    const mockSpawn = mock(() => ({
+    const mockSpawn = mock((_argv: string[]) => ({
       exited: Promise.resolve(0),
       stdout: new Blob([""]).stream(),
       stderr: new Blob([""]).stream(),

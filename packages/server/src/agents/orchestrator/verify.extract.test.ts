@@ -11,7 +11,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "some output\nFAIL 1 test failed\nerror",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     expect(reason).toContain("FAIL 1 test failed");
   });
@@ -25,7 +25,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "output\nError: Failed to compile module\nerror",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     expect(reason).toContain("Error: Failed to compile module");
   });
@@ -39,7 +39,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "output\nwarning: Unused variable at line 42",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     expect(reason).toContain("warning: Unused variable at line 42");
   });
@@ -53,7 +53,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "output\nOops something went wrong",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     expect(reason).toContain("Oops something went wrong");
   });
@@ -67,7 +67,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     expect(reason).toContain("command: cmd");
   });
@@ -81,7 +81,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "err",
       stderr: "",
       passed: false,
-      reason: null,
+      reason: "",
     });
     const result = _formatVerificationResult(
       {
@@ -108,7 +108,7 @@ describe("executor - verifyWorktree extract/format", () => {
       stdout: "line1",
       stderr: "line2",
       passed: false,
-      reason: null,
+      reason: "",
     });
     const result = _formatVerificationResult(
       {
