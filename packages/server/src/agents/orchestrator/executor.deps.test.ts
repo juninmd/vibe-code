@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, afterEach } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 
 const originalSpawn = Bun.spawn;
 
@@ -92,7 +92,7 @@ describe("executor - autoInstallDependencies", () => {
     Bun.spawn = mockSpawn as any;
 
     await autoInstallDependencies("/tmp/bun-proj", (m) => logs.push(m));
-    expect(logs.some(l => l.includes("failed to install"))).toBe(true);
+    expect(logs.some((l) => l.includes("failed to install"))).toBe(true);
   });
 
   test("handles spawn error", async () => {
@@ -103,6 +103,9 @@ describe("executor - autoInstallDependencies", () => {
     Bun.spawn = mockSpawn as any;
 
     await autoInstallDependencies("/tmp/bun-proj", (m) => logs.push(m));
-    expect(logs.some(l => l.includes("failed to run install")) || logs.some(l => l.includes("Spawn error"))).toBe(true);
+    expect(
+      logs.some((l) => l.includes("failed to run install")) ||
+        logs.some((l) => l.includes("Spawn error"))
+    ).toBe(true);
   });
 });

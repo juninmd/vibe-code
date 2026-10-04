@@ -80,6 +80,8 @@ describe("reviewer engine", () => {
 
     expect(result.persona).toBe("security");
     expect(result.hasBlocker).toBe(true);
-    expect(result.content).toContain("BLOCKER: [reviewer] Security review failed (gemini) with exit code 1: Fatal error");
+    expect(result.content).toContain(
+      "BLOCKER: [reviewer] Security review failed (gemini) with exit code 1: Fatal error"
+    );
   });
 });

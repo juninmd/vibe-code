@@ -1,8 +1,7 @@
-import { describe, expect, test, mock, afterEach } from "bun:test";
-import { join } from "node:path";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 
 mock.module("node:fs/promises", () => ({
-  readFile: mock(async (path: string, options: any) => {
+  readFile: mock(async (path: string, _options: any) => {
     if (path.includes("task-1")) {
       return "Docs Content with ![img](./docs/assets/pic.png)";
     }
