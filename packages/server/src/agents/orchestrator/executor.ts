@@ -263,7 +263,7 @@ export function rewriteDocsAssetLinks(body: string, repoUrl: string, branch: str
 }
 
 /** Builds PR body using only the docs generated in the docs step. */
-async function buildPRBody(
+export async function buildPRBody(
   task: Task,
   wtPath: string,
   repoUrl: string,
