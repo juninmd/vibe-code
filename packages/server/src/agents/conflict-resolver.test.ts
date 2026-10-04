@@ -303,7 +303,7 @@ describe("ConflictResolver", () => {
       });
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
 
-      // @ts-ignore
+      // @ts-expect-error
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce(() => {
         throw new Error("Network error during check");
       });
@@ -394,7 +394,7 @@ describe("ConflictResolver", () => {
     db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
     db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
-    // @ts-ignore
+    // @ts-expect-error
     const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (typeof url === "string" && url.includes("github.com")) {
         return { ok: true, json: async () => ({ mergeable: false }) } as any;
