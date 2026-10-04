@@ -393,7 +393,7 @@ describe("ConflictResolver", () => {
     db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
     db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url) => {
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url: string | URL | Request) => {
       if (typeof url === "string" && url.includes("github.com")) {
         return { ok: true, json: async () => ({ mergeable: false }) } as any;
       }
