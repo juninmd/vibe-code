@@ -159,18 +159,15 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
     const workflowCommands = parseWorkflowCommands(workflowText);
     if (workflowCommands.length > 0) return workflowCommands;
   } catch {
-    // fall through
+    // Compatibility mode: fall through to package.json.
   }
-
-  // Try to detect additional commands (Makefile, README)
-  const additional = await detectAdditionalCommands(wtPath);
-  if (additional.length > 0) return additional;
 
   // Try package.json
   try {
     const packageJsonText = await readFile(join(wtPath, PACKAGE_JSON_FILE), "utf8");
     const packageJsonCommands = parsePackageJsonCommands(packageJsonText);
     if (packageJsonCommands.length > 0) {
+      // Ensure node_modules exist before running package scripts
       const hasModules = await access(join(wtPath, "node_modules"))
         .then(() => true)
         .catch(() => false);
@@ -189,8 +186,12 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
       return packageJsonCommands;
     }
   } catch {
-    // no package.json
+    // Unsupported repository shape.
   }
+
+  // Try to detect additional commands
+  const additional = await detectAdditionalCommands(wtPath);
+  if (additional.length > 0) return additional;
 
   throw new Error(
     "Verification failed: unable to discover validation commands from WORKFLOW.md or package.json"
