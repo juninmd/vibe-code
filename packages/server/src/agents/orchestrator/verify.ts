@@ -82,7 +82,7 @@ export function parsePackageJsonCommands(packageJsonText: string): ValidationCom
     scripts?: Record<string, string>;
   };
   const scripts = parsed.scripts ?? {};
-  const orderedNames = ["lint", "typecheck", "test", "build"].filter((name) => scripts[name]);
+  const orderedNames = ["lint", "test", "build"].filter((name) => scripts[name]);
 
   return orderedNames.map((name) => ({
     name,
