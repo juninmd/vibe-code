@@ -14,6 +14,20 @@ export interface CreateRepoParams {
   isPrivate: boolean;
 }
 
+export interface ListIssuesOptions {
+  state?: "open" | "closed" | "all";
+  labels?: string[];
+  limit?: number;
+  /** Most recently updated first (default is provider order). */
+  recentlyUpdated?: boolean;
+}
+
+export interface LabelSpec {
+  name: string;
+  color: string;
+  description?: string;
+}
+
 export interface GitProviderAdapter {
   readonly name: GitProvider;
 
@@ -39,8 +53,19 @@ export interface GitProviderAdapter {
   listIssues(
     token: string,
     repoUrl: string,
-    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+    options?: ListIssuesOptions
   ): Promise<RepositoryIssue[]>;
+
+  /** Add and remove labels on one issue; removing a label it does not have is not an error. */
+  updateIssueLabels(
+    token: string,
+    repoUrl: string,
+    issueNumber: number,
+    change: { add: string[]; remove: string[] }
+  ): Promise<void>;
+
+  /** Create labels that do not exist yet (colour is a hex string without "#"). */
+  ensureLabels(token: string, repoUrl: string, labels: LabelSpec[]): Promise<void>;
 
   /** List branches for a repository */
   listBranches(token: string, repoUrl: string): Promise<string[]>;

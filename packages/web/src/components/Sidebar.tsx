@@ -500,13 +500,13 @@ export function Sidebar({
           />
           <SidebarNavItem
             icon="stats"
-            label="Estatísticas"
+            label="Stats"
             onClick={runAndClose(onOpenStats)}
             collapsed={collapsed}
           />
           <SidebarNavItem
             icon="settings"
-            label="Configurações"
+            label="Settings"
             onClick={runAndClose(onOpenSettings)}
             collapsed={collapsed}
           />
