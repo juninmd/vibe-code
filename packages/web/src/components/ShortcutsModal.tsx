@@ -7,23 +7,22 @@ const SHORTCUTS = [
   { keys: ["Ctrl", "Shift", "O"], description: "Add repository" },
   { keys: ["Ctrl", "O"], description: "Open in editor" },
   { keys: ["Ctrl", "1-9"], description: "Switch repository (workspace)" },
-  { keys: ["S"], description: "Sessions board (OpenCode / Claude Code / Antigravity)" },
-  { keys: ["E"], description: "AI engines panel" },
+  { keys: ["S"], description: "Sessions board" },
+  { keys: ["E"], description: "Engines" },
   { keys: ["Ctrl", "K"], description: "Command palette" },
   { keys: ["Ctrl", "S"], description: "Export board" },
   { keys: ["Ctrl", "Shift", "C"], description: "Copy path" },
-  { keys: ["Ctrl", "D"], description: "Split terminal right" },
-  { keys: ["Ctrl", "Shift", "D"], description: "Split terminal down" },
   { keys: ["?"], description: "Show shortcuts" },
   { keys: ["Esc"], description: "Close active panel" },
 ];
 
 export function ShortcutsModal({ onClose }: { onClose: () => void }) {
   return (
-    <Dialog open onClose={onClose} title="Neural Interface Bindings" size="md">
+    <Dialog open onClose={onClose} title="Keyboard shortcuts" size="md">
       <div className="space-y-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed ml-1">
-          Keyboard Command Reference
+        <p className="text-xs leading-relaxed text-dimmed">
+          Board shortcuts are off while a task terminal has focus: every key goes to the agent
+          there. Click outside the terminal to use them again.
         </p>
         <div className="rounded-[1.5rem] border border-white/5 bg-white/[0.02] overflow-hidden">
           <table className="w-full text-xs">

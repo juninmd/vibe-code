@@ -216,14 +216,12 @@ describe("E2E Homologation — full task lifecycle", () => {
       )
     ).text();
 
-    // Must have conflictColor defined
-    expect(src).toContain("conflictColor");
     // Must check for the tag
     expect(src).toContain("conflict-resolution");
-    // Must have rose color scheme
+    // Conflict cards keep their rose accent (border) so they stand out on the board
     expect(src).toContain("rose-500");
-    // Must show the Merge Conflict badge
-    expect(src).toContain("Merge Conflict");
+    // Must say what is wrong, in words
+    expect(src).toContain("Merge conflict");
 
     console.log(`[STEP 6] TaskCard UI contract verified ✓`);
   });
