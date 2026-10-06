@@ -1,3 +1,4 @@
+import { HARNESS_ENGINES } from "@vibe-code/shared";
 import { Hono } from "hono";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { EngineRegistry } from "../agents/registry";
@@ -112,19 +113,38 @@ export function createInboxRouter(db: Db, registry: EngineRegistry, orchestrator
     const activeRuns = orchestrator.getActiveRunEngines();
     const engines = await registry.listEngines(activeRuns);
     const unavailable = engines.filter((engine) => !engine.available);
+    const hasAgent = engines.some(
+      (engine) => HARNESS_ENGINES.some((name) => name === engine.name) && engine.available
+    );
 
-    for (const engine of unavailable) {
+    // One signal instead of one per missing CLI: most machines only have a couple of
+    // agents installed, and fourteen "unavailable" rows buried the signals that matter.
+    if (!hasAgent) {
       items.push({
-        id: `engine_unavailable:${engine.name}`,
+        id: "engine_unavailable:harness",
         type: "engine_unavailable",
-        severity: engine.setupIssue ? "warning" : "info",
-        title: `${engine.displayName} indisponivel`,
-        description: engine.setupIssue ?? "CLI nao encontrado neste runtime local.",
+        severity: "warning",
+        title: "No agent CLI installed",
+        description:
+          "Install Claude Code or OpenCode on the machine running vibe-code to run tasks in a terminal.",
         taskId: null,
         repoId: null,
         repoName: null,
         createdAt: new Date().toISOString(),
-        actionLabel: "Abrir engines",
+        actionLabel: "Open engines",
+      });
+    } else if (unavailable.length > 0) {
+      items.push({
+        id: "engine_unavailable:others",
+        type: "engine_unavailable",
+        severity: "info",
+        title: `${unavailable.length} more engine${unavailable.length === 1 ? "" : "s"} not installed`,
+        description: unavailable.map((engine) => engine.displayName).join(", "),
+        taskId: null,
+        repoId: null,
+        repoName: null,
+        createdAt: new Date().toISOString(),
+        actionLabel: "Open engines",
       });
     }
 

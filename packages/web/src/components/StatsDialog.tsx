@@ -137,7 +137,10 @@ function formatDuration(secs: number): string {
 
 function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolean }) {
   const o = stats.overview;
-  const failRate = o.totalRuns > 0 ? Math.round((o.failedRuns / o.totalRuns) * 100) : 0;
+  // Only runs that ended count: queued, running and cancelled ones are neither wins nor losses.
+  const finishedRuns = o.completedRuns + o.failedRuns;
+  const failRate = finishedRuns > 0 ? Math.round((o.failedRuns / finishedRuns) * 100) : 0;
+  const successWidth = finishedRuns > 0 ? 100 - failRate : 0;
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -145,16 +148,16 @@ function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolea
         <SectionTitle>Global Summary</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Repositories" value={o.totalRepos} animated={ready} />
-          <StatCard label="Active Tasks" value={o.totalTasks} animated={ready} />
+          <StatCard label="Tasks" value={o.totalTasks} animated={ready} />
           <StatCard
             label="Total Executions"
             value={o.totalRuns}
             animated={ready}
-            sub={`${o.failedRuns} issues`}
+            sub={`${o.failedRuns} failed`}
           />
           <StatCard
             label="Success Rate"
-            value={`${o.successRate}%`}
+            value={finishedRuns > 0 ? `${o.successRate}%` : "—"}
             color="var(--success)"
             animated={ready}
             highlight
@@ -182,7 +185,7 @@ function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolea
             <div className="flex justify-between items-end mb-4">
               <div className="space-y-1">
                 <p className="text-2xl font-black text-primary tracking-tighter">
-                  {o.totalRuns - o.failedRuns}
+                  {o.completedRuns}
                 </p>
                 <p className="text-[10px] font-black uppercase tracking-widest text-success">
                   Successful
@@ -199,7 +202,7 @@ function OverviewSection({ stats, ready }: { stats: StatsResponse; ready: boolea
               <div
                 className="h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(34,211,238,0.4)]"
                 style={{
-                  width: `${100 - failRate}%`,
+                  width: `${successWidth}%`,
                   background: "linear-gradient(90deg, #4ade80, #22d3ee)",
                 }}
               />
@@ -677,7 +680,7 @@ export function StatsDialog({ open, onClose }: StatsDialogProps) {
   }, [open, loadData]);
 
   return (
-    <Dialog open={open} onClose={onClose} title="Operational Intelligence" size="5xl">
+    <Dialog open={open} onClose={onClose} title="Stats" size="5xl">
       <div className="flex h-[75vh] -mx-8 -mb-8 mt-4 overflow-hidden border-t border-white/5">
         {/* Modern Sidebar Nav */}
         <nav className="w-60 shrink-0 border-r border-white/5 bg-white/[0.01] flex flex-col p-4 gap-1">
