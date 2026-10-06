@@ -305,7 +305,7 @@ describe("ConflictResolver", () => {
 
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce((() => {
         throw new Error("Network error during check");
-      }) as any); //
+      }) as unknown as typeof fetch);
 
       db.settings.set("github_token", "test-token");
       (resolver as any).lastCheckAt = 0;
@@ -393,7 +393,9 @@ describe("ConflictResolver", () => {
     db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
     db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url: any) => {
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: RequestInfo | URL
+    ) => {
       if (typeof url === "string" && url.includes("github.com")) {
         return { ok: true, json: async () => ({ mergeable: false }) } as any;
       }
@@ -401,7 +403,7 @@ describe("ConflictResolver", () => {
         throw new Error("Telegram failure");
       }
       return { ok: true, json: async () => ({}) } as any;
-    }) as any);
+    }) as unknown as typeof fetch);
 
     db.settings.set("github_token", "test-token");
     db.settings.set("telegram_enabled", "true");

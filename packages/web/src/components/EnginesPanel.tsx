@@ -125,7 +125,7 @@ export function EnginesPanel({
       <div className="relative h-full w-full max-w-md glass-panel border-l border-white/10 flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-right duration-500 ease-out">
         <div className="p-8 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.02]">
           <div>
-            <h2 className="text-xl font-black tracking-tight text-primary">Intelligence Hub</h2>
+            <h2 className="text-xl font-black tracking-tight text-primary">Engines</h2>
             <div className="flex items-center gap-2 mt-2">
               <div className="h-1 w-6 bg-accent rounded-full" />
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">

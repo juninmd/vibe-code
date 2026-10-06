@@ -109,7 +109,7 @@ export function InboxPanel({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} title="Operations Center" size="2xl">
+    <Dialog open={open} onClose={onClose} title="Inbox" size="2xl">
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3 px-1">
           <div className="flex items-center gap-2">

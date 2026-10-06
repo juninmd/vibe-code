@@ -6,6 +6,7 @@ import type {
   WsClientMessage,
   WsServerMessage,
 } from "@vibe-code/shared";
+import { HARNESS_ENGINES, MANUAL_TASK_TAG } from "@vibe-code/shared";
 import {
   lazy,
   Suspense,
@@ -18,17 +19,23 @@ import {
   useState,
 } from "react";
 import { api } from "./api/client";
+import { AppMenu } from "./components/AppMenu";
 import { Board } from "./components/Board";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExportImportMenu } from "./components/ExportImportMenu";
 import { FilterBar, type Filters } from "./components/FilterBar";
+import { LaneSyncPill } from "./components/LaneSyncPill";
+import { Onboarding } from "./components/Onboarding";
+import type { Tab as SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
+import { publishTerminalEvent } from "./hooks/terminalBus";
 import { useApiHealth } from "./hooks/useApiHealth";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
+import { useLanes } from "./hooks/useLanes";
 import { useIsMobile } from "./hooks/useMediaQuery";
 import { useRepos } from "./hooks/useRepos";
 import { useRetryQueue } from "./hooks/useRetryQueue";
@@ -48,6 +55,9 @@ const CommandPalette = lazy(() =>
 );
 const EnginesPanel = lazy(() =>
   import("./components/EnginesPanel").then((m) => ({ default: m.EnginesPanel }))
+);
+const TaskPanel = lazy(() =>
+  import("./components/TaskPanel").then((m) => ({ default: m.TaskPanel }))
 );
 const SessionBoard = lazy(() =>
   import("./components/SessionBoard").then((m) => ({ default: m.SessionBoard }))
@@ -108,14 +118,6 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   const merged = [...existing, ...unique];
   if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
-}
-
-interface TerminalChunk {
-  id: number;
-  runId: string | null;
-  stream: "stdout" | "stderr";
-  chunk: string;
-  timestamp: string;
 }
 
 function LoginScreen({
@@ -298,9 +300,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [selectedAgent, _setSelectedAgent] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
+  const lanes = useLanes();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
@@ -335,7 +340,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     return { engine: null, priority: null, hasPR: false, tags: [], labelIds: [] };
   });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
-  const [terminalLogs, setTerminalLogs] = useState<Record<string, TerminalChunk[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedLogCursorRef = useRef(0);
@@ -398,6 +402,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
   // ─── WebSocket ──────────────────────────────────────────────────────────────
   const wasConnected = useRef(false);
+  // The very first connection is not a *re*connection and must not announce itself.
+  const everConnected = useRef(false);
 
   const refreshEnginesThrottled = useCallback(() => {
     if (refreshEnginesThrottleRef.current) return;
@@ -551,60 +557,26 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           }
           break;
         case "terminal_opened":
-          if (sel?.id === msg.taskId) {
-            startTransition(() => {
-              setTerminalLogs((prev) => ({ ...prev, [msg.taskId]: prev[msg.taskId] ?? [] }));
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "opened",
+            runId: msg.runId,
+            cols: msg.cols,
+            rows: msg.rows,
+          });
           break;
         case "terminal_output":
-          if (sel?.id === msg.taskId) {
-            const stream: "stdout" | "stderr" = msg.stream;
-            const runId = msg.runId;
-            const chunk = msg.chunk;
-            const timestamp = msg.timestamp;
-            startTransition(() => {
-              setTerminalLogs((prev) => {
-                const existing = prev[msg.taskId] ?? [];
-                const entry: TerminalChunk = {
-                  id: Date.now(),
-                  runId,
-                  stream,
-                  chunk,
-                  timestamp,
-                };
-                const next: TerminalChunk[] = [...existing, entry];
-                return {
-                  ...prev,
-                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
-                } as Record<string, TerminalChunk[]>;
-              });
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "output",
+            chunk: msg.chunk,
+            replay: msg.replay === true,
+          });
           break;
         case "terminal_closed":
-          if (sel?.id === msg.taskId) {
-            const runId = msg.runId;
-            const timestamp = msg.timestamp;
-            const exitCode = msg.exitCode;
-            startTransition(() => {
-              setTerminalLogs((prev) => {
-                const existing = prev[msg.taskId] ?? [];
-                const entry: TerminalChunk = {
-                  id: Date.now(),
-                  runId,
-                  stream: "stderr",
-                  chunk: `\n[session closed: exit ${exitCode ?? "unknown"}]\n`,
-                  timestamp,
-                };
-                const next: TerminalChunk[] = [...existing, entry];
-                return {
-                  ...prev,
-                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
-                } as Record<string, TerminalChunk[]>;
-              });
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "closed",
+            exitCode: msg.exitCode,
+            reason: msg.reason ?? "exit",
+          });
           break;
         case "execution_event":
           if (sel?.id === msg.taskId) {
@@ -659,6 +631,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const selectedRepo = useMemo(
     () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
     [repos, selectedRepoId]
+  );
+  const laneLabels = useMemo(
+    () => lanes.labelsFor(selectedRepo ? [selectedRepo] : repos),
+    [lanes, selectedRepo, repos]
   );
 
   // Backend-driven polling: refresh all statuses every minute.
@@ -736,10 +712,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     let mounted = true;
 
     if (!connected && wasConnected.current) {
-      toast("Conexão perdida. Reconectando...", "error");
+      toast("Connection lost. Reconnecting...", "error");
     }
-    if (connected && wasConnected.current === false && wasConnected.current !== undefined) {
-      toast("Reconectado!", "success");
+    if (connected && wasConnected.current === false && everConnected.current) {
+      toast("Reconnected", "success");
       (async () => {
         try {
           await refresh();
@@ -767,6 +743,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       })();
     }
     wasConnected.current = connected;
+    if (connected) everConnected.current = true;
     return () => {
       canceled = true;
       mounted = false;
@@ -777,14 +754,27 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const handleTaskClick = useCallback(
     (task: TaskWithRun) => {
       if (selectedTask?.id) unsubscribe(selectedTask.id);
+      setShowAdvanced(false);
       setSelectedTask(task);
       subscribe(task.id);
     },
     [selectedTask, subscribe, unsubscribe]
   );
 
+  // A task needs a repository: with none, send the user to adding one instead of
+  // opening a form that cannot be submitted.
+  const openNewTask = useCallback(() => {
+    if (repos.length === 0) {
+      setShowAddRepo(true);
+      toast("Add a repository first", "info");
+      return;
+    }
+    setShowNewTask(true);
+  }, [repos.length, toast]);
+
   const handleCloseDetail = useCallback(() => {
     if (selectedTask) unsubscribe(selectedTask.id);
+    setShowAdvanced(false);
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
 
@@ -1002,6 +992,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const active = document.activeElement;
+      // A focused terminal owns every key (Esc, Ctrl+C/K/O/S, letters...): agent TUIs
+      // depend on them, so no board shortcut may fire while it has focus.
+      if (active instanceof HTMLElement && active.closest(".xterm")) return;
+      // With the task panel open the board is hidden: single-key board shortcuts
+      // (N, S, E, D, Delete...) must not act on it behind the user's back.
+      const taskPanelOpen = selectedTask !== null && !showAdvanced;
       const isTyping =
         active instanceof HTMLInputElement ||
         active instanceof HTMLTextAreaElement ||
@@ -1022,7 +1018,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       }
 
       // Delete — delete selected task
-      if (e.key === "Delete" && selectedTask) {
+      if (e.key === "Delete" && selectedTask && !taskPanelOpen) {
         const active = document.activeElement;
         const isTypingInDetail =
           active instanceof HTMLInputElement ||
@@ -1110,12 +1106,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         }
       }
 
-      if (isTyping) return;
+      if (isTyping || taskPanelOpen) return;
 
       // N — new task
       if (e.key === "n" || e.key === "N") {
         e.preventDefault();
-        setShowNewTask(true);
+        openNewTask();
       }
       // / — focus search
       if (e.key === "/") {
@@ -1210,6 +1206,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     showIssueImporter,
     mobileSidebarOpen,
     selectedTask,
+    showAdvanced,
+    openNewTask,
     search,
     handleCloseDetail,
     cloneTask,
@@ -1358,26 +1356,18 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   onImportSuccess={(msg) => toast(msg, "success")}
                   onImportError={(msg) => toast(msg, "error")}
                 />
-                <HeaderAction
-                  icon="history"
-                  label="Changelog"
-                  onClick={() => setShowChangelog(true)}
-                />
-                <HeaderAction
-                  icon="help"
-                  label="Shortcuts"
-                  onClick={() => setShowShortcuts(true)}
-                />
               </div>
+              <LaneSyncPill
+                lanes={lanes.lanes}
+                onClick={() => {
+                  setSettingsTab("lanes");
+                  setShowSettings(true);
+                }}
+              />
               <div className="h-6 w-px bg-white/10 mx-1 hidden lg:block" />
 
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
-                <HeaderAction
-                  icon="plus"
-                  label="Task"
-                  onClick={() => setShowNewTask(true)}
-                  variant="primary"
-                />
+                <HeaderAction icon="plus" label="Task" onClick={openNewTask} variant="primary" />
                 <HeaderAction
                   icon="filter"
                   label={showFilterBar ? "Hide" : "Filter"}
@@ -1388,29 +1378,16 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
               <div className="h-6 w-px bg-white/10 mx-1" />
 
-              <button
-                type="button"
-                onClick={async () => {
+              <AppMenu
+                user={auth.user}
+                authEnabled={auth.enabled}
+                onShortcuts={() => setShowShortcuts(true)}
+                onChangelog={() => setShowChangelog(true)}
+                onSignOut={async () => {
                   await api.auth.logout();
                   onLogout();
                 }}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-bold text-secondary hover:text-primary hover:bg-surface-hover border border-transparent hover:border-white/10 transition-all active-shrink cursor-pointer"
-              >
-                {auth.user?.avatarUrl ? (
-                  <img
-                    src={auth.user.avatarUrl}
-                    alt={auth.user.username}
-                    className="w-6 h-6 rounded-full ring-2 ring-accent/20"
-                  />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center text-[10px] text-white font-black shadow-lg shadow-accent/20">
-                    {auth.user?.username[0].toUpperCase()}
-                  </div>
-                )}
-                <span className="hidden lg:inline text-dimmed hover:text-primary transition-colors">
-                  @{auth.user?.username}
-                </span>
-              </button>
+              />
             </div>
           </header>
 
@@ -1435,8 +1412,14 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
           {/* Board Main Area */}
           <main className="flex-1 overflow-hidden relative">
-            {tasksLoading ? (
+            {tasksLoading || reposLoading ? (
               <SkeletonBoard />
+            ) : repos.length === 0 && !tasksError ? (
+              <Onboarding
+                engines={engines}
+                onAddRepo={() => setShowAddRepo(true)}
+                onOpenSettings={() => setShowSettings(true)}
+              />
             ) : tasksError ? (
               <div className="flex flex-col items-center justify-center h-full gap-8 animate-in fade-in zoom-in duration-500">
                 <div className="w-24 h-24 rounded-[2.5rem] bg-danger/10 border border-danger/20 flex items-center justify-center shadow-2xl shadow-danger/20 rotate-12">
@@ -1456,9 +1439,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   </svg>
                 </div>
                 <div className="text-center space-y-3">
-                  <h3 className="text-xl font-black text-primary tracking-tight">Sync Lost</h3>
+                  <h3 className="text-xl font-black text-primary tracking-tight">
+                    Can't reach the server
+                  </h3>
                   <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
-                    The connection to the orchestrator was lost. Re-establishing secure tunnel...
+                    The connection to vibe-code was lost. Make sure the server is running, then
+                    retry.
                   </p>
                 </div>
                 <button
@@ -1474,6 +1460,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                 <div className="h-full w-full p-3 sm:p-5 lg:p-8 overflow-hidden">
                   <Board
                     tasks={filteredTasks}
+                    laneLabels={laneLabels}
                     onTaskClick={handleTaskClick}
                     onTaskMove={handleTaskMove}
                     onRetryPR={retryPR}
@@ -1511,7 +1498,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     }}
                     onDeleteTasks={handleDeleteTasks}
                     retryQueueMap={retryQueueMap}
-                    onNewTask={() => setShowNewTask(true)}
+                    onNewTask={openNewTask}
                   />
                 </div>
               </ErrorBoundary>
@@ -1521,15 +1508,35 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
         {/* Task Detail Slide-over */}
         <Suspense fallback={null}>
-          {selectedTask && (
+          {selectedTask && !showAdvanced && (
+            <TaskPanel
+              task={selectedTask}
+              engines={engines}
+              connected={connected}
+              onWsSend={sendWsMessage}
+              onClose={handleCloseDetail}
+              onRetryPR={async (id) => {
+                await retryPR(id);
+                toast("Creating PR...", "info");
+              }}
+              onOpenAdvanced={() => setShowAdvanced(true)}
+              onClone={async (id) => {
+                const cloned = await cloneTask(id);
+                toast(`"${cloned.title}" clonada`, "success");
+              }}
+              onDelete={handleDeleteTask}
+              onNotify={(message, kind) => toast(message, kind)}
+            />
+          )}
+
+          {selectedTask && showAdvanced && (
             <TaskDetail
               task={selectedTask}
               engines={engines}
               liveLogs={liveLogs[selectedTask.id] ?? []}
-              onClose={handleCloseDetail}
+              onClose={() => setShowAdvanced(false)}
               onLaunch={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await launchTask(id, engine, model);
                 toast("Agent started", "success");
               }}
@@ -1539,7 +1546,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               }}
               onRetry={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await retryTask(id, engine, model);
                 toast("Agent restarted", "success");
               }}
@@ -1582,8 +1588,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               onSendInput={(taskId, input) => {
                 send({ type: "agent_input", taskId, input });
               }}
-              terminalLogs={terminalLogs[selectedTask.id] ?? []}
-              onWsSend={sendWsMessage}
               onClone={async (id) => {
                 const cloned = await cloneTask(id);
                 toast(`"${cloned.title}" clonada`, "success");
@@ -1664,7 +1668,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               }}
               onNewTask={() => {
                 setShowCommandPalette(false);
-                setShowNewTask(true);
+                openNewTask();
               }}
               onAddRepo={() => {
                 setShowCommandPalette(false);
@@ -1719,10 +1723,14 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               loopConfig,
               ...data
             }) => {
+              // Harness tasks are driven by hand in their terminal; the tag keeps the
+              // autopilot from launching a second, headless agent on them.
+              const handsOn =
+                !schedule && (HARNESS_ENGINES as readonly string[]).includes(data.engine ?? "");
               const task = await createTask({
                 ...data,
                 baseBranch,
-                tags,
+                tags: handsOn ? [...(tags ?? []), MANUAL_TASK_TAG] : tags,
                 model,
                 agentId,
                 workflowId,
@@ -1736,6 +1744,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   enabled: true,
                 });
                 toast(`"${data.title}" agendada (${schedule.cronExpression})`, "success");
+              } else if (autoLaunch && handsOn) {
+                handleTaskClick(task as TaskWithRun);
               } else if (autoLaunch) {
                 await launchTask(task.id, data.engine, model);
                 toast(`"${data.title}" iniciada`, "success");
@@ -1749,13 +1759,22 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             open={showAddRepo}
             onClose={() => setShowAddRepo(false)}
             githubUsername={auth.user?.username ?? null}
+            onOpenSettings={() => setShowSettings(true)}
             onSubmit={async (data) => {
               await addRepo(data);
               toast("Repository adicionado — clonando...", "success");
             }}
           />
 
-          <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+          <SettingsDialog
+            open={showSettings}
+            initialTab={settingsTab}
+            onClose={() => {
+              setShowSettings(false);
+              setSettingsTab(undefined);
+              lanes.refresh();
+            }}
+          />
 
           <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
 
