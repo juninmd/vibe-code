@@ -910,3 +910,53 @@ describe("Additional queries coverage", () => {
     });
   });
 });
+
+describe("Task issue lane", () => {
+  it("remembers the lane agreed with the issue without counting as an edit", () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "T", repoId: repo.id });
+    expect(task.issueLane).toBeNull();
+
+    db.tasks.setIssueLane(task.id, "review");
+    const stored = db.tasks.getById(task.id);
+    expect(stored?.issueLane).toBe("review");
+    expect(stored?.updatedAt).toBe(task.updatedAt);
+  });
+
+  it("tells subscribers about writes to issue-linked tasks only", () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const seen: string[] = [];
+    const unsubscribe = db.tasks.subscribe((task) => seen.push(`${task.title}:${task.status}`));
+
+    const linked = db.tasks.create({
+      title: "linked",
+      repoId: repo.id,
+      issueUrl: "https://github.com/o/r/issues/1",
+    });
+    const plain = db.tasks.create({ title: "plain", repoId: repo.id });
+    db.tasks.update(linked.id, { status: "review" });
+    db.tasks.updateField(linked.id, "status", "done");
+    db.tasks.update(plain.id, { status: "review" });
+    expect(seen).toEqual(["linked:backlog", "linked:review", "linked:done"]);
+
+    unsubscribe();
+    db.tasks.update(linked.id, { status: "backlog" });
+    expect(seen).toHaveLength(3);
+  });
+
+  it("survives a subscriber that throws", () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.tasks.subscribe(() => {
+      throw new Error("boom");
+    });
+    const task = db.tasks.create({
+      title: "t",
+      repoId: repo.id,
+      issueUrl: "https://github.com/o/r/issues/1",
+    });
+    expect(db.tasks.update(task.id, { status: "review" })?.status).toBe("review");
+  });
+});

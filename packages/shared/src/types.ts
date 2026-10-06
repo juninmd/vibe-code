@@ -1,3 +1,5 @@
+import type { LaneLabelMap } from "./lanes";
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type TaskStatus =
@@ -68,7 +70,9 @@ export type RunPhase =
   | "fixing"
   | "pr_creating"
   | "stalled"
-  | "timed_out";
+  | "timed_out"
+  /** Interactive agent terminal driven by hand (no headless pipeline). */
+  | "terminal";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
 
 export const TASK_COLUMNS: TaskStatus[] = [
@@ -130,6 +134,8 @@ export interface Task {
   branchName: string | null;
   prUrl: string | null;
   issueUrl: string | null;
+  /** Lane (see lanes.ts) this task and its issue last agreed on; null before the first sync. */
+  issueLane?: string | null;
   parentTaskId: string | null;
   agentId: string | null;
   workflowId: string | null;
@@ -552,6 +558,67 @@ export type WsProtocolVersion = "v1" | "v2";
 
 export type TerminalSignal = "sigint" | "sigterm" | "sighup";
 
+/** Engines that can run as an interactive terminal harness inside a task. */
+export const HARNESS_ENGINES = ["claude-code", "opencode"] as const;
+export type HarnessEngine = (typeof HARNESS_ENGINES)[number];
+
+/**
+ * Tag for tasks driven by hand in a terminal. The autopilot (headless auto-launch of
+ * Todo tasks, recovery after restarts) leaves them alone.
+ */
+export const MANUAL_TASK_TAG = "manual";
+
+/** Why a skill is part of a task's agent plugin. */
+export type SkillSource =
+  /** Built-in, applied to every task. */
+  | "always"
+  /** Picked by vibe-code from the task text. */
+  | "auto"
+  /** Chosen by the operator. */
+  | "manual";
+
+/** `auto` = vibe-code picks the skills; `manual` = the operator's list is final. */
+export type SkillMode = "auto" | "manual";
+
+export interface AppliedSkill {
+  name: string;
+  source: SkillSource;
+  /** Short, human-readable explanation ("matches: jest, flaky"). */
+  reasons: string[];
+}
+
+export interface TerminalStartRequest {
+  /** A harness, or "shell" for a plain shell in the task workspace. */
+  engine?: HarnessEngine | "shell";
+  model?: string;
+  /** Names of skills the operator picked; makes the task's skills manual. */
+  skills?: string[];
+  /** Go back to automatic skill selection (ignored when `skills` is set). */
+  skillMode?: SkillMode;
+  cols?: number;
+  rows?: number;
+}
+
+export interface SkillPlan {
+  mode: SkillMode;
+  applied: AppliedSkill[];
+}
+
+export interface TerminalState {
+  taskId: string;
+  /** True while a PTY session is running for this task. */
+  live: boolean;
+  runId: string | null;
+  engine: HarnessEngine | "shell" | null;
+  /** Names of the skills currently injected into the task workspace. */
+  skills: string[];
+  /** Same skills with the reason each one was applied. */
+  applied: AppliedSkill[];
+  skillMode: SkillMode;
+  /** Workspace path of the latest session, when one exists. */
+  cwd: string | null;
+}
+
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string; version?: WsProtocolVersion }
   | { type: "unsubscribe"; taskId: string; version?: WsProtocolVersion }
@@ -679,6 +746,8 @@ export type WsServerMessage =
       chunk: string;
       stream: "stdout" | "stderr";
       timestamp: string;
+      /** True when the chunk is the scrollback replayed to a newly attached client. */
+      replay?: boolean;
     }
   | {
       type: "terminal_closed";
@@ -686,6 +755,7 @@ export type WsServerMessage =
       runId: string | null;
       exitCode: number | null;
       timestamp: string;
+      reason?: "exit" | "closed";
     }
   | { type: "error"; message: string };
 
@@ -810,6 +880,8 @@ export interface StatsOverview {
   totalRepos: number;
   totalTasks: number;
   totalRuns: number;
+  /** Runs that finished successfully (excludes queued, running and cancelled). */
+  completedRuns: number;
   failedRuns: number;
   successRate: number;
   avgRunDurationSecs: number;
@@ -1246,4 +1318,42 @@ export interface Autopilot {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ─── Lane <-> issue label sync ───────────────────────────────────────────────
+
+export interface LaneSyncRepoStatus {
+  repoId: string;
+  name: string;
+  ok: boolean;
+  error?: string;
+  /** Tasks linked to an issue of this repository. */
+  linked: number;
+  /** Cards moved because their issue was relabelled. */
+  pulled: number;
+  /** Issues relabelled because their card moved. */
+  pushed: number;
+  /** Cards created from issues that carry a lane label. */
+  imported: number;
+}
+
+export interface LaneSyncStatus {
+  running: boolean;
+  lastSyncAt: string | null;
+  repos: LaneSyncRepoStatus[];
+}
+
+export interface LaneSettings {
+  /** Off until the operator turns it on: syncing writes labels to real issues. */
+  enabled: boolean;
+  /** Labels the operator customised; everything else follows the provider default. */
+  overrides: Partial<LaneLabelMap>;
+  defaults: Record<"github" | "gitlab", LaneLabelMap>;
+  status: LaneSyncStatus;
+}
+
+export interface UpdateLaneSettingsRequest {
+  enabled?: boolean;
+  /** Replaces the overrides; an empty string or a missing lane goes back to the default. */
+  labels?: Partial<LaneLabelMap>;
 }
