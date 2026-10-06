@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 import { PERSONA_LABELS } from "./reviewer";
 
+const originalSpawn = Bun.spawn;
+
 // Need to safely mock spawn as it overlaps globally across tests in Bun
 // The core issue in Bun's module mocking is causing test parallelism to bleed,
 // so testing this module's integration with spawn separately manually is better suited
