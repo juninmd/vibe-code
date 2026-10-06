@@ -81,8 +81,12 @@ export function useWebSocket(onMessage: MessageHandler) {
       };
 
       ws.onclose = (_evt) => {
-        setConnected(false);
-        wsRef.current = null;
+        // A stale socket (e.g. React StrictMode's discarded first connection) must not
+        // clobber the live one, or every later send() would be queued forever.
+        if (wsRef.current === ws) {
+          setConnected(false);
+          wsRef.current = null;
+        }
         if (pingTimer) {
           clearInterval(pingTimer);
           pingTimer = null;
