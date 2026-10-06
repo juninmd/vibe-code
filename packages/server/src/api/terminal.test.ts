@@ -24,7 +24,14 @@ function buildApp(overrides: Partial<Record<keyof TerminalController, unknown>> 
       return { taskId, live: true, runId: "r1", engine: "claude-code", skills: [], cwd: "/w" };
     },
     stop: () => true,
-    setSkills: async () => ({}),
+    previewSkills: async (taskId: string, choice: unknown) => {
+      calls.push({ taskId, preview: choice });
+      return { mode: "auto", applied: [] };
+    },
+    setSkills: async (taskId: string, choice: unknown) => {
+      calls.push({ taskId, choice });
+      return {};
+    },
     finish: async () => ({}),
     ...overrides,
   } as unknown as TerminalController;
@@ -87,6 +94,49 @@ describe("/api/terminal", () => {
     const res = await post(app, `/api/terminal/${task.id}/start`, {});
     expect(res.status).toBe(409);
     expect((await res.json()).message).toContain("claude is not installed");
+  });
+
+  it("previews the skills a task would get before it starts", async () => {
+    const { app, task, calls } = buildApp();
+    const res = await post(app, `/api/terminal/${task.id}/skills/preview`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ mode: "auto", applied: [] });
+
+    await post(app, `/api/terminal/${task.id}/skills/preview`, { skills: ["tdd"] });
+    expect(calls).toEqual([
+      { taskId: task.id, preview: {} },
+      { taskId: task.id, preview: { skills: ["tdd"] } },
+    ]);
+    expect(
+      (await post(app, `/api/terminal/${task.id}/skills/preview`, { skills: [1] })).status
+    ).toBe(400);
+  });
+
+  it("changes skills with an explicit list or back to auto, and rejects anything else", async () => {
+    const { app, task, calls } = buildApp();
+    const put = (body: unknown) =>
+      app.request(`/api/terminal/${task.id}/skills`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    expect((await put({ skills: ["tdd"] })).status).toBe(200);
+    expect((await put({ mode: "auto" })).status).toBe(200);
+    expect(calls).toEqual([
+      { taskId: task.id, choice: { skills: ["tdd"] } },
+      { taskId: task.id, choice: { mode: "auto" } },
+    ]);
+    expect((await put({})).status).toBe(400);
+    expect((await put({ mode: "manual" })).status).toBe(400);
+  });
+
+  it("accepts a request to start with automatic skills", async () => {
+    const { app, task, calls } = buildApp();
+    expect((await post(app, `/api/terminal/${task.id}/start`, { skillMode: "auto" })).status).toBe(
+      200
+    );
+    expect(calls).toEqual([{ taskId: task.id, req: { skillMode: "auto" } }]);
   });
 
   it("does not expose terminals of unknown tasks", async () => {

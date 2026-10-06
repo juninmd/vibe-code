@@ -1,6 +1,12 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { EngineInfo, TaskWithRun, TerminalState } from "@vibe-code/shared";
+import type {
+  AppliedSkill,
+  EngineInfo,
+  SkillPlan,
+  TaskWithRun,
+  TerminalState,
+} from "@vibe-code/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { api } = vi.hoisted(() => ({
@@ -11,6 +17,7 @@ const { api } = vi.hoisted(() => ({
       stop: vi.fn(),
       finish: vi.fn(),
       setSkills: vi.fn(),
+      previewSkills: vi.fn(),
     },
     skills: { index: vi.fn() },
     engines: { models: vi.fn() },
@@ -65,7 +72,19 @@ const idle: TerminalState = {
   runId: null,
   engine: null,
   skills: [],
+  applied: [],
+  skillMode: "auto",
   cwd: null,
+};
+
+const builtIn: AppliedSkill = {
+  name: "vibe-code-orchestrator",
+  source: "always",
+  reasons: ["built in"],
+};
+const autoPlan: SkillPlan = {
+  mode: "auto",
+  applied: [builtIn, { name: "test-first", source: "auto", reasons: ["matches: tests"] }],
 };
 
 function renderPanel(overrides: Partial<TaskWithRun> = {}, props: Record<string, unknown> = {}) {
@@ -94,6 +113,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.terminal.state.mockResolvedValue(idle);
   api.terminal.stop.mockResolvedValue({ stopped: true });
+  api.terminal.previewSkills.mockResolvedValue(autoPlan);
   api.skills.index.mockResolvedValue({
     skills: [
       { name: "test-first", description: "Write the test first", filePath: "/s/SKILL.md" },
@@ -114,30 +134,103 @@ describe("TaskPanel", () => {
     expect(screen.getByRole("button", { name: "Shell" })).toBeEnabled();
   });
 
-  it("starts the chosen harness with the visible terminal size and the picked skills", async () => {
+  it("shows the plugins picked for the task and starts without forcing a skill list", async () => {
     api.terminal.start.mockResolvedValue({
       ...idle,
       live: true,
       engine: "claude-code",
-      skills: ["test-first"],
+      skills: ["vibe-code-orchestrator", "test-first"],
+      applied: autoPlan.applied,
       cwd: "/w",
     });
     renderPanel();
 
-    await userEvent.click(await screen.findByRole("button", { name: /^skills/i }));
-    await userEvent.click(await screen.findByText("test-first"));
+    const plugins = await screen.findByRole("region", { name: "Plugins" });
+    expect(within(plugins).getByText("test-first")).toBeInTheDocument();
+    expect(within(plugins).getByText("matches: tests")).toBeInTheDocument();
+    expect(within(plugins).getByText("Auto")).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: /start claude code/i }));
 
+    // No `skills`: the server keeps choosing from the task text.
     await waitFor(() =>
       expect(api.terminal.start).toHaveBeenCalledWith("task-1", {
         engine: "claude-code",
-        skills: ["test-first"],
         cols: 90,
         rows: 28,
       })
     );
     expect(await screen.findByRole("button", { name: "Finish" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+  });
+
+  it("makes the plan manual when the operator edits it before starting", async () => {
+    api.terminal.previewSkills.mockImplementation(async (_id: string, skills?: string[]) =>
+      skills
+        ? {
+            mode: "manual",
+            applied: [
+              builtIn,
+              ...skills.map((name) => ({ name, source: "manual", reasons: ["picked by you"] })),
+            ],
+          }
+        : autoPlan
+    );
+    api.terminal.start.mockResolvedValue({ ...idle, live: true, engine: "claude-code", cwd: "/w" });
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole("button", { name: /^skills/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^review/ }));
+    await waitFor(() =>
+      expect(api.terminal.previewSkills).toHaveBeenLastCalledWith("task-1", [
+        "test-first",
+        "review",
+      ])
+    );
+    const plugins = screen.getByRole("region", { name: "Plugins" });
+    expect(await within(plugins).findByText("Manual")).toBeInTheDocument();
+    expect(within(plugins).getAllByText("picked by you")).toHaveLength(2);
+
+    await userEvent.click(screen.getByRole("button", { name: /start claude code/i }));
+    await waitFor(() =>
+      expect(api.terminal.start).toHaveBeenCalledWith("task-1", {
+        engine: "claude-code",
+        skills: ["test-first", "review"],
+        cols: 90,
+        rows: 28,
+      })
+    );
+  });
+
+  it("can drop a picked skill from its chip and go back to automatic", async () => {
+    api.terminal.previewSkills.mockImplementation(async (_id: string, skills?: string[]) =>
+      skills
+        ? {
+            mode: "manual",
+            applied: [
+              builtIn,
+              ...skills.map((name) => ({ name, source: "manual", reasons: ["picked by you"] })),
+            ],
+          }
+        : autoPlan
+    );
+    renderPanel();
+
+    await userEvent.click(await screen.findByRole("button", { name: /^skills/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^review/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Remove review" }));
+    await waitFor(() =>
+      expect(api.terminal.previewSkills).toHaveBeenLastCalledWith("task-1", ["test-first"])
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^skills/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Reset to auto" }));
+    await waitFor(() =>
+      expect(api.terminal.previewSkills).toHaveBeenLastCalledWith("task-1", undefined)
+    );
+    const plugins = screen.getByRole("region", { name: "Plugins" });
+    expect(await within(plugins).findByText("matches: tests")).toBeInTheDocument();
+    expect(within(plugins).getByText("Auto")).toBeInTheDocument();
   });
 
   it("starts a plain shell without skills", async () => {
@@ -182,17 +275,49 @@ describe("TaskPanel", () => {
     await waitFor(() => expect(api.terminal.stop).toHaveBeenCalledWith("task-1"));
   });
 
-  it("applies skill changes to the live workspace right away", async () => {
-    api.terminal.state.mockResolvedValue({ ...idle, live: true, engine: "claude-code", cwd: "/w" });
-    api.terminal.setSkills.mockResolvedValue({ ...idle, skills: ["review"] });
+  it("applies skill changes to the live workspace through the server", async () => {
+    api.terminal.state.mockResolvedValue({
+      ...idle,
+      live: true,
+      engine: "claude-code",
+      cwd: "/w",
+      skills: autoPlan.applied.map((skill) => skill.name),
+      applied: autoPlan.applied,
+    });
+    api.terminal.setSkills.mockResolvedValue({
+      ...idle,
+      live: true,
+      engine: "claude-code",
+      cwd: "/w",
+      skillMode: "manual",
+      applied: [builtIn, { name: "review", source: "manual", reasons: ["picked by you"] }],
+    });
     renderPanel({ status: "in_progress" });
     // Wait for the live state: before it loads, the idle card has its own picker.
     await screen.findByRole("button", { name: "Finish" });
 
     await userEvent.click(screen.getByRole("button", { name: /^skills/i }));
-    await userEvent.click(await screen.findByText("review"));
+    expect(screen.getByText("Changes apply the next time the session starts.")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /^review/ }));
 
-    await waitFor(() => expect(api.terminal.setSkills).toHaveBeenCalledWith("task-1", ["review"]));
+    await waitFor(() =>
+      expect(api.terminal.setSkills).toHaveBeenCalledWith("task-1", {
+        skills: ["test-first", "review"],
+      })
+    );
+    expect(await screen.findByText("Manual")).toBeInTheDocument();
+
+    api.terminal.setSkills.mockResolvedValue({
+      ...idle,
+      live: true,
+      engine: "claude-code",
+      cwd: "/w",
+      applied: autoPlan.applied,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Reset to auto" }));
+    await waitFor(() =>
+      expect(api.terminal.setSkills).toHaveBeenLastCalledWith("task-1", { mode: "auto" })
+    );
   });
 
   it("offers Create PR for a reviewed task and Open PR once there is one", async () => {

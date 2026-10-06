@@ -7,10 +7,13 @@ import {
   buildHarnessLaunch,
   buildTaskBrief,
   type InjectableSkill,
+  installAgentPlugin,
   isHarnessEngine,
   listManagedSkills,
+  readSkillPlan,
   SKILL_DIRS,
   syncSkills,
+  writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
 
@@ -149,6 +152,93 @@ describe("task brief", () => {
     const file = await writeTaskBrief(dir, { title: "T", description: "D" });
     expect(file).toBe(join(dir, ".vibe-code", "TASK.md"));
     expect(await readFile(file, "utf8")).toContain("# T");
+  });
+});
+
+describe("agent plugin", () => {
+  const task = { title: "Fix login" };
+
+  it("loads the plugin before the prompt so the prompt stays the last argument", () => {
+    const { argv } = buildHarnessLaunch({
+      engine: "claude-code",
+      task,
+      pluginDir: "/w/.vibe-code/plugin",
+    });
+    expect(argv.slice(0, 3)).toEqual(["claude", "--plugin-dir", "/w/.vibe-code/plugin"]);
+    expect(argv.at(-1)).toContain("Fix login");
+  });
+
+  it("does not pass plugin flags to OpenCode, which has none", () => {
+    const { argv } = buildHarnessLaunch({ engine: "opencode", task, pluginDir: "/ignored" });
+    expect(argv).not.toContain("--plugin-dir");
+  });
+
+  it("builds a Claude Code plugin with the skills and keeps .claude untouched", async () => {
+    const wt = await makeRepoWithWorktree();
+    const catalog = await makeCatalog();
+
+    const result = await installAgentPlugin(wt, "claude-code", ["tdd", "ghost", "review"], catalog);
+
+    expect(result.pluginDir).toBe(join(wt, ".vibe-code", "plugin"));
+    expect(result.injected).toEqual(["tdd", "review"]);
+    expect(result.missing).toEqual(["ghost"]);
+    const manifest = JSON.parse(
+      await readFile(join(wt, ".vibe-code", "plugin", ".claude-plugin", "plugin.json"), "utf8")
+    );
+    expect(manifest.name).toBe("vibe-code");
+    expect(existsSync(join(wt, ".vibe-code", "plugin", "skills", "tdd", "scripts", "run.sh"))).toBe(
+      true
+    );
+    expect(existsSync(join(wt, ".claude"))).toBe(false);
+    expect((await git(wt, "status", "--porcelain")).trim()).toBe("");
+  });
+
+  it("rebuilds the plugin from scratch and drops it when no skill is left", async () => {
+    const wt = await makeRepoWithWorktree();
+    const catalog = await makeCatalog();
+    await installAgentPlugin(wt, "claude-code", ["tdd", "review"], catalog);
+
+    const narrowed = await installAgentPlugin(wt, "claude-code", ["review"], catalog);
+    expect(narrowed.injected).toEqual(["review"]);
+    expect(existsSync(join(wt, ".vibe-code", "plugin", "skills", "tdd"))).toBe(false);
+
+    const empty = await installAgentPlugin(wt, "claude-code", [], catalog);
+    expect(empty.pluginDir).toBeNull();
+    expect(existsSync(join(wt, ".vibe-code", "plugin"))).toBe(false);
+  });
+
+  it("moves skills an earlier version copied into .claude/skills into the plugin", async () => {
+    const wt = await makeRepoWithWorktree();
+    const catalog = await makeCatalog();
+    await syncSkills(wt, "claude-code", ["tdd"], catalog);
+    expect(existsSync(join(wt, ".claude", "skills", "tdd"))).toBe(true);
+
+    await installAgentPlugin(wt, "claude-code", ["tdd"], catalog);
+
+    expect(existsSync(join(wt, ".claude", "skills", "tdd"))).toBe(false);
+    expect(existsSync(join(wt, ".vibe-code", "plugin", "skills", "tdd", "SKILL.md"))).toBe(true);
+  });
+
+  it("gives OpenCode project skills, since it has no plugin directory flag", async () => {
+    const wt = await makeRepoWithWorktree();
+    const result = await installAgentPlugin(wt, "opencode", ["review"], await makeCatalog());
+    expect(result.pluginDir).toBeNull();
+    expect(existsSync(join(wt, ".opencode", "skill", "review", "SKILL.md"))).toBe(true);
+  });
+
+  it("remembers the plan with its reasons and ignores a corrupt file", async () => {
+    const wt = await makeRepoWithWorktree();
+    expect(await readSkillPlan(wt)).toBeNull();
+
+    const plan = {
+      mode: "auto" as const,
+      applied: [{ name: "tdd", source: "auto" as const, reasons: ["matches: tests"] }],
+    };
+    await writeSkillPlan(wt, plan);
+    expect(await readSkillPlan(wt)).toEqual(plan);
+
+    await writeFile(join(wt, ".vibe-code", "plan.json"), "{nope");
+    expect(await readSkillPlan(wt)).toBeNull();
   });
 });
 

@@ -67,7 +67,13 @@ async function makeEnv() {
   const skills = {
     load: async () => ({
       skills: [
-        { name: "tdd", description: "", category: "skill", filePath: join(skillDir, "SKILL.md") },
+        {
+          name: "tdd",
+          description: "Write failing tests first, then make them pass",
+          tags: ["test", "tdd"],
+          category: "skill",
+          filePath: join(skillDir, "SKILL.md"),
+        },
         {
           name: "vibe-code-orchestrator",
           description: "Create sub-tasks",
@@ -150,18 +156,21 @@ afterAll(async () => {
 });
 
 describe.skipIf(!posix)("TerminalController", () => {
-  it("runs Claude Code in an isolated worktree with the task prompt and injected skills", async () => {
+  it("runs Claude Code in an isolated worktree with the task prompt and the skills as a plugin", async () => {
     const { controller, db, task, output } = await makeEnv();
 
     const state = await controller.start(task.id, { skills: ["tdd"], cols: 100, rows: 30 });
 
     expect(state.live).toBe(true);
     expect(state.engine).toBe("claude-code");
-    expect(state.skills).toEqual(["tdd"]);
+    expect(state.skills).toEqual(["vibe-code-orchestrator", "tdd"]);
+    expect(state.skillMode).toBe("manual");
     expect(state.cwd).toBeTruthy();
-    expect(existsSync(join(state.cwd as string, ".claude", "skills", "tdd", "SKILL.md"))).toBe(
-      true
-    );
+    const plugin = join(state.cwd as string, ".vibe-code", "plugin");
+    expect(existsSync(join(plugin, ".claude-plugin", "plugin.json"))).toBe(true);
+    expect(existsSync(join(plugin, "skills", "tdd", "SKILL.md"))).toBe(true);
+    // Nothing lands in the repository's own .claude directory.
+    expect(existsSync(join(state.cwd as string, ".claude"))).toBe(false);
     expect(existsSync(join(state.cwd as string, ".vibe-code", "TASK.md"))).toBe(true);
 
     const running = db.tasks.getById(task.id);
@@ -172,6 +181,7 @@ describe.skipIf(!posix)("TerminalController", () => {
     await waitFor(() => output().includes("claude-args:"), "claude to start");
     expect(output()).toContain("Fix login");
     expect(output()).toContain("Redirect loops");
+    expect(output()).toContain(`--plugin-dir ${plugin}`);
 
     controller.input(task.id, "hello\n");
     await waitFor(() => output().includes("typed:hello"), "keyboard input to reach claude");
@@ -251,25 +261,73 @@ describe.skipIf(!posix)("TerminalController", () => {
     );
   });
 
-  it("removes a skill from the workspace when it is unselected", async () => {
+  it("removes a skill from the plugin when it is unselected", async () => {
     const { controller, task } = await makeEnv();
     const { cwd } = await controller.start(task.id, { skills: ["tdd"] });
-    const skillFile = join(cwd as string, ".claude", "skills", "tdd", "SKILL.md");
+    const skillFile = join(cwd as string, ".vibe-code", "plugin", "skills", "tdd", "SKILL.md");
     expect(existsSync(skillFile)).toBe(true);
 
-    const state = await controller.setSkills(task.id, []);
-    expect(state.skills).toEqual([]);
+    const state = await controller.setSkills(task.id, { skills: [] });
+    expect(state.skills).toEqual(["vibe-code-orchestrator"]);
+    expect(state.skillMode).toBe("manual");
     expect(existsSync(skillFile)).toBe(false);
     controller.stop(task.id);
   });
 
-  it("can inject the built-in orchestrator skill and tells the agent how to reach the board", async () => {
+  it("applies the built-in orchestrator skill to every task and tells the agent how to reach the board", async () => {
     const { controller, task, output } = await makeEnv();
-    const { cwd } = await controller.start(task.id, { skills: ["vibe-code-orchestrator"] });
-    const file = join(cwd as string, ".claude", "skills", "vibe-code-orchestrator", "SKILL.md");
-    expect(existsSync(file)).toBe(true);
+    const { cwd, applied } = await controller.start(task.id);
+    expect(applied).toEqual([
+      { name: "vibe-code-orchestrator", source: "always", reasons: ["built in"] },
+    ]);
+    const file = join(
+      cwd as string,
+      ".vibe-code",
+      "plugin",
+      "skills",
+      "vibe-code-orchestrator",
+      "SKILL.md"
+    );
     expect(await Bun.file(file).text()).toContain("name: vibe-code-orchestrator");
     await waitFor(() => output().includes("claude-args:"), "claude to start");
+    controller.stop(task.id);
+  });
+
+  it("picks skills from the task text and records why", async () => {
+    const { controller, db, task } = await makeEnv();
+    db.tasks.update(task.id, { title: "Add failing tests for login redirect" });
+
+    const preview = await controller.previewSkills(task.id);
+    expect(preview.mode).toBe("auto");
+    expect(preview.applied.map((skill) => skill.name)).toEqual(["vibe-code-orchestrator", "tdd"]);
+
+    const state = await controller.start(task.id);
+    expect(state.skillMode).toBe("auto");
+    const tdd = state.applied.find((skill) => skill.name === "tdd");
+    expect(tdd?.source).toBe("auto");
+    expect(tdd?.reasons[0]).toContain("tests");
+    const stored = db.runs.getLatestByTask(task.id)?.matchedSkills;
+    expect(JSON.parse(stored as unknown as string)).toEqual(["vibe-code-orchestrator", "tdd"]);
+    controller.stop(task.id);
+  });
+
+  it("keeps a manual choice across sessions until the operator returns to auto", async () => {
+    const { controller, db, task } = await makeEnv();
+    db.tasks.update(task.id, { title: "Add failing tests for login redirect" });
+    await controller.start(task.id, { skills: [] });
+    controller.stop(task.id);
+    await waitFor(
+      () => db.runs.getLatestByTask(task.id)?.status === "cancelled",
+      "first session to stop"
+    );
+
+    const again = await controller.start(task.id);
+    expect(again.skillMode).toBe("manual");
+    expect(again.skills).toEqual(["vibe-code-orchestrator"]);
+
+    const back = await controller.setSkills(task.id, { mode: "auto" });
+    expect(back.skillMode).toBe("auto");
+    expect(back.skills).toEqual(["vibe-code-orchestrator", "tdd"]);
     controller.stop(task.id);
   });
 });

@@ -4,6 +4,9 @@ import { join } from "node:path";
 import {
   HARNESS_ENGINES,
   type HarnessEngine,
+  type SkillEntry,
+  type SkillMode,
+  type SkillPlan,
   type Task,
   type TerminalSignal,
   type TerminalStartRequest,
@@ -17,12 +20,14 @@ import type { BroadcastHub } from "../ws/broadcast";
 import {
   buildHarnessLaunch,
   type InjectableSkill,
+  installAgentPlugin,
   isHarnessEngine,
-  listManagedSkills,
-  syncSkills,
+  readSkillPlan,
+  writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
 import { resolveShellCommand, TerminalSessionService } from "./session-service";
+import { manualPicks, planSkills, skillNames } from "./skill-plan";
 
 export class TerminalError extends Error {
   constructor(
@@ -45,8 +50,22 @@ interface LiveSession {
   runId: string;
   engine: HarnessEngine | "shell";
   cwd: string;
-  skills: string[];
+  plan: SkillPlan;
 }
+
+export interface SkillChoice {
+  /** The operator's own list; makes the plan manual. */
+  skills?: string[];
+  /** `auto` hands the choice back to vibe-code. */
+  mode?: SkillMode;
+}
+
+interface SkillCatalog {
+  entries: SkillEntry[];
+  injectable: InjectableSkill[];
+}
+
+const EMPTY_PLAN: SkillPlan = { mode: "auto", applied: [] };
 
 const SESSION_MARKER = ".vibe-code/terminal.json";
 
@@ -134,21 +153,37 @@ export class TerminalController {
         live: true,
         runId: live.runId,
         engine: live.engine,
-        skills: live.skills,
+        skills: skillNames(live.plan),
+        applied: live.plan.applied,
+        skillMode: live.plan.mode,
         cwd: live.cwd,
       };
     }
 
     const run = this.deps.db.runs.getLatestByTask(taskId);
     const cwd = run?.worktreePath && (await pathExists(run.worktreePath)) ? run.worktreePath : null;
+    const plan = (cwd ? await readSkillPlan(cwd) : null) ?? EMPTY_PLAN;
     return {
       taskId,
       live: false,
       runId: run?.id ?? null,
       engine: isHarnessEngine(run?.engine) ? run.engine : null,
-      skills: Array.isArray(run?.matchedSkills) ? run.matchedSkills : [],
+      skills: skillNames(plan),
+      applied: plan.applied,
+      skillMode: plan.mode,
       cwd,
     };
+  }
+
+  /**
+   * The skills a task gets when started now, before any workspace exists. Lets the UI show
+   * what will be applied (and why) instead of asking the operator to pick blindly.
+   */
+  async previewSkills(taskId: string, choice: SkillChoice = {}): Promise<SkillPlan> {
+    const task = this.requireTask(taskId);
+    const { cwd } = await this.state(taskId);
+    const { entries } = await this.loadSkills();
+    return this.resolvePlan(task, cwd, entries, choice);
   }
 
   /** Rendered screen to restore on a client that (re)attaches to a live session. */
@@ -183,8 +218,8 @@ export class TerminalController {
     return this.service.signal(taskId, signal);
   }
 
-  /** Replace the set of skills injected into the task's workspace. */
-  async setSkills(taskId: string, names: string[]): Promise<TerminalState> {
+  /** Change the skills of the task's agent plugin (applies when the session next starts). */
+  async setSkills(taskId: string, choice: SkillChoice): Promise<TerminalState> {
     const task = this.requireTask(taskId);
     const current = await this.state(taskId);
     if (!current.cwd) {
@@ -192,13 +227,24 @@ export class TerminalController {
     }
     const engine =
       current.engine && current.engine !== "shell" ? current.engine : this.pickDefaultEngine(task);
-    const catalog = await this.skillCatalog();
-    const result = await syncSkills(current.cwd, engine, names, catalog);
-    const active = [...result.injected, ...result.skipped];
-    if (current.runId) this.deps.db.runs.updateMatchedSkills(current.runId, active);
+    const { entries, injectable } = await this.loadSkills();
+    const plan = await this.resolvePlan(task, current.cwd, entries, choice);
+    const installed = await installAgentPlugin(current.cwd, engine, skillNames(plan), injectable);
+    const applied = plan.applied.filter(
+      (skill) => !installed.missing.includes(skill.name) || skill.source === "manual"
+    );
+    const finalPlan: SkillPlan = { mode: plan.mode, applied };
+    await writeSkillPlan(current.cwd, finalPlan);
+    if (current.runId) this.deps.db.runs.updateMatchedSkills(current.runId, skillNames(finalPlan));
     const live = this.live.get(taskId);
-    if (live) live.skills = active;
-    return { ...current, engine, skills: active };
+    if (live) live.plan = finalPlan;
+    return {
+      ...current,
+      engine,
+      skills: skillNames(finalPlan),
+      applied: finalPlan.applied,
+      skillMode: finalPlan.mode,
+    };
   }
 
   /**
@@ -231,10 +277,10 @@ export class TerminalController {
     return isHarnessEngine(task.engine) ? task.engine : HARNESS_ENGINES[0];
   }
 
-  private async skillCatalog(): Promise<InjectableSkill[]> {
+  private async loadSkills(): Promise<SkillCatalog> {
     try {
       const index = await this.deps.skills.load();
-      const catalog: InjectableSkill[] = [];
+      const injectable: InjectableSkill[] = [];
       for (const skill of index.skills) {
         if (!skill.filePath) continue;
         if (skill.filePath.startsWith("virtual://")) {
@@ -243,15 +289,41 @@ export class TerminalController {
             skill.description,
             skill.filePath
           );
-          if (file) catalog.push({ name: skill.name, filePath: file });
+          if (file) injectable.push({ name: skill.name, filePath: file });
         } else {
-          catalog.push({ name: skill.name, filePath: skill.filePath });
+          injectable.push({ name: skill.name, filePath: skill.filePath });
         }
       }
-      return catalog;
+      return { entries: index.skills, injectable };
     } catch {
-      return [];
+      return { entries: [], injectable: [] };
     }
+  }
+
+  /**
+   * Manual until the operator says otherwise: an explicit list wins, then a manual plan
+   * stored with the workspace, and everything else is picked from the task text.
+   */
+  private async resolvePlan(
+    task: Task,
+    cwd: string | null,
+    entries: SkillEntry[],
+    choice: SkillChoice
+  ): Promise<SkillPlan> {
+    let manual: string[] | null = null;
+    if (choice.skills) {
+      manual = choice.skills;
+    } else if (choice.mode !== "auto") {
+      const stored = cwd ? await readSkillPlan(cwd) : null;
+      if (stored?.mode === "manual") manual = manualPicks(stored.applied);
+    }
+    return planSkills({
+      skills: entries,
+      title: task.title,
+      description: task.description,
+      goal: task.goal,
+      manual,
+    });
   }
 
   /** Built-in skills (e.g. the board orchestrator) have no folder: write one on demand. */
@@ -372,7 +444,7 @@ export class TerminalController {
     }
 
     let launch: { argv: string[]; env: Record<string, string> };
-    let activeSkills: string[] = [];
+    let plan: SkillPlan = EMPTY_PLAN;
     if (shell) {
       launch = {
         argv: resolveShellCommand(),
@@ -381,16 +453,26 @@ export class TerminalController {
     } else {
       const resume = await this.canResume(cwd, engine);
       await writeTaskBrief(cwd, task);
-      const catalog = await this.skillCatalog();
-      const wantedSkills = request.skills ?? (await listManagedSkills(cwd, engine, catalog));
-      const injected = await syncSkills(cwd, engine, wantedSkills, catalog);
-      activeSkills = [...injected.injected, ...injected.skipped];
+      const { entries, injectable } = await this.loadSkills();
+      const wanted = await this.resolvePlan(task, cwd, entries, {
+        skills: request.skills,
+        mode: request.skillMode,
+      });
+      const installed = await installAgentPlugin(cwd, engine, skillNames(wanted), injectable);
+      plan = {
+        mode: wanted.mode,
+        applied: wanted.applied.filter(
+          (skill) => !installed.missing.includes(skill.name) || skill.source === "manual"
+        ),
+      };
+      await writeSkillPlan(cwd, plan);
 
       launch = buildHarnessLaunch({
         engine,
         task,
         model: request.model ?? task.model ?? undefined,
         resume,
+        pluginDir: installed.pluginDir,
         apiKeys: {
           anthropic: db.settings.get("anthropic_api_key") || undefined,
           openai: db.settings.get("openai_api_key") || undefined,
@@ -405,12 +487,12 @@ export class TerminalController {
       worktree_path: cwd,
       current_status: "terminal",
     });
-    db.runs.updateMatchedSkills(run.id, activeSkills);
+    db.runs.updateMatchedSkills(run.id, skillNames(plan));
     this.live.set(taskId, {
       runId: run.id,
       engine: shell ? "shell" : engine,
       cwd,
-      skills: activeSkills,
+      plan,
     });
     if (!shell) {
       await writeFile(join(cwd, SESSION_MARKER), JSON.stringify({ engine, runId: run.id }), "utf8");

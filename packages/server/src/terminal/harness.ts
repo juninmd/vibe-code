@@ -1,6 +1,12 @@
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { HARNESS_ENGINES, type HarnessEngine } from "@vibe-code/shared";
+import {
+  type AppliedSkill,
+  HARNESS_ENGINES,
+  type HarnessEngine,
+  type SkillMode,
+  type SkillPlan,
+} from "@vibe-code/shared";
 import { resolveOpencodeBinary } from "../agents/engines/opencode";
 
 /**
@@ -19,6 +25,10 @@ export const SKILL_DIRS: Record<HarnessEngine, string> = {
 const INLINE_PROMPT_LIMIT = 4_000;
 const BRIEF_PATH = ".vibe-code/TASK.md";
 const MANIFEST_PATH = ".vibe-code/skills.json";
+const PLAN_PATH = ".vibe-code/plan.json";
+/** Claude Code plugin generated per workspace and loaded with `--plugin-dir`. */
+export const PLUGIN_DIR = ".vibe-code/plugin";
+const PLUGIN_NAME = "vibe-code";
 const SAFE_DIR_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export function isHarnessEngine(value: string | null | undefined): value is HarnessEngine {
@@ -44,6 +54,8 @@ export interface HarnessLaunchInput {
   model?: string | null;
   /** Continue the previous conversation of this workspace instead of starting a new one. */
   resume?: boolean;
+  /** Absolute path of the generated agent plugin (Claude Code only). */
+  pluginDir?: string | null;
   apiKeys?: { anthropic?: string; openai?: string; gemini?: string };
   env?: Record<string, string>;
 }
@@ -77,6 +89,7 @@ export function buildHarnessLaunch(input: HarnessLaunchInput): HarnessLaunch {
     if (input.apiKeys?.anthropic) env.ANTHROPIC_API_KEY = input.apiKeys.anthropic;
     const argv = ["claude"];
     if (model) argv.push("--model", model);
+    if (input.pluginDir) argv.push("--plugin-dir", input.pluginDir);
     if (input.resume) argv.push("--continue");
     else argv.push(prompt);
     return { argv, env };
@@ -246,4 +259,107 @@ export async function listManagedSkills(
   const manifest = await readManifest(workdir);
   const folders = new Set(manifest[engine] ?? []);
   return catalog.filter((skill) => folders.has(skillFolder(skill))).map((skill) => skill.name);
+}
+
+// ─── Agent plugin ───────────────────────────────────────────────────────────
+
+export interface PluginInstall extends InjectResult {
+  /** Directory to pass to `claude --plugin-dir`; null when nothing needs loading. */
+  pluginDir: string | null;
+}
+
+/** Write the skills of a task as a session-only Claude Code plugin. */
+async function buildClaudePlugin(
+  workdir: string,
+  wanted: string[],
+  catalog: InjectableSkill[]
+): Promise<PluginInstall> {
+  const root = join(workdir, PLUGIN_DIR);
+  const byName = new Map(catalog.map((skill) => [skill.name, skill]));
+  const result: PluginInstall = { injected: [], missing: [], skipped: [], pluginDir: null };
+  await rm(root, { recursive: true, force: true });
+
+  const folders: Array<{ name: string; folder: string; source: string }> = [];
+  for (const name of wanted) {
+    const skill = byName.get(name);
+    const folder = skill ? skillFolder(skill) : "";
+    if (!skill || !SAFE_DIR_NAME.test(folder) || !(await exists(skill.filePath))) {
+      result.missing.push(name);
+      continue;
+    }
+    folders.push({ name, folder, source: dirname(skill.filePath) });
+  }
+
+  if (folders.length > 0) {
+    await mkdir(join(root, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify(
+        {
+          name: PLUGIN_NAME,
+          version: "1.0.0",
+          description: "Skills vibe-code selected for this task",
+          author: { name: "vibe-code" },
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    for (const entry of folders) {
+      await cp(entry.source, join(root, "skills", entry.folder), { recursive: true });
+      result.injected.push(entry.name);
+    }
+    result.pluginDir = root;
+  }
+
+  await excludeFromGit(workdir, ["/.vibe-code/"]);
+  return result;
+}
+
+/**
+ * Apply the chosen skills the way each harness consumes plugins: Claude Code gets a
+ * session-only plugin (nothing lands in `.claude/`), OpenCode — which has no plugin
+ * directory flag — gets project skills under `.opencode/skill`. Both stay out of git.
+ */
+export async function installAgentPlugin(
+  workdir: string,
+  engine: HarnessEngine,
+  wanted: string[],
+  catalog: InjectableSkill[]
+): Promise<PluginInstall> {
+  if (engine === "claude-code") {
+    // Skills copied into `.claude/skills` by an earlier version are now plugin content.
+    await syncSkills(workdir, "claude-code", [], catalog);
+    return buildClaudePlugin(workdir, wanted, catalog);
+  }
+  const result = await syncSkills(workdir, engine, wanted, catalog);
+  return { ...result, pluginDir: null };
+}
+
+interface StoredPlan {
+  mode: SkillMode;
+  applied: AppliedSkill[];
+}
+
+/** The plan applied to a workspace, so reasons and the manual/auto choice survive restarts. */
+export async function readSkillPlan(workdir: string): Promise<SkillPlan | null> {
+  try {
+    const stored = JSON.parse(await readFile(join(workdir, PLAN_PATH), "utf8")) as StoredPlan;
+    if (stored.mode !== "auto" && stored.mode !== "manual") return null;
+    if (!Array.isArray(stored.applied)) return null;
+    const applied = stored.applied.filter(
+      (entry): entry is AppliedSkill =>
+        !!entry && typeof entry.name === "string" && Array.isArray(entry.reasons)
+    );
+    return { mode: stored.mode, applied };
+  } catch {
+    return null;
+  }
+}
+
+export async function writeSkillPlan(workdir: string, plan: SkillPlan): Promise<void> {
+  const file = join(workdir, PLAN_PATH);
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(plan, null, 2), "utf8");
 }

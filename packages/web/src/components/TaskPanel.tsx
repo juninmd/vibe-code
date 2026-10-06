@@ -10,8 +10,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { subscribeTerminal } from "../hooks/terminalBus";
+import { useSkillPlan } from "../hooks/useSkillPlan";
 import { DiffViewer } from "./DiffViewer";
-import { SkillPicker } from "./SkillPicker";
+import { PluginChips } from "./PluginChips";
+import { picksOf, SkillPicker } from "./SkillPicker";
 import { TaskTerminal, type TaskTerminalHandle } from "./TaskTerminal";
 import { Button } from "./ui/button";
 import { getEngineMeta } from "./ui/engine-icons";
@@ -75,12 +77,17 @@ export function TaskPanel({
   const [menuOpen, setMenuOpen] = useState(false);
 
   const [catalog, setCatalog] = useState<SkillEntry[]>([]);
-  const [chosenSkills, setChosenSkills] = useState<string[]>([]);
   const [choice, setChoice] = useState<Choice | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
 
   const live = state?.live ?? false;
+  const skillPlan = useSkillPlan({
+    taskId: task.id,
+    state,
+    onState: setState,
+    onError: (err) => onNotify(errorMessage(err), "error"),
+  });
   const available = useMemo(
     () => new Set(engines.filter((engine) => engine.available).map((engine) => engine.name)),
     [engines]
@@ -91,10 +98,7 @@ export function TaskPanel({
   const refreshState = useCallback(() => {
     api.terminal
       .state(task.id)
-      .then((next) => {
-        setState(next);
-        setChosenSkills(next.skills);
-      })
+      .then(setState)
       .catch(() => {});
   }, [task.id]);
 
@@ -168,11 +172,11 @@ export function TaskPanel({
       const next = await api.terminal.start(task.id, {
         engine,
         ...(engine !== "shell" && model ? { model } : {}),
-        ...(engine !== "shell" ? { skills: chosenSkills } : {}),
+        // Only a hand-picked list is sent; otherwise the server picks from the task text.
+        ...(engine !== "shell" && skillPlan.startSkills ? { skills: skillPlan.startSkills } : {}),
         ...size,
       });
       setState(next);
-      setChosenSkills(next.skills);
       terminalRef.current?.focus();
     });
   };
@@ -190,18 +194,6 @@ export function TaskPanel({
     void run("pr", async () => {
       await onRetryPR(task.id);
     });
-
-  const changeSkills = (next: string[]) => {
-    setChosenSkills(next);
-    // With a workspace the files change right away (Claude Code hot-reloads them;
-    // OpenCode picks them up on the next start).
-    if (state?.cwd) {
-      api.terminal
-        .setSkills(task.id, next)
-        .then((updated) => setChosenSkills(updated.skills))
-        .catch((err) => onNotify(errorMessage(err), "error"));
-    }
-  };
 
   // ── Derived view state ────────────────────────────────────────────────────
   const status = live
@@ -378,7 +370,13 @@ export function TaskPanel({
             </span>
           )}
           {(live || hasWorkspace) && !showIdle && (
-            <SkillPicker skills={catalog} selected={chosenSkills} onChange={changeSkills} />
+            <SkillPicker
+              skills={catalog}
+              plan={skillPlan.plan}
+              onChange={skillPlan.choose}
+              onAuto={skillPlan.auto}
+              notice={live ? "Changes apply the next time the session starts." : undefined}
+            />
           )}
         </div>
       </div>
@@ -464,9 +462,26 @@ export function TaskPanel({
                   })}
                 </div>
 
+                {choice && choice !== "shell" && (
+                  <PluginChips
+                    plan={skillPlan.plan}
+                    engine={choice}
+                    onRemove={(name) =>
+                      skillPlan.choose(
+                        picksOf(skillPlan.plan?.applied ?? []).filter((n) => n !== name)
+                      )
+                    }
+                  />
+                )}
+
                 <div className="flex flex-wrap items-center gap-2">
                   {choice !== "shell" && (
-                    <SkillPicker skills={catalog} selected={chosenSkills} onChange={changeSkills} />
+                    <SkillPicker
+                      skills={catalog}
+                      plan={skillPlan.plan}
+                      onChange={skillPlan.choose}
+                      onAuto={skillPlan.auto}
+                    />
                   )}
                   {choice !== "shell" && models.length > 0 && (
                     <select
@@ -484,10 +499,6 @@ export function TaskPanel({
                     </select>
                   )}
                 </div>
-
-                {chosenSkills.length > 0 && choice !== "shell" && (
-                  <p className="text-xs text-text-dimmed">Injected: {chosenSkills.join(", ")}</p>
-                )}
 
                 {error && (
                   <p role="alert" className="text-xs text-danger">

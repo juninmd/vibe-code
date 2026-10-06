@@ -564,14 +564,40 @@ export type HarnessEngine = (typeof HARNESS_ENGINES)[number];
  */
 export const MANUAL_TASK_TAG = "manual";
 
+/** Why a skill is part of a task's agent plugin. */
+export type SkillSource =
+  /** Built-in, applied to every task. */
+  | "always"
+  /** Picked by vibe-code from the task text. */
+  | "auto"
+  /** Chosen by the operator. */
+  | "manual";
+
+/** `auto` = vibe-code picks the skills; `manual` = the operator's list is final. */
+export type SkillMode = "auto" | "manual";
+
+export interface AppliedSkill {
+  name: string;
+  source: SkillSource;
+  /** Short, human-readable explanation ("matches: jest, flaky"). */
+  reasons: string[];
+}
+
 export interface TerminalStartRequest {
   /** A harness, or "shell" for a plain shell in the task workspace. */
   engine?: HarnessEngine | "shell";
   model?: string;
-  /** Names of skills (from the skills index) to inject into the workspace. */
+  /** Names of skills the operator picked; makes the task's skills manual. */
   skills?: string[];
+  /** Go back to automatic skill selection (ignored when `skills` is set). */
+  skillMode?: SkillMode;
   cols?: number;
   rows?: number;
+}
+
+export interface SkillPlan {
+  mode: SkillMode;
+  applied: AppliedSkill[];
 }
 
 export interface TerminalState {
@@ -580,8 +606,11 @@ export interface TerminalState {
   live: boolean;
   runId: string | null;
   engine: HarnessEngine | "shell" | null;
-  /** Skills currently injected into the task workspace. */
+  /** Names of the skills currently injected into the task workspace. */
   skills: string[];
+  /** Same skills with the reason each one was applied. */
+  applied: AppliedSkill[];
+  skillMode: SkillMode;
   /** Workspace path of the latest session, when one exists. */
   cwd: string | null;
 }

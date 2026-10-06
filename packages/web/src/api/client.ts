@@ -19,6 +19,7 @@ import type {
   SessionSource,
   SettingsResponse,
   SkillEffectiveness,
+  SkillPlan,
   SkillsIndex,
   StatsResponse,
   Task,
@@ -343,10 +344,17 @@ export const api = {
       }),
     stop: (taskId: string) =>
       request<{ stopped: boolean }>(`/terminal/${taskId}/stop`, { method: "POST" }),
-    setSkills: (taskId: string, skills: string[]) =>
+    /** What the task would get if started now; pass `skills` to preview a manual pick. */
+    previewSkills: (taskId: string, skills?: string[]) =>
+      request<SkillPlan>(`/terminal/${taskId}/skills/preview`, {
+        method: "POST",
+        body: JSON.stringify(skills ? { skills } : {}),
+      }),
+    /** An explicit list makes the plan manual; `{ mode: "auto" }` hands the choice back. */
+    setSkills: (taskId: string, choice: { skills: string[] } | { mode: "auto" }) =>
       request<TerminalState>(`/terminal/${taskId}/skills`, {
         method: "PUT",
-        body: JSON.stringify({ skills }),
+        body: JSON.stringify(choice),
       }),
     finish: (taskId: string) => request<Task>(`/terminal/${taskId}/finish`, { method: "POST" }),
   },
