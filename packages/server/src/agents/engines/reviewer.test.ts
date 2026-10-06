@@ -9,6 +9,12 @@ function createMockProcess(stdoutText: string, stderrText: string, exitCode = 0)
   };
 }
 
+const originalSpawn = Bun.spawn;
+
+// Need to safely mock spawn as it overlaps globally across tests in Bun
+// The core issue in Bun's module mocking is causing test parallelism to bleed,
+// so testing this module's integration with spawn separately manually is better suited
+
 describe("reviewer engine", () => {
   test("PERSONA_LABELS exists", () => {
     expect(PERSONA_LABELS.frontend).toBe("Frontend");

@@ -84,6 +84,7 @@ interface TaskRow {
   branch_name: string | null;
   pr_url: string | null;
   issue_url: string | null;
+  issue_lane: string | null;
   parent_task_id: string | null;
   agent_id: string | null;
   workflow_id: string | null;
@@ -179,6 +180,7 @@ function mapTask(row: TaskRow): Task {
     branchName: row.branch_name,
     prUrl: row.pr_url,
     issueUrl: row.issue_url,
+    issueLane: row.issue_lane ?? null,
     parentTaskId: row.parent_task_id,
     agentId: row.agent_id,
     workflowId: row.workflow_id ?? null,
@@ -422,6 +424,23 @@ export function createRepoQueries(db: Database) {
 // ─── Task Queries ────────────────────────────────────────────────────────────
 
 export function createTaskQueries(db: Database) {
+  // Tasks linked to an issue tell the lane sync when they change, whoever changed them.
+  const listeners = new Set<(task: Task) => void>();
+  const announce = (row: TaskRow | null): Task | null => {
+    if (!row) return null;
+    const task = mapTask(row);
+    if (task.issueUrl) {
+      for (const listener of listeners) {
+        try {
+          listener(task);
+        } catch {
+          // A faulty subscriber must never break a write.
+        }
+      }
+    }
+    return task;
+  };
+
   const stmts = {
     list: db.prepare<TaskRow, []>("SELECT * FROM tasks ORDER BY column_order ASC, created_at DESC"),
     listByRepo: db.prepare<TaskRow, [string]>(
@@ -504,7 +523,7 @@ export function createTaskQueries(db: Database) {
       })();
 
       if (!row) throw new Error("Failed to create task");
-      return mapTask(row as TaskRow);
+      return announce(row as TaskRow) as Task;
     },
     update: (id: string, req: UpdateTaskRequest): Task | null => {
       const sets: string[] = [];
@@ -574,7 +593,7 @@ export function createTaskQueries(db: Database) {
       values.push(id);
       const sql = `UPDATE tasks SET ${sets.join(", ")} WHERE id = ? RETURNING *`;
       const row = db.prepare(sql).get(...values) as TaskRow | null;
-      return row ? mapTask(row) : null;
+      return announce(row);
     },
     updateField: (
       id: string,
@@ -586,7 +605,16 @@ export function createTaskQueries(db: Database) {
         throw new Error(`Invalid field: ${field}`);
       const sql = `UPDATE tasks SET ${field} = ?, updated_at = datetime('now') WHERE id = ? RETURNING *`;
       const row = db.prepare(sql).get(value, id) as TaskRow | null;
-      return row ? mapTask(row) : null;
+      return announce(row);
+    },
+    /** Remember the lane the task and its issue agree on (does not count as an edit). */
+    setIssueLane: (id: string, lane: string | null): void => {
+      db.prepare("UPDATE tasks SET issue_lane = ? WHERE id = ?").run(lane, id);
+    },
+    /** Called after every write to a task that is linked to an issue. */
+    subscribe: (listener: (task: Task) => void): (() => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     updatePlannerSpec: (id: string, spec: string): void => {
       db.prepare(

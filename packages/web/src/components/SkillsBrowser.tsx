@@ -628,7 +628,7 @@ export function SkillsBrowser({
     selected?.category === "skill" ? ((selected as SkillEntry).dependencies ?? []) : [];
 
   return (
-    <Dialog open={open} onClose={onClose} title="Intelligence Registry" size="5xl">
+    <Dialog open={open} onClose={onClose} title="Skills" size="5xl">
       <div className="flex h-[75vh] -mx-8 -mb-8 mt-4 overflow-hidden border-t border-white/5 bg-black/20">
         {/* Modern Sidebar Nav */}
         <div className="w-72 shrink-0 border-r border-white/5 flex flex-col">
