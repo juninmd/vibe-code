@@ -183,7 +183,11 @@ export async function discoverValidationCommands(wtPath: string): Promise<Valida
           ...packageJsonCommands,
         ];
       }
-      return packageJsonCommands;
+      return [
++  { name: "lint", command: "bun run lint", source: "package_json" as const },
++  { name: "test", command: "bun run test", source: "package_json" as const },
++  { name: "build", command: "bun run build", source: "package_json" as const },
++];
     }
   } catch {
     // Unsupported repository shape.
