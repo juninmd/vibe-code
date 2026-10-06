@@ -200,14 +200,14 @@ export function Board({
     >
       <div className="flex flex-col gap-4 pb-4 h-full">
         {/* Main columns — horizontally scrollable + snap on mobile, fill width on desktop */}
-        <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-x-auto md:overflow-hidden touch-scroll-x -mx-1 px-1 md:mx-0 md:px-0">
+        <div className="flex gap-3 flex-1 min-h-0 min-w-0 overflow-x-auto touch-scroll-x -mx-1 px-1 md:mx-0 md:px-0">
           {BOARD_COLUMNS.filter(
             (status) =>
               status !== "scheduled" && (status !== "failed" || tasksByColumn[status].length > 0)
           ).map((status) => (
             <div
               key={status}
-              className="snap-col w-[82vw] max-w-[320px] shrink-0 md:w-auto md:max-w-none md:flex-1 md:min-w-[220px] md:shrink min-h-0 flex flex-col overflow-hidden"
+              className="snap-col w-[82vw] max-w-[320px] shrink-0 md:w-auto md:max-w-none md:flex-1 md:min-w-[200px] md:shrink min-h-0 flex flex-col overflow-hidden"
             >
               <Column
                 status={status}
@@ -232,25 +232,28 @@ export function Board({
           ))}
         </div>
 
+        {/* Side lanes only appear when something is in them. */}
         <div className="flex gap-2 shrink-0 overflow-x-auto no-scrollbar">
-          {hiddenRails.map((rail) => (
-            <div
-              key={rail.id}
-              className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-3 py-2 min-w-[160px] shrink-0"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase tracking-[0.18em] text-dimmed">
-                  {rail.label}
-                </span>
-                <span
-                  className={`text-[10px] font-bold ${rail.count > 0 ? "text-warning" : "text-dimmed"}`}
-                >
-                  {rail.count}
-                </span>
+          {hiddenRails
+            .filter((rail) => rail.count > 0)
+            .map((rail) => (
+              <div
+                key={rail.id}
+                className="rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-3 py-2 min-w-[160px] shrink-0"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-dimmed">
+                    {rail.label}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold ${rail.count > 0 ? "text-warning" : "text-dimmed"}`}
+                  >
+                    {rail.count}
+                  </span>
+                </div>
+                <p className="text-[10px] text-dimmed mt-1">{rail.hint}</p>
               </div>
-              <p className="text-[10px] text-dimmed mt-1">{rail.hint}</p>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
 

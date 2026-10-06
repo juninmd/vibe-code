@@ -315,6 +315,13 @@ export function TaskPanel({
                 />
                 <div className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-lg border border-white/10 bg-bg-app py-1 text-xs shadow-2xl shadow-black/60">
                   {[
+                    {
+                      label: "Open in editor",
+                      action: () =>
+                        api.tasks
+                          .openEditor(task.id)
+                          .catch((err) => onNotify(errorMessage(err), "error")),
+                    },
                     { label: "Advanced view", action: onOpenAdvanced },
                     { label: "Clone task", action: () => onClone(task.id) },
                     { label: "Delete task", action: () => onDelete(task.id), danger: true },
@@ -531,6 +538,16 @@ export function TaskPanel({
                   {task.description || "No description."}
                 </p>
               </section>
+              {task.issueUrl && (
+                <a
+                  href={task.issueUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-accent-text hover:underline"
+                >
+                  Linked issue{task.issueNumber ? ` #${task.issueNumber}` : ""} ↗
+                </a>
+              )}
               <dl className="grid grid-cols-2 gap-4 text-sm">
                 {[
                   ["Repository", task.repo?.name],

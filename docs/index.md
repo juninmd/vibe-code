@@ -9,6 +9,8 @@ This directory is the repository system of record for durable operating guidance
 | `../WORKFLOW.md` | Repository-owned workflow contract in compatibility mode |
 | `repo-contract.md` | Repository boundaries, quality gates, and rollout policy |
 | `glossary.md` | Shared vocabulary for objectives, runs, artifacts, and memory |
+| `terminal.md` | Interactive task terminals (PTY, harnesses, skill injection, reattach) |
+| `ux-review.md` | Flow and UX review: what was fixed, prioritised backlog, issues-first direction |
 
 ## Usage
 

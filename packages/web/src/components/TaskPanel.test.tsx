@@ -14,6 +14,7 @@ const { api } = vi.hoisted(() => ({
     },
     skills: { index: vi.fn() },
     engines: { models: vi.fn() },
+    tasks: { openEditor: vi.fn() },
   },
 }));
 
@@ -221,6 +222,28 @@ describe("TaskPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     await userEvent.click(screen.getByRole("button", { name: "Delete task" }));
     expect(onDelete).toHaveBeenCalledWith("task-1");
+  });
+
+  it("opens the workspace in the editor from the menu, reporting failures", async () => {
+    api.tasks.openEditor.mockRejectedValueOnce(new Error("no editor found"));
+    const { onNotify } = renderPanel({ branchName: "vibe-code/x" });
+    await screen.findByTestId("xterm");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open in editor" }));
+
+    expect(api.tasks.openEditor).toHaveBeenCalledWith("task-1");
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith("no editor found", "error"));
+  });
+
+  it("links to the issue a task came from", async () => {
+    renderPanel({ issueUrl: "https://github.com/o/r/issues/7", issueNumber: 7 });
+    await screen.findByTestId("xterm");
+    await userEvent.click(screen.getByRole("button", { name: "details" }));
+    expect(screen.getByRole("link", { name: /Linked issue #7/ })).toHaveAttribute(
+      "href",
+      "https://github.com/o/r/issues/7"
+    );
   });
 
   it("goes back to the board", async () => {

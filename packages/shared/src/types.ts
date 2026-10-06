@@ -847,6 +847,8 @@ export interface StatsOverview {
   totalRepos: number;
   totalTasks: number;
   totalRuns: number;
+  /** Runs that finished successfully (excludes queued, running and cancelled). */
+  completedRuns: number;
   failedRuns: number;
   successRate: number;
   avgRunDurationSecs: number;
