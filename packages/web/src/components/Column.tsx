@@ -103,6 +103,8 @@ interface ColumnProps {
   /** When true, the column stretches to fill available width instead of using fixed 272px */
   fillWidth?: boolean;
   retryQueueMap?: Map<string, RetryState>;
+  /** Issue label this lane stands for; set only while lane sync is on. */
+  laneLabel?: string;
 }
 
 function EmptyStateIcon({ icon }: { icon: (typeof columnConfig)[TaskStatus]["emptyIcon"] }) {
@@ -199,6 +201,7 @@ function ColumnComponent({
   onToggleCollapse,
   fillWidth = false,
   retryQueueMap,
+  laneLabel,
 }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const taskIds = tasks.map((t) => t.id);
@@ -407,6 +410,28 @@ function ColumnComponent({
             )}
           </div>
         </div>
+        {laneLabel && (
+          <p
+            className="mt-1.5 flex items-center gap-1 pl-[1.125rem] font-mono text-[10px] text-text-dimmed"
+            title="Issues carrying this label are in this lane"
+          >
+            <svg
+              aria-hidden="true"
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 8.6V3a1 1 0 011-1h5.6a1 1 0 01.7.3l5.4 5.4a1 1 0 010 1.4l-5.6 5.6a1 1 0 01-1.4 0L2.3 9.3a1 1 0 01-.3-.7z" />
+              <circle cx="5.5" cy="5.5" r="1" />
+            </svg>
+            <span className="truncate">{laneLabel}</span>
+          </p>
+        )}
       </div>
 
       {/* Cards area */}
@@ -506,6 +531,7 @@ export const Column = memo(ColumnComponent, (prev, next) => {
     prev.collapsible === next.collapsible &&
     prev.collapsed === next.collapsed &&
     prev.onToggleCollapse === next.onToggleCollapse &&
-    prev.retryQueueMap === next.retryQueueMap
+    prev.retryQueueMap === next.retryQueueMap &&
+    prev.laneLabel === next.laneLabel
   );
 });
