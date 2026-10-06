@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+- **Simplified task UI**: the task detail Info tab went from ~30 fields in 5 sections to a single row (branch, pull request, issue when linked, priority), the description, and a collapsed "Technical details". Removed readiness tiles, Agent/Workflow/Approval, artifact/dependency/subtask counters, duplicated usage/cost (still in Telemetry) and the repo field already linked in the header. The New Task dialog is now one column (repository, base branch, title, description, engine, model, priority) with scheduling, retry loop, structured brief and specialized agent under "Advanced".
+
 ### Removed
 - **Dead task metadata fields**: dropped `Task.taskType` / `Task.taskComplexity` and their `TaskType`, `TaskComplexity`, `TASK_TYPES`, `TASK_TYPE_META`, `TASK_COMPLEXITY_LEVELS` and `TASK_COMPLEXITY_META` definitions. Nothing ever wrote them — no DB column, no create/update payload, no server code path — so they only added badges that could never render. `SessionCard` follows the same rule: it carries only the fields a card actually shows.
 

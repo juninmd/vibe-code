@@ -134,11 +134,9 @@ describe("TaskDetail tabs", () => {
       await userEvent.click(screen.getByRole("button", { name: "Info" }));
     });
 
-    expect(screen.getByText("Task objective")).toBeInTheDocument();
-    expect(screen.getByText("Jump to")).toBeInTheDocument();
-    expect(screen.getByText("Presentation readiness")).toBeInTheDocument();
-    expect(screen.getByText("Repository context")).toBeInTheDocument();
-    expect(screen.getByText("Delivery output")).toBeInTheDocument();
-    expect(screen.getByText("Branch task/task-1-execution-split is available")).toBeInTheDocument();
+    expect(screen.getByText("Branch")).toBeInTheDocument();
+    expect(screen.getByText("task/task-1-execution-split")).toBeInTheDocument();
+    expect(screen.getByText("Technical details")).toBeInTheDocument();
+    expect(screen.queryByText("Presentation readiness")).not.toBeInTheDocument();
   });
 });

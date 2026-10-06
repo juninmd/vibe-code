@@ -11,7 +11,6 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../api/client";
-import { useElapsedTime } from "../hooks/useElapsedTime";
 import { formatDateTime, formatDuration } from "../utils/date";
 import { DiffViewer } from "./DiffViewer";
 import { ExecutionTimeline } from "./ExecutionTimeline";
@@ -136,89 +135,19 @@ function hasText(value: string | null | undefined): value is string {
   return Boolean(value?.trim());
 }
 
-function formatNullableDate(value: string | null | undefined) {
-  return value ? formatDateTime(value) : "Not recorded";
-}
-
-function formatCurrencyMicros(value: number | undefined) {
-  return value === undefined ? null : `$${(value / 1_000_000).toFixed(6)}`;
-}
-
-function DetailField({
+function MetaItem({
   label,
-  value,
   title,
+  children,
 }: {
   label: string;
-  value: React.ReactNode;
   title?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
-      <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-dimmed">
-        {label}
-      </div>
-      <div className="mt-1 min-w-0 truncate text-xs text-secondary" title={title}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: React.ReactNode;
-  tone?: "default" | "info" | "success" | "warning" | "danger";
-}) {
-  const toneClass = {
-    default: "border-white/10 bg-white/[0.035] text-primary",
-    info: "border-info/25 bg-info/10 text-info",
-    success: "border-success/25 bg-success/10 text-success",
-    warning: "border-warning/25 bg-warning/10 text-warning",
-    danger: "border-danger/25 bg-danger/10 text-danger",
-  }[tone];
-
-  return (
-    <div className={`min-w-0 rounded-lg border px-3 py-3 ${toneClass}`}>
-      <div className="text-[9px] font-semibold uppercase tracking-[0.14em] opacity-75">{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function ReadinessItem({
-  label,
-  detail,
-  state,
-}: {
-  label: string;
-  detail: string;
-  state: "ready" | "attention" | "pending";
-}) {
-  const stateClass = {
-    ready: "border-success/20 bg-success/10 text-success",
-    attention: "border-warning/25 bg-warning/10 text-warning",
-    pending: "border-white/10 bg-white/[0.025] text-dimmed",
-  }[state];
-  const marker = { ready: "Ready", attention: "Attention", pending: "Pending" }[state];
-
-  return (
-    <div className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-xs font-semibold text-primary">{label}</div>
-          <div className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-dimmed">{detail}</div>
-        </div>
-        <span
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${stateClass}`}
-        >
-          {marker}
-        </span>
-      </div>
+    <div className="min-w-0" title={title}>
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-dimmed">{label}</dt>
+      <dd className="mt-0.5 min-w-0 truncate text-sm text-secondary">{children}</dd>
     </div>
   );
 }
@@ -576,7 +505,6 @@ export function TaskDetail({
   }, [selectedEngine, selectedModel]);
 
   const isRunning = task.status === "in_progress" || task.latestRun?.status === "running";
-  const elapsed = useElapsedTime(task.latestRun?.startedAt, isRunning);
   const provider = task.repo ? getProviderFromUrl(task.repo.url) : null;
   const ProviderIcon = provider?.icon;
   const duration = formatDuration(
@@ -618,11 +546,6 @@ export function TaskDetail({
       ? costStats.total / 1_000_000
       : displayInputCostUSD + displayOutputCostUSD;
 
-  let displayInputCostRaw = costStats?.input;
-  let displayOutputCostRaw = costStats?.output;
-  let displayTotalCostRaw =
-    costStats?.total ?? (costStats ? (costStats.input || 0) + (costStats.output || 0) : undefined);
-
   if (tokenUsage && Object.keys(tokenUsage).length > 0) {
     let sumTotalTokens = 0;
     let sumInputTokens = 0;
@@ -649,10 +572,6 @@ export function TaskDetail({
     displayInputCostUSD = sumInputCost;
     displayOutputCostUSD = sumOutputCost;
     displayTotalCostUSD = sumTotalCost;
-
-    displayInputCostRaw = sumInputCost * 1_000_000;
-    displayOutputCostRaw = sumOutputCost * 1_000_000;
-    displayTotalCostRaw = sumTotalCost * 1_000_000;
   }
 
   if (usageSummary && usageSummary.runCount > 0) {
@@ -662,79 +581,9 @@ export function TaskDetail({
     displayInputCostUSD = usageSummary.inputCost;
     displayOutputCostUSD = usageSummary.outputCost;
     displayTotalCostUSD = usageSummary.totalCost;
-    displayInputCostRaw = usageSummary.inputCost * 1_000_000;
-    displayOutputCostRaw = usageSummary.outputCost * 1_000_000;
-    displayTotalCostRaw = usageSummary.totalCost * 1_000_000;
   }
 
-  const inputCost = formatCurrencyMicros(displayInputCostRaw);
-  const outputCost = formatCurrencyMicros(displayOutputCostRaw);
-  const totalCost = formatCurrencyMicros(displayTotalCostRaw);
   const totalTokens = displayTotalTokens;
-  const statusTone =
-    task.status === "failed"
-      ? "danger"
-      : task.status === "done"
-        ? "success"
-        : task.status === "scheduled" || task.status === "blocked"
-          ? "warning"
-          : isRunning
-            ? "info"
-            : "default";
-  const outputState = task.prUrl
-    ? "PR created"
-    : runBranch
-      ? "Branch ready"
-      : task.status === "review"
-        ? "Waiting for PR"
-        : "No output yet";
-  const runState = task.latestRun?.status ?? "No run yet";
-  const readinessItems = [
-    {
-      label: "Repository context",
-      detail: task.repo
-        ? `${task.repo.name} on ${task.baseBranch ?? task.repo.defaultBranch ?? "unknown base"}`
-        : "Repository metadata is not loaded for this task.",
-      state: task.repo ? "ready" : "attention",
-    },
-    {
-      label: "Execution configuration",
-      detail: `${task.latestRun?.engine ?? task.engine ?? "No engine selected"} / ${
-        task.model ?? "engine default model"
-      }`,
-      state: task.latestRun || task.engine ? "ready" : "pending",
-    },
-    {
-      label: "Delivery output",
-      detail: task.prUrl
-        ? `Pull request ${task.prUrl.split("/").pop() ?? "created"}`
-        : runBranch
-          ? `Branch ${runBranch} is available`
-          : "No branch or pull request recorded yet.",
-      state: task.prUrl || runBranch ? "ready" : task.status === "failed" ? "attention" : "pending",
-    },
-    {
-      label: "Evidence package",
-      detail:
-        artifacts.length > 0
-          ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"} attached`
-          : "No persisted artifacts are attached to this task.",
-      state: artifacts.length > 0 ? "ready" : "pending",
-    },
-    {
-      label: "Governance",
-      detail: task.pendingApproval
-        ? "Agent is waiting for explicit approval."
-        : task.status === "failed"
-          ? "Failed task needs operator review."
-          : "No approval gate is currently pending.",
-      state: task.pendingApproval || task.status === "failed" ? "attention" : "ready",
-    },
-  ] satisfies Array<{
-    label: string;
-    detail: string;
-    state: "ready" | "attention" | "pending";
-  }>;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(isRunning ? "execution" : "info");
   const [sharedMemory, setSharedMemory] = useState<string>("");
@@ -1060,42 +909,6 @@ export function TaskDetail({
             )}
           </div>
 
-          {activeTab === "info" && (
-            <div className="mt-4 grid gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-3 md:grid-cols-[1fr_auto] md:items-center">
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest">
-                  <span className="text-dimmed">Task objective</span>
-                  <span className="font-semibold text-primary0">
-                    {cleanStatusLabel[task.status] ?? task.status}
-                  </span>
-                </div>
-                <p className="truncate text-xs text-secondary">
-                  {hasText(task.goal) ? task.goal : task.description || "No description recorded"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="hidden text-[10px] uppercase tracking-widest text-dimmed sm:inline">
-                  Jump to
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                    onClick={() => setActiveTab("execution")}
-                  >
-                    Execution
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-white/10 px-2 py-1 text-[10px] font-medium text-primary0 transition-colors hover:bg-white/10 hover:text-primary"
-                    onClick={() => setActiveTab("reviews")}
-                  >
-                    Reviews
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
           {/* Tab bar */}
           <div className="relative z-20 mt-4 overflow-x-auto no-scrollbar">
             <div className="flex min-w-max gap-1 pb-2">
@@ -1277,166 +1090,14 @@ export function TaskDetail({
           {/* ── Info Tab ──────────────────────────────────── */}
           {activeTab === "info" && (
             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3 content-start lg:grid-cols-3">
-              <section className="col-span-1 overflow-hidden rounded-xl border border-white/10 bg-black/20 lg:col-span-3">
-                <div className="grid gap-3 border-b border-white/5 bg-white/[0.025] px-4 py-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-dimmed">
-                      Objective
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-primary">
-                      {hasText(task.goal)
-                        ? task.goal
-                        : task.description || "No objective text recorded for this task."}
-                    </p>
-                    {hasText(task.desiredOutcome) && (
-                      <p className="mt-2 text-xs leading-relaxed text-secondary">
-                        Desired outcome: {task.desiredOutcome}
-                      </p>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <SummaryTile
-                      label="Task status"
-                      value={cleanStatusLabel[task.status] ?? task.status}
-                      tone={statusTone}
-                    />
-                    <SummaryTile
-                      label="Run"
-                      value={runState}
-                      tone={
-                        isRunning
-                          ? "info"
-                          : task.latestRun?.status === "completed"
-                            ? "success"
-                            : "default"
-                      }
-                    />
-                    <SummaryTile
-                      label="Output"
-                      value={outputState}
-                      tone={task.prUrl ? "success" : runBranch ? "info" : "default"}
-                    />
-                    <SummaryTile
-                      label="Evidence"
-                      value={`${artifacts.length} artifacts`}
-                      tone={artifacts.length > 0 ? "success" : "default"}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              <section className="col-span-1 rounded-lg border border-white/5 bg-white/[0.03] p-3 lg:col-span-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary0">
-                    Presentation readiness
-                  </h3>
-                  <span className="text-[10px] text-dimmed">
-                    {readinessItems.filter((item) => item.state === "ready").length}/
-                    {readinessItems.length} ready
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
-                  {readinessItems.map((item) => (
-                    <ReadinessItem
-                      key={item.label}
-                      label={item.label}
-                      detail={item.detail}
-                      state={item.state}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <section className="col-span-1 rounded-lg border border-white/5 bg-white/[0.03] p-3 lg:col-span-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary0">
-                    Task record
-                  </h3>
-                  <Badge variant={statusVariant[task.status] ?? "default"} className="text-[10px]">
-                    {cleanStatusLabel[task.status] ?? task.status}
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <DetailField label="Task ID" value={task.id} title={task.id} />
-                  <DetailField
-                    label="Issue"
-                    value={
-                      task.issueUrl ? (
-                        <a
-                          href={task.issueUrl}
-                          target="_blank"
-                          rel="noopener"
-                          className="text-accent-text hover:underline"
-                        >
-                          {task.issueNumber ? `#${task.issueNumber}` : task.issueUrl}
-                        </a>
-                      ) : task.issueNumber ? (
-                        `#${task.issueNumber}`
-                      ) : (
-                        "Not linked"
-                      )
-                    }
-                    title={task.issueUrl ?? undefined}
-                  />
-                  <DetailField label="Priority" value={task.priority || "none"} />
-                  <DetailField label="Created" value={formatDateTime(task.createdAt)} />
-                  <DetailField label="Updated" value={formatDateTime(task.updatedAt)} />
-                  <DetailField label="Agent" value={task.agentId || "Default agent"} />
-                  <DetailField label="Workflow" value={task.workflowId || "No workflow"} />
-                  <DetailField
-                    label="Approval"
-                    value={task.pendingApproval ? "Pending approval" : "No approval gate"}
-                  />
-                </div>
-              </section>
-
-              <section className="col-span-1 rounded-lg border border-white/5 bg-white/[0.03] p-3 lg:col-span-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary0">
-                    Repository and output
-                  </h3>
-                  {task.prUrl && (
-                    <button
-                      type="button"
-                      onClick={handleCopyPR}
-                      className="rounded bg-surface px-2 py-1 text-[10px] text-secondary hover:bg-surface-hover"
-                    >
-                      {prCopied ? "Copied" : "Copy PR"}
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <DetailField
-                    label="Repository"
-                    value={
-                      task.repo ? (
-                        <a
-                          href={task.repo.url}
-                          target="_blank"
-                          rel="noopener"
-                          className="text-accent-text hover:underline"
-                        >
-                          {task.repo.name}
-                        </a>
-                      ) : (
-                        "Repository not loaded"
-                      )
-                    }
-                    title={task.repo?.url}
-                  />
-                  <DetailField
-                    label="Base branch"
-                    value={task.baseBranch ?? task.repo?.defaultBranch ?? "Not recorded"}
-                  />
-                  <DetailField
-                    label="Task branch"
-                    value={runBranch ?? "Not created"}
-                    title={runBranch ?? undefined}
-                  />
-                  <DetailField
-                    label="Pull request"
-                    value={
-                      task.prUrl ? (
+              <section className="col-span-1 lg:col-span-3">
+                <dl className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                  <MetaItem label="Branch" title={runBranch ?? undefined}>
+                    {runBranch ?? task.baseBranch ?? task.repo?.defaultBranch ?? "—"}
+                  </MetaItem>
+                  <MetaItem label="Pull request" title={task.prUrl ?? undefined}>
+                    {task.prUrl ? (
+                      <span className="flex items-center gap-2">
                         <a
                           href={task.prUrl}
                           target="_blank"
@@ -1445,114 +1106,63 @@ export function TaskDetail({
                         >
                           {task.prUrl.split("/").pop() ?? task.prUrl}
                         </a>
-                      ) : task.status === "review" ? (
-                        "Ready for PR creation"
-                      ) : (
-                        "Not created"
-                      )
-                    }
-                    title={task.prUrl ?? undefined}
-                  />
-                  <DetailField
-                    label="Worktree"
-                    value={worktreePath ?? "Not recorded"}
-                    title={worktreePath ?? undefined}
-                  />
-                  <DetailField label="Artifacts" value={artifacts.length.toString()} />
-                  <DetailField label="Dependencies" value={task.dependsOn.length.toString()} />
-                  <DetailField label="Subtasks" value={subTasks.length.toString()} />
-                </div>
-                {task.status === "review" && !task.prUrl && (
-                  <Button
-                    variant="primary"
-                    size="xs"
-                    className="mt-3 text-[10px]"
-                    disabled={!!loadingAction}
-                    onClick={async () => {
-                      setLoadingAction("retry-pr");
-                      try {
-                        await onRetryPR(task.id);
-                      } finally {
-                        setLoadingAction(null);
-                      }
-                    }}
-                  >
-                    {loadingAction === "retry-pr" ? "Creating PR..." : "Create PR"}
-                  </Button>
-                )}
+                        <button
+                          type="button"
+                          onClick={handleCopyPR}
+                          className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-secondary hover:bg-surface-hover"
+                        >
+                          {prCopied ? "Copied" : "Copy"}
+                        </button>
+                      </span>
+                    ) : task.status === "review" ? (
+                      <Button
+                        variant="primary"
+                        size="xs"
+                        className="text-[10px]"
+                        disabled={!!loadingAction}
+                        onClick={async () => {
+                          setLoadingAction("retry-pr");
+                          try {
+                            await onRetryPR(task.id);
+                          } finally {
+                            setLoadingAction(null);
+                          }
+                        }}
+                      >
+                        {loadingAction === "retry-pr" ? "Creating PR..." : "Create PR"}
+                      </Button>
+                    ) : (
+                      "—"
+                    )}
+                  </MetaItem>
+                  {task.issueUrl && (
+                    <MetaItem label="Issue" title={task.issueUrl}>
+                      <a
+                        href={task.issueUrl}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-accent-text hover:underline"
+                      >
+                        {task.issueNumber ? `#${task.issueNumber}` : task.issueUrl}
+                      </a>
+                    </MetaItem>
+                  )}
+                  <MetaItem label="Priority">{task.priority || "none"}</MetaItem>
+                </dl>
               </section>
 
-              <section className="col-span-1 rounded-lg border border-white/5 bg-white/[0.03] p-3 lg:col-span-3">
-                <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary0">
-                  Execution run
-                </h3>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                  <DetailField
-                    label="Engine"
-                    value={task.latestRun?.engine ?? task.engine ?? "Not selected"}
-                  />
-                  <DetailField label="Model" value={task.model ?? "Engine default"} />
-                  <DetailField label="Run status" value={task.latestRun?.status ?? "No run yet"} />
-                  <DetailField
-                    label="Current phase"
-                    value={task.latestRun?.currentStatus ?? runSnapshot?.phase ?? "Not recorded"}
-                  />
-                  <DetailField
-                    label="Session ID"
-                    value={sessionId ?? "Not recorded"}
-                    title={sessionId ?? undefined}
-                  />
-                  <DetailField
-                    label="Session IDs"
-                    value={
-                      usageSummary?.sessionIds.length
-                        ? usageSummary.sessionIds.map((id) => id.slice(0, 8)).join(", ")
-                        : "Not recorded"
-                    }
-                    title={usageSummary?.sessionIds.join("\n") || undefined}
-                  />
-                  <DetailField
-                    label="Started"
-                    value={formatNullableDate(task.latestRun?.startedAt)}
-                  />
-                  <DetailField
-                    label="Finished"
-                    value={formatNullableDate(task.latestRun?.finishedAt)}
-                  />
-                  <DetailField
-                    label="Exit code"
-                    value={
-                      task.latestRun?.exitCode === null || task.latestRun?.exitCode === undefined
-                        ? "Not recorded"
-                        : task.latestRun.exitCode
-                    }
-                  />
-                  {duration && <DetailField label="Duration" value={duration} />}
-                  {isRunning && <DetailField label="Elapsed" value={elapsed} />}
-                  {runSnapshot?.validatorAttempts !== undefined && (
-                    <DetailField
-                      label="Validator attempts"
-                      value={runSnapshot.validatorAttempts.toString()}
-                    />
-                  )}
-                  {runSnapshot?.validationSummary && (
-                    <DetailField
-                      label="Validation summary"
-                      value={runSnapshot.validationSummary}
-                      title={runSnapshot.validationSummary}
-                    />
-                  )}
-                </div>
-              </section>
+              {hasText(task.goal) && (
+                <section className="col-span-1 lg:col-span-3">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-dimmed">Goal</div>
+                  <p className="text-sm leading-relaxed text-primary">{task.goal}</p>
+                </section>
+              )}
 
               {/* Description - full markdown render */}
               {task.description && (
-                <div className="col-span-3 bg-white/[0.02] rounded-lg p-3 border border-white/5 h-full min-h-[400px]">
+                <div className="col-span-3 bg-white/[0.02] rounded-lg p-3 border border-white/5">
                   <div className="text-[9px] text-dimmed mb-3 flex items-center gap-2">
                     <span>DESCRIPTION</span>
-                    <span className="text-[8px] bg-accent/20 text-accent-text px-1.5 rounded uppercase font-bold tracking-wider">
-                      markdown
-                    </span>
                   </div>
                   <div className="prose prose-invert prose-sm max-w-none text-[12px] text-secondary leading-relaxed space-y-3">
                     <ReactMarkdown
@@ -1672,51 +1282,6 @@ export function TaskDetail({
                 </div>
               )}
 
-              {(usageSummary?.runCount ||
-                costStats ||
-                (tokenUsage && Object.keys(tokenUsage).length > 0)) && (
-                <section
-                  className="col-span-1 rounded-xl glass-card border p-3.5 lg:col-span-3 shadow-sm"
-                  style={{ borderColor: "var(--glass-border)" }}
-                >
-                  <h3
-                    className="mb-3 text-[10px] font-black uppercase tracking-[0.16em]"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Usage recorded by task
-                  </h3>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <DetailField
-                      label="Input tokens"
-                      value={(displayInputTokens || 0).toLocaleString()}
-                    />
-                    <DetailField
-                      label="Output tokens"
-                      value={(displayOutputTokens || 0).toLocaleString()}
-                    />
-                    <DetailField
-                      label="Total tokens"
-                      value={(displayTotalTokens || 0).toLocaleString()}
-                    />
-                    <DetailField
-                      label="Cached tokens"
-                      value={(displayCachedTokens || 0).toLocaleString()}
-                    />
-                    <DetailField label="Input cost" value={inputCost ?? "Not reported"} />
-                    <DetailField label="Output cost" value={outputCost ?? "Not reported"} />
-                    <DetailField label="Total cost" value={totalCost ?? "Not reported"} />
-                    <DetailField
-                      label="Tool calls"
-                      value={
-                        costStats?.tool_calls === undefined
-                          ? "Not reported"
-                          : costStats.tool_calls.toLocaleString()
-                      }
-                    />
-                  </div>
-                </section>
-              )}
-
               {/* Tags & Notes row */}
               <div className="col-span-3 grid grid-cols-2 gap-3">
                 <div className="bg-white/[0.01] rounded-lg p-2">
@@ -1754,33 +1319,41 @@ export function TaskDetail({
                 </div>
               )}
 
-              {/* Run Stats */}
-              {task.latestRun && (
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-primary0 bg-surface/20 rounded-lg px-3 py-2">
-                  {task.latestRun.startedAt && (
-                    <div>
-                      <span className="text-dimmed">Iniciado </span>
-                      {formatDateTime(task.latestRun.startedAt)}
-                    </div>
+              {/* Technical details (collapsed) */}
+              <details className="col-span-1 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 lg:col-span-3">
+                <summary className="cursor-pointer select-none text-[10px] font-semibold uppercase tracking-wider text-dimmed">
+                  Technical details
+                </summary>
+                <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <MetaItem label="Task ID" title={task.id}>
+                    {task.id}
+                  </MetaItem>
+                  <MetaItem label="Created">{formatDateTime(task.createdAt)}</MetaItem>
+                  <MetaItem label="Updated">{formatDateTime(task.updatedAt)}</MetaItem>
+                  {task.latestRun?.startedAt && (
+                    <MetaItem label="Started">{formatDateTime(task.latestRun.startedAt)}</MetaItem>
                   )}
-                  {duration && (
-                    <div>
-                      <span className="text-dimmed">Duration </span>
-                      <span className="text-secondary font-medium">{duration}</span>
-                    </div>
+                  {duration && <MetaItem label="Duration">{duration}</MetaItem>}
+                  {task.latestRun?.exitCode !== null && task.latestRun?.exitCode !== undefined && (
+                    <MetaItem label="Exit code">{task.latestRun.exitCode}</MetaItem>
                   )}
-                  {task.latestRun.exitCode !== null && (
-                    <div>
-                      <span className="text-dimmed">Exit </span>
-                      <code
-                        className={`font-mono ${task.latestRun.exitCode === 0 ? "text-green-400" : "text-danger"}`}
-                      >
-                        {task.latestRun.exitCode}
-                      </code>
-                    </div>
+                  {sessionId && (
+                    <MetaItem label="Session" title={sessionId}>
+                      {sessionId}
+                    </MetaItem>
                   )}
-                </div>
-              )}
+                  {worktreePath && (
+                    <MetaItem label="Worktree" title={worktreePath}>
+                      {worktreePath}
+                    </MetaItem>
+                  )}
+                  {runSnapshot?.validationSummary && (
+                    <MetaItem label="Validation" title={runSnapshot.validationSummary}>
+                      {runSnapshot.validationSummary}
+                    </MetaItem>
+                  )}
+                </dl>
+              </details>
 
               {/* Actions */}
               <div className="space-y-4">
@@ -1962,12 +1535,6 @@ export function TaskDetail({
               {(task.status === "scheduled" || task.status === "backlog") && (
                 <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
               )}
-
-              {/* Timestamps */}
-              <div className="text-[11px] text-dimmed space-y-0.5 pt-2 border-t border-default">
-                <div>Criado: {formatDateTime(task.createdAt)}</div>
-                <div>Atualizado: {formatDateTime(task.updatedAt)}</div>
-              </div>
             </div>
           )}
 
@@ -2420,17 +1987,6 @@ export function TaskDetail({
                     No token or cost telemetry has been recorded for this task yet. It will appear
                     here as soon as the engine emits cost events for the latest run.
                   </p>
-                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <DetailField
-                      label="Run status"
-                      value={task.latestRun?.status ?? "No run yet"}
-                    />
-                    <DetailField
-                      label="Engine"
-                      value={task.latestRun?.engine ?? task.engine ?? "Not selected"}
-                    />
-                    <DetailField label="Model" value={task.model ?? "Engine default"} />
-                  </div>
                 </div>
               </div>
             ))}

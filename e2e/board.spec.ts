@@ -36,7 +36,7 @@ test.beforeAll(async ({ request }) => {
 
 async function openNewTaskModal(page: Page) {
   await page.getByRole("button", { name: "Task", exact: true }).click();
-  await expect(page.getByText("Neural Task Construction")).toBeVisible();
+  await expect(page.getByText("New task", { exact: true })).toBeVisible();
 }
 
 test.describe("Board UI", () => {
@@ -49,13 +49,12 @@ test.describe("Board UI", () => {
     await page.goto("/");
     await openNewTaskModal(page);
 
-    await expect(page.getByText("Target Repository")).toBeVisible();
-    await expect(page.getByText("Task Title")).toBeVisible();
-    await expect(page.getByText("Implementation Brief")).toBeVisible();
+    await expect(page.getByText("Repository", { exact: true })).toBeVisible();
+    await expect(page.getByText("Title", { exact: true })).toBeVisible();
+    await expect(page.getByText("Description", { exact: true })).toBeVisible();
     await expect(page.getByText("Priority", { exact: true })).toBeVisible();
-    await expect(page.getByText("AI Engine Matrix")).toBeVisible();
-    await expect(page.getByText("Automated Scheduling")).toBeVisible();
-    await expect(page.getByText("Ralph Loop")).toBeVisible();
+    await expect(page.getByText("Engine", { exact: true })).toBeVisible();
+    await expect(page.getByText("Advanced", { exact: true })).toBeVisible();
 
     // Base branch appears once a repository is selected
     const repoInput = page.locator("#new-task-repository");
@@ -67,7 +66,7 @@ test.describe("Board UI", () => {
       .locator("div.relative:has(#new-task-repository) button", { hasText: "fixture-repo" })
       .first()
       .click();
-    await expect(page.getByText("Base Branch")).toBeVisible();
+    await expect(page.getByText("Base branch")).toBeVisible();
   });
 
   test("creates a task through the modal and opens its detail", async ({ page }) => {
@@ -90,18 +89,22 @@ test.describe("Board UI", () => {
     await page.locator("#new-task-title").fill(title);
     await page.locator("#new-task-description").fill("Task created by board.spec.ts");
 
-    // Engine: pick the first available engine card
-    const engineCard = page.locator("#engine-matrix button").first();
-    await engineCard.click();
+    // Engine: pick the first available engine
+    const engineSelect = page.locator("#new-task-engine");
+    const firstEngine = await engineSelect
+      .locator("option:not([disabled])")
+      .first()
+      .getAttribute("value");
+    await engineSelect.selectOption(firstEngine as string);
 
     // Disable instant execution so no agent is launched
-    await page.getByText("Instant Execution").click();
+    await page.getByText("Start immediately").click();
 
-    await page.getByRole("button", { name: "Deploy AI Agent" }).click();
+    await page.getByRole("button", { name: "Create task" }).click();
 
     // Modal closes and the task lands on the board (heading = the board card;
     // the success toast also contains the title, so match by role)
-    await expect(page.getByText("Neural Task Construction")).toBeHidden();
+    await expect(page.getByText("New task", { exact: true })).toBeHidden();
     const card = page.getByRole("heading", { name: title });
     await expect(card).toBeVisible();
 
