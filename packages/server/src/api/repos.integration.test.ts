@@ -21,6 +21,7 @@ function makeGit(overrides: Partial<GitService> = {}): GitService {
     detectDefaultBranch: async () => "main",
     cloneRepo: async (_url: string, name: string) => `/tmp/${name}.git`,
     listGitHubRepos: async () => [],
+    isProviderConfigured: () => true,
     deleteLocalRepo: async () => {},
     ...overrides,
   } as unknown as GitService;
@@ -315,6 +316,28 @@ describe("POST /api/repos/:id/refresh", () => {
   it("returns 404 for unknown repo", async () => {
     const res = await buildApp(makeDb()).request("/api/repos/ghost/refresh", { method: "POST" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("remote operations without a connected account", () => {
+  it.each([
+    ["github", "list"],
+    ["github", "search?q=vibe"],
+    ["gitlab", "list"],
+    ["gitlab", "search?q=vibe"],
+  ])("GET /api/repos/%s/%s answers 409 with a fixable message", async (provider, route) => {
+    const git = makeGit({ isProviderConfigured: () => false });
+    const res = await buildApp(makeDb(), git).request(`/api/repos/${provider}/${route}`);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("provider_not_configured");
+    expect(body.message).toContain("Settings");
+  });
+
+  it("does not hit the provider when there is nothing to search for", async () => {
+    const git = makeGit({ isProviderConfigured: () => false });
+    const res = await buildApp(makeDb(), git).request("/api/repos/github/search?q=");
+    expect(res.status).toBe(200);
   });
 });
 
