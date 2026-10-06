@@ -5,7 +5,7 @@ import type {
   TaskPriority,
   TaskSpec,
 } from "@vibe-code/shared";
-import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
+import { HARNESS_ENGINES, TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -14,7 +14,6 @@ import { EMPTY_TASK_SPEC, TaskSpecEditor, taskSpecToDescription } from "./TaskSp
 import { Button } from "./ui/button";
 import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/dialog";
-import { getEngineMeta } from "./ui/engine-icons";
 import { Input } from "./ui/input";
 import { Select } from "./ui/select";
 import { Textarea } from "./ui/textarea";
@@ -77,67 +76,39 @@ const NEW_TASK_FIELD_IDS = {
   baseBranch: "new-task-base-branch",
   description: "new-task-description",
   agent: "new-task-agent",
+  engine: "new-task-engine",
 } as const;
 
-function EngineCard({
-  engine,
-  selected,
-  onSelect,
-}: {
-  engine: EngineInfo;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const meta = getEngineMeta(engine.name);
-  const Icon = meta.icon;
+const LABEL_CLASS = "mb-1.5 block text-xs font-medium text-muted";
 
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 text-left w-full active-shrink group ${
-        selected
-          ? "bg-accent/10 border-accent shadow-lg shadow-accent/10"
-          : "bg-surface/30 border-white/5 hover:border-white/10 hover:bg-surface/50"
-      }`}
-      style={{
-        opacity: engine.available ? 1 : 0.4,
-      }}
-    >
-      {selected && (
-        <div className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center bg-accent shadow-lg animate-in zoom-in duration-200">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-white"
-            aria-hidden="true"
-          >
-            <title>Selected</title>
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        </div>
-      )}
-      <div
-        className={`w-14 h-14 flex items-center justify-center mb-3 transition-transform duration-300 ${selected ? "scale-110" : "group-hover:scale-105"}`}
-      >
-        <Icon size={42} className={meta.color} />
-      </div>
-      <span className="text-sm font-bold tracking-tight text-primary">{engine.displayName}</span>
-      <span className="text-[10px] font-black uppercase tracking-widest text-dimmed mt-1 opacity-70">
-        {meta.provider}
+    <label className="flex cursor-pointer items-center justify-between gap-4">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-primary">{label}</span>
+        {hint && <span className="block text-xs text-muted">{hint}</span>}
       </span>
-      {!engine.available && (
-        <span className="absolute bottom-2 right-2 text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-danger text-white shadow-lg">
-          offline
-        </span>
-      )}
-    </button>
+      <span className="relative shrink-0">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="peer sr-only"
+        />
+        <span className="block h-6 w-10 rounded-full bg-white/10 transition-colors peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent/50" />
+        <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+      </span>
+    </label>
   );
 }
 
@@ -153,24 +124,21 @@ function ModelSelector({
   loading: boolean;
 }) {
   const grouped = groupModelsByProvider(models);
-  if (models.length === 0 && !loading) return null;
+  if (models.length === 0 && !loading) return <div />;
 
   return (
-    <div className="mt-4 animate-in fade-in slide-in-from-top-1 duration-200">
-      <label
-        htmlFor="model-select"
-        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
-      >
-        Intelligence Model
+    <div>
+      <label htmlFor="model-select" className={LABEL_CLASS}>
+        Model
       </label>
       <Select
         id="model-select"
         value={model}
         onChange={(e) => onChange(e.target.value)}
         disabled={loading}
-        className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
+        className="h-10 rounded-lg text-sm"
       >
-        <option value="">{loading ? "Searching models..." : "Default (recommended)"}</option>
+        <option value="">{loading ? "Loading..." : "Default"}</option>
         {grouped.map(({ provider, models: providerModels }) => (
           <optgroup key={provider} label={provider}>
             {providerModels.map((m) => (
@@ -284,6 +252,9 @@ export function NewTaskDialog({
       .finally(() => setLoadingModels(false));
   }, [engine]);
 
+  // Claude Code / OpenCode tasks are driven by hand in the task terminal.
+  const handsOn = (HARNESS_ENGINES as readonly string[]).includes(engine);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !repoId || submitting) return;
@@ -340,523 +311,357 @@ export function NewTaskDialog({
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} title="Neural Task Construction" size="5xl">
-        <form onSubmit={handleSubmit} className="flex flex-col">
-          <div className="grid grid-cols-5 gap-10">
-            {/* Main Info Column */}
-            <div className="col-span-3 space-y-8 animate-in fade-in slide-in-from-left-4 duration-500">
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black">
-                    1
-                  </div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-primary">
-                    Core Objective
-                  </h3>
+      <Dialog open={open} onClose={onClose} title="New task" size="2xl">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor={NEW_TASK_FIELD_IDS.repository} className={LABEL_CLASS}>
+                Repository
+              </label>
+              {reposLoading ? (
+                <div className="flex h-10 items-center gap-2 rounded-lg border border-white/5 bg-input/40 px-3 text-sm text-muted">
+                  Loading repositories...
                 </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor={NEW_TASK_FIELD_IDS.repository}
-                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
-                    >
-                      Target Repository
-                    </label>
-                    {reposLoading ? (
-                      <div className="flex h-12 items-center gap-2 rounded-xl border border-white/5 bg-input/40 px-4 text-sm text-muted">
-                        <div className="w-3 h-3 rounded-full bg-accent/40 animate-pulse" />
-                        Loading repositories...
-                      </div>
-                    ) : repos.length === 0 ? (
-                      <div className="flex h-12 items-center gap-2 rounded-xl border border-danger/20 bg-danger/5 px-4 text-sm text-danger">
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          aria-hidden="true"
-                        >
-                          <title>Alert</title>
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="12" y1="8" x2="12" y2="12" />
-                          <line x1="12" y1="16" x2="12.01" y2="16" />
-                        </svg>
-                        No repositories found
-                      </div>
-                    ) : (
-                      <Combobox
-                        inputId={NEW_TASK_FIELD_IDS.repository}
-                        value={repoId}
-                        onChange={setRepoId}
-                        placeholder="Search repositories..."
-                        required
-                        className="h-12 rounded-xl bg-input/40 border border-white/5 focus-within:border-accent/40"
-                        inputClassName="h-full px-4 font-bold text-sm"
-                        options={repos
-                          .filter((r) => r.status !== "error")
-                          .map((repo) => {
-                            const sublabel =
-                              repo.status === "ready"
-                                ? repo.url
-                                : repo.status === "cloning"
-                                  ? "cloning…"
-                                  : repo.status === "pending"
-                                    ? "pending"
-                                    : repo.status;
-                            return {
-                              value: repo.id,
-                              label: repo.name,
-                              sublabel,
-                              searchText: repo.url,
-                            };
-                          })}
-                      />
-                    )}
-                  </div>
-
-                  {repoId && (
-                    <div>
-                      <label
-                        htmlFor={NEW_TASK_FIELD_IDS.baseBranch}
-                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
-                      >
-                        Base Branch
-                      </label>
-                      {branches.length > 0 ? (
-                        <Select
-                          id={NEW_TASK_FIELD_IDS.baseBranch}
-                          value={baseBranch}
-                          onChange={(e) => setBaseBranch(e.target.value)}
-                          disabled={loadingBranches}
-                          className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
-                        >
-                          {branches.map((b) => (
-                            <option key={b} value={b}>
-                              {b}
-                            </option>
-                          ))}
-                        </Select>
-                      ) : (
-                        <Input
-                          id={NEW_TASK_FIELD_IDS.baseBranch}
-                          value={baseBranch}
-                          onChange={(e) => setBaseBranch(e.target.value)}
-                          placeholder={loadingBranches ? "Loading branches..." : "main"}
-                          className="h-11 rounded-2xl bg-input/40 border-white/5 text-sm font-bold"
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  <div>
-                    <label
-                      htmlFor={NEW_TASK_FIELD_IDS.title}
-                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-2 ml-1"
-                    >
-                      Task Title
-                    </label>
-                    <Input
-                      id={NEW_TASK_FIELD_IDS.title}
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="e.g., refactor: optimize database query performance"
-                      className="h-12 rounded-2xl bg-input/50 border-white/5 focus:border-accent/40 text-sm font-bold"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2 ml-1">
-                      <label
-                        htmlFor={NEW_TASK_FIELD_IDS.description}
-                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed"
-                      >
-                        Implementation Brief
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowPicker(true)}
-                          className="text-[10px] font-black uppercase tracking-widest text-accent hover:text-accent-hover transition-colors"
-                        >
-                          Use Template ✦
-                        </button>
-                        <div className="h-4 w-px bg-white/10" />
-                        <div className="flex rounded-lg overflow-hidden bg-white/5 p-0.5 border border-white/5">
-                          <button
-                            type="button"
-                            onClick={() => setGuidedMode(false)}
-                            className={`text-[9px] px-2 py-1 rounded-md font-black uppercase tracking-widest transition-all ${!guidedMode ? "bg-white text-black shadow-sm" : "text-muted hover:text-primary"}`}
-                          >
-                            Simple
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setGuidedMode(true)}
-                            className={`text-[9px] px-2 py-1 rounded-md font-black uppercase tracking-widest transition-all ${guidedMode ? "bg-white text-black shadow-sm" : "text-muted hover:text-primary"}`}
-                          >
-                            Guided
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {guidedMode ? (
-                      <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
-                    ) : (
-                      <Textarea
-                        id={NEW_TASK_FIELD_IDS.description}
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Describe exactly what needs to be changed..."
-                        className="min-h-[160px] rounded-[1.5rem] bg-input/50 border-white/5 focus:border-accent/40 text-sm leading-relaxed p-5"
-                        required
-                      />
-                    )}
-                  </div>
+              ) : repos.length === 0 ? (
+                <div className="flex h-10 items-center rounded-lg border border-danger/20 bg-danger/5 px-3 text-sm text-danger">
+                  No repositories found
                 </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="priority-select"
-                  className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
-                >
-                  Priority
-                </label>
-                <div id="priority-select" className="inline-flex rounded-xl bg-white/5 p-1 gap-1">
-                  {TASK_PRIORITY_LEVELS.map((p) => {
-                    const meta = TASK_PRIORITY_META[p];
-                    const isActive = priority === p;
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPriority(p)}
-                        title={meta.label}
-                        aria-label={meta.label}
-                        className={`px-3 py-1.5 rounded-lg text-sm transition-all active-shrink ${
-                          isActive
-                            ? "bg-accent text-white shadow-lg shadow-accent/25"
-                            : "text-muted hover:text-primary hover:bg-white/5"
-                        }`}
-                      >
-                        {meta.icon}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              ) : (
+                <Combobox
+                  inputId={NEW_TASK_FIELD_IDS.repository}
+                  value={repoId}
+                  onChange={setRepoId}
+                  placeholder="Search repositories..."
+                  required
+                  className="h-10 rounded-lg bg-input/40 border border-white/5 focus-within:border-accent/40"
+                  inputClassName="h-full px-3 text-sm"
+                  options={repos
+                    .filter((r) => r.status !== "error")
+                    .map((repo) => {
+                      const sublabel =
+                        repo.status === "ready"
+                          ? repo.url
+                          : repo.status === "cloning"
+                            ? "cloning…"
+                            : repo.status === "pending"
+                              ? "pending"
+                              : repo.status;
+                      return {
+                        value: repo.id,
+                        label: repo.name,
+                        sublabel,
+                        searchText: repo.url,
+                      };
+                    })}
+                />
+              )}
             </div>
 
-            {/* Configuration Column */}
-            <div className="col-span-2 space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black">
-                    2
-                  </div>
-                  <h3 className="text-sm font-black uppercase tracking-widest text-primary">
-                    Intelligence & Context
-                  </h3>
-                </div>
-
-                <div className="space-y-5">
-                  <div>
-                    <label
-                      htmlFor={NEW_TASK_FIELD_IDS.agent}
-                      className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-3 ml-1"
-                    >
-                      Specialized Agent
-                    </label>
-                    {skillsIndex &&
-                    (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) ? (
-                      <Select
-                        value={agentId}
-                        onChange={(e) => setAgentId(e.target.value)}
-                        className="h-11 rounded-2xl bg-input/40 border-white/5 font-bold text-sm"
-                      >
-                        <option value="">Generalist Orchestrator</option>
-                        {skillsIndex.agents.map((a) => (
-                          <option key={a.name} value={a.name}>
-                            {a.name}
-                          </option>
-                        ))}
-                        {skillsIndex.workflows.map((w) => (
-                          <option key={w.name} value={`workflow:${w.name}`}>
-                            {w.name} (Workflow)
-                          </option>
-                        ))}
-                      </Select>
-                    ) : (
-                      <div className="p-3 rounded-2xl border border-white/5 bg-input/20 text-[10px] font-black uppercase tracking-widest text-dimmed text-center italic">
-                        No specialized assets available
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-3 ml-1">
-                      <label
-                        htmlFor="engine-matrix"
-                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed"
-                      >
-                        AI Engine Matrix
-                      </label>
-                      {enginesLoading && (
-                        <span className="text-[10px] font-black uppercase tracking-widest text-accent animate-pulse">
-                          Syncing...
-                        </span>
-                      )}
-                    </div>
-                    <div id="engine-matrix" className="grid grid-cols-2 gap-3">
-                      {engines
-                        .filter((e) => e.available)
-                        .map((eng) => (
-                          <EngineCard
-                            key={eng.name}
-                            engine={eng}
-                            selected={engine === eng.name}
-                            onSelect={() => setEngine(eng.name)}
-                          />
-                        ))}
-                    </div>
-                  </div>
-
-                  <ModelSelector
-                    models={models}
-                    model={model}
-                    onChange={setModel}
-                    loading={loadingModels}
+            {repoId && (
+              <div>
+                <label htmlFor={NEW_TASK_FIELD_IDS.baseBranch} className={LABEL_CLASS}>
+                  Base branch
+                </label>
+                {branches.length > 0 ? (
+                  <Select
+                    id={NEW_TASK_FIELD_IDS.baseBranch}
+                    value={baseBranch}
+                    onChange={(e) => setBaseBranch(e.target.value)}
+                    disabled={loadingBranches}
+                    className="h-10 rounded-lg text-sm"
+                  >
+                    {branches.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    id={NEW_TASK_FIELD_IDS.baseBranch}
+                    value={baseBranch}
+                    onChange={(e) => setBaseBranch(e.target.value)}
+                    placeholder={loadingBranches ? "Loading branches..." : "main"}
+                    className="h-10 rounded-lg text-sm"
                   />
-
-                  <div className="pt-4 p-5 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
-                    <label className="flex items-center justify-between cursor-pointer group">
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-bold text-primary">Automated Scheduling</p>
-                        <p className="text-[10px] text-muted font-medium">
-                          Run this operation on a interval
-                        </p>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          checked={isScheduled}
-                          onChange={(e) => setIsScheduled(e.target.checked)}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`w-12 h-7 rounded-full transition-all active-shrink ${isScheduled ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
-                        >
-                          <div
-                            className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${isScheduled ? "left-6" : "left-1"}`}
-                          />
-                        </div>
-                      </div>
-                    </label>
-
-                    {!isScheduled && (
-                      <label className="flex items-center justify-between cursor-pointer group">
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-bold text-primary">Instant Execution</p>
-                          <p className="text-[10px] text-muted font-medium">
-                            Launch agent immediately after creation
-                          </p>
-                        </div>
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            checked={autoLaunch}
-                            onChange={(e) => setAutoLaunch(e.target.checked)}
-                            className="sr-only"
-                          />
-                          <div
-                            className={`w-12 h-7 rounded-full transition-all active-shrink ${autoLaunch ? "bg-accent shadow-lg shadow-accent/25" : "bg-white/10"}`}
-                          >
-                            <div
-                              className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all shadow-sm ${autoLaunch ? "left-6" : "left-1"}`}
-                            />
-                          </div>
-                        </div>
-                      </label>
-                    )}
-
-                    {isScheduled && (
-                      <div className="pt-2 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                        <Select
-                          value={isCustomCron ? "custom" : cronExpression}
-                          onChange={(e) => {
-                            if (e.target.value === "custom") {
-                              setIsCustomCron(true);
-                            } else {
-                              setIsCustomCron(false);
-                              setCronExpression(e.target.value);
-                            }
-                          }}
-                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-bold"
-                        >
-                          {CRON_PRESETS.map((p) => (
-                            <option key={p.value} value={p.value}>
-                              {p.label}
-                            </option>
-                          ))}
-                          <option value="custom">Custom Expression...</option>
-                        </Select>
-                        {isCustomCron && (
-                          <Input
-                            type="text"
-                            placeholder="Cron (e.g., 0 9 * * 1-5)"
-                            value={cronExpression}
-                            onChange={(e) => setCronExpression(e.target.value)}
-                            className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-mono"
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Ralph Loop Section */}
-              <div className="rounded-2xl border border-white/5 bg-surface/20 p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-primary">Ralph Loop</p>
-                    <p className="text-xs text-muted mt-0.5">
-                      Auto-relaunch on failure until success or max attempts
-                    </p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={loopEnabled}
-                      onChange={(e) => setLoopEnabled(e.target.checked)}
-                    />
-                    <div
-                      className={`w-12 h-7 rounded-full transition-colors duration-200 relative ${
-                        loopEnabled ? "bg-accent" : "bg-white/10"
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                          loopEnabled ? "translate-x-6" : "translate-x-1"
-                        }`}
-                      />
-                    </div>
-                  </label>
-                </div>
-                {loopEnabled && (
-                  <div className="pt-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label
-                          htmlFor="loop-max-attempts"
-                          className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
-                        >
-                          Max Attempts
-                        </label>
-                        <Input
-                          id="loop-max-attempts"
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={loopMaxAttempts}
-                          onChange={(e) => setLoopMaxAttempts(Number(e.target.value))}
-                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="loop-timeout"
-                          className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
-                        >
-                          Timeout (min)
-                        </label>
-                        <Select
-                          id="loop-timeout"
-                          value={loopTimeoutMinutes}
-                          onChange={(e) => setLoopTimeoutMinutes(Number(e.target.value))}
-                          className="h-10 rounded-xl bg-input/50 border-white/10 text-xs font-bold"
-                        >
-                          <option value={15}>15 min</option>
-                          <option value={30}>30 min</option>
-                          <option value={60}>60 min</option>
-                          <option value={120}>2 hours</option>
-                          <option value={240}>4 hours</option>
-                          <option value={480}>8 hours</option>
-                        </Select>
-                      </div>
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="loop-feedback"
-                        className="block text-[10px] font-black uppercase tracking-widest text-dimmed mb-1.5"
-                      >
-                        Loop Feedback (optional)
-                      </label>
-                      <textarea
-                        id="loop-feedback"
-                        rows={2}
-                        placeholder="Instructions to include on each retry attempt..."
-                        value={loopFeedback}
-                        onChange={(e) => setLoopFeedback(e.target.value)}
-                        className="w-full rounded-xl bg-input/50 border border-white/10 px-3 py-2 text-xs text-primary placeholder:text-muted/50 resize-none focus:outline-none focus:border-accent/40"
-                      />
-                    </div>
-                  </div>
                 )}
               </div>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor={NEW_TASK_FIELD_IDS.title} className={LABEL_CLASS}>
+              Title
+            </label>
+            <Input
+              id={NEW_TASK_FIELD_IDS.title}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g., refactor: optimize database query performance"
+              className="h-10 rounded-lg text-sm"
+              required
+            />
+          </div>
+
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label
+                htmlFor={NEW_TASK_FIELD_IDS.description}
+                className="text-xs font-medium text-muted"
+              >
+                Description
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                className="text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+              >
+                Use template
+              </button>
+            </div>
+            {guidedMode ? (
+              <TaskSpecEditor value={taskSpec} onChange={setTaskSpec} />
+            ) : (
+              <Textarea
+                id={NEW_TASK_FIELD_IDS.description}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe what needs to be changed..."
+                className="min-h-[140px] rounded-lg text-sm leading-relaxed p-3"
+                required
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label htmlFor={NEW_TASK_FIELD_IDS.engine} className={LABEL_CLASS}>
+                Engine
+              </label>
+              <Select
+                id={NEW_TASK_FIELD_IDS.engine}
+                value={engine}
+                onChange={(e) => setEngine(e.target.value)}
+                disabled={enginesLoading}
+                className="h-10 rounded-lg text-sm"
+                required
+              >
+                <option value="" disabled>
+                  {enginesLoading ? "Loading..." : "Select engine"}
+                </option>
+                {engines
+                  .filter((e) => e.available)
+                  .map((eng) => (
+                    <option key={eng.name} value={eng.name}>
+                      {eng.displayName}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+
+            <ModelSelector
+              models={models}
+              model={model}
+              onChange={setModel}
+              loading={loadingModels}
+            />
+
+            <div>
+              <label htmlFor="priority-select" className={LABEL_CLASS}>
+                Priority
+              </label>
+              <Select
+                id="priority-select"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as TaskPriority)}
+                className="h-10 rounded-lg text-sm"
+              >
+                {TASK_PRIORITY_LEVELS.map((p) => (
+                  <option key={p} value={p}>
+                    {TASK_PRIORITY_META[p].label}
+                  </option>
+                ))}
+              </Select>
             </div>
           </div>
 
-          <div className="mt-12 pt-8 border-t border-white/5 flex items-center justify-between gap-6">
-            <div className="flex-1 min-w-0">
-              {submitError && (
-                <div className="flex items-center gap-3 text-danger animate-in shake-1">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                    aria-hidden="true"
+          <details className="group rounded-lg border border-white/5 bg-white/[0.02] px-4 py-3">
+            <summary className="cursor-pointer select-none text-xs font-medium text-muted">
+              Advanced
+            </summary>
+            <div className="mt-4 space-y-4">
+              {skillsIndex &&
+                (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) && (
+                  <div>
+                    <label htmlFor={NEW_TASK_FIELD_IDS.agent} className={LABEL_CLASS}>
+                      Specialized agent
+                    </label>
+                    <Select
+                      id={NEW_TASK_FIELD_IDS.agent}
+                      value={agentId}
+                      onChange={(e) => setAgentId(e.target.value)}
+                      className="h-10 rounded-lg text-sm"
+                    >
+                      <option value="">Default</option>
+                      {skillsIndex.agents.map((a) => (
+                        <option key={a.name} value={a.name}>
+                          {a.name}
+                        </option>
+                      ))}
+                      {skillsIndex.workflows.map((w) => (
+                        <option key={w.name} value={`workflow:${w.name}`}>
+                          {w.name} (Workflow)
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
+              <Toggle
+                label="Structured brief"
+                hint="Fill a guided spec instead of free text"
+                checked={guidedMode}
+                onChange={setGuidedMode}
+              />
+
+              <Toggle
+                label="Recurring"
+                hint="Run this task on a schedule"
+                checked={isScheduled}
+                onChange={setIsScheduled}
+              />
+              {isScheduled && (
+                <div className="space-y-3">
+                  <Select
+                    value={isCustomCron ? "custom" : cronExpression}
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
+                        setIsCustomCron(true);
+                      } else {
+                        setIsCustomCron(false);
+                        setCronExpression(e.target.value);
+                      }
+                    }}
+                    className="h-10 rounded-lg text-sm"
                   >
-                    <title>Error icon</title>
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 8v4M12 16h.01" />
-                  </svg>
-                  <p className="text-[10px] font-black uppercase tracking-widest truncate">
-                    {submitError}
-                  </p>
+                    {CRON_PRESETS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                    <option value="custom">Custom expression...</option>
+                  </Select>
+                  {isCustomCron && (
+                    <Input
+                      type="text"
+                      placeholder="Cron (e.g., 0 9 * * 1-5)"
+                      value={cronExpression}
+                      onChange={(e) => setCronExpression(e.target.value)}
+                      className="h-10 rounded-lg text-sm font-mono"
+                    />
+                  )}
                 </div>
-              )}{" "}
+              )}
+
+              <Toggle
+                label="Retry on failure"
+                hint="Relaunch until it succeeds or hits max attempts"
+                checked={loopEnabled}
+                onChange={setLoopEnabled}
+              />
+              {loopEnabled && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label htmlFor="loop-max-attempts" className={LABEL_CLASS}>
+                        Max attempts
+                      </label>
+                      <Input
+                        id="loop-max-attempts"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={loopMaxAttempts}
+                        onChange={(e) => setLoopMaxAttempts(Number(e.target.value))}
+                        className="h-10 rounded-lg text-sm font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="loop-timeout" className={LABEL_CLASS}>
+                        Timeout
+                      </label>
+                      <Select
+                        id="loop-timeout"
+                        value={loopTimeoutMinutes}
+                        onChange={(e) => setLoopTimeoutMinutes(Number(e.target.value))}
+                        className="h-10 rounded-lg text-sm"
+                      >
+                        <option value={15}>15 min</option>
+                        <option value={30}>30 min</option>
+                        <option value={60}>60 min</option>
+                        <option value={120}>2 hours</option>
+                        <option value={240}>4 hours</option>
+                        <option value={480}>8 hours</option>
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="loop-feedback" className={LABEL_CLASS}>
+                      Feedback on each retry (optional)
+                    </label>
+                    <Textarea
+                      id="loop-feedback"
+                      rows={2}
+                      placeholder="Instructions to include on each retry attempt..."
+                      value={loopFeedback}
+                      onChange={(e) => setLoopFeedback(e.target.value)}
+                      className="rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </details>
+
+          <div className="flex items-center justify-between gap-4 border-t border-white/5 pt-4">
+            <div className="min-w-0 flex-1">
+              {submitError ? (
+                <p className="truncate text-xs text-danger" role="alert">
+                  {submitError}
+                </p>
+              ) : (
+                !isScheduled && (
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={autoLaunch}
+                      onChange={(e) => setAutoLaunch(e.target.checked)}
+                      className="h-4 w-4 accent-[var(--accent)]"
+                    />
+                    {handsOn ? "Open task after creating" : "Start immediately"}
+                  </label>
+                )
+              )}
             </div>
 
-            <div className="flex items-center gap-4 shrink-0">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={onClose}
-                disabled={submitting}
-                className="rounded-2xl h-12 px-8 font-black uppercase tracking-widest text-[10px]"
-              >
-                Discard
+            <div className="flex shrink-0 items-center gap-2">
+              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+                Cancel
               </Button>
               <Button
                 type="submit"
                 variant="primary"
                 disabled={!title.trim() || !repoId || !engine || submitting}
-                className="rounded-2xl h-12 px-12 shadow-2xl shadow-accent/30 font-black uppercase tracking-[0.15em] text-[10px] min-w-[200px]"
               >
                 {submitting
-                  ? "Engaging System..."
+                  ? "Creating..."
                   : isScheduled
-                    ? "Establish Schedule"
-                    : "Deploy AI Agent"}
+                    ? "Schedule"
+                    : autoLaunch
+                      ? handsOn
+                        ? "Create & open"
+                        : "Create & run"
+                      : "Create task"}
               </Button>
             </div>
           </div>
