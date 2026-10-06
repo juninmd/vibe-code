@@ -28,7 +28,7 @@ class FakeOpenCodeEngine extends OpenCodeEngine {
     _workdir: string,
     _resumeSessionId?: string
   ): string[] {
-    return [process.execPath, this.scriptPath];
+    return ["bun", this.scriptPath];
   }
 }
 
