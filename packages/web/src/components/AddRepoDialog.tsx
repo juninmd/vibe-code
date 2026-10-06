@@ -1,6 +1,6 @@
 import type { RemoteRepo } from "@vibe-code/shared";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { api } from "../api/client";
+import { ApiError, api } from "../api/client";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
@@ -11,13 +11,23 @@ interface AddRepoDialogProps {
   onClose: () => void;
   onSubmit: (data: { url: string }) => Promise<void>;
   githubUsername?: string | null;
+  /** Lets the "not connected" state send the user straight to the token settings. */
+  onOpenSettings?: () => void;
 }
 
-export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRepoDialogProps) {
+export function AddRepoDialog({
+  open,
+  onClose,
+  onSubmit,
+  githubUsername,
+  onOpenSettings,
+}: AddRepoDialogProps) {
   const manualUrlInputId = useId();
   const [repos, setRepos] = useState<RemoteRepo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The provider has no token yet: a setup step, not a failure.
+  const [notConnected, setNotConnected] = useState(false);
   const [search, setSearch] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [mode, setMode] = useState<"github" | "gitlab" | "manual" | "create">("github");
@@ -39,12 +49,14 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
   const fetchRecent = useCallback(async (provider: "github" | "gitlab") => {
     setLoading(true);
     setError(null);
+    setNotConnected(false);
     setIsSearchResult(false);
     try {
       const list =
         provider === "gitlab" ? await api.repos.listGitLab() : await api.repos.listGitHub();
       setRepos(list);
     } catch (err) {
+      setNotConnected(err instanceof ApiError && err.status === 409);
       setError(err instanceof Error ? err.message : String(err));
       setRepos([]);
     } finally {
@@ -62,20 +74,29 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
   }, [open, mode, fetchRecent]);
 
   // Debounced server-side search
+  const hadQuery = useRef(false);
   useEffect(() => {
+    // Closed dialogs stay mounted: never call the provider (or burn rate limit) for them.
+    if (!open) return;
     if (mode !== "github" && mode !== "gitlab") return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     const q = search.trim();
     if (!q) {
-      // Restore recent list when search is cleared
-      fetchRecent(mode);
+      // Restore the recent list only when a search was just cleared; opening the dialog
+      // already loads it (see the effect above).
+      if (hadQuery.current) {
+        hadQuery.current = false;
+        fetchRecent(mode);
+      }
       return;
     }
+    hadQuery.current = true;
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       setError(null);
+      setNotConnected(false);
       setIsSearchResult(true);
       try {
         const searchFn = mode === "gitlab" ? api.repos.searchGitLab : api.repos.searchGitHub;
@@ -85,6 +106,7 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
         const results = await searchFn(scopedQ);
         setRepos(results);
       } catch (err) {
+        setNotConnected(err instanceof ApiError && err.status === 409);
         setError(err instanceof Error ? err.message : String(err));
         setRepos([]);
       } finally {
@@ -95,7 +117,7 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [search, mode, fetchRecent, githubUsername]);
+  }, [open, search, mode, fetchRecent, githubUsername]);
 
   const submitRepository = async (url: string) => {
     setSubmitting(true);
@@ -232,7 +254,13 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
               </div>
             ) : error ? (
               <div className="px-6 py-12 text-center space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center mx-auto text-danger shadow-xl shadow-danger/10">
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto shadow-xl ${
+                    notConnected
+                      ? "bg-accent/10 text-accent shadow-accent/10"
+                      : "bg-danger/10 text-danger shadow-danger/10"
+                  }`}
+                >
                   <svg
                     width="24"
                     height="24"
@@ -249,10 +277,36 @@ export function AddRepoDialog({ open, onClose, onSubmit, githubUsername }: AddRe
                   </svg>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm font-bold text-primary">Connection Error</p>
-                  <p className="text-xs text-muted leading-relaxed max-w-[240px] mx-auto">
+                  <p className="text-sm font-bold text-primary">
+                    {notConnected ? `Connect ${providerLabel}` : "Could not load repositories"}
+                  </p>
+                  <p className="text-xs text-muted leading-relaxed max-w-[260px] mx-auto">
                     {error}
                   </p>
+                  {notConnected && (
+                    <div className="flex flex-col items-center gap-2 pt-1">
+                      {onOpenSettings && (
+                        <Button
+                          type="button"
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            handleClose();
+                            onOpenSettings();
+                          }}
+                        >
+                          Open settings
+                        </Button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setMode("manual")}
+                        className="text-xs text-accent-text hover:underline"
+                      >
+                        Or paste a Git URL instead
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : repos.length === 0 ? (

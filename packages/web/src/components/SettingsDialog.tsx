@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { themes } from "../theme/themes";
+import { LanesSettings } from "./LanesSettings";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -10,9 +11,19 @@ import { Input } from "./ui/input";
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Tab to show each time the dialog opens. */
+  initialTab?: Tab;
 }
 
-type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general" | "telegram" | "mcp";
+export type Tab =
+  | "github"
+  | "gitlab"
+  | "lanes"
+  | "litellm"
+  | "apikeys"
+  | "general"
+  | "telegram"
+  | "mcp";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -26,7 +37,6 @@ function SettingsSection({ title, children }: { title: string; children: React.R
 }
 
 function GitHubOAuthTab() {
-  const [status, setStatus] = useState<SettingsResponse | null>(null);
   const [auth, setAuth] = useState<{
     username?: string;
     enabled: boolean;
@@ -38,7 +48,6 @@ function GitHubOAuthTab() {
     setError(null);
     Promise.all([api.settings.get(), api.auth.me()])
       .then(([settings, authStatus]) => {
-        setStatus(settings);
         setAuth({
           username: authStatus.user?.username ?? settings.github.username,
           enabled: authStatus.enabled,
@@ -52,8 +61,14 @@ function GitHubOAuthTab() {
     load();
   }, [load]);
 
+  // Without OAuth configured on the server there is no login to offer: the access token
+  // form below is the way to connect, so this card would only be a dead end.
+  if (auth && !auth.enabled && !error) return null;
+
+  const signedInAs = auth?.username;
+
   return (
-    <SettingsSection title="Identity Provider">
+    <SettingsSection title="Sign in">
       <div className="flex items-center gap-5 p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 shadow-inner">
         {auth?.avatarUrl ? (
           <img
@@ -63,32 +78,31 @@ function GitHubOAuthTab() {
           />
         ) : (
           <div className="w-16 h-16 rounded-[1.5rem] bg-accent flex items-center justify-center text-2xl text-white font-black shadow-2xl shadow-accent/20">
-            {auth?.username?.[0].toUpperCase() || "?"}
+            {signedInAs?.[0]?.toUpperCase() || "?"}
           </div>
         )}
         <div className="flex-1 min-w-0">
           <p className="text-lg font-black tracking-tight text-primary leading-none">
-            {status?.github.tokenSet ? `@${auth?.username}` : "Not Connected"}
+            {signedInAs ? `@${signedInAs}` : "Not signed in"}
           </p>
           <div className="flex items-center gap-2 mt-2">
             <span
-              className={`w-2 h-2 rounded-full ${status?.github.tokenSet ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-zinc-600"}`}
+              className={`w-2 h-2 rounded-full ${signedInAs ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-zinc-600"}`}
             />
             <span className="text-[10px] font-black uppercase tracking-widest text-muted">
-              {status?.github.tokenSet ? "GitHub OAuth Active" : "Authentication Required"}
+              {signedInAs ? "Signed in with GitHub" : "Login required"}
             </span>
           </div>
         </div>
         <Button
           type="button"
           variant="primary"
-          disabled={auth?.enabled === false}
           onClick={() => {
             window.location.href = api.auth.loginUrl();
           }}
           className="rounded-xl h-11 px-6 shadow-xl shadow-accent/25 font-black uppercase tracking-widest text-[10px]"
         >
-          {status?.github.tokenSet ? "Reconnect" : "Login with GitHub"}
+          {signedInAs ? "Reconnect" : "Login with GitHub"}
         </Button>
       </div>
 
@@ -108,29 +122,6 @@ function GitHubOAuthTab() {
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
           <p className="text-xs font-bold text-danger">{error}</p>
-        </div>
-      )}
-
-      {auth?.enabled === false && (
-        <div className="p-4 rounded-2xl bg-warning/10 border border-warning/20 flex gap-3 items-center">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            className="text-warning shrink-0"
-            aria-hidden="true"
-          >
-            <title>Warning</title>
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <p className="text-xs font-bold text-warning leading-relaxed">
-            Missing Server Config: Please set GITHUB_OAUTH_CLIENT_ID and CLIENT_SECRET.
-          </p>
         </div>
       )}
     </SettingsSection>
@@ -1564,33 +1555,42 @@ function McpTab() {
   );
 }
 
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const [tab, setTab] = useState<Tab>("github");
+export function SettingsDialog({ open, onClose, initialTab }: SettingsDialogProps) {
+  const [tab, setTab] = useState<Tab>(initialTab ?? "github");
+
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab);
+  }, [open, initialTab]);
 
   return (
-    <Dialog open={open} onClose={onClose} title="System Configuration" size="2xl">
+    <Dialog open={open} onClose={onClose} title="Settings" size="2xl">
       {/* Modern High-End Tabs */}
       <div className="flex gap-2 mb-8 p-1.5 rounded-[1.25rem] bg-input/40 border border-white/5 backdrop-blur-md">
-        {(["github", "gitlab", "litellm", "apikeys", "general", "telegram", "mcp"] as Tab[]).map(
-          (t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
-                tab === t
-                  ? "bg-accent text-white shadow-lg shadow-accent/25"
-                  : "text-muted hover:text-primary hover:bg-white/5"
-              }`}
-            >
-              {t === "apikeys" ? "API Keys" : t === "mcp" ? "MCP" : t}
-            </button>
-          )
-        )}
+        {(
+          ["github", "gitlab", "lanes", "litellm", "apikeys", "general", "telegram", "mcp"] as Tab[]
+        ).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
+              tab === t
+                ? "bg-accent text-white shadow-lg shadow-accent/25"
+                : "text-muted hover:text-primary hover:bg-white/5"
+            }`}
+          >
+            {t === "apikeys" ? "API Keys" : t === "mcp" ? "MCP" : t}
+          </button>
+        ))}
       </div>
 
       <div className="min-h-[320px] max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-        {tab === "github" && <GitHubOAuthTab />}
+        {tab === "github" && (
+          <>
+            <GitHubOAuthTab />
+            <ProviderTab provider="github" label="GitHub" tokenPlaceholder="ghp_xxxxxxxxxxxx" />
+          </>
+        )}
 
         {tab === "gitlab" && (
           <ProviderTab
@@ -1600,6 +1600,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             showBaseUrl
           />
         )}
+
+        {tab === "lanes" && <LanesSettings />}
 
         {tab === "litellm" && <LiteLLMTab />}
 
