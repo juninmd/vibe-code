@@ -342,6 +342,11 @@ export class GitService {
     };
   }
 
+  /** True when a token for the provider is available (settings or environment). */
+  isProviderConfigured(provider: "github" | "gitlab"): boolean {
+    return !!this._providers?.get(provider) && !!this._providers.getToken(provider);
+  }
+
   async listRemoteRepos(
     provider: "github" | "gitlab",
     limit = 20

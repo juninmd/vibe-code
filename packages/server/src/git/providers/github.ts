@@ -1,5 +1,11 @@
 import type { RemoteRepo, RepositoryIssue } from "@vibe-code/shared";
-import type { CreatePRParams, CreateRepoParams, GitProviderAdapter } from "./types";
+import type {
+  CreatePRParams,
+  CreateRepoParams,
+  GitProviderAdapter,
+  LabelSpec,
+  ListIssuesOptions,
+} from "./types";
 
 const GH_API = "https://api.github.com";
 
@@ -170,11 +176,15 @@ export class GitHubProvider implements GitProviderAdapter {
   async listIssues(
     token: string,
     repoUrl: string,
-    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+    options?: ListIssuesOptions
   ): Promise<RepositoryIssue[]> {
     const repoPath = getRepoOwnerAndName(repoUrl);
     const params = new URLSearchParams();
-    params.set("per_page", String(options?.limit ?? 50));
+    params.set("per_page", String(Math.min(options?.limit ?? 50, 100)));
+    if (options?.recentlyUpdated) {
+      params.set("sort", "updated");
+      params.set("direction", "desc");
+    }
     if (options?.state) params.set("state", options.state);
     if (options?.labels && options.labels.length > 0) {
       params.set("labels", options.labels.join(","));
@@ -213,6 +223,54 @@ export class GitHubProvider implements GitProviderAdapter {
         updatedAt: issue.updated_at,
         url: issue.html_url,
       }));
+  }
+
+  async updateIssueLabels(
+    token: string,
+    repoUrl: string,
+    issueNumber: number,
+    change: { add: string[]; remove: string[] }
+  ): Promise<void> {
+    const repoPath = getRepoOwnerAndName(repoUrl);
+    const base = `${GH_API}/repos/${repoPath}/issues/${issueNumber}/labels`;
+
+    if (change.add.length > 0) {
+      const res = await fetch(base, {
+        method: "POST",
+        headers: { ...headers(token), "Content-Type": "application/json" },
+        body: JSON.stringify({ labels: change.add }),
+      });
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    }
+    for (const name of change.remove) {
+      const res = await fetch(`${base}/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+        headers: headers(token),
+      });
+      // 404: the issue no longer carries it, which is what was asked for.
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      }
+    }
+  }
+
+  async ensureLabels(token: string, repoUrl: string, labels: LabelSpec[]): Promise<void> {
+    const repoPath = getRepoOwnerAndName(repoUrl);
+    for (const label of labels) {
+      const res = await fetch(`${GH_API}/repos/${repoPath}/labels`, {
+        method: "POST",
+        headers: { ...headers(token), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: label.name,
+          color: label.color,
+          description: label.description,
+        }),
+      });
+      // 422: it exists already.
+      if (!res.ok && res.status !== 422) {
+        throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      }
+    }
   }
 
   async listBranches(token: string, repoUrl: string): Promise<string[]> {
