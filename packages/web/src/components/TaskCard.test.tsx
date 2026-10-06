@@ -67,14 +67,18 @@ describe("TaskCard", () => {
     expect(screen.getByText("My Task Title")).toBeInTheDocument();
   });
 
-  it("renders the short task id", () => {
-    render(<TaskCard task={baseTask} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText("abc1")).toBeInTheDocument();
+  it("keeps the card minimal: no id, description or tags", () => {
+    const task = { ...baseTask, tags: ["frontend"], description: "Long description text" };
+    render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
+    expect(screen.queryByText("abc1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Long description text")).not.toBeInTheDocument();
+    expect(screen.queryByText("#frontend")).not.toBeInTheDocument();
   });
 
-  it("renders the engine badge", () => {
+  it("identifies the engine and repository", () => {
     render(<TaskCard task={baseTask} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByText(/claude-code/i)).toBeInTheDocument();
+    expect(screen.getByTitle("claude-code")).toBeInTheDocument();
+    expect(screen.getByText("my-repo")).toBeInTheDocument();
   });
 
   it("calls onClick when card is clicked", async () => {
@@ -90,10 +94,24 @@ describe("TaskCard", () => {
     expect(screen.getByText("PR")).toBeInTheDocument();
   });
 
-  it("shows Retry PR button when status is review and no prUrl", () => {
+  it("offers Create PR when the task is in review without a PR", async () => {
+    const onRetryPR = vi.fn();
+    const onClick = vi.fn();
     const task = { ...baseTask, status: "review" as const };
+    render(<TaskCard task={task} onClick={onClick} onRetryPR={onRetryPR} />);
+    await userEvent.click(screen.getByRole("button", { name: /create pr/i }));
+    expect(onRetryPR).toHaveBeenCalledWith(task.id);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("shows a live indicator while the terminal session runs", () => {
+    const task = {
+      ...baseTask,
+      status: "in_progress" as const,
+      latestRun: { ...({} as NonNullable<TaskWithRun["latestRun"]>), status: "running" as const },
+    };
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /retry pr/i })).toBeInTheDocument();
+    expect(screen.getByText("live")).toBeInTheDocument();
   });
 
   it("shows Failed badge when status is failed", () => {

@@ -5,7 +5,7 @@ import type {
   TaskPriority,
   TaskSpec,
 } from "@vibe-code/shared";
-import { TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
+import { HARNESS_ENGINES, TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
@@ -251,6 +251,9 @@ export function NewTaskDialog({
       .catch(() => setModels([]))
       .finally(() => setLoadingModels(false));
   }, [engine]);
+
+  // Claude Code / OpenCode tasks are driven by hand in the task terminal.
+  const handsOn = (HARNESS_ENGINES as readonly string[]).includes(engine);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -635,7 +638,7 @@ export function NewTaskDialog({
                       onChange={(e) => setAutoLaunch(e.target.checked)}
                       className="h-4 w-4 accent-[var(--accent)]"
                     />
-                    Start immediately
+                    {handsOn ? "Open task after creating" : "Start immediately"}
                   </label>
                 )
               )}
@@ -655,7 +658,9 @@ export function NewTaskDialog({
                   : isScheduled
                     ? "Schedule"
                     : autoLaunch
-                      ? "Create & run"
+                      ? handsOn
+                        ? "Create & open"
+                        : "Create & run"
                       : "Create task"}
               </Button>
             </div>

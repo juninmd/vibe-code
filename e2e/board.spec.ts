@@ -98,7 +98,7 @@ test.describe("Board UI", () => {
     await engineSelect.selectOption(firstEngine as string);
 
     // Disable instant execution so no agent is launched
-    await page.getByText("Start immediately").click();
+    await page.getByText("Open task after creating").click();
 
     await page.getByRole("button", { name: "Create task" }).click();
 

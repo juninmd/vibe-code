@@ -1,4 +1,4 @@
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { config } from "dotenv";
@@ -26,8 +26,9 @@ import { createSkillsRouter } from "./api/skills";
 import { createStatsRouter } from "./api/stats";
 import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
+import { createTerminalRouter } from "./api/terminal";
 import { createWorkspacesRouter } from "./api/workspaces";
-import { authMiddleware, createAuthRouter } from "./auth";
+import { authMiddleware, createAuthRouter, isRequestAuthenticated } from "./auth";
 import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
@@ -36,7 +37,8 @@ import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
 import { logValidationReport, validateSkills } from "./skills/validator";
-import { TerminalSessionService } from "./terminal/session-service";
+import { TerminalController } from "./terminal/controller";
+import { cleanupWorkspaces } from "./terminal/workspace-cleanup";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -83,56 +85,6 @@ const orchestrator = new Orchestrator(
   hub,
   resolveMaxAgents(MAX_AGENTS, storedMaxAgents)
 );
-// Interactive terminal sessions (opened from the task "Terminal" tab). Each
-// session spawns a shell in the task's worktree so the operator can inspect what
-// the OpenCode agent is doing or drive it manually. Output is streamed back over
-// the WS hub to clients subscribed to the task.
-const now = () => new Date().toISOString();
-const terminalService = new TerminalSessionService({
-  onOpened: (taskId, runId, cols, rows) =>
-    hub.broadcastToTask(taskId, { type: "terminal_opened", taskId, runId, cols, rows }),
-  onOutput: (taskId, runId, stream, chunk) =>
-    hub.broadcastToTask(taskId, {
-      type: "terminal_output",
-      taskId,
-      runId,
-      stream,
-      chunk,
-      timestamp: now(),
-    }),
-  onClosed: (taskId, runId, exitCode) =>
-    hub.broadcastToTask(taskId, {
-      type: "terminal_closed",
-      taskId,
-      runId,
-      exitCode,
-      timestamp: now(),
-    }),
-  onError: (taskId, runId, message) =>
-    hub.broadcastToTask(taskId, {
-      type: "terminal_output",
-      taskId,
-      runId,
-      stream: "stderr",
-      chunk: `\n[terminal error] ${message}\n`,
-      timestamp: now(),
-    }),
-});
-
-/** Resolve the worktree directory for a task's most recent run (or null). */
-function resolveTaskWorktree(taskId: string): string | null {
-  try {
-    const row = db.raw
-      .query(
-        "SELECT worktree_path FROM agent_runs WHERE task_id = ? AND worktree_path IS NOT NULL ORDER BY created_at DESC LIMIT 1"
-      )
-      .get(taskId) as { worktree_path: string } | undefined;
-    return row?.worktree_path ?? null;
-  } catch {
-    return null;
-  }
-}
-
 const agentTemplates = new AgentTemplateRegistry();
 const skillsLoader = new SkillsLoader();
 validateSkills(skillsLoader)
@@ -141,6 +93,19 @@ validateSkills(skillsLoader)
     console.error("[startup] Skills validation failed with error:", err);
   });
 const skillRegistry = new SkillRegistryService();
+const terminalController = new TerminalController({
+  db,
+  git,
+  registry,
+  hub,
+  skills: skillsLoader,
+});
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    terminalController.service.closeAll();
+    process.exit(0);
+  });
+}
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
 scheduleRunner.start();
@@ -159,11 +124,14 @@ try {
   console.warn("[startup] Failed to cleanup orphaned runs:", err);
 }
 
-// Clean up all worked workspaces at startup to prevent PVC storage exhaustion
+// Clean up stale workspaces at startup to prevent PVC storage exhaustion. Workspaces of
+// unfinished terminal sessions hold the user's work in progress and are kept.
 try {
   const workspacesPath = join(DATA_DIR, "workspaces");
-  await rm(workspacesPath, { recursive: true, force: true });
-  console.log(`[startup] Cleaned up stale workspaces at ${workspacesPath}`);
+  const { removed, kept } = await cleanupWorkspaces(db, workspacesPath);
+  console.log(
+    `[startup] Cleaned up ${removed} stale workspaces at ${workspacesPath} (kept ${kept} terminal workspaces)`
+  );
 } catch (err) {
   console.warn("[startup] Failed to cleanup stale workspaces:", err);
 }
@@ -242,6 +210,7 @@ api.route("/engines", createEnginesRouter(registry, orchestrator));
 api.route("/workspaces", createWorkspacesRouter(db));
 api.route("/settings", createSettingsRouter(db, providerRegistry, skillsLoader, orchestrator));
 api.route("/skills", createSkillsRouter(skillsLoader, skillRegistry, db));
+api.route("/terminal", createTerminalRouter(db, terminalController));
 api.route("/stats", createStatsRouter(db));
 api.route("/reviews", createReviewsRouter(db));
 api.route("/runtimes", createRuntimesRouter(db, registry, orchestrator, DATA_DIR, MAX_AGENTS));
@@ -299,7 +268,9 @@ const server = Bun.serve({
     if (url.pathname === "/ws") {
       const workspaceId = url.searchParams.get("workspaceId") || null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const success = (server as any).upgrade(req, { data: { workspaceId } });
+      const success = (server as any).upgrade(req, {
+        data: { workspaceId, authenticated: isRequestAuthenticated(db, req) },
+      });
       if (success) return undefined;
     }
     return app.fetch(req);
@@ -320,23 +291,56 @@ const server = Bun.serve({
           hub.subscribe(client, msg.taskId);
         } else if (msg.type === "unsubscribe" && msg.taskId) {
           hub.unsubscribe(client, msg.taskId);
-        } else if (msg.type === "terminal_open" && msg.taskId) {
-          hub.subscribe(client, msg.taskId);
-          terminalService.openSession({
-            taskId: msg.taskId,
-            runId: msg.runId ?? null,
-            cwd: resolveTaskWorktree(msg.taskId) ?? undefined,
-            cols: msg.cols,
-            rows: msg.rows,
-          });
-        } else if (msg.type === "terminal_input" && msg.taskId) {
-          terminalService.sendInput(msg.taskId, msg.input);
-        } else if (msg.type === "terminal_resize" && msg.taskId) {
-          terminalService.resize(msg.taskId, msg.cols, msg.rows);
-        } else if (msg.type === "terminal_signal" && msg.taskId) {
-          terminalService.signal(msg.taskId, msg.signal);
-        } else if (msg.type === "terminal_close" && msg.taskId) {
-          terminalService.closeSession(msg.taskId);
+        } else if (typeof msg.type === "string" && msg.type.startsWith("terminal_")) {
+          // A terminal is a shell on the server: never serve it to unauthenticated sockets.
+          if (!(ws.data as { authenticated?: boolean } | undefined)?.authenticated) {
+            ws.send(JSON.stringify({ type: "error", message: "Authentication required" }));
+            return;
+          }
+          if (!msg.taskId) return;
+          if (msg.type === "terminal_open") {
+            // Attach: the session itself is started over HTTP (POST /api/terminal/:id/start).
+            hub.subscribe(client, msg.taskId);
+            const info = terminalController.service.getInfo(msg.taskId);
+            if (info) {
+              ws.send(
+                JSON.stringify({
+                  type: "terminal_opened",
+                  taskId: msg.taskId,
+                  runId: info.runId,
+                  cols: info.cols,
+                  rows: info.rows,
+                })
+              );
+              terminalController.snapshotTo(msg.taskId, (replay) => {
+                if (!replay) return;
+                try {
+                  ws.send(
+                    JSON.stringify({
+                      type: "terminal_output",
+                      taskId: msg.taskId,
+                      runId: info.runId,
+                      stream: "stdout",
+                      chunk: replay,
+                      timestamp: new Date().toISOString(),
+                      replay: true,
+                    })
+                  );
+                } catch {
+                  // The socket closed while the snapshot was being prepared.
+                }
+              });
+            }
+          } else if (msg.type === "terminal_input" && typeof msg.input === "string") {
+            terminalController.input(msg.taskId, msg.input);
+          } else if (msg.type === "terminal_resize") {
+            terminalController.resize(msg.taskId, Number(msg.cols), Number(msg.rows));
+          } else if (msg.type === "terminal_signal") {
+            terminalController.signal(msg.taskId, msg.signal);
+          } else if (msg.type === "terminal_close") {
+            // Detach only: closing a panel must not kill the agent session.
+            hub.unsubscribe(client, msg.taskId);
+          }
         }
       } catch {
         // ignore malformed messages

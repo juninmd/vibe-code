@@ -27,6 +27,8 @@ import type {
   TaskSchedule,
   TaskScheduleWithTask,
   TaskWithRun,
+  TerminalStartRequest,
+  TerminalState,
   TestConnectionResult,
   UpdateSettingsRequest,
   UpdateTaskRequest,
@@ -330,6 +332,23 @@ export const api = {
       const query = params.toString();
       return request<SessionBoardResponse>(`/sessions${query ? `?${query}` : ""}`);
     },
+  },
+
+  terminal: {
+    state: (taskId: string) => request<TerminalState>(`/terminal/${taskId}/state`),
+    start: (taskId: string, data: TerminalStartRequest = {}) =>
+      request<TerminalState>(`/terminal/${taskId}/start`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    stop: (taskId: string) =>
+      request<{ stopped: boolean }>(`/terminal/${taskId}/stop`, { method: "POST" }),
+    setSkills: (taskId: string, skills: string[]) =>
+      request<TerminalState>(`/terminal/${taskId}/skills`, {
+        method: "PUT",
+        body: JSON.stringify({ skills }),
+      }),
+    finish: (taskId: string) => request<Task>(`/terminal/${taskId}/finish`, { method: "POST" }),
   },
 
   engines: {

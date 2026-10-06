@@ -6,6 +6,7 @@ import type {
   WsClientMessage,
   WsServerMessage,
 } from "@vibe-code/shared";
+import { HARNESS_ENGINES, MANUAL_TASK_TAG } from "@vibe-code/shared";
 import {
   lazy,
   Suspense,
@@ -26,6 +27,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
+import { publishTerminalEvent } from "./hooks/terminalBus";
 import { useApiHealth } from "./hooks/useApiHealth";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
@@ -48,6 +50,9 @@ const CommandPalette = lazy(() =>
 );
 const EnginesPanel = lazy(() =>
   import("./components/EnginesPanel").then((m) => ({ default: m.EnginesPanel }))
+);
+const TaskPanel = lazy(() =>
+  import("./components/TaskPanel").then((m) => ({ default: m.TaskPanel }))
 );
 const SessionBoard = lazy(() =>
   import("./components/SessionBoard").then((m) => ({ default: m.SessionBoard }))
@@ -108,14 +113,6 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   const merged = [...existing, ...unique];
   if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
-}
-
-interface TerminalChunk {
-  id: number;
-  runId: string | null;
-  stream: "stdout" | "stderr";
-  chunk: string;
-  timestamp: string;
 }
 
 function LoginScreen({
@@ -298,6 +295,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
   const [selectedAgent, _setSelectedAgent] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithRun | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -335,7 +333,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     return { engine: null, priority: null, hasPR: false, tags: [], labelIds: [] };
   });
   const [liveLogs, setLiveLogs] = useState<Record<string, AgentLog[]>>({});
-  const [terminalLogs, setTerminalLogs] = useState<Record<string, TerminalChunk[]>>({});
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedLogCursorRef = useRef(0);
@@ -551,60 +548,26 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           }
           break;
         case "terminal_opened":
-          if (sel?.id === msg.taskId) {
-            startTransition(() => {
-              setTerminalLogs((prev) => ({ ...prev, [msg.taskId]: prev[msg.taskId] ?? [] }));
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "opened",
+            runId: msg.runId,
+            cols: msg.cols,
+            rows: msg.rows,
+          });
           break;
         case "terminal_output":
-          if (sel?.id === msg.taskId) {
-            const stream: "stdout" | "stderr" = msg.stream;
-            const runId = msg.runId;
-            const chunk = msg.chunk;
-            const timestamp = msg.timestamp;
-            startTransition(() => {
-              setTerminalLogs((prev) => {
-                const existing = prev[msg.taskId] ?? [];
-                const entry: TerminalChunk = {
-                  id: Date.now(),
-                  runId,
-                  stream,
-                  chunk,
-                  timestamp,
-                };
-                const next: TerminalChunk[] = [...existing, entry];
-                return {
-                  ...prev,
-                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
-                } as Record<string, TerminalChunk[]>;
-              });
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "output",
+            chunk: msg.chunk,
+            replay: msg.replay === true,
+          });
           break;
         case "terminal_closed":
-          if (sel?.id === msg.taskId) {
-            const runId = msg.runId;
-            const timestamp = msg.timestamp;
-            const exitCode = msg.exitCode;
-            startTransition(() => {
-              setTerminalLogs((prev) => {
-                const existing = prev[msg.taskId] ?? [];
-                const entry: TerminalChunk = {
-                  id: Date.now(),
-                  runId,
-                  stream: "stderr",
-                  chunk: `\n[session closed: exit ${exitCode ?? "unknown"}]\n`,
-                  timestamp,
-                };
-                const next: TerminalChunk[] = [...existing, entry];
-                return {
-                  ...prev,
-                  [msg.taskId]: next.slice(-MAX_LIVE_LOGS_PER_TASK),
-                } as Record<string, TerminalChunk[]>;
-              });
-            });
-          }
+          publishTerminalEvent(msg.taskId, {
+            kind: "closed",
+            exitCode: msg.exitCode,
+            reason: msg.reason ?? "exit",
+          });
           break;
         case "execution_event":
           if (sel?.id === msg.taskId) {
@@ -777,6 +740,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const handleTaskClick = useCallback(
     (task: TaskWithRun) => {
       if (selectedTask?.id) unsubscribe(selectedTask.id);
+      setShowAdvanced(false);
       setSelectedTask(task);
       subscribe(task.id);
     },
@@ -785,6 +749,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
   const handleCloseDetail = useCallback(() => {
     if (selectedTask) unsubscribe(selectedTask.id);
+    setShowAdvanced(false);
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
 
@@ -1002,6 +967,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const active = document.activeElement;
+      // A focused terminal owns every key (Esc, Ctrl+C/K/O/S, letters...): agent TUIs
+      // depend on them, so no board shortcut may fire while it has focus.
+      if (active instanceof HTMLElement && active.closest(".xterm")) return;
+      // With the task panel open the board is hidden: single-key board shortcuts
+      // (N, S, E, D, Delete...) must not act on it behind the user's back.
+      const taskPanelOpen = selectedTask !== null && !showAdvanced;
       const isTyping =
         active instanceof HTMLInputElement ||
         active instanceof HTMLTextAreaElement ||
@@ -1022,7 +993,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       }
 
       // Delete — delete selected task
-      if (e.key === "Delete" && selectedTask) {
+      if (e.key === "Delete" && selectedTask && !taskPanelOpen) {
         const active = document.activeElement;
         const isTypingInDetail =
           active instanceof HTMLInputElement ||
@@ -1110,7 +1081,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
         }
       }
 
-      if (isTyping) return;
+      if (isTyping || taskPanelOpen) return;
 
       // N — new task
       if (e.key === "n" || e.key === "N") {
@@ -1210,6 +1181,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     showIssueImporter,
     mobileSidebarOpen,
     selectedTask,
+    showAdvanced,
     search,
     handleCloseDetail,
     cloneTask,
@@ -1521,15 +1493,35 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
         {/* Task Detail Slide-over */}
         <Suspense fallback={null}>
-          {selectedTask && (
+          {selectedTask && !showAdvanced && (
+            <TaskPanel
+              task={selectedTask}
+              engines={engines}
+              connected={connected}
+              onWsSend={sendWsMessage}
+              onClose={handleCloseDetail}
+              onRetryPR={async (id) => {
+                await retryPR(id);
+                toast("Creating PR...", "info");
+              }}
+              onOpenAdvanced={() => setShowAdvanced(true)}
+              onClone={async (id) => {
+                const cloned = await cloneTask(id);
+                toast(`"${cloned.title}" clonada`, "success");
+              }}
+              onDelete={handleDeleteTask}
+              onNotify={(message, kind) => toast(message, kind)}
+            />
+          )}
+
+          {selectedTask && showAdvanced && (
             <TaskDetail
               task={selectedTask}
               engines={engines}
               liveLogs={liveLogs[selectedTask.id] ?? []}
-              onClose={handleCloseDetail}
+              onClose={() => setShowAdvanced(false)}
               onLaunch={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await launchTask(id, engine, model);
                 toast("Agent started", "success");
               }}
@@ -1539,7 +1531,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               }}
               onRetry={async (id, engine, model) => {
                 setLiveLogs((prev) => ({ ...prev, [id]: [] }));
-                setTerminalLogs((prev) => ({ ...prev, [id]: [] }));
                 await retryTask(id, engine, model);
                 toast("Agent restarted", "success");
               }}
@@ -1582,8 +1573,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               onSendInput={(taskId, input) => {
                 send({ type: "agent_input", taskId, input });
               }}
-              terminalLogs={terminalLogs[selectedTask.id] ?? []}
-              onWsSend={sendWsMessage}
               onClone={async (id) => {
                 const cloned = await cloneTask(id);
                 toast(`"${cloned.title}" clonada`, "success");
@@ -1719,10 +1708,14 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               loopConfig,
               ...data
             }) => {
+              // Harness tasks are driven by hand in their terminal; the tag keeps the
+              // autopilot from launching a second, headless agent on them.
+              const handsOn =
+                !schedule && (HARNESS_ENGINES as readonly string[]).includes(data.engine ?? "");
               const task = await createTask({
                 ...data,
                 baseBranch,
-                tags,
+                tags: handsOn ? [...(tags ?? []), MANUAL_TASK_TAG] : tags,
                 model,
                 agentId,
                 workflowId,
@@ -1736,6 +1729,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   enabled: true,
                 });
                 toast(`"${data.title}" agendada (${schedule.cronExpression})`, "success");
+              } else if (autoLaunch && handsOn) {
+                handleTaskClick(task as TaskWithRun);
               } else if (autoLaunch) {
                 await launchTask(task.id, data.engine, model);
                 toast(`"${data.title}" iniciada`, "success");

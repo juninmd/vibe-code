@@ -5,7 +5,6 @@ import type {
   TaskSchedule,
   TaskWithRun,
   UpdateTaskRequest,
-  WsClientMessage,
 } from "@vibe-code/shared";
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -15,7 +14,6 @@ import { formatDateTime, formatDuration } from "../utils/date";
 import { DiffViewer } from "./DiffViewer";
 import { ExecutionTimeline } from "./ExecutionTimeline";
 import { TaskTagsEditor } from "./TaskTags";
-import { TerminalSessionPanel } from "./TerminalSessionPanel";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { getProviderFromUrl } from "./ui/git-icons";
@@ -32,14 +30,6 @@ interface TaskDetailProps {
   onRetryPR: (taskId: string) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
   onSendInput: (taskId: string, input: string) => void;
-  terminalLogs?: Array<{
-    id: number;
-    runId: string | null;
-    stream: "stdout" | "stderr";
-    chunk: string;
-    timestamp: string;
-  }>;
-  onWsSend?: (message: WsClientMessage) => void;
   onApprove?: (taskId: string) => Promise<void>;
   onReject?: (taskId: string) => Promise<void>;
   onClone?: (taskId: string) => Promise<void>;
@@ -52,7 +42,6 @@ interface TaskDetailProps {
 
 type ActiveTab =
   | "info"
-  | "terminal"
   | "execution"
   | "diff"
   | "artifacts"
@@ -123,7 +112,6 @@ const cleanStatusLabel: Record<string, string> = {
 
 const headerTabs = [
   { id: "info", label: "Info" },
-  { id: "terminal", label: "Terminal" },
   { id: "execution", label: "Execution" },
   { id: "diff", label: "Diff" },
   { id: "skills", label: "Skills" },
@@ -419,8 +407,6 @@ export function TaskDetail({
   onRetryPR,
   onDelete,
   onSendInput,
-  terminalLogs = [],
-  onWsSend,
   onApprove,
   onReject,
   onClone,
@@ -928,9 +914,6 @@ export function TaskDetail({
                   >
                     <div className="flex items-center gap-2">
                       {label}
-                      {id === "terminal" && isRunning && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-info shadow-[0_0_8px_var(--info)] animate-pulse" />
-                      )}
                       {id === "cost" && totalTokens > 0 && (
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded-sm font-bold ${isActive ? "bg-warning/20 text-warning" : "bg-white/5 text-muted"}`}
@@ -1535,18 +1518,6 @@ export function TaskDetail({
               {(task.status === "scheduled" || task.status === "backlog") && (
                 <ScheduleSection taskId={task.id} onTaskRefresh={onTaskRefresh ?? (() => {})} />
               )}
-            </div>
-          )}
-
-          {/* ── Terminal Tab (real terminal session channel) ── */}
-          {activeTab === "terminal" && (
-            <div className="flex-1 min-h-0">
-              <TerminalSessionPanel
-                taskId={task.id}
-                runId={task.latestRun?.id ?? null}
-                chunks={terminalLogs}
-                onWsSend={onWsSend}
-              />
             </div>
           )}
 

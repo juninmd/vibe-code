@@ -68,7 +68,9 @@ export type RunPhase =
   | "fixing"
   | "pr_creating"
   | "stalled"
-  | "timed_out";
+  | "timed_out"
+  /** Interactive agent terminal driven by hand (no headless pipeline). */
+  | "terminal";
 export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
 
 export const TASK_COLUMNS: TaskStatus[] = [
@@ -552,6 +554,38 @@ export type WsProtocolVersion = "v1" | "v2";
 
 export type TerminalSignal = "sigint" | "sigterm" | "sighup";
 
+/** Engines that can run as an interactive terminal harness inside a task. */
+export const HARNESS_ENGINES = ["claude-code", "opencode"] as const;
+export type HarnessEngine = (typeof HARNESS_ENGINES)[number];
+
+/**
+ * Tag for tasks driven by hand in a terminal. The autopilot (headless auto-launch of
+ * Todo tasks, recovery after restarts) leaves them alone.
+ */
+export const MANUAL_TASK_TAG = "manual";
+
+export interface TerminalStartRequest {
+  /** A harness, or "shell" for a plain shell in the task workspace. */
+  engine?: HarnessEngine | "shell";
+  model?: string;
+  /** Names of skills (from the skills index) to inject into the workspace. */
+  skills?: string[];
+  cols?: number;
+  rows?: number;
+}
+
+export interface TerminalState {
+  taskId: string;
+  /** True while a PTY session is running for this task. */
+  live: boolean;
+  runId: string | null;
+  engine: HarnessEngine | "shell" | null;
+  /** Skills currently injected into the task workspace. */
+  skills: string[];
+  /** Workspace path of the latest session, when one exists. */
+  cwd: string | null;
+}
+
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string; version?: WsProtocolVersion }
   | { type: "unsubscribe"; taskId: string; version?: WsProtocolVersion }
@@ -679,6 +713,8 @@ export type WsServerMessage =
       chunk: string;
       stream: "stdout" | "stderr";
       timestamp: string;
+      /** True when the chunk is the scrollback replayed to a newly attached client. */
+      replay?: boolean;
     }
   | {
       type: "terminal_closed";
@@ -686,6 +722,7 @@ export type WsServerMessage =
       runId: string | null;
       exitCode: number | null;
       timestamp: string;
+      reason?: "exit" | "closed";
     }
   | { type: "error"; message: string };
 

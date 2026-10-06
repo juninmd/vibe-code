@@ -29,10 +29,6 @@ vi.mock("./ExecutionTimeline", () => ({
   ExecutionTimeline: () => <div>execution-timeline-mock</div>,
 }));
 
-vi.mock("./TerminalSessionPanel", () => ({
-  TerminalSessionPanel: () => <div>terminal-session-mock</div>,
-}));
-
 const baseTask: TaskWithRun = {
   id: "task-1",
   title: "Execution split",
@@ -103,12 +99,9 @@ describe("TaskDetail tabs", () => {
     expect(screen.queryByText("Jump to")).not.toBeInTheDocument();
   });
 
-  it("switches to terminal tab when terminal tab is clicked", async () => {
+  it("no longer embeds a terminal: that lives in the task panel", async () => {
     await renderDetail();
-    await act(async () => {
-      await userEvent.click(screen.getByRole("button", { name: "Terminal" }));
-    });
-    expect(screen.getByText("terminal-session-mock")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Terminal" })).not.toBeInTheDocument();
   });
 
   it("shows real-data presentation readiness on the info tab", async () => {

@@ -47,6 +47,7 @@ Repository contract entrypoints:
 - **`agents/registry.ts`** — discovers and registers available engines at startup
 - **`agents/orchestrator.ts`** — manages concurrent runs (default max 4), git worktree creation, task lifecycle, and broadcasts WS events
 - **`agents/engines/`** — one file per engine; each spawns the CLI tool via `Bun.spawn` and streams output
+- **`terminal/`** — interactive task terminals: `session-service.ts` (Bun PTY + headless screen snapshot), `harness.ts` (Claude Code / OpenCode launch + skill injection), `controller.ts` (worktree, run/task lifecycle); routes in `api/terminal.ts` (see `docs/terminal.md`)
 - **`sessions/`** — read-only readers for the local CLI session stores (OpenCode, Claude Code, Antigravity) plus `SessionService`, which projects them onto kanban cards
 - **`db/`** — SQLite via Bun; tables: `repositories`, `tasks`, `agent_runs`, `agent_logs`; WAL mode + foreign keys enabled
 - **`git/git-service.ts`** — clones repos as bare, creates per-task git worktrees under `~/.vibe-code/workspaces/`
@@ -57,7 +58,7 @@ Repository contract entrypoints:
 
 - **`api/client.ts`** — typed fetch wrapper over the REST API
 - **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)
-- **`components/`** — `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
+- **`components/`** — `TaskPanel` (terminal-first task view with `TaskTerminal` xterm + `SkillPicker`), `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
 
 ### Session board data flow
 

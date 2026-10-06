@@ -1,13 +1,22 @@
 # Changelog
 
 ## [Unreleased]
+### Added
+- **Task terminal**: every card runs Claude Code, OpenCode or a plain shell in a real terminal inside the task panel (Bun PTY on the server, xterm.js in the browser) in an isolated worktree. Sessions survive closing the panel or reloading the page (the server keeps a headless screen model and sends a rendered-screen snapshot on reattach). See `docs/terminal.md`.
+- **Skill injection**: pick skills per task; they are copied into `.claude/skills` / `.opencode/skill` of the worktree and hidden from git. The built-in `vibe-code-orchestrator` skill lets the agent create sub-tasks on the board.
+- `POST /api/terminal/:taskId/{start,stop,finish}`, `GET .../state`, `PUT .../skills`; new `MANUAL_TASK_TAG` and `terminal` run phase.
+
 ### Changed
+- **Task redesign**: the card shows only title, engine, repo and live state (priority is an edge colour; badges appear only for exceptional states). The task view is terminal-first (Terminal / Changes / Details); execution timeline, reviews, telemetry and schedules stay under "Advanced view". "Create & open" replaces headless auto-launch for Claude Code / OpenCode tasks.
+- The autopilot (backlog sweep, restart recovery) and the startup workspace cleanup now leave hand-driven terminal tasks and their worktrees alone.
 - **Simplified task UI**: the task detail Info tab went from ~30 fields in 5 sections to a single row (branch, pull request, issue when linked, priority), the description, and a collapsed "Technical details". Removed readiness tiles, Agent/Workflow/Approval, artifact/dependency/subtask counters, duplicated usage/cost (still in Telemetry) and the repo field already linked in the header. The New Task dialog is now one column (repository, base branch, title, description, engine, model, priority) with scheduling, retry loop, structured brief and specialized agent under "Advanced".
 
 ### Removed
 - **Dead task metadata fields**: dropped `Task.taskType` / `Task.taskComplexity` and their `TaskType`, `TaskComplexity`, `TASK_TYPES`, `TASK_TYPE_META`, `TASK_COMPLEXITY_LEVELS` and `TASK_COMPLEXITY_META` definitions. Nothing ever wrote them — no DB column, no create/update payload, no server code path — so they only added badges that could never render. `SessionCard` follows the same rule: it carries only the fields a card actually shows.
 
 ### Fixed
+- WebSocket: a stale socket's `onclose` (React StrictMode) cleared the live socket, so no message was ever sent in dev.
+- `terminal_*` WebSocket messages now require an authenticated socket.
 - Fixed task launch failing with `git fetch exit 128` when the bare repo was deleted from disk but the DB still said `ready` — the orchestrator now self-heals by re-cloning.
 - Fixed post-validation `git commit` failing with "nothing to commit" when only `.vibe-code/` harness files changed — commit now checks the staged index, and retries with `--no-verify` when target-repo hooks (husky/commitlint) reject orchestrator commits.
 - Fixed OpenCode error events being logged as `[object Object]`, masking the real failure cause.

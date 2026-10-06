@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { AgentRun, Task } from "@vibe-code/shared";
+import { type AgentRun, MANUAL_TASK_TAG, type Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { SkillsLoader } from "../skills/loader";
@@ -133,6 +133,15 @@ export class Orchestrator {
       });
   }
 
+  /**
+   * Tasks driven by hand in a terminal are never touched by the autopilot: it would
+   * start a second, headless agent on the same branch.
+   */
+  private isHandDriven(task: Task): boolean {
+    if (task.tags?.includes(MANUAL_TASK_TAG)) return true;
+    return this.db.runs.getLatestByTask(task.id)?.currentStatus === "terminal";
+  }
+
   async sweepBacklog(): Promise<void> {
     if (this.activeCount >= this.maxConcurrent) return;
 
@@ -152,6 +161,7 @@ export class Orchestrator {
     for (const task of backlog) {
       if (this.activeCount >= this.maxConcurrent) break;
       if (this.activeRuns.has(task.id)) continue;
+      if (this.isHandDriven(task)) continue;
 
       // Check if blocked by dependencies
       if (task.dependsOn.length > 0) {
@@ -615,8 +625,15 @@ export class Orchestrator {
       low: 1,
       none: 0,
     };
-    const orphans = this.db.tasks
-      .list(undefined, "in_progress")
+    const inProgress = this.db.tasks.list(undefined, "in_progress");
+    // A terminal session died with the server, but its workspace is intact: park the
+    // task in Todo (the autopilot skips it) so the user can resume it by hand.
+    for (const task of inProgress.filter((t) => this.isHandDriven(t))) {
+      this.db.tasks.update(task.id, { status: "backlog" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    }
+    const orphans = inProgress
+      .filter((task) => !this.isHandDriven(task))
       .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
     if (orphans.length === 0) return;
     // Block ALL — no subprocesses at startup
