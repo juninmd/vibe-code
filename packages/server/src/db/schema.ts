@@ -177,6 +177,10 @@ export function initDatabase(dbPath: string): Database {
   if (!taskColNames.includes("issue_number")) {
     db.exec("ALTER TABLE tasks ADD COLUMN issue_number INTEGER");
   }
+  // Migration: lane (board column) the task and its issue last agreed on
+  if (!taskColNames.includes("issue_lane")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN issue_lane TEXT");
+  }
   // Paperclip-inspired: explicit goal alignment for tasks.
   if (!taskColNames.includes("goal")) {
     db.exec("ALTER TABLE tasks ADD COLUMN goal TEXT");

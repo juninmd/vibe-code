@@ -76,8 +76,8 @@ export const darkTheme: Theme = {
 
     textPrimary: "#e4e4e7",
     textSecondary: "#a1a1aa",
-    textMuted: "#71717a",
-    textDimmed: "#52525b",
+    textMuted: "#919198",
+    textDimmed: "#828289",
 
     borderDefault: "rgba(63, 63, 70, 0.5)",
     borderSubtle: "rgba(255, 255, 255, 0.055)",
@@ -126,8 +126,8 @@ export const lightTheme: Theme = {
 
     textPrimary: "#0f172a",
     textSecondary: "#334155",
-    textMuted: "#64748b",
-    textDimmed: "#94a3b8",
+    textMuted: "#556376",
+    textDimmed: "#65707e",
 
     borderDefault: "rgba(30, 41, 59, 0.12)",
     borderSubtle: "rgba(30, 41, 59, 0.06)",
@@ -176,8 +176,8 @@ export const draculaTheme: Theme = {
 
     textPrimary: "#f8f8f2",
     textSecondary: "#bfbfca",
-    textMuted: "#6272a4",
-    textDimmed: "#44475a",
+    textMuted: "#adb6d0",
+    textDimmed: "#a3a5ae",
 
     borderDefault: "rgba(68, 71, 90, 0.6)",
     borderSubtle: "rgba(255, 255, 255, 0.06)",
@@ -226,8 +226,8 @@ export const githubDarkTheme: Theme = {
 
     textPrimary: "#c9d1d9",
     textSecondary: "#8b949e",
-    textMuted: "#6e7681",
-    textDimmed: "#484f58",
+    textMuted: "#878e97",
+    textDimmed: "#80858b",
 
     borderDefault: "rgba(48, 54, 61, 0.8)",
     borderSubtle: "rgba(240, 246, 252, 0.1)",

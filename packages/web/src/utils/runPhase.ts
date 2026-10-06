@@ -12,6 +12,7 @@ export const RUN_PHASE_LABELS: Record<RunPhase, string> = {
   pr_creating: "Creating PR",
   stalled: "Stalled",
   timed_out: "Timed out",
+  terminal: "Terminal session",
 };
 
 export function getPhaseLabel(phase: string | null | undefined): string {

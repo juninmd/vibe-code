@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@vibe-code/shared": "workspace:*",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0",
     "croner": "^10.0.1",
     "dotenv": "^17.4.2",
     "hono": "^4.12.26",
