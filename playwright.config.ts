@@ -93,6 +93,8 @@ export default defineConfig({
       env: {
         ...process.env,
         VITE_SERVER_URL: E2E.serverUrl,
+        // The dev client opens its WebSocket on this port.
+        VITE_API_PORT: String(SERVER_PORT),
       },
     },
   ],

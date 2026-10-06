@@ -1,7 +1,3 @@
-/**
- * Integration tests for ConflictResolver — end-to-end flow:
- *   conflict detected → child task created → prompt has --force-with-lease → no --force
- */
 import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { createDb } from "../db";
 import type { BroadcastHub } from "../ws/broadcast";
@@ -65,7 +61,6 @@ describe("ConflictResolver", () => {
     orchestrator = makeOrchestrator(db);
     resolver = new ConflictResolver(db, orchestrator as any);
 
-    // Create a test repo
     const repo = db.repos.create({
       url: "https://github.com/owner/test-repo",
       defaultBranch: "main",
@@ -75,7 +70,6 @@ describe("ConflictResolver", () => {
 
   describe("conflict detection — prompt safety", () => {
     it("generated prompt contains git push --force-with-lease", async () => {
-      // Create a parent task with a PR
       const parent = db.tasks.create({
         repoId,
         title: "feat: add awesome feature",
@@ -85,7 +79,6 @@ describe("ConflictResolver", () => {
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/42");
       db.tasks.updateField(parent.id, "branch_name", "feat/awesome");
 
-      // Mock isPRConflicting to return true
       const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
         ok: true,
         json: async () => ({ mergeable: false, mergeable_state: "dirty" }),
@@ -93,25 +86,20 @@ describe("ConflictResolver", () => {
 
       db.settings.set("github_token", "test-token");
 
-      // Advance the internal timer so check() actually runs
       (resolver as any).lastCheckAt = 0;
 
       await resolver.check();
 
       fetchSpy.mockRestore();
 
-      // Child conflict task must exist
       const children = db.tasks.listChildren(parent.id);
       const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
       expect(conflictTask).toBeDefined();
 
-      // Prompt must contain --force-with-lease
       expect(conflictTask?.description).toContain("--force-with-lease");
 
-      // Prompt must NOT contain bare --force (without --lease)
       const descLines = conflictTask?.description?.split("\n") ?? [];
       const hasBareForcePush = descLines.some((line) => {
-        // Match `git push --force` but not `git push --force-with-lease`
         return /git push .*--force(?!-with-lease)/.test(line);
       });
       expect(hasBareForcePush).toBe(false);
@@ -126,7 +114,6 @@ describe("ConflictResolver", () => {
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/99");
       db.tasks.updateField(parent.id, "branch_name", "feat/another");
 
-      // Manually create an existing conflict child
       db.tasks.create({
         repoId,
         title: "fix(conflicts): existing",
@@ -148,7 +135,6 @@ describe("ConflictResolver", () => {
 
       const children = db.tasks.listChildren(parent.id);
       const conflictTasks = children.filter((t) => t.tags?.includes("conflict-resolution"));
-      // Must still be exactly 1 — no duplicate created
       expect(conflictTasks).toHaveLength(1);
     });
 
@@ -156,12 +142,10 @@ describe("ConflictResolver", () => {
       const fetchSpy = spyOn(globalThis, "fetch");
       db.settings.set("github_token", "test-token");
 
-      // First call (timer not set yet) — sets lastCheckAt
-      (resolver as any).lastCheckAt = Date.now(); // already just ran
+      (resolver as any).lastCheckAt = Date.now();
 
       await resolver.check();
 
-      // fetch must NOT have been called because timer throttles
       expect(fetchSpy).not.toHaveBeenCalled();
       fetchSpy.mockRestore();
     });
@@ -260,11 +244,8 @@ describe("ConflictResolver", () => {
 
       const fetchSpy = spyOn(globalThis, "fetch");
 
-      // Clear environment variable if any
       const originalEnvToken = process.env.GITHUB_TOKEN;
       delete process.env.GITHUB_TOKEN;
-
-      // Clear token in db
       db.settings.set("github_token", "");
 
       (resolver as any).lastCheckAt = 0;
@@ -272,13 +253,11 @@ describe("ConflictResolver", () => {
 
       expect(fetchSpy).not.toHaveBeenCalled();
 
-      // restore
       if (originalEnvToken) process.env.GITHUB_TOKEN = originalEnvToken;
       fetchSpy.mockRestore();
     });
 
     it("skips if no candidates are active", async () => {
-      // Create only inactive tasks
       const parent = db.tasks.create({
         repoId,
         title: "feat: inactive",
@@ -393,15 +372,17 @@ describe("ConflictResolver", () => {
     db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
     db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (url: any) => {
-      if (typeof url === "string" && url.includes("github.com")) {
-        return { ok: true, json: async () => ({ mergeable: false }) } as any;
-      }
-      if (typeof url === "string" && url.includes("api.telegram.org")) {
-        throw new Error("Telegram failure");
-      }
-      return { ok: true, json: async () => ({}) } as any;
-    }) as unknown as typeof fetch);
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+      async (url: RequestInfo | URL) => {
+        if (typeof url === "string" && url.includes("github.com")) {
+          return { ok: true, json: async () => ({ mergeable: false }) } as any;
+        }
+        if (typeof url === "string" && url.includes("api.telegram.org")) {
+          throw new Error("Telegram failure");
+        }
+        return { ok: true, json: async () => ({}) } as any;
+      } as unknown as typeof fetch
+    );
 
     db.settings.set("github_token", "test-token");
     db.settings.set("telegram_enabled", "true");
@@ -483,7 +464,7 @@ describe("ConflictResolver", () => {
 
       await resolver.notifyConflictResolved(launchTask as any);
 
-      expect(fetchSpy).toHaveBeenCalled(); // It should fallback to task.repoId if repo is missing in Telegram message
+      expect(fetchSpy).toHaveBeenCalled();
       fetchSpy.mockRestore();
       repoSpy.mockRestore();
     });
