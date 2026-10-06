@@ -143,7 +143,7 @@ export async function runPersonaReview(opts: {
     spawn = Bun.spawn,
   } = opts;
 
-  const spawnFn = opts._spawnMock || Bun.spawn;
+  const spawnFn = opts._spawnMock || spawn;
   const diff = await getWorktreeDiff(worktreePath, defaultBranch, spawnFn);
   const label = PERSONA_LABELS[persona];
   const runtime = pickReviewRuntime(reviewEngine);

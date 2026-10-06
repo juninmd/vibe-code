@@ -88,7 +88,7 @@ describe("reviewer engine", () => {
       reviewEngine: "claude-code",
       litellmKey: "", // Use native key fallback
       litellmBaseUrl: "",
-      nativeAnthropicKey: "native-claude-key"
+      nativeAnthropicKey: "native-claude-key",
     });
 
     expect(result.persona).toBe("backend");
@@ -99,7 +99,7 @@ describe("reviewer engine", () => {
   });
 
   test("runPersonaReview handles execution failure", async () => {
-    const mockSpawn = mock().mockImplementation((cmd: string[], options?: any) => {
+    const mockSpawn = mock().mockImplementation((cmd: string[], _options?: any) => {
       if (cmd[0] === "git") {
         return {
           stdout: new Blob(["+ const c = 3;"]).stream(),
@@ -131,7 +131,9 @@ describe("reviewer engine", () => {
 
     expect(result.persona).toBe("security");
     expect(result.content).toContain("INFO: [reviewer:claude:stderr] Command failed");
-    expect(result.content).toContain("BLOCKER: [reviewer] Security review failed (claude) with exit code 1");
+    expect(result.content).toContain(
+      "BLOCKER: [reviewer] Security review failed (claude) with exit code 1"
+    );
     expect(result.hasBlocker).toBe(true);
     expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
