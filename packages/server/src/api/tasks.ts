@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { access, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  AgentRun,
-  DiffFileSummary,
-  DiffSummary,
-  TaskUsageSummary,
-  TaskWithRun,
+import {
+  type AgentRun,
+  type DiffFileSummary,
+  type DiffSummary,
+  statusOfLane,
+  type TaskUsageSummary,
+  type TaskWithRun,
 } from "@vibe-code/shared";
 import { Cron } from "croner";
 import { Hono } from "hono";
@@ -25,6 +26,7 @@ import {
 } from "../agents/orchestrator/task-plan";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import type { LaneSyncService } from "../lanes/lane-sync";
 import {
   asForbiddenResponse,
   claimUnmappedRepoForWorkspace,
@@ -203,7 +205,12 @@ const importIssuesSchema = z.object({
   autoLabel: z.string().optional(),
 });
 
-export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitService) {
+export function createTasksRouter(
+  db: Db,
+  orchestrator: Orchestrator,
+  git?: GitService,
+  lanes?: LaneSyncService
+) {
   const router = new Hono();
   const memoryService = new MemoryService(db);
 
@@ -333,6 +340,9 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
 
   router.post("/clear-failed", (c) => {
     const repoId = c.req.query("repo_id");
+    for (const task of db.tasks.list(repoId)) {
+      if (task.status === "failed") void lanes?.forget(task);
+    }
     const count = db.tasks.clearFailed(repoId);
     return c.json({ data: { deleted: count } });
   });
@@ -412,13 +422,17 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
         .filter(Boolean)
         .join("\n");
 
+      // With lane sync on, the issue's own lane label decides the column.
+      const lane = lanes?.laneForLabels(repo, issue.labels) ?? null;
       const task = db.tasks.create({
         title: issue.title,
         description,
         repoId: parsed.data.repoId,
         tags: tags.length > 0 ? tags : undefined,
         issueUrl: issue.url,
+        ...(lane ? { status: statusOfLane(lane) } : {}),
       });
+      if (lane) db.tasks.setIssueLane(task.id, lane);
       created.push({ id: task.id, title: task.title, number: issue.number });
     }
 
@@ -470,6 +484,8 @@ export function createTasksRouter(db: Db, orchestrator: Orchestrator, git?: GitS
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
     db.tasks.remove(c.req.param("id"));
+    // Deleting a card takes its issue off the lanes, or the next sync would bring it back.
+    void lanes?.forget(task);
     return c.json({ data: { ok: true } });
   });
 

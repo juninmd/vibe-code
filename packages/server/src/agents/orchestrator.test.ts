@@ -105,6 +105,33 @@ describe("Orchestrator - edge cases", () => {
     expect((orch.launch as any).mock.calls.map((call: any[]) => call[0].id)).toEqual(["plain"]);
   });
 
+  it("sweepBacklog leaves issue-linked cards alone while lane sync is on", async () => {
+    const tasks = [
+      { id: "linked", priority: "high", dependsOn: [], tags: [], issueUrl: "https://x/issues/1" },
+      { id: "plain", priority: "low", dependsOn: [], tags: [] },
+    ];
+    const build = (laneSync: string) => {
+      const mockDb = {
+        tasks: { list: mock().mockReturnValue(tasks) },
+        runs: { getLatestByTask: mock().mockReturnValue(undefined) },
+        settings: { get: mock((key: string) => (key === "lane_sync_enabled" ? laneSync : null)) },
+      };
+      const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+      orch.launch = mock().mockResolvedValue({} as any);
+      return orch;
+    };
+    const launched = (orch: Orchestrator) =>
+      (orch.launch as any).mock.calls.map((call: any[]) => call[0].id);
+
+    const on = build("true");
+    await on.sweepBacklog();
+    expect(launched(on)).toEqual(["plain"]);
+
+    const off = build("false");
+    await off.sweepBacklog();
+    expect(launched(off)).toEqual(["linked", "plain"]);
+  });
+
   it("recoverInProgressTasks parks terminal tasks in Todo instead of re-running them", async () => {
     const tasks = [
       { id: "term", priority: "high", tags: [] },

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { api } from "../api/client";
 import { useTheme } from "../theme/ThemeProvider";
 import { themes } from "../theme/themes";
+import { LanesSettings } from "./LanesSettings";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Input } from "./ui/input";
@@ -10,9 +11,19 @@ import { Input } from "./ui/input";
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** Tab to show each time the dialog opens. */
+  initialTab?: Tab;
 }
 
-type Tab = "github" | "gitlab" | "litellm" | "apikeys" | "general" | "telegram" | "mcp";
+export type Tab =
+  | "github"
+  | "gitlab"
+  | "lanes"
+  | "litellm"
+  | "apikeys"
+  | "general"
+  | "telegram"
+  | "mcp";
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -1544,29 +1555,33 @@ function McpTab() {
   );
 }
 
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
-  const [tab, setTab] = useState<Tab>("github");
+export function SettingsDialog({ open, onClose, initialTab }: SettingsDialogProps) {
+  const [tab, setTab] = useState<Tab>(initialTab ?? "github");
+
+  useEffect(() => {
+    if (open && initialTab) setTab(initialTab);
+  }, [open, initialTab]);
 
   return (
     <Dialog open={open} onClose={onClose} title="Settings" size="2xl">
       {/* Modern High-End Tabs */}
       <div className="flex gap-2 mb-8 p-1.5 rounded-[1.25rem] bg-input/40 border border-white/5 backdrop-blur-md">
-        {(["github", "gitlab", "litellm", "apikeys", "general", "telegram", "mcp"] as Tab[]).map(
-          (t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
-                tab === t
-                  ? "bg-accent text-white shadow-lg shadow-accent/25"
-                  : "text-muted hover:text-primary hover:bg-white/5"
-              }`}
-            >
-              {t === "apikeys" ? "API Keys" : t === "mcp" ? "MCP" : t}
-            </button>
-          )
-        )}
+        {(
+          ["github", "gitlab", "lanes", "litellm", "apikeys", "general", "telegram", "mcp"] as Tab[]
+        ).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2.5 rounded-xl transition-all active-shrink cursor-pointer ${
+              tab === t
+                ? "bg-accent text-white shadow-lg shadow-accent/25"
+                : "text-muted hover:text-primary hover:bg-white/5"
+            }`}
+          >
+            {t === "apikeys" ? "API Keys" : t === "mcp" ? "MCP" : t}
+          </button>
+        ))}
       </div>
 
       <div className="min-h-[320px] max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
@@ -1585,6 +1600,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             showBaseUrl
           />
         )}
+
+        {tab === "lanes" && <LanesSettings />}
 
         {tab === "litellm" && <LiteLLMTab />}
 

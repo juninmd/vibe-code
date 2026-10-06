@@ -119,4 +119,27 @@ describe("TaskCard", () => {
     render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
+
+  it("links to the issue the card came from without opening the task", async () => {
+    const onClick = vi.fn();
+    const task = { ...baseTask, issueUrl: "https://github.com/o/r/issues/42" };
+    render(<TaskCard task={task} onClick={onClick} onRetryPR={vi.fn()} />);
+
+    const link = screen.getByRole("link", { name: "#42" });
+    expect(link).toHaveAttribute("href", "https://github.com/o/r/issues/42");
+    await userEvent.click(link);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("reads GitLab issue numbers too", () => {
+    const task = { ...baseTask, issueUrl: "https://gitlab.com/g/p/-/issues/7" };
+    render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "#7" })).toBeInTheDocument();
+  });
+
+  it("never turns a non-web issue URL into a link", () => {
+    const task = { ...baseTask, issueUrl: "javascript:alert(1)//issues/9" };
+    render(<TaskCard task={task} onClick={vi.fn()} onRetryPR={vi.fn()} />);
+    expect(screen.queryByRole("link", { name: "#9" })).not.toBeInTheDocument();
+  });
 });

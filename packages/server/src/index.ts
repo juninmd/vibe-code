@@ -15,6 +15,7 @@ import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
 import { createLabelsRouter } from "./api/labels";
+import { createLanesRouter } from "./api/lanes";
 import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createReviewsRouter } from "./api/reviews";
@@ -33,6 +34,7 @@ import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
+import { LaneSyncService } from "./lanes/lane-sync";
 import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
@@ -106,6 +108,15 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.exit(0);
   });
 }
+// Board lanes follow the labels of the linked GitHub/GitLab issues (opt-in, see Settings).
+const laneSync = new LaneSyncService({
+  db,
+  providers: providerRegistry,
+  hub,
+  isBusy: (taskId) =>
+    terminalController.service.isOpen(taskId) || orchestrator.getActiveRunEngines().has(taskId),
+});
+laneSync.start();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
 scheduleRunner.start();
@@ -204,7 +215,8 @@ const sessionService = new SessionService();
 
 const api = new Hono();
 api.route("/repos", createReposRouter(db, git, hub));
-api.route("/tasks", createTasksRouter(db, orchestrator, git));
+api.route("/tasks", createTasksRouter(db, orchestrator, git, laneSync));
+api.route("/lanes", createLanesRouter(laneSync));
 api.route("/runs", createRunsRouter(db));
 api.route("/engines", createEnginesRouter(registry, orchestrator));
 api.route("/workspaces", createWorkspacesRouter(db));

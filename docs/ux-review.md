@@ -83,6 +83,8 @@ in versioned files; secrets stay in the environment.
 
 - **Derive status instead of storing it:** Todo = open issue; Working = `vibe:doing` label (also the
   lease); Review = linked PR open; Done = issue closed (`Closes #N`).
+  *First step done — see `lanes.md`:* the lane is an issue label (`status:review`, GitLab scoped
+  `status::review`), synced both ways with the issue winning conflicts. Providers can now write labels.
 - **Key** = `provider:owner/repo#number`; it replaces local ids and the local issue counter.
 - **Port `IssueStore`** with GitHub, GitLab and a *local files* adapter (`.vibe-code/issues/*.md`) so
   development and tests need no network, token or database. The providers today only list issues:

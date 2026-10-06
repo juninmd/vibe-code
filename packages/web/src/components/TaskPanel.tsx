@@ -481,6 +481,7 @@ export function TaskPanel({
                       plan={skillPlan.plan}
                       onChange={skillPlan.choose}
                       onAuto={skillPlan.auto}
+                      align="left"
                     />
                   )}
                   {choice !== "shell" && models.length > 0 && (

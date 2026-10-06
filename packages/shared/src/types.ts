@@ -1,3 +1,5 @@
+import type { LaneLabelMap } from "./lanes";
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type TaskStatus =
@@ -132,6 +134,8 @@ export interface Task {
   branchName: string | null;
   prUrl: string | null;
   issueUrl: string | null;
+  /** Lane (see lanes.ts) this task and its issue last agreed on; null before the first sync. */
+  issueLane?: string | null;
   parentTaskId: string | null;
   agentId: string | null;
   workflowId: string | null;
@@ -1314,4 +1318,42 @@ export interface Autopilot {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ─── Lane <-> issue label sync ───────────────────────────────────────────────
+
+export interface LaneSyncRepoStatus {
+  repoId: string;
+  name: string;
+  ok: boolean;
+  error?: string;
+  /** Tasks linked to an issue of this repository. */
+  linked: number;
+  /** Cards moved because their issue was relabelled. */
+  pulled: number;
+  /** Issues relabelled because their card moved. */
+  pushed: number;
+  /** Cards created from issues that carry a lane label. */
+  imported: number;
+}
+
+export interface LaneSyncStatus {
+  running: boolean;
+  lastSyncAt: string | null;
+  repos: LaneSyncRepoStatus[];
+}
+
+export interface LaneSettings {
+  /** Off until the operator turns it on: syncing writes labels to real issues. */
+  enabled: boolean;
+  /** Labels the operator customised; everything else follows the provider default. */
+  overrides: Partial<LaneLabelMap>;
+  defaults: Record<"github" | "gitlab", LaneLabelMap>;
+  status: LaneSyncStatus;
+}
+
+export interface UpdateLaneSettingsRequest {
+  enabled?: boolean;
+  /** Replaces the overrides; an empty string or a missing lane goes back to the default. */
+  labels?: Partial<LaneLabelMap>;
 }

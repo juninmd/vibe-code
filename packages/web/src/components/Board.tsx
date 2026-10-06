@@ -9,7 +9,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
+import type { LaneStatus, TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { TASK_COLUMNS } from "@vibe-code/shared";
 import type { RetryState } from "../hooks/useRetryQueue";
 
@@ -31,6 +31,8 @@ interface BoardProps {
   onDeleteTasks?: (taskIds: string[]) => void | Promise<void>;
   retryQueueMap?: Map<string, RetryState>;
   onNewTask?: () => void;
+  /** Issue label behind each lane; empty while lane sync is off. */
+  laneLabels?: Partial<Record<LaneStatus, string>>;
 }
 
 export function Board({
@@ -45,6 +47,7 @@ export function Board({
   onDeleteTasks,
   retryQueueMap,
   onNewTask: _onNewTask,
+  laneLabels,
 }: BoardProps) {
   const [activeTask, setActiveTask] = useState<TaskWithRun | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -226,6 +229,7 @@ export function Board({
                 onDeleteSelected={handleDeleteSelected}
                 onDeleteColumn={handleDeleteColumn}
                 retryQueueMap={retryQueueMap}
+                laneLabel={laneLabels?.[status as LaneStatus]}
                 fillWidth
               />
             </div>

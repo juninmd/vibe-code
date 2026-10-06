@@ -9,6 +9,7 @@ import type {
   EngineEffectiveness,
   EngineInfo,
   InboxItem,
+  LaneSettings,
   LaunchTaskRequest,
   PromptTemplate,
   RemoteRepo,
@@ -31,6 +32,7 @@ import type {
   TerminalStartRequest,
   TerminalState,
   TestConnectionResult,
+  UpdateLaneSettingsRequest,
   UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
@@ -371,6 +373,13 @@ export const api = {
     testConnection: (provider: "github" | "gitlab") =>
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
     litellmHealth: () => request<{ ok: boolean; baseUrl: string }>("/settings/litellm/health"),
+  },
+
+  lanes: {
+    get: () => request<LaneSettings>("/lanes"),
+    update: (data: UpdateLaneSettingsRequest) =>
+      request<LaneSettings>("/lanes", { method: "PUT", body: JSON.stringify(data) }),
+    sync: () => request<LaneSettings>("/lanes/sync", { method: "POST" }),
   },
 
   prompts: {

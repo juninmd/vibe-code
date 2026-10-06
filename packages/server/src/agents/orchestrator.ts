@@ -139,6 +139,8 @@ export class Orchestrator {
    */
   private isHandDriven(task: Task): boolean {
     if (task.tags?.includes(MANUAL_TASK_TAG)) return true;
+    // With lane sync on, issue labels move cards around: that must never start an agent.
+    if (task.issueUrl && this.db.settings.get("lane_sync_enabled") === "true") return true;
     return this.db.runs.getLatestByTask(task.id)?.currentStatus === "terminal";
   }
 

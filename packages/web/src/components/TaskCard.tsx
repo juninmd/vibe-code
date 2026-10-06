@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskPriority, TaskWithRun } from "@vibe-code/shared";
+import { issueNumberFromUrl, type TaskPriority, type TaskWithRun } from "@vibe-code/shared";
 import { memo, useEffect, useState } from "react";
 import { useElapsedTime } from "../hooks/useElapsedTime";
 import type { RetryState } from "../hooks/useRetryQueue";
@@ -82,6 +82,10 @@ function TaskCardComponent({
   const isDone = task.status === "done";
   const isConflict = task.tags?.includes("conflict-resolution") ?? false;
   const hasPR = !!task.prUrl;
+  // Only web links: the URL comes from whoever created the task.
+  const issueNumber = /^https?:\/\//.test(task.issueUrl ?? "")
+    ? issueNumberFromUrl(task.issueUrl)
+    : null;
 
   const engine = task.engine ? getEngineMeta(task.engine) : null;
   const EngineIcon = engine?.icon;
@@ -154,6 +158,18 @@ function TaskCardComponent({
           </span>
         )}
         {task.repo && <span className="min-w-0 truncate">{task.repo.name}</span>}
+        {issueNumber !== null && task.issueUrl && (
+          <a
+            href={task.issueUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title="Open the linked issue"
+            className="shrink-0 font-mono text-text-dimmed hover:text-text-primary hover:underline"
+          >
+            #{issueNumber}
+          </a>
+        )}
 
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {isRunning ? (

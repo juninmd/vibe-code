@@ -12,6 +12,8 @@ interface SkillPickerProps {
   onAuto: () => void;
   /** Shown under the list, e.g. "Applies when the session restarts". */
   notice?: string;
+  /** Which edge of the button the popover lines up with (default: right). */
+  align?: "left" | "right";
   disabled?: boolean;
 }
 
@@ -73,6 +75,7 @@ export function SkillPicker({
   onChange,
   onAuto,
   notice,
+  align = "right",
   disabled,
 }: SkillPickerProps) {
   const [open, setOpen] = useState(false);
@@ -146,7 +149,9 @@ export function SkillPicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1.5 w-80 overflow-hidden rounded-lg border border-white/10 bg-bg-app shadow-2xl shadow-black/60">
+        <div
+          className={`absolute ${align === "left" ? "left-0" : "right-0"} top-full z-30 mt-1.5 w-80 overflow-hidden rounded-lg border border-white/10 bg-bg-app shadow-2xl shadow-black/60`}
+        >
           <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-text-primary">Agent plugin</span>

@@ -24,7 +24,9 @@ import { Board } from "./components/Board";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExportImportMenu } from "./components/ExportImportMenu";
 import { FilterBar, type Filters } from "./components/FilterBar";
+import { LaneSyncPill } from "./components/LaneSyncPill";
 import { Onboarding } from "./components/Onboarding";
+import type { Tab as SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
 import { Button } from "./components/ui/button";
@@ -33,6 +35,7 @@ import { publishTerminalEvent } from "./hooks/terminalBus";
 import { useApiHealth } from "./hooks/useApiHealth";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
+import { useLanes } from "./hooks/useLanes";
 import { useIsMobile } from "./hooks/useMediaQuery";
 import { useRepos } from "./hooks/useRepos";
 import { useRetryQueue } from "./hooks/useRetryQueue";
@@ -301,6 +304,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showNewTask, setShowNewTask] = useState(false);
   const [showAddRepo, setShowAddRepo] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | undefined>(undefined);
+  const lanes = useLanes();
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
@@ -626,6 +631,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const selectedRepo = useMemo(
     () => repos.find((repo) => repo.id === selectedRepoId) ?? null,
     [repos, selectedRepoId]
+  );
+  const laneLabels = useMemo(
+    () => lanes.labelsFor(selectedRepo ? [selectedRepo] : repos),
+    [lanes, selectedRepo, repos]
   );
 
   // Backend-driven polling: refresh all statuses every minute.
@@ -1348,6 +1357,13 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   onImportError={(msg) => toast(msg, "error")}
                 />
               </div>
+              <LaneSyncPill
+                lanes={lanes.lanes}
+                onClick={() => {
+                  setSettingsTab("lanes");
+                  setShowSettings(true);
+                }}
+              />
               <div className="h-6 w-px bg-white/10 mx-1 hidden lg:block" />
 
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
@@ -1444,6 +1460,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                 <div className="h-full w-full p-3 sm:p-5 lg:p-8 overflow-hidden">
                   <Board
                     tasks={filteredTasks}
+                    laneLabels={laneLabels}
                     onTaskClick={handleTaskClick}
                     onTaskMove={handleTaskMove}
                     onRetryPR={retryPR}
@@ -1749,7 +1766,15 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             }}
           />
 
-          <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+          <SettingsDialog
+            open={showSettings}
+            initialTab={settingsTab}
+            onClose={() => {
+              setShowSettings(false);
+              setSettingsTab(undefined);
+              lanes.refresh();
+            }}
+          />
 
           <StatsDialog open={showStats} onClose={() => setShowStats(false)} />
 
