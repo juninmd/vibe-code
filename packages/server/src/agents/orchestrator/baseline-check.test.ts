@@ -1,8 +1,16 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import * as fs from "node:fs/promises";
 // Using mock.module at the top level
 import * as originalFs from "node:fs/promises";
 import { runBaselineCheck } from "./baseline-check";
+
+// mock.module() is process-wide and survives mock.restore(): put the real module back when this
+// file is done, otherwise every file that runs later (verify.test.ts reads real package.json and
+// Makefile files) silently talks to these fakes.
+const realFs = { ...originalFs };
+afterAll(() => {
+  mock.module("node:fs/promises", () => realFs);
+});
 
 mock.module("node:fs/promises", () => ({
   ...originalFs,

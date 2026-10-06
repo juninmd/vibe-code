@@ -1,4 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+
+// mock.module() is process-wide and survives mock.restore(): capture the real modules now and
+// put them back in afterAll, otherwise every test file that runs later (e.g. opencode.test.ts,
+// which needs a working mkdir) silently talks to these fakes.
+const realFsPromises = { ...(await import("node:fs/promises")) };
+const realLiteLLMClient = { ...(await import("../litellm-client")) };
+const realProcessTree = { ...(await import("../../utils/process-tree")) };
+
+afterAll(() => {
+  mock.module("node:fs/promises", () => realFsPromises);
+  mock.module("../litellm-client", () => realLiteLLMClient);
+  mock.module("../../utils/process-tree", () => realProcessTree);
+});
 
 let mockAccessSuccess = true;
 let mockMkdirCalled = false;

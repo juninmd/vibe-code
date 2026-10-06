@@ -126,7 +126,6 @@ export async function runPersonaReview(opts: {
   litellmBaseUrl: string;
   nativeGeminiKey?: string;
   nativeAnthropicKey?: string;
-  spawn?: typeof Bun.spawn;
 }): Promise<ReviewEvent> {
   const {
     persona,
