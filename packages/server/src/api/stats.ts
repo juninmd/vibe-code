@@ -17,7 +17,9 @@ export function createStatsRouter(db: Db) {
     const failedRuns = (
       raw.query("SELECT COUNT(*) as c FROM agent_runs WHERE status = 'failed'").get() as any
     ).c;
-    const successRate = totalRuns > 0 ? Math.round((completedRuns / totalRuns) * 100) : 0;
+    // Only runs that ended count: queued, running and cancelled runs are neither wins nor losses.
+    const finishedRuns = completedRuns + failedRuns;
+    const successRate = finishedRuns > 0 ? Math.round((completedRuns / finishedRuns) * 100) : 0;
 
     // Average run duration (seconds)
     const avgDuration =
@@ -144,6 +146,7 @@ export function createStatsRouter(db: Db) {
           totalRepos,
           totalTasks,
           totalRuns,
+          completedRuns,
           failedRuns,
           successRate,
           avgRunDurationSecs: Math.round(avgDuration),

@@ -72,6 +72,7 @@ describe("Orchestrator - edge cases", () => {
       tasks: {
         list: mock().mockReturnValue([{ id: "t-1", priority: "low", dependsOn: [] }]),
       },
+      runs: { getLatestByTask: mock().mockReturnValue(undefined) },
     };
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
 
@@ -80,6 +81,83 @@ describe("Orchestrator - edge cases", () => {
 
     // should not throw
     await orch.sweepBacklog();
+  });
+
+  it("sweepBacklog never auto-launches tasks driven by hand in a terminal", async () => {
+    const tasks = [
+      { id: "manual", priority: "high", dependsOn: [], tags: ["manual"] },
+      { id: "terminal-run", priority: "high", dependsOn: [], tags: [] },
+      { id: "plain", priority: "low", dependsOn: [], tags: [] },
+    ];
+    const mockDb = {
+      tasks: { list: mock().mockReturnValue(tasks) },
+      runs: {
+        getLatestByTask: mock((id: string) =>
+          id === "terminal-run" ? { currentStatus: "terminal" } : undefined
+        ),
+      },
+    };
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+    orch.launch = mock().mockResolvedValue({} as any);
+
+    await orch.sweepBacklog();
+
+    expect((orch.launch as any).mock.calls.map((call: any[]) => call[0].id)).toEqual(["plain"]);
+  });
+
+  it("sweepBacklog leaves issue-linked cards alone while lane sync is on", async () => {
+    const tasks = [
+      { id: "linked", priority: "high", dependsOn: [], tags: [], issueUrl: "https://x/issues/1" },
+      { id: "plain", priority: "low", dependsOn: [], tags: [] },
+    ];
+    const build = (laneSync: string) => {
+      const mockDb = {
+        tasks: { list: mock().mockReturnValue(tasks) },
+        runs: { getLatestByTask: mock().mockReturnValue(undefined) },
+        settings: { get: mock((key: string) => (key === "lane_sync_enabled" ? laneSync : null)) },
+      };
+      const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
+      orch.launch = mock().mockResolvedValue({} as any);
+      return orch;
+    };
+    const launched = (orch: Orchestrator) =>
+      (orch.launch as any).mock.calls.map((call: any[]) => call[0].id);
+
+    const on = build("true");
+    await on.sweepBacklog();
+    expect(launched(on)).toEqual(["plain"]);
+
+    const off = build("false");
+    await off.sweepBacklog();
+    expect(launched(off)).toEqual(["linked", "plain"]);
+  });
+
+  it("recoverInProgressTasks parks terminal tasks in Todo instead of re-running them", async () => {
+    const tasks = [
+      { id: "term", priority: "high", tags: [] },
+      { id: "headless", priority: "low", tags: [] },
+    ];
+    const update = mock();
+    const mockDb = {
+      tasks: { list: mock().mockReturnValue(tasks), update },
+      runs: {
+        getLatestByTask: mock((id: string) =>
+          id === "term" ? { currentStatus: "terminal" } : undefined
+        ),
+      },
+    };
+    const hub = { broadcastAll: mock() };
+    const orch = new Orchestrator(mockDb as any, {} as any, {} as any, hub as any);
+
+    await orch.recoverInProgressTasks();
+
+    const statusOf = (id: string) =>
+      update.mock.calls
+        .filter((call: any[]) => call[0] === id)
+        .map((call: any[]) => call[1].status);
+    expect(statusOf("term")).toEqual(["backlog"]);
+    // The headless task keeps the old behaviour: blocked, then promoted for the sweep.
+    expect(statusOf("headless")).toEqual(["blocked", "backlog"]);
   });
 
   it("launch throws when task limit is reached via maxCost check", async () => {

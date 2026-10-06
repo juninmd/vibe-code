@@ -3,6 +3,7 @@ import type { AuthStatus, AuthUser } from "@vibe-code/shared";
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { parse as parseCookie } from "hono/utils/cookie";
 import type { Db } from "./db";
 
 const SESSION_COOKIE = "vibe_session";
@@ -169,6 +170,29 @@ export function getCurrentUser(db: Db, c: Context): AuthUser | null {
   if (!isAuthEnabled()) return null;
   const row = getSession(db, getCookie(c, SESSION_COOKIE));
   return row ? mapSession(row) : null;
+}
+
+/**
+ * Auth check for raw requests (WebSocket upgrades bypass the Hono middleware).
+ * Mirrors authMiddleware: API key first, then the OAuth session cookie.
+ */
+export function isRequestAuthenticated(db: Db, req: Request): boolean {
+  if (!isAuthEnabled()) return true;
+
+  const key = process.env.VIBE_CODE_API_KEY;
+  if (key) {
+    const header = req.headers.get("authorization") ?? "";
+    const query = new URL(req.url).searchParams.get("api_key") ?? "";
+    const provided = header.startsWith("Bearer ") ? header.slice(7) : query;
+    if (provided) {
+      const a = Buffer.from(key);
+      const b = Buffer.from(provided);
+      if (a.length === b.length && timingSafeEqual(a, b)) return true;
+    }
+  }
+
+  const cookies = parseCookie(req.headers.get("cookie") ?? "");
+  return Boolean(getSession(db, cookies[SESSION_COOKIE]));
 }
 
 export function authStatus(db: Db, c: Context): AuthStatus {

@@ -21,6 +21,16 @@ const purgeLocalClonesSchema = z.object({
   confirm: z.literal(true),
 });
 
+const PROVIDER_LABEL = { github: "GitHub", gitlab: "GitLab" } as const;
+
+/** 409 + a message the UI can turn into "connect your account", instead of a generic 500. */
+function providerNotConfigured(provider: "github" | "gitlab") {
+  return {
+    error: "provider_not_configured",
+    message: `${PROVIDER_LABEL[provider]} is not connected. Add an access token in Settings → ${PROVIDER_LABEL[provider]}.`,
+  };
+}
+
 export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   const router = new Hono();
 
@@ -93,6 +103,9 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   });
 
   router.get("/github/list", async (c) => {
+    if (!git.isProviderConfigured("github")) {
+      return c.json(providerNotConfigured("github"), 409);
+    }
     try {
       const repos = await git.listRemoteRepos("github", 20);
       return c.json({ data: repos });
@@ -105,6 +118,9 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   router.get("/github/search", async (c) => {
     const q = c.req.query("q")?.trim();
     if (!q) return c.json({ data: [] });
+    if (!git.isProviderConfigured("github")) {
+      return c.json(providerNotConfigured("github"), 409);
+    }
     try {
       const repos = await git.searchRemoteRepos("github", q, 20);
       return c.json({ data: repos });
@@ -136,6 +152,9 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
 
   // GitLab provider routes
   router.get("/gitlab/list", async (c) => {
+    if (!git.isProviderConfigured("gitlab")) {
+      return c.json(providerNotConfigured("gitlab"), 409);
+    }
     try {
       const repos = await git.listRemoteRepos("gitlab", 20);
       return c.json({ data: repos });
@@ -148,6 +167,9 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
   router.get("/gitlab/search", async (c) => {
     const q = c.req.query("q")?.trim();
     if (!q) return c.json({ data: [] });
+    if (!git.isProviderConfigured("gitlab")) {
+      return c.json(providerNotConfigured("gitlab"), 409);
+    }
     try {
       const repos = await git.searchRemoteRepos("gitlab", q, 20);
       return c.json({ data: repos });

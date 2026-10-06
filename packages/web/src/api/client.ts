@@ -9,6 +9,7 @@ import type {
   EngineEffectiveness,
   EngineInfo,
   InboxItem,
+  LaneSettings,
   LaunchTaskRequest,
   PromptTemplate,
   RemoteRepo,
@@ -19,6 +20,7 @@ import type {
   SessionSource,
   SettingsResponse,
   SkillEffectiveness,
+  SkillPlan,
   SkillsIndex,
   StatsResponse,
   Task,
@@ -27,7 +29,10 @@ import type {
   TaskSchedule,
   TaskScheduleWithTask,
   TaskWithRun,
+  TerminalStartRequest,
+  TerminalState,
   TestConnectionResult,
+  UpdateLaneSettingsRequest,
   UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
@@ -332,6 +337,30 @@ export const api = {
     },
   },
 
+  terminal: {
+    state: (taskId: string) => request<TerminalState>(`/terminal/${taskId}/state`),
+    start: (taskId: string, data: TerminalStartRequest = {}) =>
+      request<TerminalState>(`/terminal/${taskId}/start`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    stop: (taskId: string) =>
+      request<{ stopped: boolean }>(`/terminal/${taskId}/stop`, { method: "POST" }),
+    /** What the task would get if started now; pass `skills` to preview a manual pick. */
+    previewSkills: (taskId: string, skills?: string[]) =>
+      request<SkillPlan>(`/terminal/${taskId}/skills/preview`, {
+        method: "POST",
+        body: JSON.stringify(skills ? { skills } : {}),
+      }),
+    /** An explicit list makes the plan manual; `{ mode: "auto" }` hands the choice back. */
+    setSkills: (taskId: string, choice: { skills: string[] } | { mode: "auto" }) =>
+      request<TerminalState>(`/terminal/${taskId}/skills`, {
+        method: "PUT",
+        body: JSON.stringify(choice),
+      }),
+    finish: (taskId: string) => request<Task>(`/terminal/${taskId}/finish`, { method: "POST" }),
+  },
+
   engines: {
     list: () => request<EngineInfo[]>("/engines"),
     models: (name: string) => request<string[]>(`/engines/${name}/models`),
@@ -344,6 +373,13 @@ export const api = {
     testConnection: (provider: "github" | "gitlab") =>
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
     litellmHealth: () => request<{ ok: boolean; baseUrl: string }>("/settings/litellm/health"),
+  },
+
+  lanes: {
+    get: () => request<LaneSettings>("/lanes"),
+    update: (data: UpdateLaneSettingsRequest) =>
+      request<LaneSettings>("/lanes", { method: "PUT", body: JSON.stringify(data) }),
+    sync: () => request<LaneSettings>("/lanes/sync", { method: "POST" }),
   },
 
   prompts: {

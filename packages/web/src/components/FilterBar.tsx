@@ -126,7 +126,7 @@ export function FilterBar({
             type="text"
             value={search ?? ""}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Buscar tasks..."
+            placeholder="Search tasks..."
             className="bg-white/4 border border-white/10 rounded-lg pl-7 pr-3 py-1 text-[11px] text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:bg-white/6 transition-all w-40"
           />
         </div>
@@ -153,7 +153,7 @@ export function FilterBar({
       )}
 
       {/* Priority */}
-      <FilterGroup label="Prioridade">
+      <FilterGroup label="Priority">
         {TASK_PRIORITY_LEVELS.filter((p) => p !== "none").map((p) => {
           const meta = TASK_PRIORITY_META[p];
           return (
@@ -189,7 +189,7 @@ export function FilterBar({
               d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
             />
           </svg>
-          Com PR
+          Has PR
         </FilterChip>
       </FilterGroup>
 
