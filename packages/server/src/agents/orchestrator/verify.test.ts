@@ -149,6 +149,7 @@ describe("extractFailureReason", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-extract-"));
+    require("node:fs").mkdirSync(join(dir, "node_modules"));
     try {
       await writeFile(
         join(dir, "package.json"),
@@ -173,6 +174,7 @@ describe("extractFailureReason", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-build-err-"));
+    require("node:fs").mkdirSync(join(dir, "node_modules"));
     try {
       await writeFile(
         join(dir, "package.json"),
@@ -201,6 +203,7 @@ describe("extractFailureReason", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-lint-warn-"));
+    require("node:fs").mkdirSync(join(dir, "node_modules"));
     try {
       await writeFile(
         join(dir, "package.json"),
@@ -229,6 +232,7 @@ describe("extractFailureReason", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dir = await mkdtemp(join(tmpdir(), "vibe-verify-fallback-"));
+    require("node:fs").mkdirSync(join(dir, "node_modules"));
     try {
       await writeFile(
         join(dir, "package.json"),
@@ -254,11 +258,12 @@ describe("extractFailureReason", () => {
     const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const dir = await mkdtemp(join(tmpdir(), "vibe-verify-empty-err-"));
+const dir = await mkdtemp(join(tmpdir(), "vibe-verify-empty-err-"));
+    require("node:fs").mkdirSync(join(dir, "node_modules"));
     try {
       await writeFile(
         join(dir, "package.json"),
-        JSON.stringify({ scripts: { test: "sh -c 'exit 1'" } }),
+        JSON.stringify({ scripts: { test: "sh -c 'exit 1'" }),
         "utf8"
       );
 
