@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { Terminal as ClientScreen } from "@xterm/headless";
 import { supportsPty, TerminalSessionService } from "./session-service";
 
-const posix = process.platform !== "win32";
+const posix = supportsPty();
 
 interface Recorder {
   service: TerminalSessionService;

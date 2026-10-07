@@ -21,10 +21,10 @@ describe("autoInstallDependencies extended", () => {
     spyOn(fsPromises, "access").mockImplementation(async (path: any) => {
       if (typeof path === "string") {
         if (path.includes("package.json") || path.includes("pnpm-lock.yaml")) {
-          return undefined; // exists
+          return Promise.resolve(); // exists
         }
       }
-      throw new Error("enoent"); // others don't exist
+      return Promise.reject(new Error("enoent")); // others don't exist
     });
 
     const logs: string[] = [];
@@ -39,10 +39,10 @@ describe("autoInstallDependencies extended", () => {
     spyOn(fsPromises, "access").mockImplementation(async (path: any) => {
       if (typeof path === "string") {
         if (path.includes("package.json") || path.includes("package-lock.json")) {
-          return undefined; // exists
+          return Promise.resolve(); // exists
         }
       }
-      throw new Error("enoent"); // others don't exist
+      return Promise.reject(new Error("enoent")); // others don't exist
     });
 
     (Bun as any).spawn = mock().mockImplementation((_cmd: string[]) => {
@@ -78,13 +78,13 @@ describe("runWorkspaceScripts extended", () => {
   it("executes setup scripts from config", async () => {
     spyOn(fsPromises, "access").mockImplementation(async (path: any) => {
       if (typeof path === "string" && path.includes(".vibe-code/config.json")) {
-        return undefined; // exists
+        return Promise.resolve(); // exists
       }
-      throw new Error("enoent");
+      return Promise.reject(new Error("enoent"));
     });
 
     spyOn(fsPromises, "readFile").mockImplementation(async () => {
-      return JSON.stringify({ setup: ["echo setup"] });
+      return JSON.stringify({ setup: ["echo setup"] }) as any;
     });
 
     const logs: string[] = [];
@@ -96,13 +96,13 @@ describe("runWorkspaceScripts extended", () => {
   it("fails execution script gracefully", async () => {
     spyOn(fsPromises, "access").mockImplementation(async (path: any) => {
       if (typeof path === "string" && path.includes(".vibe-code/config.json")) {
-        return undefined; // exists
+        return Promise.resolve(); // exists
       }
-      throw new Error("enoent");
+      return Promise.reject(new Error("enoent"));
     });
 
     spyOn(fsPromises, "readFile").mockImplementation(async () => {
-      return JSON.stringify({ setup: ["echo setup"] });
+      return JSON.stringify({ setup: ["echo setup"] }) as any;
     });
 
     (Bun as any).spawn = mock().mockImplementation((_cmd: string[]) => {
