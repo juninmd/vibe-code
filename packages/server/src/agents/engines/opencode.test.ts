@@ -978,7 +978,7 @@ describe("OpenCodeEngine MCP configuration", () => {
 });
 
 describe("OpenCodeEngine missing coverage", () => {
-  it("opencodeWindowsPackageCandidates returns arm64 first when arm64", async () => {
+  it("opencodeWindowsPackageCandidates returns arm64 first when arm64", () => {
     // requires moving resolveOpencodeNativeFromShim mock out to test actual logic, but we test sendInput catch here:
     const engine = new OpenCodeEngine();
     (engine as any).processes.set("test-run-broken", {
