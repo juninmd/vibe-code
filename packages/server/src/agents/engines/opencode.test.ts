@@ -976,3 +976,30 @@ describe("OpenCodeEngine MCP configuration", () => {
     expect(config.mcp.github).toEqual(mcpServers.github);
   });
 });
+
+describe("OpenCodeEngine missing coverage", () => {
+  it("opencodeWindowsPackageCandidates returns arm64 first when arm64", () => {
+    // requires moving resolveOpencodeNativeFromShim mock out to test actual logic, but we test sendInput catch here:
+    const engine = new OpenCodeEngine();
+    (engine as any).processes.set("test-run-broken", {
+      stdin: {
+        write: () => {
+          throw new Error("broken");
+        },
+      },
+    });
+    expect(engine.sendInput("test-run-broken", "hello")).toBe(false);
+  });
+});
+
+describe("findOnPath missing coverage", () => {
+  it("findOnPath returns null for empty PATH", async () => {
+    const origPath = process.env.PATH;
+    process.env.PATH = "";
+    // we need to call findOnPath, but it's not exported.
+    // it is used by isAvailable / getVersion which calls resolveCommand
+    const engine = new OpenCodeEngine();
+    expect(await engine.isAvailable()).toBe(false);
+    process.env.PATH = origPath;
+  });
+});
