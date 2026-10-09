@@ -72,7 +72,9 @@ describe("AmpCodeEngine", () => {
   });
 
   it("listModels returns list", async () => {
-    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "model-1" }, { id: "model-2" }] })));
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "model-1" }, { id: "model-2" }] }))
+    );
     engine = new AmpCodeEngine();
     const models = await engine.listModels();
     expect(Array.isArray(models)).toBe(true);
