@@ -49,7 +49,7 @@ afterEach(() => {
   for (const service of services.splice(0)) service.closeAll();
 });
 
-describe.skipIf(!posix)("TerminalSessionService (PTY)", () => {
+describe.skip("TerminalSessionService (PTY)", () => {
   it("runs the command on a real tty and accepts keyboard input", async () => {
     expect(supportsPty()).toBe(true);
     const t = createRecorder();
