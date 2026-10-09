@@ -127,11 +127,11 @@ describe("PiEngine", () => {
       kill: mock(),
     };
 
-    spyOn(Bun, "spawn").mockImplementation((args, options) => {
+    spyOn(Bun, "spawn").mockImplementation(((args: any, options: any) => {
       spawnCalled = true;
       spawnArgs = { args, options };
       return procMock as any;
-    });
+    }) as any);
 
     const opts = { runId: "test-run", signal: new AbortController().signal };
     const generator = engine.execute("test prompt", "/tmp", opts as any);
