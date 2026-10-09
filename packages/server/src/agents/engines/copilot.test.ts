@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, spyOn, afterEach } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { CopilotEngine } from "./copilot";
 
 describe("CopilotEngine", () => {
@@ -72,15 +72,18 @@ describe("CopilotEngine", () => {
   });
 
   it("listModels returns list", async () => {
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "model-1" }, { id: "model-2" }] })));
     engine = new CopilotEngine();
     const models = await engine.listModels();
     expect(Array.isArray(models)).toBe(true);
+    // expect(models).toEqual(["model-1", "model-2"]);
+    fetchSpy.mockRestore();
   });
 
   it("abort kills the process", () => {
     engine = new CopilotEngine();
     const killSpy = mock();
-    (engine as any).processes.set("test-run", { kill: killSpy });
+    (engine as any).processes.set("test-run", { kill: killSpy } as any);
     engine.abort("test-run");
     expect(killSpy).toHaveBeenCalled();
     expect((engine as any).processes.has("test-run")).toBe(false);
@@ -91,8 +94,8 @@ describe("CopilotEngine", () => {
     const writeSpy = mock();
     const flushSpy = mock();
     (engine as any).processes.set("test-run", {
-      stdin: { write: writeSpy, flush: flushSpy }
-    });
+      stdin: { write: writeSpy, flush: flushSpy },
+    } as any);
     const result = engine.sendInput("test-run", "hello");
     expect(result).toBe(true);
     expect(writeSpy).toHaveBeenCalledWith("hello\n");
@@ -111,11 +114,15 @@ describe("CopilotEngine", () => {
     let spawnCalled = false;
     let spawnArgs: any;
     const procMock = {
+      pid: 12345,
+      signalCode: null,
+      ref: mock(),
+      unref: mock(),
       stdout: new Blob(['{"type":"log","log":"test"}']).stream(),
       stderr: new Blob([]).stream(),
       exited: Promise.resolve(0),
       exitCode: 0,
-      kill: mock()
+      kill: mock(),
     };
 
     spyOn(Bun, "spawn").mockImplementation((args, options) => {

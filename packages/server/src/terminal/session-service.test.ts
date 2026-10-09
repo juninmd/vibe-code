@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { Terminal as ClientScreen } from "@xterm/headless";
 import { supportsPty, TerminalSessionService } from "./session-service";
 
-const posix = process.platform !== "win32";
+const _posix = process.platform !== "win32";
 
 interface Recorder {
   service: TerminalSessionService;
@@ -49,6 +49,7 @@ afterEach(() => {
   for (const service of services.splice(0)) service.closeAll();
 });
 
+// Skipping PTY tests due to node-pty native compilation issues in CI environments
 describe.skip("TerminalSessionService (PTY)", () => {
   it("runs the command on a real tty and accepts keyboard input", async () => {
     expect(supportsPty()).toBe(true);
