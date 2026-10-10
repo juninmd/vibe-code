@@ -141,7 +141,7 @@ export async function runPersonaReview(opts: {
     nativeAnthropicKey,
   } = opts;
 
-  const spawnFn = opts._spawnMock || Bun.spawn;
+  const spawnFn = opts._spawnMock || opts.spawn || Bun.spawn;
   const diff = await getWorktreeDiff(worktreePath, defaultBranch, spawnFn);
   const label = PERSONA_LABELS[persona];
   const runtime = pickReviewRuntime(reviewEngine);
