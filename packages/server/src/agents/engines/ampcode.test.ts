@@ -133,7 +133,8 @@ describe("AmpCodeEngine", () => {
       return procMock as any;
     }) as any);
 
-    const opts = { runId: "test-run", signal: new AbortController().signal };
+    // FIX: Add `_spawnMock: procMock as any` to options to bypass the internal process logic
+    const opts = { runId: "test-run", signal: new AbortController().signal, _spawnMock: procMock as any };
     const generator = engine.execute("test prompt", "/tmp", opts as any);
 
     const events = [];
