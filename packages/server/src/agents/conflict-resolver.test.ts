@@ -1,4 +1,5 @@
 /**
+
  * Integration tests for ConflictResolver — end-to-end flow:
  *   conflict detected → child task created → prompt has --force-with-lease → no --force
  */
@@ -304,7 +305,7 @@ describe("ConflictResolver", () => {
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
 
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce((() => {
-        throw new Error("Network error during check");
+        throw new Error("Network error during check";
       }) as unknown as typeof fetch);
 
       db.settings.set("github_token", "test-token");
