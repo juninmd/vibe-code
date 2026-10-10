@@ -6,7 +6,6 @@ const originalSpawn = Bun.spawn;
 describe("reviewer engine", () => {
   afterEach(() => {
     mock.restore();
-    Bun.spawn = originalSpawn;
   });
 
   test("PERSONA_LABELS exists", () => {
