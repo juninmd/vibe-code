@@ -430,7 +430,7 @@ export function escalateModel(currentModel?: string): string | undefined {
   if (lower.includes("mini") || lower.includes("gpt-3.5") || lower.includes("gpt-4o-mini")) {
     return "gpt-4o";
   }
-  if (lower.includes("gpt-4o") || lower.includes("pro")) {
+  if (lower.includes("gpt-4o") || lower.includes("pro") || lower.includes("gpt-4")) {
     return "claude-3-5-sonnet-20241022";
   }
   return currentModel;

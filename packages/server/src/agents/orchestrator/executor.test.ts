@@ -187,3 +187,151 @@ describe("executeAgent (integration mock)", () => {
     );
   });
 });
+
+describe("executor additional coverage", () => {
+  it("escalates correctly when no model given", () => {
+    expect(escalateModel(undefined)).toBeUndefined();
+  });
+
+  it("handles empty docs asset path", () => {
+    expect(extractDocsAssetPath("")).toBe(null);
+  });
+
+  it("escalates flash correctly", () => {
+    expect(escalateModel("gemini-1.5-flash")).toBe("gemini-2.5-pro");
+    expect(escalateModel("claude-3-haiku-flash")).toBe("gpt-4o");
+  });
+
+  it("escalates mini correctly", () => {
+    expect(escalateModel("gpt-4o-mini")).toBe("gpt-4o");
+    expect(escalateModel("gpt-3.5-turbo")).toBe("gpt-4o");
+  });
+
+  it("escalates pro/4o correctly", () => {
+    expect(escalateModel("gpt-4o")).toBe("claude-3-5-sonnet-20241022");
+    expect(escalateModel("pro")).toBe("claude-3-5-sonnet-20241022");
+  });
+
+  it("preserves non-matching models", () => {
+    expect(escalateModel("something-else")).toBe("something-else");
+  });
+
+  it("autoInstallDependencies runs npm install if package.json exists", async () => {
+    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
+        }) as any
+    );
+
+    let logged = false;
+    await autoInstallDependencies("/path/to/wt", () => {
+      logged = true;
+    });
+    expect(logged).toBe(true);
+  });
+
+  it("autoInstallDependencies handles install failure", async () => {
+    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(1),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob(["failed"]).stream(),
+        }) as any
+    );
+
+    let logged = false;
+    await autoInstallDependencies("/path/to/wt", () => {
+      logged = true;
+    });
+    expect(logged).toBe(true);
+  });
+
+  it("runWorkspaceScripts reads and executes scripts if config exists", async () => {
+    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "readFile").mockResolvedValue(
+      JSON.stringify({
+        setup: ["npm run build"],
+      })
+    );
+    spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
+        }) as any
+    );
+
+    let logged = false;
+    await runWorkspaceScripts("setup", "/path/to/wt", "repoName", () => {
+      logged = true;
+    });
+    expect(logged).toBe(true);
+  });
+
+  it("runWorkspaceScripts handles missing setup script array gracefully", async () => {
+    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({}));
+    let logged = false;
+    await runWorkspaceScripts("setup", "/path/to/wt", "repoName", () => {
+      logged = true;
+    });
+    expect(logged).toBe(false);
+  });
+
+  it("runWorkspaceScripts handles script execution failure", async () => {
+    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "readFile").mockResolvedValue(
+      JSON.stringify({
+        setup: ["npm run build"],
+      })
+    );
+    spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(1),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob(["error"]).stream(),
+        }) as any
+    );
+
+    let logged = false;
+    await runWorkspaceScripts("setup", "/path/to/wt", "repoName", () => {
+      logged = true;
+    });
+    expect(logged).toBe(true);
+  });
+
+  it("buildValidationRepairPrompt builds prompt without memory string if not provided", () => {
+    const prompt = buildValidationRepairPrompt(
+      { title: "My Task" } as any,
+      {
+        passed: false,
+        summary: "It failed",
+        commands: ["cmd"],
+        results: [
+          {
+            passed: false,
+            command: "cmd",
+            stdout: "out",
+            stderr: "err",
+            exitCode: 1,
+            name: "validation",
+            source: "detected",
+            reason: "Mock failure",
+          },
+        ],
+      } as any
+    );
+    expect(prompt).toContain("It failed");
+    expect(prompt).toContain("Failed command: cmd");
+    expect(prompt).toContain("Failure output:");
+    expect(prompt).not.toContain("Here are the memories");
+  });
+});
