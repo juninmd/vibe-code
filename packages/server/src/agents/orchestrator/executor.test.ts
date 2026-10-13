@@ -327,7 +327,6 @@ describe("executeAgent (integration mock)", () => {
       try {
         await promise;
       } catch {}
-
     } finally {
       // Restore
       process.env.VIBE_CODE_INACTIVITY_MS = originalEnv;
