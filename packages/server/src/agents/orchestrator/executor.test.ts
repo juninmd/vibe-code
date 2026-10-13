@@ -186,6 +186,156 @@ describe("executeAgent (integration mock)", () => {
       "Max concurrent agents reached (1)."
     );
   });
+
+  it("handles timeout correctly", async () => {
+    const { executeAgent } = await import("./executor");
+
+    const fakeTask = { id: "t1", title: "test", description: "test" } as any;
+    const fakeRun = { id: "r1" } as any;
+    const fakeEngine = {
+      name: "test-engine",
+      execute: async function* () {
+        // Block indefinitely to trigger timeout
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      },
+    } as any;
+    const fakeRepo = { name: "repo", url: "url", localPath: "/tmp" } as any;
+    const abort = new AbortController();
+    const fakeDb = {
+      runs: { updateStateSnapshot: mock(), updateStatus: mock(), updateTokenUsage: mock() },
+      tasks: { update: mock(), getById: mock() },
+      settings: { get: mock().mockReturnValue(undefined) },
+      artifacts: { upsert: mock(), listByTask: mock().mockReturnValue([]) },
+      memories: {
+        getByTaskIdAndScope: mock().mockReturnValue(null),
+        append: mock(),
+        appendRunSummary: mock(),
+      },
+      workflow: { getGlobalWorkflow: mock().mockReturnValue(null) },
+    } as any;
+    const fakeGit = {
+      getBarePath: async () => "/tmp",
+      createWorktree: async () => "/tmp/wt",
+      hasChanges: async () => false,
+      hasCommitsAhead: async () => false,
+      removeWorktree: async () => {},
+      syncWithBase: async () => ({ ok: true }),
+      hasMergeConflict: async () => false,
+      getCurrentBranch: async () => "main",
+    } as any;
+    const fakeHub = { broadcastToTask: mock(), flushLogs: mock(), broadcastAll: mock() } as any;
+    const sysLog = mock();
+    const onFinish = mock();
+
+    // Fast track timeout for testing
+    const originalEnv = process.env.VIBE_CODE_AGENT_TIMEOUT_MS;
+    process.env.VIBE_CODE_AGENT_TIMEOUT_MS = "10"; // 10 ms
+
+    try {
+      await executeAgent(
+        fakeTask,
+        fakeRun,
+        fakeEngine,
+        fakeRepo,
+        abort,
+        fakeDb,
+        fakeGit,
+        fakeHub,
+        sysLog,
+        onFinish
+      );
+    } catch {}
+
+    // Restore env
+    process.env.VIBE_CODE_AGENT_TIMEOUT_MS = originalEnv;
+
+    expect(abort.signal.aborted).toBe(true);
+    expect(fakeDb.runs.updateStateSnapshot).toHaveBeenCalledWith("r1", "timed_out");
+  });
+
+  it("handles inactivity correctly", async () => {
+    const { executeAgent } = await import("./executor");
+
+    const fakeTask = { id: "t1", title: "test", description: "test" } as any;
+    const fakeRun = { id: "r1" } as any;
+    const fakeEngine = {
+      name: "test-engine",
+      execute: async function* () {
+        // Block indefinitely to trigger inactivity monitor
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      },
+    } as any;
+    const fakeRepo = { name: "repo", url: "url", localPath: "/tmp" } as any;
+    const abort = new AbortController();
+    const fakeDb = {
+      runs: { updateStateSnapshot: mock(), updateStatus: mock(), updateTokenUsage: mock() },
+      tasks: { update: mock(), getById: mock() },
+      settings: { get: mock().mockReturnValue(undefined) },
+      artifacts: { upsert: mock(), listByTask: mock().mockReturnValue([]) },
+      memories: {
+        getByTaskIdAndScope: mock().mockReturnValue(null),
+        append: mock(),
+        appendRunSummary: mock(),
+      },
+      workflow: { getGlobalWorkflow: mock().mockReturnValue(null) },
+    } as any;
+    const fakeGit = {
+      getBarePath: async () => "/tmp",
+      createWorktree: async () => "/tmp/wt",
+      hasChanges: async () => false,
+      hasCommitsAhead: async () => false,
+      removeWorktree: async () => {},
+      syncWithBase: async () => ({ ok: true }),
+      hasMergeConflict: async () => false,
+      getCurrentBranch: async () => "main",
+    } as any;
+    const fakeHub = { broadcastToTask: mock(), flushLogs: mock(), broadcastAll: mock() } as any;
+    const sysLog = mock();
+    const onFinish = mock();
+
+    // Set inactivity quite low
+    const originalEnv = process.env.VIBE_CODE_INACTIVITY_MS;
+    process.env.VIBE_CODE_INACTIVITY_MS = "10"; // 10 ms
+
+    // Replace setInterval temporarily to run once immediately
+    const origSetInterval = global.setInterval;
+    let cb: any;
+
+    try {
+      (global.setInterval as any) = (fn: any, _ms: number) => {
+        cb = fn;
+        return 1 as any; // return interval id
+      };
+
+      const promise = executeAgent(
+        fakeTask,
+        fakeRun,
+        fakeEngine,
+        fakeRepo,
+        abort,
+        fakeDb,
+        fakeGit,
+        fakeHub,
+        sysLog,
+        onFinish
+      );
+
+      // artificially wait a bit and call the callback to simulate stalled
+      await new Promise((r) => setTimeout(r, 20));
+      if (cb) cb();
+
+      try {
+        await promise;
+      } catch {}
+    } finally {
+      // Restore
+      process.env.VIBE_CODE_INACTIVITY_MS = originalEnv;
+      global.setInterval = origSetInterval;
+    }
+
+    expect(abort.signal.aborted).toBe(true);
+    expect(fakeDb.runs.updateStateSnapshot).toHaveBeenCalledWith("r1", "stalled");
+  });
 });
 
 describe("executor additional coverage", () => {
@@ -217,8 +367,12 @@ describe("executor additional coverage", () => {
   });
 
   it("autoInstallDependencies runs npm install if package.json exists", async () => {
-    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
-    spyOn(Bun, "spawn").mockImplementation(
+    const accessSpy = spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).endsWith("package.json")) return Promise.resolve();
+      if (String(path).endsWith("package-lock.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
+    const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
       () =>
         ({
           exited: Promise.resolve(0),
@@ -227,11 +381,72 @@ describe("executor additional coverage", () => {
         }) as any
     );
 
-    let logged = false;
-    await autoInstallDependencies("/path/to/wt", () => {
-      logged = true;
+    await autoInstallDependencies("/path/to/wt", () => {});
+    expect((spawnSpy as any).mock.calls[0][0]).toEqual(["npm", "install"]);
+    accessSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  it("autoInstallDependencies runs bun install if bun.lock exists", async () => {
+    const accessSpy = spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).endsWith("package.json")) return Promise.resolve();
+      if (String(path).endsWith("bun.lock")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
     });
-    expect(logged).toBe(true);
+    const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
+        }) as any
+    );
+
+    await autoInstallDependencies("/path/to/wt", () => {});
+    expect((spawnSpy as any).mock.calls[0][0]).toEqual(["bun", "install"]);
+    accessSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  it("autoInstallDependencies runs pnpm install if pnpm-lock.yaml exists", async () => {
+    const accessSpy = spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).endsWith("package.json")) return Promise.resolve();
+      if (String(path).endsWith("pnpm-lock.yaml")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
+    const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
+        }) as any
+    );
+
+    await autoInstallDependencies("/path/to/wt", () => {});
+    expect((spawnSpy as any).mock.calls[0][0]).toEqual(["pnpm", "install"]);
+    accessSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  it("autoInstallDependencies defaults to bun install", async () => {
+    const accessSpy = spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).endsWith("package.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
+    const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
+        }) as any
+    );
+
+    await autoInstallDependencies("/path/to/wt", () => {});
+    expect((spawnSpy as any).mock.calls[0][0]).toEqual(["bun", "install"]);
+    accessSpy.mockRestore();
+    spawnSpy.mockRestore();
   });
 
   it("autoInstallDependencies handles install failure", async () => {
@@ -253,7 +468,10 @@ describe("executor additional coverage", () => {
   });
 
   it("runWorkspaceScripts reads and executes scripts if config exists", async () => {
-    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
     spyOn(fsPromises, "readFile").mockResolvedValue(
       JSON.stringify({
         setup: ["npm run build"],
@@ -276,7 +494,10 @@ describe("executor additional coverage", () => {
   });
 
   it("runWorkspaceScripts handles missing setup script array gracefully", async () => {
-    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
     spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({}));
     let logged = false;
     await runWorkspaceScripts("setup", "/path/to/wt", "repoName", () => {
@@ -286,7 +507,10 @@ describe("executor additional coverage", () => {
   });
 
   it("runWorkspaceScripts handles script execution failure", async () => {
-    spyOn(fsPromises, "access").mockImplementation(() => Promise.resolve());
+    spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
     spyOn(fsPromises, "readFile").mockResolvedValue(
       JSON.stringify({
         setup: ["npm run build"],
@@ -298,6 +522,34 @@ describe("executor additional coverage", () => {
           exited: Promise.resolve(1),
           stdout: new Blob([]).stream(),
           stderr: new Blob(["error"]).stream(),
+        }) as any
+    );
+
+    let logged = false;
+    await runWorkspaceScripts("setup", "/path/to/wt", "repoName", () => {
+      logged = true;
+    });
+    expect(logged).toBe(true);
+  });
+
+  it("runWorkspaceScripts reads and executes scripts if vibe-code config exists", async () => {
+    spyOn(fsPromises, "access").mockImplementation((path) => {
+      if (String(path).includes(".superset/config.json"))
+        return Promise.reject(new Error("enoent"));
+      if (String(path).includes(".vibe-code/config.json")) return Promise.resolve();
+      return Promise.reject(new Error("enoent"));
+    });
+    spyOn(fsPromises, "readFile").mockResolvedValue(
+      JSON.stringify({
+        setup: ["npm run build"],
+      })
+    );
+    spyOn(Bun, "spawn").mockImplementation(
+      () =>
+        ({
+          exited: Promise.resolve(0),
+          stdout: new Blob([]).stream(),
+          stderr: new Blob([]).stream(),
         }) as any
     );
 
