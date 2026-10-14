@@ -1,0 +1,1303 @@
+$ bun test src --timeout 15000 --coverage
+bun test v1.2.14 (6a363a38)
+
+src/auth.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module 'hono/cookie' from '/app/packages/server/src/auth.test.ts'
+-------------------------------
+
+
+src/agents/agent-templates.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/agents/agent-templates.test.ts'
+-------------------------------
+
+
+src/agents/conflict-resolver.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@vibe-code/shared' from '/app/packages/server/src/agents/orchestrator.ts'
+-------------------------------
+
+
+src/agents/conflict-resolver.smoke.test.ts:
+[smoke] Server not reachable at http://localhost:3002 — skipping live tests
+(pass) ConflictResolver E2E smoke (live server) > server is reachable [0.98ms]
+(pass) ConflictResolver E2E smoke (live server) > creates a conflict-resolution task with correct tags and status [0.25ms]
+(pass) ConflictResolver E2E smoke (live server) > conflict task is retrievable and appears in the board [0.15ms]
+(pass) ConflictResolver E2E smoke (live server) > conflict prompt in conflict-resolver.ts uses --force-with-lease and not bare --force [1.49ms]
+
+src/agents/orchestrator.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/agents/acp-parser.test.ts:
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse session/started [2.07ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse session/resumed [0.08ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/use [0.07ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/call with name/arguments [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/result success [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse tool/result error [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse cost/usage [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse error [0.10ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage stdout [0.09ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage stderr [0.07ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse window/logMessage system [0.05ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse progress [0.12ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_start [0.07ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_finish with tokens [14.74ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse step_finish without tokens [0.11ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse question [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should parse thinking [0.06ms]
+(pass) parseAcpMessage > JSON-RPC 2.0 Notifications > should return empty array for unhandled JSON-RPC method [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:text [0.04ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:session [0.05ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:result [0.05ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:cost [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse total_tokens directly [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use pending [0.11ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use completed [0.10ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use completed with exitCode [0.13ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:tool_use failed [0.12ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:thinking [0.13ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:error [0.05ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:question [0.05ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:progress [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:step_start [0.03ms]
+(pass) parseAcpMessage > Direct Event Objects > should parse type:step_finish with tokens [0.23ms]
+(pass) parseAcpMessage > Direct Event Objects > should extract unknown event content [0.16ms]
+(pass) parseAcpMessage > Plain Text Fallback > should handle valid plain text [1.58ms]
+(pass) parseAcpMessage > Plain Text Fallback > should ignore noise starting with DEBUG [0.11ms]
+(pass) parseAcpMessage > Plain Text Fallback > should ignore noise starting with TRACE [0.07ms]
+(pass) parseAcpMessage > Plain Text Fallback > should extract session ID from noise [0.10ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured INFO lines for llm model [0.14ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured INFO lines for tool [0.10ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured ERROR lines [0.16ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process structured WARN lines [0.07ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: thinking plain text [0.08ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: tool_use plain text [0.15ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process type: tool_result plain text [0.14ms]
+(pass) parseAcpMessage > Plain Text Fallback > should process event: plain text [0.05ms]
+(pass) parseAcpMessage > should return empty array for empty string [0.03ms]
+(pass) parseAcpMessage uncovered coverage > should process init event type [0.05ms]
+(pass) parseAcpMessage uncovered coverage > should process function_call_request [0.07ms]
+(pass) parseAcpMessage uncovered coverage > should process tool status active [0.07ms]
+(pass) parseAcpMessage uncovered coverage > should parse step_complete event type [0.20ms]
+(pass) parseAcpMessage uncovered coverage > should parse result without token usage to empty array [0.06ms]
+(pass) parseAcpMessage uncovered coverage > should process tool with done status [0.08ms]
+(pass) parseAcpMessage uncovered coverage > should extract unknown event with text [0.06ms]
+(pass) parseAcpMessage uncovered coverage > should return empty array for non json plain text that is not handled [0.04ms]
+(pass) parseAcpMessage uncovered coverage > should return empty array if event content string is empty [0.04ms]
+(pass) parseAcpMessage uncovered coverage 2 > should process session method with missing params [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should parse window/logMessage with other type [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should parse step_finish with tokens nested object [0.14ms]
+(pass) parseAcpMessage uncovered coverage 2 > should extract tokens from usage for cost event [0.06ms]
+(pass) parseAcpMessage uncovered coverage 2 > should return empty array for result with no valid stats [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should handle error with msg field [0.05ms]
+(pass) parseAcpMessage uncovered coverage 2 > should handle thinking event with content field [0.05ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should cover missing closing braces block branches [0.04ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should cover usage without matching properties [0.05ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should return empty array for tool result plain text [0.04ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should test unknown result with stats but no tokens [0.03ms]
+(pass) parseAcpMessage uncovered coverage 3 (closing braces) > should test cost object with missing token fields [0.03ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should return empty array when method tool/use has no name/tool/function [0.05ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should handle error in tool result json where error is an object [0.07ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should process JSON RPC 2.0 with null params [0.04ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should handle tool_use event where status is undefined [0.06ms]
+(pass) parseAcpMessage uncovered coverage 4 (more JSON properties) > should process step_finish when params is undefined [0.04ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should cover tool_use with function_call fallback [0.07ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should return empty string if result without proper token stats [0.04ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should process error event type with 'error event' literal [0.05ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should test cost type falling back to parsed self [0.05ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should return empty for thinking event missing thought [0.03ms]
+(pass) parseAcpMessage uncovered coverage 5 (all JSON permutations) > should ignore long thinking content [0.12ms]
+
+src/agents/litellm-client.test.ts:
+(pass) Litellm Client > getLiteLLMBaseUrl > returns env LITELLM_BASE_URL over dbBaseUrl [0.15ms]
+(pass) Litellm Client > getLiteLLMBaseUrl > returns dbBaseUrl if env LITELLM_BASE_URL is not set [0.03ms]
+(pass) Litellm Client > getLiteLLMBaseUrl > returns default url if neither env nor db base url are set [0.02ms]
+(pass) Litellm Client > getMasterKey internally > throws if LITELLM_MASTER_KEY is not set when calling generateVirtualKey [0.37ms]
+(pass) Litellm Client > generateVirtualKey > generates and returns virtual key [0.49ms]
+(pass) Litellm Client > generateVirtualKey > falls back to token if key or token_id are missing [0.23ms]
+(pass) Litellm Client > generateVirtualKey > throws if response is not ok [0.31ms]
+(pass) Litellm Client > generateVirtualKey > throws if json has unexpected shape [0.21ms]
+(pass) Litellm Client > deleteVirtualKey > deletes virtual key successfully [0.38ms]
+(pass) Litellm Client > deleteVirtualKey > logs warning if response is not ok [0.23ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns true if health check is ok [0.26ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns false if health check is not ok [0.12ms]
+(pass) Litellm Client > checkLiteLLMHealth > returns false if fetch throws [0.15ms]
+(pass) Litellm Client > listLiteLLMModels > lists models successfully using default base url [0.48ms]
+(pass) Litellm Client > listLiteLLMModels > lists models successfully using provided base url [0.25ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if response is not ok [0.13ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if fetch throws [0.15ms]
+(pass) Litellm Client > listLiteLLMModels > returns empty array if data is missing [0.18ms]
+
+src/agents/conflict-resolver.e2e.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/agents/stream-process.test.ts:
+(pass) streamProcess > stdout streaming > yields stdout lines as log events [20.78ms]
+(pass) streamProcess > stdout streaming > streams carriage-return progress lines in real time [47.13ms]
+(pass) streamProcess > stdout streaming > does not emit empty lines [28.94ms]
+(pass) streamProcess > stderr streaming > yields stderr lines as stderr log events [43.65ms]
+(pass) streamProcess > exit code handling — critical bug fix > does NOT yield type:error for non-zero exit code [22.82ms]
+(pass) streamProcess > exit code handling — critical bug fix > yields type:log stream:stderr with exit message for non-zero exit [19.90ms]
+(pass) streamProcess > exit code handling — critical bug fix > does NOT yield exit error log for exit code 0 [17.92ms]
+(pass) streamProcess > complete event > yields type:complete with exitCode 0 on success [19.26ms]
+(pass) streamProcess > complete event > yields type:complete with correct exit code for non-zero [18.70ms]
+(pass) streamProcess > complete event > always yields complete even when process writes output then fails [18.38ms]
+(pass) streamProcess > parseLine callback > applies parseLine transformer to stdout lines [18.47ms]
+(pass) streamProcess > parseLine callback > parseLine returning empty array produces no events for that line [19.29ms]
+(pass) streamProcess > abort signal > stops streaming when aborted [22.99ms]
+
+src/agents/memory-service.test.ts:
+(pass) MemoryService > ranks current task memory ahead of ancestor memory and reflection artifacts [21.08ms]
+(pass) MemoryService > compacts oversized memories when appending run summaries [14.59ms]
+
+src/agents/orchestrator-fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/agents/orchestrator-fuzz.test.ts'
+-------------------------------
+
+
+src/config/max-agents.test.ts:
+(pass) resolveMaxAgents > uses the env default when no stored value exists [1.09ms]
+(pass) resolveMaxAgents > caps a stored value by the env cap [0.06ms]
+(pass) resolveMaxAgents > preserves a lower stored value under the env cap [0.02ms]
+(pass) resolveMaxAgents > ignores invalid values [0.02ms]
+
+src/db/queries.test.ts:
+(pass) Repository queries > creates a repo in pending status by default [11.73ms]
+(pass) Repository queries > updates status to ready with local path [10.74ms]
+(pass) Repository queries > lists all repos [10.94ms]
+(pass) Repository queries > extracts repo name from bare URL [11.03ms]
+(pass) Repository queries > extracts repo name from URL [11.16ms]
+(pass) Database queries with repo and task > Task queries > creates task with backlog status [0.37ms]
+(pass) Database queries with repo and task > Task queries > creates task with description [0.42ms]
+(pass) Database queries with repo and task > Task queries > creates and updates goal alignment fields [0.80ms]
+(pass) Database queries with repo and task > Task queries > creates task with engine preference [0.34ms]
+(pass) Database queries with repo and task > Task queries > lists all tasks [0.50ms]
+(pass) Database queries with repo and task > Task queries > lists tasks filtered by repo [0.58ms]
+(pass) Database queries with repo and task > Task queries > updates task status [0.40ms]
+(pass) Database queries with repo and task > Task queries > updates specific fields via updateField [0.39ms]
+(pass) Database queries with repo and task > Task queries > updateField sets branch_name [0.24ms]
+(pass) Database queries with repo and task > Task queries > deletes task [0.39ms]
+(pass) Database queries with repo and task > Task queries > returns null for non-existent task [0.07ms]
+(pass) Database queries with repo and task > AgentRun queries > creates a run in queued status [0.10ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to running with started_at [0.39ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to completed with exit_code [0.28ms]
+(pass) Database queries with repo and task > AgentRun queries > updates run status to failed with error_message [0.20ms]
+(pass) Database queries with repo and task > AgentRun queries > getLatestByTask returns the most recently created run [0.19ms]
+(pass) Database queries with repo and task > AgentRun queries > listByTask returns all runs for a task [0.15ms]
+(pass) Database queries with repo and task > AgentRun queries > returns null for latest run of task with no runs [0.54ms]
+(pass) Database queries with repo and task > AgentLog queries > creates and retrieves logs for a run [0.35ms]
+(pass) Database queries with repo and task > AgentLog queries > logs are ordered by insertion (id ASC) [0.15ms]
+(pass) Database queries with repo and task > AgentLog queries > returns empty array for run with no logs [0.09ms]
+(pass) Database queries with repo and task > AgentLog queries > supports all stream types [0.27ms]
+(pass) Database queries with repo and task > Artifact queries > upserts and lists task artifacts [0.40ms]
+(pass) Database queries with repo and task > Task schedules queries > upsert creates a new schedule [0.35ms]
+(pass) Database queries with repo and task > Task schedules queries > upsert updates an existing schedule [0.37ms]
+(pass) Database queries with repo and task > Task schedules queries > setEnabled enables and disables [0.40ms]
+(pass) Database queries with repo and task > Task schedules queries > listDue returns schedules due [0.36ms]
+(pass) Database queries with repo and task > Task schedules queries > updateAfterRun updates nextRunAt [0.33ms]
+(pass) Database queries with repo and task > Task schedules queries > remove deletes a schedule [0.27ms]
+(pass) Database queries with repo and task > Task schedules queries > disableExpired disables expired schedules [0.29ms]
+(pass) Database queries with repo and task > Findings queries > create creates a finding [0.37ms]
+(pass) Database queries with repo and task > Findings queries > listByRepo lists findings [0.40ms]
+(pass) Database queries with repo and task > Findings queries > resolve resolves a finding [0.48ms]
+(pass) Database queries with repo and task > Findings queries > getRecentByRepo returns unresolved findings from last 30 days [0.50ms]
+(pass) Database queries with repo and task > Metrics queries > create creates a metric [0.47ms]
+(pass) Database queries with repo and task > Metrics queries > skillEffectiveness returns stats [0.81ms]
+(pass) Database queries with repo and task > Metrics queries > engineEffectiveness returns stats [0.67ms]
+(pass) Settings queries > get returns default null if key not found [0.09ms]
+(pass) Settings queries > set sets a value and get retrieves it [0.21ms]
+(pass) Settings queries > set overrides existing value [0.12ms]
+(pass) Prompt templates queries > listAll returns predefined templates [0.32ms]
+(pass) Prompt templates queries > getById returns a template [0.32ms]
+(pass) Prompt templates queries > create creates a custom template [0.36ms]
+(pass) Prompt templates queries > update updates a custom template [0.46ms]
+(pass) Prompt templates queries > delete removes a custom template [0.36ms]
+(pass) Prompt templates queries > cannot update or delete a builtin template [0.22ms]
+(pass) Additional queries coverage > Workspace queries update missing fields > updates empty and with all fields [0.90ms]
+(pass) Additional queries coverage > Tasks queries update additional fields > updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority [0.45ms]
+(pass) Additional queries coverage > Task query utility methods > archiveDone works [1.35ms]
+(pass) Additional queries coverage > Task query utility methods > clearFailed works [2.04ms]
+(pass) Additional queries coverage > Task query utility methods > retryFailed works [1.50ms]
+(pass) Additional queries coverage > Task query utility methods > cleanupArchived works [0.49ms]
+(pass) Additional queries coverage > Task query utility methods > incrementLoopAttempt works [0.48ms]
+(pass) Additional queries coverage > Task queries loopConfig > maps loopConfig properly if loop_enabled is true [0.33ms]
+(pass) Additional queries coverage > ReviewRound API > updateStatus [0.43ms]
+(pass) Additional queries coverage > ReviewIssue update un-covered paths > returns existing row when updates is empty [0.83ms]
+(pass) Additional queries coverage > Label API > listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts [1.86ms]
+(pass) Additional queries coverage > WorkflowMemory remaining paths > getById returns correctly [0.33ms]
+(pass) Additional queries coverage > Workspace queries update missing fields > updates empty and with all fields [0.68ms]
+(pass) Additional queries coverage > Tasks queries update additional fields > updates description, status, column_order, engine, model, tags, notes, desired_outcome, depends_on, max_cost, priority [0.42ms]
+(pass) Additional queries coverage > Task query utility methods > archiveDone works [1.30ms]
+(pass) Additional queries coverage > Task query utility methods > clearFailed works [1.79ms]
+(pass) Additional queries coverage > Task query utility methods > retryFailed works [1.20ms]
+(pass) Additional queries coverage > Task query utility methods > cleanupArchived works [0.29ms]
+(pass) Additional queries coverage > Task query utility methods > incrementLoopAttempt works [0.36ms]
+(pass) Additional queries coverage > Task queries loopConfig > maps loopConfig properly if loop_enabled is true [0.27ms]
+(pass) Additional queries coverage > ReviewRound API > updateStatus [0.25ms]
+(pass) Additional queries coverage > ReviewIssue update un-covered paths > returns existing row when updates is empty [0.45ms]
+(pass) Additional queries coverage > Label API > listByRepo, getById, update, remove, setTaskLabels, addTaskLabel, removeTaskLabel, getByRepoWithCounts [1.04ms]
+(pass) Additional queries coverage > WorkflowMemory remaining paths > getById returns correctly [0.24ms]
+(pass) Task issue lane > remembers the lane agreed with the issue without counting as an edit [16.73ms]
+(pass) Task issue lane > tells subscribers about writes to issue-linked tasks only [14.11ms]
+(pass) Task issue lane > survives a subscriber that throws [14.60ms]
+
+src/db/index.test.ts:
+(pass) Database index > creates db and applies migrations [109.06ms]
+(pass) Database index > migrates from old schema [119.04ms]
+
+src/api/stats.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/stats.test.ts'
+-------------------------------
+
+
+src/api/inbox.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/inbox.test.ts'
+-------------------------------
+
+
+src/api/sessions.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/sessions.integration.test.ts'
+-------------------------------
+
+
+src/api/settings.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/settings.test.ts'
+-------------------------------
+
+
+src/api/lanes.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/lanes.test.ts'
+-------------------------------
+
+
+src/api/terminal.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/terminal.test.ts'
+-------------------------------
+
+
+src/api/tasks.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/auth.ts'
+-------------------------------
+
+
+src/api/tasks.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/tasks.integration.test.ts'
+-------------------------------
+
+
+src/api/reviews.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/reviews.integration.test.ts'
+-------------------------------
+
+
+src/api/runs.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/runs.integration.test.ts'
+-------------------------------
+
+
+src/api/repos.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'hono' from '/app/packages/server/src/api/repos.integration.test.ts'
+-------------------------------
+
+
+src/utils/process-tree.test.ts:
+(pass) killProcessTree > windows platform runs taskkill [0.74ms]
+(pass) killProcessTree > windows platform gracefully handles taskkill error [0.60ms]
+(pass) killProcessTree > unix platform attempts process group kill first [0.23ms]
+(pass) killProcessTree > unix platform falls back to recursive pgrep and kill if group kill fails [0.42ms]
+(pass) killProcessTree > unix platform logs debug on fallback execution error [0.39ms]
+
+src/utils/fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/utils/fuzz.test.ts'
+-------------------------------
+
+
+src/utils/workspace-context.test.ts:
+(pass) Workspace Context Utilities > getWorkspaceContext > should return null if user is null [0.83ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "env-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "env-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from c.env.workspaceId [0.75ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "header-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "header-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from header x-workspace-id [0.45ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "query-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "query-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from query workspace_id [0.57ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "body-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "body-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should extract workspaceId from body json in non-GET request [0.51ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-testuser",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should ignore invalid JSON body [0.46ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "env",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "env",
+}
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "header",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "header",
+}
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "query",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "query",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should prioritize c.env > header > query > body [21.24ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-testuser",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should auto-assign and create default workspace if none provided [0.68ms]
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should use existing auto-assigned workspace if none provided [0.36ms]
+[workspace-context] ❌ SECURITY: User attempting cross-workspace access {
+  username: "testuser",
+  authorizedWs: "my-ws",
+  requestedWs: "other-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should return null for cross-workspace access attempt [0.21ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should call ensureWorkspaceExists and create base slug if available [0.55ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "my-custom-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should call ensureWorkspaceExists and create suffixed slug if base slug is taken [0.52ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "existing-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should do nothing in ensureWorkspaceExists if workspace already exists [0.34ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "---",
+  workspaceId: "my-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "---",
+  workspaceId: "my-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should fallback to 'personal' if slugify results in empty string [0.51ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "---",
+  workspaceId: "my-ws",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "---",
+  workspaceId: "my-ws",
+}
+(pass) Workspace Context Utilities > getWorkspaceContext > should fallback to 'personal' with suffix if slugify results in empty string and personal is taken [0.51ms]
+[workspace-context] 📝 Creating default workspace for user {
+  username: "testuser",
+  workspaceId: "ws-1",
+}
+[workspace-context] ✅ Workspace context validated {
+  username: "testuser",
+  workspaceId: "ws-1",
+}
+(pass) Workspace Context Utilities > requireWorkspaceContext > should return workspaceId on success [0.60ms]
+[workspace-context] ❌ SECURITY: User attempting cross-workspace access {
+  username: "testuser",
+  authorizedWs: "my-ws",
+  requestedWs: "other-ws",
+}
+(pass) Workspace Context Utilities > requireWorkspaceContext > should return null on failure (e.g., cross-workspace) [0.33ms]
+
+src/lanes/lane-labels.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@vibe-code/shared' from '/app/packages/server/src/lanes/lane-labels.test.ts'
+-------------------------------
+
+
+src/lanes/lane-sync.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@vibe-code/shared' from '/app/packages/server/src/lanes/lane-sync.ts'
+-------------------------------
+
+
+src/ws/event-dedup.test.ts:
+(pass) EventDedup > delivers first occurrence, drops repeats [0.18ms]
+(pass) EventDedup > treats empty/undefined id as always-deliver (no dedup) [0.05ms]
+(pass) EventDedup > evicts oldest id once capacity exceeded (FIFO) [0.05ms]
+(pass) EventDedup > clear() resets the buffer [0.04ms]
+
+src/sessions/session-service.test.ts:
+(pass) deriveStatus > an explicit terminal state from the CLI wins over activity [0.19ms]
+(pass) deriveStatus > falls back to how recently the session was touched [0.19ms]
+(pass) ClaudeCodeSessionReader > projects a transcript onto the fields a card needs [12.69ms]
+(pass) ClaudeCodeSessionReader > prefers the summary record and skips slash-command envelopes [3.66ms]
+(pass) ClaudeCodeSessionReader > marks a transcript whose last turn is an API error as failed [2.70ms]
+(pass) ClaudeCodeSessionReader > tolerates truncated lines from a session still being written [3.06ms]
+(pass) ClaudeCodeSessionReader > ignores directories with no transcripts [1.09ms]
+(pass) OpenCodeSessionReader > reads sessions from either storage layout and counts messages [8.56ms]
+(pass) OpenCodeSessionReader > skips sub-agent sessions [2.63ms]
+(pass) OpenCodeSessionReader > treats a recorded completion time as done [1.92ms]
+(pass) AntigravitySessionReader > reads a session object regardless of field naming [5.16ms]
+(pass) AntigravitySessionReader > unwraps a `{ sessions: [...] }` container [1.66ms]
+(pass) AntigravitySessionReader > folds a JSONL event log into a single session [4.06ms]
+(pass) AntigravitySessionReader > ignores files that carry no session at all [1.47ms]
+(pass) SessionService > merges every CLI into one board, newest first [9.01ms]
+(pass) SessionService > reports a source as unavailable when its store is absent [1.11ms]
+(pass) SessionService > cards expose only the projected fields [2.44ms]
+(pass) SessionService > filters by source and honours the limit [3.94ms]
+(pass) SessionService > serves repeat reads from cache within the TTL [5.46ms]
+(pass) SessionService > a failing reader degrades to an error on its own source [0.51ms]
+
+src/notifications/telegram.test.ts:
+(pass) createTelegramNotifier > uses env credentials when db settings are empty [0.19ms]
+(pass) createTelegramNotifier > sends through Telegram using env credentials [0.45ms]
+
+src/security/access-control.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/git/git-fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/git/git-fuzz.test.ts'
+-------------------------------
+
+
+src/git/git-service.test.ts:
+(pass) GitService.gitEnv > adds safe.directory without pre-existing config [0.22ms]
+(pass) GitService.gitEnv > preserves existing config and appends safe.directory [0.09ms]
+(pass) GitService.getRepoOwnerAndName > parses HTTPS GitHub URL [0.13ms]
+(pass) GitService.getRepoOwnerAndName > parses HTTPS URL with .git suffix [0.03ms]
+(pass) GitService.getRepoOwnerAndName > parses SSH URL [0.02ms]
+(pass) GitService.getRepoOwnerAndName > parses URL with nested org name [0.02ms]
+(pass) GitService.hasCommitsAhead > returns false when no new commits since base [4.69ms]
+(pass) GitService.hasCommitsAhead > returns true after adding a new commit on the feature branch [19.85ms]
+(pass) GitService.hasCommitsAhead > returns false when baseBranch is fast-forwarded to the same commit [8.58ms]
+(pass) GitService.hasChanges > returns false on clean working tree [5.90ms]
+(pass) GitService.hasChanges > returns true after creating a new file [5.77ms]
+(pass) Git integration operations > init() creates repos and workspaces directories [0.59ms]
+(pass) Git integration operations > cloneRepo() clones seed dir to a bare repo [16.29ms]
+(pass) Git integration operations > fetchRepo() populates remote-tracking branches in the bare repo [24.20ms]
+(pass) Git integration operations > getBarePath() matches cloneRepo bare path [0.20ms]
+(pass) Git integration operations > listBranches() returns empty array on a fresh bare clone [19.35ms]
+(pass) Git integration operations > detectDefaultBranch() detects main [9.85ms]
+(pass) Git integration operations > isRepoSource() accepts a local Git repository path [11.11ms]
+(pass) Git integration operations > isRepoSource() rejects a non-repository source [9.42ms]
+(pass) Git integration operations > detectDefaultBranch() falls back to main on failure [8.22ms]
+(pass) Git integration operations > createWorktree() creates a linked worktree [36.05ms]
+(pass) Git integration operations > syncWithBase() refreshes origin/main before rebasing [64.45ms]
+(pass) Git integration operations > branchExists() returns true for new-branch and false for fake [8.65ms]
+(pass) Git integration operations > commitAll() commits new files [39.36ms]
+(pass) Git integration operations > push() pushes branch to origin [30.93ms]
+(pass) Git integration operations > checkout() changes checked out branch [9.75ms]
+(pass) Git integration operations > diffSummary() and diffFileContent() return changes [13.83ms]
+Switched to a new branch 'branch2'
+(pass) Git integration operations > diffSummary() parses modified and deleted correctly [76.90ms]
+(pass) Git integration operations > removeWorktree() removes worktree [5.05ms]
+(pass) Git integration operations > removeWorktree() falls back to manual cleanup if git fails [7.81ms]
+(pass) Git integration operations > deleteLocalRepo() removes workspace and bare dirs [3.19ms]
+
+src/git/git-service.lock.test.ts:
+(pass) GitService per-repo lock > serializes concurrent mutations on the same bare path [41.72ms]
+(pass) GitService per-repo lock > runs different bare paths concurrently [21.67ms]
+
+src/terminal/harness.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@vibe-code/shared' from '/app/packages/server/src/terminal/harness.ts'
+-------------------------------
+
+
+src/terminal/session-service.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@xterm/headless' from '/app/packages/server/src/terminal/session-service.test.ts'
+-------------------------------
+
+
+src/terminal/workspace-cleanup.test.ts:
+(pass) cleanupWorkspaces > keeps the workspaces of unfinished terminal tasks and removes the rest [23.40ms]
+(pass) cleanupWorkspaces > does nothing when the workspaces directory does not exist [11.86ms]
+(pass) cleanupWorkspaces > only protects terminal runs [12.89ms]
+
+src/terminal/skill-plan.test.ts:
+(pass) planSkills > always applies the built-in orchestrator, even when nothing else matches [2.00ms]
+(pass) planSkills > omits the built-in skill when it is not installed [0.21ms]
+(pass) planSkills > picks skills whose name or tags match the task and explains the match [1.22ms]
+(pass) planSkills > matches plurals and verb endings [0.69ms]
+(pass) planSkills > ignores a lone description word, which is mostly noise [0.49ms]
+(pass) planSkills > pulls in the dependencies of a picked skill [0.45ms]
+(pass) planSkills > never applies more than four picks [1.14ms]
+(pass) planSkills > uses the operator's list as is once it is manual [0.20ms]
+(pass) planSkills > does not duplicate a skill that is both built in and picked [0.19ms]
+(pass) manualPicks > returns only what the operator chose, never the built-ins [0.15ms]
+(pass) rankSkills > returns nothing for a task made only of filler words [0.05ms]
+
+src/terminal/controller.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@vibe-code/shared' from '/app/packages/server/src/terminal/controller.ts'
+-------------------------------
+
+
+src/terminal/terminal-fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/terminal/terminal-fuzz.test.ts'
+-------------------------------
+
+
+src/skills/matcher.test.ts:
+(pass) matcher > should match skills, rules, agents, and workflows based on task description and workdir [3.36ms]
+(pass) matcher > should match workflow if mentioned in task [0.40ms]
+(pass) matcher > should return top 5 rules if workdir cannot be read or no extensions [0.25ms]
+(pass) matcher > should handle large amount of matched skills by trimming character count [1.74ms]
+(pass) matcher > should handle large amount of matched skills by trimming character count (skills) [1.70ms]
+(pass) matcher > prefers historically effective skills when lexical overlap is tied [0.71ms]
+
+src/skills/skills-fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/skills/skills-fuzz.test.ts'
+-------------------------------
+
+
+src/skills/registry.test.ts:
+(pass) SkillRegistryService > installs assets as pending review and activates them after approval [5.63ms]
+(pass) SkillRegistryService > builds hygiene reports from registry, memories, and failed dependencies [21.04ms]
+
+src/skills/repo-loader.test.ts:
+(pass) RepoSkillsLoader > loadManifestsFromGit > should load available manifest files using git cat-file [1.35ms]
+(pass) RepoSkillsLoader > loadWorktreeManifests > should load available manifest files from .agents/ directory [1.80ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should skip unreadable files when loading index [2.68ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should safely handle readdir errors by returning empty arrays [0.63ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should handle files with no frontmatter [0.57ms]
+(pass) RepoSkillsLoader > Edge cases and error handling > should parse frontmatter with unquoted and quoted strings correctly [0.34ms]
+(pass) RepoSkillsLoader > should load skills, rules, agents, and workflows from .vibe-code directory [0.52ms]
+(pass) RepoSkillsLoader > returns cached index on subsequent load calls and handles empty states [0.25ms]
+(pass) RepoSkillsLoader > loads manifests from worktrees and bare repos gracefully [0.67ms]
+(pass) RepoSkillsLoader > should restrict getFileContent to paths within .vibe-code directory [0.27ms]
+
+src/agents/orchestrator/verify.coverage.test.ts:
+(pass) verify utils > formatVerificationResult with long stdout/stderr correctly truncates [0.81ms]
+(pass) verify utils > extractFailureReason with missing runner/command should fallback [0.07ms]
+(pass) verify utils > verifyWorktreeParallel abort signal correctly handles failure [1.46ms]
+
+src/agents/orchestrator/pr-retry.test.ts:
+(pass) retryPR > throws if task not found [0.81ms]
+(pass) retryPR > throws if task not in review status [0.17ms]
+(pass) retryPR > throws if task has no branch associated [0.15ms]
+(pass) retryPR > throws if repository not found [0.12ms]
+(pass) retryPR > throws if no run found for this task [0.11ms]
+(pass) retryPR > throws if engine not found [0.18ms]
+(pass) retryPR > successfully retries PR, updates db and broadcasts [0.32ms]
+(pass) retryPR > uses defaultBranch if task baseBranch is missing [0.15ms]
+(pass) retryPR > uses barePath from git if localPath is missing [0.14ms]
+(pass) retryPR > throws error if git operations fail, but still tries to clean up [0.49ms]
+(pass) retryPR > ignores error if cleanup fails [0.15ms]
+
+src/agents/orchestrator/frontend-shot.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'playwright' from '/app/packages/server/src/agents/orchestrator/frontend-shot.test.ts'
+-------------------------------
+
+
+src/agents/orchestrator/review.test.ts:
+(pass) runReviewPipeline > runs the review pipeline for all personas and extracts findings [0.05ms]
+
+src/agents/orchestrator/task-plan.test.ts:
+(pass) task-plan tests > extractCandidateSteps > extracts from bullet points [0.69ms]
+(pass) task-plan tests > extractCandidateSteps > extracts from sentences if no bullets are present [0.18ms]
+(pass) task-plan tests > extractCandidateSteps > returns default fallback steps if nothing else matches [0.07ms]
+(pass) task-plan tests > inferTaskType > infers frontend [0.12ms]
+(pass) task-plan tests > inferTaskType > infers test [0.04ms]
+(pass) task-plan tests > inferTaskType > infers docs [0.03ms]
+(pass) task-plan tests > inferTaskType > infers infra [0.03ms]
+(pass) task-plan tests > inferTaskType > infers refactor [0.03ms]
+(pass) task-plan tests > inferTaskType > infers bugfix [0.03ms]
+(pass) task-plan tests > inferTaskType > infers chore [0.04ms]
+(pass) task-plan tests > inferTaskType > infers backend by default [0.02ms]
+(pass) task-plan tests > buildPlanNodes > handles preparation and terminal nodes correctly [0.46ms]
+(pass) task-plan tests > buildPlanNodes > handles multiple sequential preparation and execution nodes [0.10ms]
+(pass) task-plan tests > materializeTaskExecutionPlan > returns existing children if force is false [0.25ms]
+(pass) task-plan tests > materializeTaskExecutionPlan > creates tasks correctly when distributing budget [0.70ms]
+
+src/agents/orchestrator/verify.test.ts:
+(pass) discoverValidationCommands > prefers WORKFLOW.md quality gate commands when present [4.37ms]
+(pass) discoverValidationCommands > falls back to package.json scripts when no workflow contract exists [2.48ms]
+(pass) discoverValidationCommands - extra > detects validation commands from Makefile when package.json is missing [2.76ms]
+(pass) discoverValidationCommands - extra > detects validation commands from README.md bash blocks [1.66ms]
+(pass) discoverValidationCommands - extra > throws an error when no validation commands can be discovered [1.12ms]
+(pass) computeRunQualityScore > reduces score for retries and review findings [0.11ms]
+(pass) computeRunQualityScore > clamps score to the 0..100 range [0.11ms]
+(pass) extractFailureReason > extracts test failures properly [374.18ms]
+(pass) extractFailureReason > extracts build error messages properly [359.55ms]
+(pass) extractFailureReason > extracts lint warning messages properly [351.02ms]
+(pass) extractFailureReason > falls back to generic failure reason if no match [356.07ms]
+(pass) extractFailureReason > extracts failure reason exactly as fallback to generic command if no output [356.38ms]
+(pass) _formatVerificationResult > formats successful results [0.35ms]
+(pass) _formatVerificationResult > formats failed results without verbose [0.13ms]
+(pass) _formatVerificationResult > formats failed results with verbose [0.22ms]
+(pass) verifyWorktreeParallel > runs commands in parallel and returns results [0.09ms]
+(pass) verifyWorktreeParallel > handles failing commands in parallel execution [0.04ms]
+
+src/agents/orchestrator/executor.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/agents/orchestrator/baseline-check.test.ts:
+(pass) runBaselineCheck > skips if VIBE_CODE_SKIP_BASELINE_CHECK is true [0.45ms]
+(pass) runBaselineCheck > skips if no runner is detected (no package.json or Makefile) [0.47ms]
+(pass) runBaselineCheck > detects make and runs make typecheck [0.96ms]
+(pass) runBaselineCheck > detects package.json but skips if no typecheck script [0.57ms]
+(pass) runBaselineCheck > detects type-check script in package.json [0.42ms]
+(pass) runBaselineCheck > fails if runner command fails [0.32ms]
+(pass) runBaselineCheck > handles JSON parse error gracefully [0.37ms]
+(pass) runBaselineCheck > handles spawn errors gracefully [0.32ms]
+(pass) runBaselineCheck > truncates output to last 10 lines [0.43ms]
+(pass) runBaselineCheck > runner process handles exit timeout (or unresolved exited) [0.54ms]
+
+src/agents/orchestrator/evaluator.test.ts:
+(pass) runPostRunEvaluator > returns null if disabled [0.27ms]
+(pass) runPostRunEvaluator > returns null if diff is empty [0.75ms]
+(pass) runPostRunEvaluator > returns evaluation result on success [0.85ms]
+(pass) runPostRunEvaluator > returns null if fetch fails [0.26ms]
+(pass) runPostRunEvaluator > returns null if fetch throws [0.28ms]
+(pass) runPostRunEvaluator > handles invalid JSON response [0.44ms]
+(pass) runPostRunEvaluator > handles missing properties in valid JSON response, bounds score [0.27ms]
+(pass) runPostRunEvaluator > passes if score >= threshold and pass not explicitly false [0.41ms]
+(pass) runPostRunEvaluator > handles truncated diff logic [0.54ms]
+(pass) runPostRunEvaluator > handles git failure [0.33ms]
+
+src/agents/orchestrator/orchestrator.coverage.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/agents/orchestrator/event-handler.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+src/agents/orchestrator/prompt.test.ts:
+(pass) prompt tests > buildPrompt > builds prompt with task title and description [1.64ms]
+(pass) prompt tests > buildPrompt > builds prompt with task goal and desired outcome [0.14ms]
+(pass) prompt tests > buildPrompt > builds prompt with memory context [0.09ms]
+(pass) prompt tests > appendRuntimeContextHints > appends hints without planner spec [0.07ms]
+(pass) prompt tests > appendRuntimeContextHints > appends hints with planner spec [0.04ms]
+(pass) prompt tests > buildContextAsync > handles full context loading [5.15ms]
+
+src/agents/orchestrator/planner.test.ts:
+(pass) runPlannerIfNeeded > returns null if explicitly disabled [0.26ms]
+(pass) runPlannerIfNeeded > returns null if description is long enough [0.09ms]
+(pass) runPlannerIfNeeded > returns spec and writes to file on success [0.57ms]
+(pass) runPlannerIfNeeded > returns null if fetch fails [0.16ms]
+(pass) runPlannerIfNeeded > returns null if fetch throws [0.19ms]
+(pass) runPlannerIfNeeded > returns null if writeFile throws [0.36ms]
+(pass) runPlannerIfNeeded > handles empty descriptions properly in the prompt [0.17ms]
+
+src/agents/engines/claude-code.test.ts:
+(pass) ClaudeCodeEngine > isAvailable returns true when command succeeds [0.31ms]
+(pass) ClaudeCodeEngine > isAvailable returns false when command fails [0.10ms]
+(pass) ClaudeCodeEngine > isAvailable returns false on throw [0.16ms]
+(pass) ClaudeCodeEngine > getVersion returns version string on success [0.47ms]
+(pass) ClaudeCodeEngine > getVersion returns null on non-zero exit code [0.16ms]
+(pass) ClaudeCodeEngine > getVersion returns null on throw [0.15ms]
+(pass) ClaudeCodeEngine > listModels returns list [0.59ms]
+(pass) ClaudeCodeEngine > abort kills the process [0.09ms]
+(pass) ClaudeCodeEngine > sendInput writes to stdin [0.12ms]
+(pass) ClaudeCodeEngine > sendInput returns false if proc missing [0.03ms]
+(pass) ClaudeCodeEngine > execute runs the engine [5.30ms]
+
+src/agents/engines/copilot.test.ts:
+(pass) CopilotEngine > isAvailable returns true when command succeeds [133.48ms]
+(pass) CopilotEngine > isAvailable returns false when command fails [136.65ms]
+(pass) CopilotEngine > isAvailable returns false on throw [131.26ms]
+(pass) CopilotEngine > getVersion returns version string on success [138.43ms]
+(pass) CopilotEngine > getVersion returns null on non-zero exit code [131.28ms]
+(pass) CopilotEngine > getVersion returns null on throw [140.98ms]
+(pass) CopilotEngine > listModels returns list [0.76ms]
+(pass) CopilotEngine > abort kills the process [0.11ms]
+(pass) CopilotEngine > sendInput writes to stdin [0.15ms]
+(pass) CopilotEngine > sendInput returns false if proc missing [0.05ms]
+(pass) CopilotEngine > execute runs the engine [132.23ms]
+
+src/agents/engines/reviewer.test.ts:
+(pass) reviewer engine > PERSONA_LABELS exists [1.19ms]
+(pass) reviewer engine > runPersonaReview handles successful gemini execution [3.09ms]
+(pass) reviewer engine > runPersonaReview handles successful claude execution [1.61ms]
+(pass) reviewer engine > runPersonaReview handles execution failure [1.47ms]
+(pass) reviewer engine > runPersonaReview handles exception during run [1.42ms]
+(pass) reviewer engine > runPersonaReview truncates large diffs [1.73ms]
+(pass) reviewer engine > runPersonaReview getWorktreeDiff error handling [1.39ms]
+(pass) reviewer engine > runPersonaReview handles claude with fallback native key [1.54ms]
+(pass) reviewer engine > runPersonaReview handles missing git diff correctly [1.28ms]
+(pass) reviewer engine > runPersonaReview returns empty output when child produces nothing [1.07ms]
+(pass) reviewer engine > runPersonaReview handles gemini with litellmKey [2.70ms]
+
+src/agents/engines/ampcode.test.ts:
+(pass) AmpCodeEngine > isAvailable returns true when command succeeds [0.32ms]
+(pass) AmpCodeEngine > isAvailable returns false when command fails [0.10ms]
+(pass) AmpCodeEngine > isAvailable returns false on throw [0.14ms]
+(pass) AmpCodeEngine > getVersion returns version string on success [0.25ms]
+(pass) AmpCodeEngine > getVersion returns null on non-zero exit code [0.20ms]
+(pass) AmpCodeEngine > getVersion returns null on throw [0.15ms]
+(pass) AmpCodeEngine > listModels returns list [0.17ms]
+(pass) AmpCodeEngine > abort kills the process [0.08ms]
+(pass) AmpCodeEngine > sendInput writes to stdin [0.10ms]
+(pass) AmpCodeEngine > sendInput returns false if proc missing [0.05ms]
+(pass) AmpCodeEngine > execute runs the engine [2.00ms]
+
+src/agents/engines/codex.test.ts:
+(pass) CodexEngine > isAvailable returns true when command succeeds [0.36ms]
+(pass) CodexEngine > isAvailable returns false when command fails [0.13ms]
+(pass) CodexEngine > isAvailable returns false on throw [0.15ms]
+(pass) CodexEngine > getVersion returns version string on success [0.28ms]
+(pass) CodexEngine > getVersion returns null on non-zero exit code [0.13ms]
+(pass) CodexEngine > getVersion returns null on throw [0.24ms]
+(pass) CodexEngine > listModels returns list [0.30ms]
+(pass) CodexEngine > abort kills the process [0.10ms]
+(pass) CodexEngine > sendInput writes to stdin [0.10ms]
+(pass) CodexEngine > sendInput returns false if proc missing [0.03ms]
+(pass) CodexEngine > execute runs the engine [1.81ms]
+
+src/agents/engines/stderr-tail.test.ts:
+(pass) StderrTail > forwards every chunk and trims tail [1.42ms]
+(pass) StderrTail > bounds buffer to maxBytes from the end [0.09ms]
+(pass) StderrTail > returns empty tail when nothing written [0.03ms]
+(pass) withAgentStderr > appends labeled stderr when non-empty [0.05ms]
+(pass) withAgentStderr > passes msg through when tail empty [0.02ms]
+
+src/agents/engines/opencode.cache-tokens.test.ts:
+(pass) step_finish cache token accumulation > emits cost event with cache.read mapped to costStats.cached [1.72ms]
+(pass) step_finish cache token accumulation > emits cost event without cache when not provided [0.12ms]
+(pass) step_finish cache token accumulation > skips cost when all token fields are zero [0.06ms]
+
+src/agents/engines/kiro-cli.test.ts:
+(pass) KiroCliEngine > isAvailable returns true when command succeeds [0.30ms]
+(pass) KiroCliEngine > isAvailable returns false when command fails [0.10ms]
+(pass) KiroCliEngine > isAvailable returns false on throw [0.22ms]
+(pass) KiroCliEngine > getVersion returns version string on success [0.31ms]
+(pass) KiroCliEngine > getVersion returns null on non-zero exit code [0.13ms]
+(pass) KiroCliEngine > getVersion returns null on throw [0.16ms]
+(pass) KiroCliEngine > listModels returns list [0.24ms]
+(pass) KiroCliEngine > abort kills the process [0.08ms]
+(pass) KiroCliEngine > sendInput writes to stdin [0.09ms]
+(pass) KiroCliEngine > sendInput returns false if proc missing [0.03ms]
+(pass) KiroCliEngine > execute runs the engine [2.06ms]
+
+src/agents/engines/gemini.trust.test.ts:
+(pass) Gemini env injection > defaults GEMINI_CLI_TRUST_WORKSPACE=true to bypass folder-trust gate [0.21ms]
+(pass) Gemini env injection > caller env wins over default [0.06ms]
+(pass) Gemini env injection > strips IDE binding env vars to avoid Gemini IDE client lock-in [0.18ms]
+
+src/agents/engines/opencode.replay.test.ts:
+(pass) OpenCodeEngine replay fixtures > replays the real write-guard flow captured from the CLI [3.22ms]
+
+src/agents/engines/acpx.test.ts:
+(pass) AcpxEngine > isAvailable returns true on success [0.38ms]
+(pass) AcpxEngine > isAvailable returns false on failure [0.10ms]
+(pass) AcpxEngine > getVersion returns version string [0.28ms]
+(pass) AcpxEngine > listModels returns models [0.39ms]
+(pass) AcpxEngine > execute runs acpx and handles all acpx.* event types [2.01ms]
+(pass) AcpxEngine > abort kills the process and deletes from map [0.14ms]
+(pass) AcpxEngine > abort does nothing if runId not found [0.05ms]
+(pass) AcpxEngine > sendInput writes to stdin if available [0.11ms]
+(pass) AcpxEngine > sendInput returns false if process not found or stdin missing [0.05ms]
+
+src/agents/engines/opencode.shim-resolver.test.ts:
+(pass) resolveOpencodeNativeFromShim > returns null when path is not a .cmd shim [0.14ms]
+(pass) resolveOpencodeNativeFromShim > prefers x64 native binary when present on x64 [0.12ms]
+(pass) resolveOpencodeNativeFromShim > falls back to x64-baseline when x64 missing [0.05ms]
+(pass) resolveOpencodeNativeFromShim > prefers arm64 binary on arm64 host [0.05ms]
+(pass) resolveOpencodeNativeFromShim > returns null when no candidate package is installed [0.03ms]
+
+src/agents/engines/blocked-args.test.ts:
+(pass) filterCustomArgs > returns empty for undefined [0.13ms]
+(pass) filterCustomArgs > passes through allowed args [0.04ms]
+(pass) filterCustomArgs > strips with-value blocked flag and its value [0.03ms]
+(pass) filterCustomArgs > strips with-value blocked flag in inline form [0.03ms]
+(pass) filterCustomArgs > strips standalone blocked flag without consuming next arg [0.02ms]
+(pass) filterCustomArgs > invokes onBlock callback per blocked flag [0.06ms]
+
+src/agents/engines/opencode.fuzz.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'fast-check' from '/app/packages/server/src/agents/engines/opencode.fuzz.test.ts'
+-------------------------------
+
+
+src/agents/engines/hermes.test.ts:
+(pass) HermesEngine > isAvailable returns true when command succeeds [1.47ms]
+(pass) HermesEngine > isAvailable returns false when command fails [0.12ms]
+(pass) HermesEngine > isAvailable returns false on throw [0.26ms]
+(pass) HermesEngine > getVersion returns version string on success [0.31ms]
+(pass) HermesEngine > getVersion returns null on non-zero exit code [0.21ms]
+(pass) HermesEngine > getVersion returns null on throw [0.17ms]
+(pass) HermesEngine > listModels returns list [0.20ms]
+(pass) HermesEngine > abort kills the process [0.08ms]
+(pass) HermesEngine > sendInput writes to stdin [0.10ms]
+(pass) HermesEngine > sendInput returns false if proc missing [0.03ms]
+(pass) HermesEngine > execute runs the engine [1.43ms]
+
+src/agents/engines/openclaw.test.ts:
+(pass) OpenClawEngine > isAvailable returns true when command succeeds [0.27ms]
+(pass) OpenClawEngine > isAvailable returns false when command fails [0.10ms]
+(pass) OpenClawEngine > isAvailable returns false on throw [0.29ms]
+(pass) OpenClawEngine > getVersion returns version string on success [0.31ms]
+(pass) OpenClawEngine > getVersion returns null on non-zero exit code [0.12ms]
+(pass) OpenClawEngine > getVersion returns null on throw [0.15ms]
+(pass) OpenClawEngine > listModels returns list [0.23ms]
+(pass) OpenClawEngine > abort kills the process [0.09ms]
+(pass) OpenClawEngine > sendInput writes to stdin [0.11ms]
+(pass) OpenClawEngine > sendInput returns false if proc missing [0.03ms]
+(pass) OpenClawEngine > execute runs the engine [1.14ms]
+
+src/agents/engines/aider.test.ts:
+(pass) AiderEngine > isAvailable returns true when command succeeds [0.31ms]
+(pass) AiderEngine > isAvailable returns false when command fails [0.09ms]
+(pass) AiderEngine > isAvailable returns false on throw [0.13ms]
+(pass) AiderEngine > getVersion returns version string on success [0.30ms]
+(pass) AiderEngine > getVersion returns null on non-zero exit code [0.16ms]
+(pass) AiderEngine > getVersion returns null on throw [0.14ms]
+(pass) AiderEngine > listModels returns list [0.16ms]
+(pass) AiderEngine > abort kills the process [0.07ms]
+(pass) AiderEngine > sendInput writes to stdin [0.09ms]
+(pass) AiderEngine > sendInput returns false if proc missing [0.03ms]
+(pass) AiderEngine > execute runs the engine [4.18ms]
+
+src/agents/engines/opencode.test.ts:
+(pass) humanizeStderr > returns null for empty lines [0.28ms]
+(pass) humanizeStderr > suppresses DEBUG/TRACE/INF/DBG prefixed lines [0.23ms]
+(pass) humanizeStderr > suppresses OpenCode INFO structured log lines (all services by default) [0.14ms]
+(pass) humanizeStderr > suppresses INFO for non-meaningful services [0.05ms]
+(pass) humanizeStderr > surfaces llm service INFO with modelID [0.08ms]
+(pass) humanizeStderr > passes through plain unrecognised text [0.09ms]
+(pass) humanizeStderr > suppresses JSON with debug level [0.06ms]
+(pass) humanizeStderr > returns message from non-debug JSON [0.06ms]
+(pass) humanizeStderr > serializes object-shaped stderr messages instead of [object Object] [0.07ms]
+(pass) OpenCodeEngine.parseLine > parses a text event into a stdout log [0.12ms]
+(pass) OpenCodeEngine.parseLine > parses a tool_use calling event into status + log [0.17ms]
+(pass) OpenCodeEngine.parseLine > parses a step_start event into Working... status [0.11ms]
+(pass) OpenCodeEngine.parseLine > parses a thinking event into Thinking... status [0.10ms]
+(pass) OpenCodeEngine.parseLine > parses an error event into a stderr log [0.13ms]
+(pass) OpenCodeEngine.parseLine > returns empty array for unknown event types (heartbeat noise) [0.22ms]
+(pass) OpenCodeEngine.parseLine > handles non-JSON plain text lines [0.07ms]
+(pass) OpenCodeEngine.parseLine > ignores lines starting with { that are invalid JSON [1.21ms]
+(pass) OpenCodeEngine.parseLine > handles JSON content containing braces and quotes correctly (brace counting) [0.11ms]
+(pass) OpenCodeEngine.parseLine > surfaces tool failures with error message [0.15ms]
+(pass) OpenCodeEngine.parseLine > handles multiple JSON objects on a single line [0.09ms]
+(pass) OpenCodeEngine.parseLine > handles deeply nested braces and escaped quotes in strings [0.07ms]
+(pass) OpenCodeEngine.parseLine > parses progress events into status + system log [0.14ms]
+(pass) OpenCodeEngine.parseLine > parses step_finish with token usage [0.13ms]
+(pass) OpenCodeEngine.parseLine > humanizes various tool calls correctly [0.32ms]
+(pass) OpenCodeEngine.parseLine > humanizes tool results correctly [0.34ms]
+(pass) OpenCodeEngine.parseLine > emits a tool label before completed tool output [0.17ms]
+(pass) OpenCodeEngine.parseLine > parses real 'text' event correctly (contract snapshot) [0.08ms]
+(pass) OpenCodeEngine.parseLine > parses real 'tool_use' (bash) event correctly (contract snapshot) [0.19ms]
+(pass) OpenCodeEngine.parseLine > parses real 'step_finish' (tokens) event correctly (contract snapshot) [0.11ms]
+(pass) OpenCodeEngine.parseLine > parses interactive question events correctly [0.13ms]
+(pass) OpenCodeEngine.parseLine > accumulates tokens and cost cumulatively across multiple step_finish events [0.29ms]
+(pass) OpenCodeEngine.buildCommand > passes correct base arguments without prompt (prompt sent via stdin) [0.38ms]
+(pass) OpenCodeEngine.buildCommand > includes --session when resumeSessionId is provided [0.08ms]
+(pass) OpenCodeEngine.buildCommand > uses pipe stdin mode on all platforms (stdin is closed immediately on Windows) [0.06ms]
+(pass) execute: opencode.json lifecycle > creates opencode.json in isolated directory and configures XDG_CONFIG_HOME [50.70ms]
+(pass) execute: opencode.json lifecycle > deletes the isolated config directory and leaves workspace clean after execution [48.43ms]
+(pass) execute: complete event > always emits a complete event as the last event [20.03ms]
+(pass) execute: complete event > complete event has exitCode 0 for a successful process [21.10ms]
+(pass) execute: complete event > complete event carries correct non-zero exitCode [22.18ms]
+(pass) execute: complete event > emits a stderr log for non-zero exit [23.40ms]
+(pass) execute: complete event > does NOT emit exit log for exit code 0 [23.94ms]
+(pass) execute: real-time streaming > yields stdout events BEFORE the process exits [449.08ms]
+(pass) execute: real-time streaming > yields multiple events incrementally during execution [247.67ms]
+(pass) execute: real-time streaming > does not duplicate events (each event appears exactly once) [96.07ms]
+(pass) execute: real-time streaming > delivers events written right before process exits [47.70ms]
+(pass) execute: stderr passthrough > surfaces plain text stderr lines [46.59ms]
+(pass) execute: stderr passthrough > suppresses OpenCode INFO structured log lines from stderr [42.41ms]
+(pass) execute: abort signal > resolves (does not hang) when the signal is aborted [54.05ms]
+(pass) execute: heartbeat > emits a 'Still running' system log during a long process [323.82ms]
+(pass) OpenCodeEngine prepareWorkdir > returns empty array by default [0.31ms]
+(pass) resolveOpencodeNativeFromShim > returns null if shimPath does not end in .cmd [0.06ms]
+(pass) resolveOpencodeNativeFromShim > returns native path if stat succeeds for an architecture candidate [0.25ms]
+(pass) resolveOpencodeNativeFromShim > returns native path for arm64 candidate [0.21ms]
+(pass) resolveOpencodeNativeFromShim > returns null if stat fails for all candidates [0.08ms]
+(pass) OpenCodeEngine buildCommandArgs > includes extra args from VIBE_OPENCODE_EXTRA_ARGS if present [0.38ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns true on success [0.24ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns false on failure [0.15ms]
+(pass) OpenCodeEngine getVersion and isAvailable > isAvailable returns false on exception [0.17ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns version text on success [0.34ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns null on failure [0.19ms]
+(pass) OpenCodeEngine getVersion and isAvailable > getVersion returns null on exception [0.17ms]
+(pass) OpenCodeEngine auto-free selection > selects a free model from listing [0.35ms]
+(pass) OpenCodeEngine auto-free selection > falls back to auto-free on command error [0.30ms]
+(pass) OpenCodeEngine model listing > returns fallback models when external providers list nothing [1.07ms]
+(pass) OpenCodeEngine MCP configuration > serializes options.mcpServers into opencode.json [35.10ms]
+(pass) OpenCodeEngine missing coverage > opencodeWindowsPackageCandidates returns arm64 first when arm64 [0.30ms]
+(pass) findOnPath missing coverage > findOnPath returns null for empty PATH [0.31ms]
+
+src/agents/engines/opencode.advanced.test.ts:
+(pass) OpenCodeEngine Advanced Contract Tests > surfaces non-zero exit code even if status is 'completed' (snapshot real) [0.21ms]
+(pass) OpenCodeEngine Advanced Contract Tests > handles complex file writing contract (write tool) [0.14ms]
+
+src/agents/engines/pi.test.ts:
+(pass) PiEngine > isAvailable returns true when command succeeds [1.43ms]
+(pass) PiEngine > isAvailable returns false when command fails [0.11ms]
+(pass) PiEngine > isAvailable returns false on throw [0.14ms]
+(pass) PiEngine > getVersion returns version string on success [0.28ms]
+(pass) PiEngine > getVersion returns null on non-zero exit code [0.14ms]
+(pass) PiEngine > getVersion returns null on throw [0.15ms]
+(pass) PiEngine > listModels returns list [0.20ms]
+(pass) PiEngine > abort kills the process [0.08ms]
+(pass) PiEngine > sendInput writes to stdin [0.11ms]
+(pass) PiEngine > sendInput returns false if proc missing [0.03ms]
+(pass) PiEngine > execute runs the engine [2.09ms]
+
+src/agents/engines/grok.test.ts:
+(pass) GrokEngine > isAvailable returns true on success [0.41ms]
+(pass) GrokEngine > isAvailable returns false on failure [0.10ms]
+(pass) GrokEngine > getVersion returns version string [0.27ms]
+(pass) GrokEngine > listModels returns grok-build [0.73ms]
+(pass) GrokEngine > execute runs grok CLI and yields events from streaming json stdout [1.57ms]
+(pass) GrokEngine > abort kills the process and deletes from map [0.10ms]
+(pass) GrokEngine > abort does nothing if runId not found [0.05ms]
+(pass) GrokEngine > sendInput writes to stdin if available [0.13ms]
+(pass) GrokEngine > sendInput returns false if process not found or stdin missing [0.04ms]
+
+src/agents/engines/heartbeat.test.ts:
+(pass) heartbeat > getHeartbeatIntervalMs > returns default 30000 when env not set [0.03ms]
+(pass) heartbeat > getHeartbeatIntervalMs > returns env value if set [0.02ms]
+(pass) heartbeat > withHeartbeat > yields events without heartbeat if they arrive quickly [0.47ms]
+(pass) heartbeat > withHeartbeat > yields heartbeat if events are delayed [150.77ms]
+(pass) heartbeat > withHeartbeat > stops when source finishes [0.44ms]
+(pass) heartbeat > withHeartbeat > aborts when signal is aborted [201.76ms]
+
+src/agents/engines/cursor-agent.test.ts:
+(pass) CursorAgentEngine > isAvailable returns true when command succeeds [0.34ms]
+(pass) CursorAgentEngine > isAvailable returns false when command fails [0.10ms]
+(pass) CursorAgentEngine > isAvailable returns false on throw [0.14ms]
+(pass) CursorAgentEngine > getVersion returns version string on success [0.45ms]
+(pass) CursorAgentEngine > getVersion returns null on non-zero exit code [0.19ms]
+(pass) CursorAgentEngine > getVersion returns null on throw [0.16ms]
+(pass) CursorAgentEngine > listModels returns list [0.22ms]
+(pass) CursorAgentEngine > abort kills the process [0.13ms]
+(pass) CursorAgentEngine > sendInput writes to stdin [0.11ms]
+(pass) CursorAgentEngine > sendInput returns false if proc missing [0.05ms]
+(pass) CursorAgentEngine > execute runs the engine [2.28ms]
+
+src/agents/engines/kimi.test.ts:
+(pass) KimiEngine > isAvailable returns true when command succeeds [0.38ms]
+(pass) KimiEngine > isAvailable returns false when command fails [0.10ms]
+(pass) KimiEngine > isAvailable returns false on throw [0.15ms]
+(pass) KimiEngine > getVersion returns version string on success [0.26ms]
+(pass) KimiEngine > getVersion returns null on non-zero exit code [0.12ms]
+(pass) KimiEngine > getVersion returns null on throw [0.14ms]
+(pass) KimiEngine > listModels returns list [0.30ms]
+(pass) KimiEngine > abort kills the process [0.10ms]
+(pass) KimiEngine > sendInput writes to stdin [0.12ms]
+(pass) KimiEngine > sendInput returns false if proc missing [0.03ms]
+(pass) KimiEngine > execute runs the engine [1.92ms]
+
+src/agents/engines/hardcoded-models.test.ts:
+(pass) Agent Engines hardcoded models verification > Engine aider.ts does not contain static/hardcoded model lists [0.38ms]
+(pass) Agent Engines hardcoded models verification > Engine claude-code.ts does not contain static/hardcoded model lists [0.06ms]
+(pass) Agent Engines hardcoded models verification > Engine opencode.fixtures.ts does not contain static/hardcoded model lists [0.02ms]
+(pass) Agent Engines hardcoded models verification > Engine kiro-cli.ts does not contain static/hardcoded model lists [0.03ms]
+(pass) Agent Engines hardcoded models verification > Engine reviewer.ts does not contain static/hardcoded model lists [0.08ms]
+(pass) Agent Engines hardcoded models verification > Engine gemini.ts does not contain static/hardcoded model lists [0.05ms]
+(pass) Agent Engines hardcoded models verification > Engine opencode.ts does not contain static/hardcoded model lists [0.49ms]
+(pass) Agent Engines hardcoded models verification > Engine pi.ts does not contain static/hardcoded model lists [0.12ms]
+(pass) Agent Engines hardcoded models verification > Engine copilot.ts does not contain static/hardcoded model lists [0.04ms]
+(pass) Agent Engines hardcoded models verification > Engine codex.ts does not contain static/hardcoded model lists [0.08ms]
+(pass) Agent Engines hardcoded models verification > Engine openclaw.ts does not contain static/hardcoded model lists [0.06ms]
+(pass) Agent Engines hardcoded models verification > Engine grok.ts does not contain static/hardcoded model lists [0.04ms]
+(pass) Agent Engines hardcoded models verification > Engine ampcode.ts does not contain static/hardcoded model lists [0.06ms]
+(pass) Agent Engines hardcoded models verification > Engine kimi.ts does not contain static/hardcoded model lists [0.03ms]
+(pass) Agent Engines hardcoded models verification > Engine cursor-agent.ts does not contain static/hardcoded model lists [0.02ms]
+(pass) Agent Engines hardcoded models verification > Engine acpx.ts does not contain static/hardcoded model lists [0.03ms]
+(pass) Agent Engines hardcoded models verification > Engine hermes.ts does not contain static/hardcoded model lists [0.04ms]
+
+src/agents/engines/gemini.test.ts:
+(pass) GeminiEngine > isAvailable and hasCli > returns true when CLI is available [0.53ms]
+(pass) GeminiEngine > isAvailable and hasCli > returns false when CLI is not available [0.19ms]
+(pass) GeminiEngine > isAvailable and hasCli > returns false when command resolution fails [0.21ms]
+(pass) GeminiEngine > getVersion > returns version string on success [0.29ms]
+(pass) GeminiEngine > getVersion > returns null on non-zero exit code [0.21ms]
+(pass) GeminiEngine > getVersion > returns null on throw [0.16ms]
+(pass) GeminiEngine > listModels > returns models from CLI and litellm [0.89ms]
+(pass) GeminiEngine > listModels > falls back to default models if CLI returns nothing [0.35ms]
+(pass) GeminiEngine > listModels > uses cached models on subsequent calls [0.23ms]
+(pass) GeminiEngine > getSetupIssue > returns null if available [0.21ms]
+(pass) GeminiEngine > getSetupIssue > returns error message if not available [0.11ms]
+(pass) GeminiEngine > prepareWorkdir > creates .gemini directory and writes config.json [0.38ms]
+(pass) GeminiEngine > execute > throws error if CLI is not installed [0.98ms]
+(pass) GeminiEngine > execute > yields events and parses acp message [0.54ms]
+(pass) GeminiEngine > execute > handles stale process killing [0.48ms]
+(pass) GeminiEngine > abort > kills the process tree if process exists [11.17ms]
+(pass) GeminiEngine > abort > does nothing if process does not exist [0.04ms]
+(pass) GeminiEngine > sendInput > writes to stdin if available [0.20ms]
+(pass) GeminiEngine > sendInput > returns false if process or stdin not available [0.04ms]
+
+src/git/providers/labels.test.ts:
+(pass) GitHubProvider labels > adds labels in one call and removes each old one, ignoring labels already gone [0.79ms]
+(pass) GitHubProvider labels > skips the add call when there is nothing to add [0.13ms]
+(pass) GitHubProvider labels > fails loudly when the provider refuses [0.13ms]
+(pass) GitHubProvider labels > creates labels with their colour and treats 'already exists' as success [0.43ms]
+(pass) GitHubProvider labels > asks for the most recently updated issues and caps the page at 100 [0.61ms]
+(pass) GitLabProvider labels > relabels with one update, scoped labels included [0.67ms]
+(pass) GitLabProvider labels > does nothing for an empty change [0.11ms]
+(pass) GitLabProvider labels > creates labels with a # colour and treats a conflict as success [0.38ms]
+(pass) GitLabProvider labels > reports GitLab's "opened" issues as open, and asks for them that way [0.64ms]
+(pass) GitLabProvider labels > orders issues by last update when asked [0.22ms]
+(pass) getProjectPath > returns the project path of https, http and ssh clone URLs [0.09ms]
+(pass) getProjectPath > drops the sub-path a self-hosted GitLab is served under [0.03ms]
+(pass) getProjectPath > hands back what it cannot parse [0.12ms]
+
+src/git/providers/gitlab.test.ts:
+(pass) GitLabProvider > getUser > returns user on success [0.36ms]
+(pass) GitLabProvider > getUser > throws on failure [0.13ms]
+(pass) GitLabProvider > listRepos > returns repos [0.46ms]
+(pass) GitLabProvider > listRepos > throws on failure [0.17ms]
+(pass) GitLabProvider > searchRepos > returns search results [0.37ms]
+(pass) GitLabProvider > searchRepos > throws on failure [0.11ms]
+(pass) GitLabProvider > createRepo > creates and returns repo [0.38ms]
+(pass) GitLabProvider > createRepo > throws on failure [0.13ms]
+(pass) GitLabProvider > createPR > creates PR [0.34ms]
+(pass) GitLabProvider > createPR > handles existing MR (409) [0.35ms]
+(pass) GitLabProvider > createPR > handles existing MR (422) [0.34ms]
+(pass) GitLabProvider > createPR > throws on creation failure [0.17ms]
+(pass) GitLabProvider > isPrMerged > returns true if merged [0.33ms]
+(pass) GitLabProvider > isPrMerged > returns false if not merged [0.14ms]
+(pass) GitLabProvider > isPrMerged > returns false if fetch fails [0.10ms]
+(pass) GitLabProvider > isPrMerged > returns false if URL is invalid [0.06ms]
+(pass) GitLabProvider > listIssues > returns issues [0.21ms]
+(pass) GitLabProvider > listIssues > handles closed issues [0.16ms]
+(pass) GitLabProvider > listIssues > throws on failure [0.10ms]
+(pass) GitLabProvider > updateIssueLabels > updates labels [0.12ms]
+(pass) GitLabProvider > updateIssueLabels > returns early if no changes [0.07ms]
+(pass) GitLabProvider > updateIssueLabels > throws on failure [0.16ms]
+(pass) GitLabProvider > listBranches > returns branches [0.38ms]
+(pass) GitLabProvider > listBranches > throws on failure [0.12ms]
+(pass) GitLabProvider > ensureLabels > creates labels [0.13ms]
+(pass) GitLabProvider > ensureLabels > handles existing label (409) [0.12ms]
+(pass) GitLabProvider > ensureLabels > throws on other errors [0.23ms]
+(pass) GitLabProvider > getProjectPath > handles simple url [0.05ms]
+(pass) GitLabProvider > getProjectPath > handles invalid url [0.03ms]
+
+src/git/providers/github.test.ts:
+(pass) GitHubProvider > getUser > returns user on success [0.30ms]
+(pass) GitHubProvider > getUser > throws on failure [0.12ms]
+(pass) GitHubProvider > listRepos > returns repos [0.52ms]
+(pass) GitHubProvider > listRepos > throws on failure [0.13ms]
+(pass) GitHubProvider > searchRepos > returns search results [0.30ms]
+(pass) GitHubProvider > searchRepos > throws on failure [0.10ms]
+(pass) GitHubProvider > createRepo > creates and returns repo [0.37ms]
+(pass) GitHubProvider > createRepo > throws on failure [0.12ms]
+(pass) GitHubProvider > createPR > creates PR [0.31ms]
+(pass) GitHubProvider > createPR > handles existing PR (422) [0.35ms]
+(pass) GitHubProvider > createPR > throws on creation failure [0.18ms]
+(pass) GitHubProvider > isPrMerged > returns true if merged [0.32ms]
+(pass) GitHubProvider > isPrMerged > returns false if not merged [0.12ms]
+(pass) GitHubProvider > isPrMerged > returns false if fetch fails [0.08ms]
+(pass) GitHubProvider > isPrMerged > returns false if URL is invalid [0.06ms]
+(pass) GitHubProvider > listIssues > returns issues [0.35ms]
+(pass) GitHubProvider > listIssues > throws on failure [0.13ms]
+(pass) GitHubProvider > listBranches > returns branches [0.36ms]
+(pass) GitHubProvider > listBranches > throws on failure [0.11ms]
+(pass) GitHubProvider > ensureLabels > creates labels [0.13ms]
+(pass) GitHubProvider > ensureLabels > handles existing label (422) [0.23ms]
+(pass) GitHubProvider > ensureLabels > throws on other errors [0.19ms]
+
+32 tests failed:
+--------------------------------------------|---------|---------|-------------------
+File                                        | % Funcs | % Lines | Uncovered Line #s
+--------------------------------------------|---------|---------|-------------------
+All files                                   |   90.49 |   95.12 |
+ src/agents/acp-parser.ts                   |  100.00 |   98.33 | 133,160,235,358-359
+ src/agents/conflict-resolver.ts            |    0.00 |    3.45 | 16-54,58-214
+ src/agents/engines/acpx.ts                 |   85.71 |  100.00 |
+ src/agents/engines/aider.ts                |   91.67 |  100.00 |
+ src/agents/engines/ampcode.ts              |   91.67 |  100.00 |
+ src/agents/engines/blocked-args.ts         |  100.00 |  100.00 |
+ src/agents/engines/claude-code.ts          |   85.71 |  100.00 |
+ src/agents/engines/codex.ts                |   91.67 |  100.00 |
+ src/agents/engines/copilot.ts              |   82.35 |   90.78 | 67-79
+ src/agents/engines/cursor-agent.ts         |   91.67 |  100.00 |
+ src/agents/engines/gemini.ts               |   92.31 |  100.00 |
+ src/agents/engines/grok.ts                 |   85.71 |  100.00 |
+ src/agents/engines/heartbeat.ts            |   90.00 |  100.00 |
+ src/agents/engines/hermes.ts               |   91.67 |  100.00 |
+ src/agents/engines/kimi.ts                 |   91.67 |  100.00 |
+ src/agents/engines/kiro-cli.ts             |   91.67 |  100.00 |
+ src/agents/engines/openclaw.ts             |   91.67 |  100.00 |
+ src/agents/engines/opencode.fixtures.ts    |  100.00 |  100.00 |
+ src/agents/engines/opencode.ts             |   79.37 |   97.54 | 198-201,228-238,306-307,749-755
+ src/agents/engines/pi.ts                   |   91.67 |  100.00 |
+ src/agents/engines/reviewer.ts             |   88.89 |  100.00 |
+ src/agents/engines/stderr-tail.ts          |  100.00 |  100.00 |
+ src/agents/litellm-client.ts               |   84.62 |  100.00 |
+ src/agents/memory-service.ts               |   92.59 |   84.54 | 165-185,290-300
+ src/agents/orchestrator/baseline-check.ts  |   84.62 |  100.00 |
+ src/agents/orchestrator/contract-layers.ts |  100.00 |  100.00 |
+ src/agents/orchestrator/evaluator.ts       |  100.00 |  100.00 |
+ src/agents/orchestrator/planner.ts         |  100.00 |  100.00 |
+ src/agents/orchestrator/pr-retry.ts        |  100.00 |  100.00 |
+ src/agents/orchestrator/prompt.ts          |   90.91 |   86.63 | 53-59,70-71,152-157,163-169,175-180,277-282,293-296,366-370
+ src/agents/orchestrator/task-plan.ts       |   95.24 |   91.67 | 95-96,105-108,134-142
+ src/agents/orchestrator/verify.ts          |   85.29 |   89.29 | 45,50-53,61-63,65-69,280,285,291,317,324,331,374,376-380,429-430,432-437
+ src/agents/stream-process.ts               |   84.62 |   98.23 | 76
+ src/config/max-agents.ts                   |  100.00 |  100.00 |
+ src/db/index.ts                            |  100.00 |  100.00 |
+ src/db/queries.ts                          |   82.86 |   88.10 | 298-301,386-391,418,472,532-533,619-621,684-699,749,752,755-758,761-782,785-788,791-794,861,887-888,958-959,962-963,966-967,970-971,1016-1019,1142-1146,1556-1561,1564-1567,1570-1575,1608-1614,1617-1620,1657,1659-1662,1664,1667,1769-1773,1786-1792
+ src/db/schema.ts                           |  100.00 |   92.70 | 123,216-220,222-225
+ src/git/git-service.ts                     |   79.49 |   73.68 | 56-63,266-285,311-341,346-393,408-411,419-422
+ src/git/providers/github.ts                |   96.67 |  100.00 |
+ src/git/providers/gitlab.ts                |  100.00 |  100.00 |
+ src/notifications/telegram.ts              |  100.00 |   94.29 | 56-57
+ src/sessions/readers/antigravity.ts        |   88.24 |   97.59 | 231-234
+ src/sessions/readers/claude-code.ts        |   72.73 |   92.38 | 40-43,155-158
+ src/sessions/readers/opencode.ts           |   90.00 |   82.81 | 102-112
+ src/sessions/session-service.ts            |  100.00 |  100.00 |
+ src/sessions/util.ts                       |   95.24 |   94.79 | 8,31,40,56
+ src/skills/matcher.ts                      |   92.31 |   94.94 | 178-179,185,251-256,296-299
+ src/skills/registry.ts                     |   90.63 |   89.16 | 206-227
+ src/skills/repo-loader.ts                  |   85.71 |  100.00 |
+ src/terminal/skill-plan.ts                 |   96.15 |   99.26 |
+ src/terminal/workspace-cleanup.ts          |   83.33 |  100.00 |
+ src/utils/process-tree.ts                  |  100.00 |   96.15 |
+ src/utils/workspace-context.ts             |  100.00 |  100.00 |
+ src/ws/event-dedup.ts                      |  100.00 |  100.00 |
+--------------------------------------------|---------|---------|-------------------
+
+ 741 pass
+ 32 fail
+ 32 errors
+ 1338 expect() calls
+Ran 773 tests across 89 files. [8.29s]
+error: script "test" exited with code 1
