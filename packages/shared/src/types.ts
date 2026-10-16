@@ -314,7 +314,11 @@ export interface CreateRepoRequest {
 }
 
 export interface CreateTaskRequest {
-  title: string;
+  /**
+   * Optional. In the remote-control flow the harness derives the session name
+   * from `description` when no title is supplied.
+   */
+  title?: string;
   description?: string;
   repoId: string;
   parentTaskId?: string;

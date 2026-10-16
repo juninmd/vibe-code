@@ -228,15 +228,23 @@ describe("POST /api/tasks", () => {
     expect(body.data.maxCost).toBe(12);
   });
 
-  it("returns 400 when title is missing", async () => {
+  it("derives a session name when the title is missing", async () => {
     const db = makeDb();
     const repo = seedRepo(db);
     const res = await buildApp(db).request("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoId: repo.id }),
+      body: JSON.stringify({
+        repoId: repo.id,
+        description: "Fix the login validation error",
+      }),
     });
-    expect(res.status).toBe(400);
+    // Title is optional: the harness names the session from the prompt.
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(typeof body.data.title).toBe("string");
+    expect(body.data.title.length).toBeGreaterThan(0);
+    expect(body.data.title).toContain("fix-the-login-validation-error");
   });
 
   it("returns 400 when repoId is missing", async () => {

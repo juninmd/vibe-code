@@ -36,6 +36,7 @@ import {
   sanitizeRunForExternal,
   sanitizeTaskForExternal,
 } from "../security/access-control";
+import { deriveSessionTitle } from "../utils/session-name";
 
 function computeNextRun(expression: string): string | null {
   try {
@@ -46,7 +47,9 @@ function computeNextRun(expression: string): string | null {
 }
 
 const createTaskSchema = z.object({
-  title: z.string().min(1),
+  // Title is optional in the remote-control flow: the harness derives a session
+  // name from the prompt when the operator does not provide one.
+  title: z.string().optional(),
   description: z.string().optional(),
   repoId: z.string().min(1),
   parentTaskId: z.string().optional(),
@@ -374,7 +377,10 @@ export function createTasksRouter(
       return c.json({ error: "not_found", message: "Repository not found" }, 404);
     }
 
-    const task = db.tasks.create(parsed.data);
+    const title = parsed.data.title?.trim()
+      ? parsed.data.title.trim()
+      : deriveSessionTitle(parsed.data.description ?? parsed.data.goal ?? "");
+    const task = db.tasks.create({ ...parsed.data, title });
     return c.json({ data: task }, 201);
   });
 

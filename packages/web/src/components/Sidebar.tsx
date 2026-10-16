@@ -206,12 +206,12 @@ export function Sidebar({
               className={`flex items-center gap-3 transition-opacity duration-200 ${collapsed ? "opacity-0 invisible w-0" : "opacity-100"}`}
             >
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent via-accent to-accent-hover flex items-center justify-center shadow-lg shadow-accent/30 hover:scale-105 transition-transform active-shrink cursor-pointer">
-                <span className="text-white font-black text-sm">V</span>
+                <span className="text-white font-black text-sm">H</span>
               </div>
               {!collapsed && (
                 <div>
                   <h1 className="text-sm font-black tracking-tight text-primary leading-none">
-                    Vibe Code
+                    Harness Remote
                   </h1>
                   <div className="flex items-center gap-2 mt-1.5">
                     {/* API status dot */}
