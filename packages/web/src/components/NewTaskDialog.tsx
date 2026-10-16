@@ -9,6 +9,7 @@ import { HARNESS_ENGINES, TASK_PRIORITY_LEVELS, TASK_PRIORITY_META } from "@vibe
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { usePromptTemplates } from "../hooks/usePromptTemplates";
+import { AgentPicker } from "./AgentPicker";
 import { PromptTemplatePicker } from "./PromptTemplatePicker";
 import { EMPTY_TASK_SPEC, TaskSpecEditor, taskSpecToDescription } from "./TaskSpecEditor";
 import { Button } from "./ui/button";
@@ -493,27 +494,15 @@ export function NewTaskDialog({
               {skillsIndex &&
                 (skillsIndex.agents.length > 0 || skillsIndex.workflows.length > 0) && (
                   <div>
-                    <label htmlFor={NEW_TASK_FIELD_IDS.agent} className={LABEL_CLASS}>
+                    <span id={NEW_TASK_FIELD_IDS.agent} className={LABEL_CLASS}>
                       Specialized agent
-                    </label>
-                    <Select
-                      id={NEW_TASK_FIELD_IDS.agent}
+                    </span>
+                    <AgentPicker
+                      agents={skillsIndex.agents}
+                      workflows={skillsIndex.workflows}
                       value={agentId}
-                      onChange={(e) => setAgentId(e.target.value)}
-                      className="h-10 rounded-lg text-sm"
-                    >
-                      <option value="">Default</option>
-                      {skillsIndex.agents.map((a) => (
-                        <option key={a.name} value={a.name}>
-                          {a.name}
-                        </option>
-                      ))}
-                      {skillsIndex.workflows.map((w) => (
-                        <option key={w.name} value={`workflow:${w.name}`}>
-                          {w.name} (Workflow)
-                        </option>
-                      ))}
-                    </Select>
+                      onChange={setAgentId}
+                    />
                   </div>
                 )}
 

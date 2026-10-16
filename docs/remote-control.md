@@ -12,7 +12,7 @@ The app has two modes, switchable from the header; the choice is remembered in
 
 | Mode | What it shows | Default |
 |---|---|---|
-| **Code** | A session list plus a live chat transcript with a reply composer | ✅ |
+| **Code** | A **Live now** session grid (filter chips, Group by, search) plus a live chat transcript with a reply composer | ✅ |
 | **Board** | The kanban board (all existing columns, filters, drag-and-drop, panels, dialogs) | |
 
 Code mode is a *view* over the same tasks, runs and logs. Every existing

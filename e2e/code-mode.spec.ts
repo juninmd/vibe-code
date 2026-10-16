@@ -50,7 +50,7 @@ test.beforeAll(async ({ request }) => {
 test.describe("Code mode", () => {
   test("is the default surface and exposes the task composer", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Sessions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Live now/ })).toBeVisible();
     await expect(page.getByPlaceholder("Describe a task…")).toBeVisible();
     await expect(page.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
   });
