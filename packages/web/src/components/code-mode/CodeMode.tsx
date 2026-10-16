@@ -1,7 +1,7 @@
 import type { AgentLog, Repository, TaskWithRun } from "@vibe-code/shared";
 import { useMemo, useState } from "react";
 import { CodeComposer } from "./CodeComposer";
-import { SessionList } from "./SessionList";
+import { SessionGrid } from "./SessionGrid";
 import { SessionThread } from "./SessionThread";
 
 export interface CodeModeProps {
@@ -13,7 +13,6 @@ export interface CodeModeProps {
   connected: boolean;
   loading: boolean;
   busy: boolean;
-  onSelectRepo: (repoId: string | null) => void;
   onOpenSession: (task: TaskWithRun) => void;
   onCloseSession: () => void;
   onCreateSession: (input: { description: string; repoId: string }) => Promise<void>;
@@ -37,7 +36,6 @@ export function CodeMode({
   connected,
   loading,
   busy,
-  onSelectRepo,
   onOpenSession,
   onCloseSession,
   onCreateSession,
@@ -99,18 +97,14 @@ export function CodeMode({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between px-4 pb-1 pt-3">
-        <h2 className="text-sm font-semibold text-primary">Sessions</h2>
-        <span className="text-[11px] text-muted">{connected ? "Live" : "Reconnecting…"}</span>
-      </div>
-
-      <SessionList
+      <SessionGrid
         tasks={tasks}
-        repos={repos}
-        selectedRepoId={selectedRepoId}
-        onSelectRepo={onSelectRepo}
-        onOpen={onOpenSession}
         loading={loading}
+        connected={connected}
+        onOpen={onOpenSession}
+        onStop={(taskId) => {
+          void onStop(taskId);
+        }}
       />
 
       <CodeComposer

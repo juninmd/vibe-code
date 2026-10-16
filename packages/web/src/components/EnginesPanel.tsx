@@ -1,7 +1,35 @@
 import type { EngineInfo } from "@vibe-code/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { getEngineMeta } from "./ui/engine-icons";
+
+function InstallCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }, [command]);
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Copy install command"
+      className="flex w-full items-center gap-2 rounded-lg border border-white/5 bg-black/25 px-2.5 py-1.5 text-left font-mono text-[10px] text-muted transition-colors hover:border-white/10 hover:text-secondary"
+    >
+      <span className="truncate">{command}</span>
+      <span className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-widest text-accent">
+        {copied ? "Copied" : "Copy"}
+      </span>
+    </button>
+  );
+}
 
 function EngineCard({
   engine,
@@ -16,70 +44,87 @@ function EngineCard({
 
   return (
     <div
-      className={`p-5 rounded-3xl border transition-all duration-300 ${
+      className={`flex flex-col rounded-2xl border p-5 transition-all duration-300 ${
         engine.available
-          ? "bg-white/[0.03] border-white/10 shadow-lg"
-          : "bg-black/20 border-white/5 opacity-60"
+          ? "border-white/10 bg-white/[0.03] shadow-lg"
+          : "border-white/5 bg-black/20 opacity-70"
       }`}
     >
       <div className="flex items-start gap-4">
         <div
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
-            engine.available ? "bg-accent/10 border-accent/20" : "bg-white/5 border-white/5"
+          className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl border ${
+            engine.available ? `${meta.bgColor} ${meta.borderColor}` : "border-white/5 bg-white/5"
           }`}
         >
-          <Icon size={28} className={engine.available ? meta.color : "text-muted"} />
+          <Icon size={26} className={engine.available ? meta.color : "text-muted"} />
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-sm font-black tracking-tight text-primary">{engine.displayName}</h3>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold tracking-tight text-primary">{engine.displayName}</h3>
             <span
-              className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
+              className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-widest ${
                 engine.available
-                  ? "bg-success/10 border-success/20 text-success"
-                  : "bg-white/5 border-white/10 text-muted"
+                  ? "border-success/20 bg-success/10 text-success"
+                  : "border-white/10 bg-white/5 text-muted"
               }`}
             >
               {engine.available ? "Online" : "Offline"}
             </span>
+            {engine.version && (
+              <span className="font-mono text-[10px] text-dimmed">v{engine.version}</span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-dimmed">
+            <span>{meta.provider || engine.name}</span>
             {engine.activeRuns > 0 && (
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-info/10 border border-info/20 text-info text-[9px] font-black uppercase tracking-widest">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                {engine.activeRuns} Active
+              <span className="inline-flex items-center gap-1.5 text-info">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+                {engine.activeRuns} active
               </span>
             )}
           </div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-dimmed mt-1.5">
-            {meta.provider}
-          </p>
         </div>
       </div>
 
       {meta.description && (
-        <p className="text-[11px] text-secondary leading-relaxed mt-4 opacity-80">
-          {meta.description}
-        </p>
+        <p className="mt-3 text-[11px] leading-relaxed text-secondary">{meta.description}</p>
       )}
 
       {engine.setupIssue && (
         <div
-          className={`mt-4 p-4 rounded-2xl border text-xs ${
+          className={`mt-4 rounded-xl border p-3 text-xs ${
             needsConfig
-              ? "bg-warning/5 border-warning/20 text-warning"
-              : "bg-white/5 border-white/5 text-muted"
+              ? "border-warning/20 bg-warning/5 text-warning"
+              : "border-white/5 bg-white/5 text-muted"
           }`}
         >
-          <p className="font-bold mb-1">Configuration Required</p>
+          <p className="mb-1 font-bold">{needsConfig ? "Configuration required" : "Note"}</p>
           {engine.setupIssue}
           {needsConfig && onOpenSettings && (
             <button
               type="button"
               onClick={onOpenSettings}
-              className="ml-1 underline decoration-2 underline-offset-4 font-black uppercase tracking-widest text-[9px] hover:text-primary transition-colors cursor-pointer"
+              className="ml-1 text-[9px] font-black uppercase tracking-widest underline decoration-2 underline-offset-4 transition-colors hover:text-primary"
             >
               Fix in Settings
             </button>
+          )}
+        </div>
+      )}
+
+      {(meta.install || meta.docsUrl) && (
+        <div className="mt-4 space-y-2">
+          {meta.install && <InstallCommand command={meta.install} />}
+          {meta.docsUrl && (
+            <a
+              href={meta.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-[10px] font-bold uppercase tracking-widest text-accent hover:underline"
+            >
+              Documentation ↗
+            </a>
           )}
         </div>
       )}
@@ -104,6 +149,7 @@ export function EnginesPanel({
       const data = await api.engines.list();
       setEngines(data);
     } catch {
+      /* the panel keeps the last known list */
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -114,22 +160,28 @@ export function EnginesPanel({
     fetchEngines();
   }, [fetchEngines]);
 
+  const summary = useMemo(() => {
+    const available = engines.filter((e) => e.available).length;
+    const active = engines.reduce((sum, e) => sum + (e.activeRuns || 0), 0);
+    return { available, total: engines.length, active };
+  }, [engines]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-end">
       <button
         type="button"
         aria-label="Close"
-        className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in duration-300"
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
-      <div className="relative h-full w-full max-w-md glass-panel border-l border-white/10 flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-right duration-500 ease-out">
-        <div className="p-8 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.02]">
+      <div className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-white/10 glass-panel shadow-2xl">
+        <div className="flex items-center justify-between border-b border-white/6 px-6 py-4">
           <div>
-            <h2 className="text-xl font-black tracking-tight text-primary">Engines</h2>
-            <div className="flex items-center gap-2 mt-2">
-              <div className="h-1 w-6 bg-accent rounded-full" />
+            <h2 className="text-lg font-bold tracking-tight text-primary">Engines</h2>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="h-1 w-6 rounded-full bg-accent" />
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-dimmed">
-                AI Engine Runtimes
+                AI engine runtimes
               </p>
             </div>
           </div>
@@ -137,7 +189,27 @@ export function EnginesPanel({
             <button
               type="button"
               onClick={() => fetchEngines(true)}
-              className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
+              aria-label="Refresh engines"
+              className="grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-white/5 hover:text-primary"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className={refreshing ? "animate-spin" : ""}
+                aria-hidden="true"
+              >
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-white/5 hover:text-primary"
             >
               <svg
                 width="18"
@@ -146,47 +218,45 @@ export function EnginesPanel({
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="2.5"
-                className={refreshing ? "animate-spin" : ""}
                 aria-hidden="true"
               >
-                <title>Refresh</title>
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-xl text-muted hover:text-primary hover:bg-white/5 transition-all active-shrink cursor-pointer"
-            >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                aria-hidden="true"
-              >
-                <title>Close</title>
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-black/10">
+        <div className="grid grid-cols-2 gap-3 border-b border-white/6 px-6 py-4">
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+              Available
+            </div>
+            <div className="mt-0.5 text-lg font-bold tabular-nums text-primary">
+              {summary.available}
+              <span className="text-sm font-medium text-muted">/{summary.total}</span>
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] px-3 py-2">
+            <div className="text-[10px] font-black uppercase tracking-widest text-dimmed">
+              Active runs
+            </div>
+            <div className="mt-0.5 text-lg font-bold tabular-nums text-info">{summary.active}</div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 py-5">
           {loading
-            ? [1, 2, 3].map((i) => (
-                <div key={i} className="h-32 rounded-3xl bg-white/5 animate-pulse" />
+            ? [0, 1, 2].map((i) => (
+                <div key={i} className="h-32 animate-pulse rounded-2xl bg-white/5" />
               ))
             : engines.map((e) => (
                 <EngineCard key={e.name} engine={e} onOpenSettings={onOpenSettings} />
               ))}
         </div>
 
-        <div className="p-6 border-t border-white/5 bg-white/[0.02] flex justify-center">
+        <div className="flex justify-center border-t border-white/6 px-6 py-4">
           <p className="text-[9px] font-black uppercase tracking-[0.3em] text-muted opacity-50">
-            Secure Agent Infrastructure
+            Secure agent infrastructure
           </p>
         </div>
       </div>
