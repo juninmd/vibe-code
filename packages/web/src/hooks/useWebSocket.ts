@@ -1,6 +1,7 @@
 import { useCurrentWorkspace } from "@vibe-code/core";
 import type { WsClientMessage, WsServerMessage } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getApiKey } from "../api/client";
 
 type MessageHandler = (msg: WsServerMessage) => void;
 
@@ -42,7 +43,12 @@ export function useWebSocket(onMessage: MessageHandler) {
       if (destroyed) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const apiPort = import.meta.env.VITE_API_PORT || "3000";
-      const queryParam = workspaceId ? `?workspaceId=${workspaceId}` : "";
+      // The socket cannot set headers, so the access key travels as a query param.
+      const params = new URLSearchParams();
+      if (workspaceId) params.set("workspaceId", workspaceId);
+      const apiKey = getApiKey();
+      if (apiKey) params.set("api_key", apiKey);
+      const queryParam = params.toString() ? `?${params.toString()}` : "";
       const wsUrl = import.meta.env.DEV
         ? `${protocol}//${window.location.hostname}:${apiPort}/ws${queryParam}`
         : `${protocol}//${window.location.host}/ws${queryParam}`;

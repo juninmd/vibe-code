@@ -18,13 +18,16 @@ import {
   useRef,
   useState,
 } from "react";
-import { api } from "./api/client";
+import { api, setApiKey } from "./api/client";
 import { AppMenu } from "./components/AppMenu";
 import { Board } from "./components/Board";
+import { CodeMode } from "./components/code-mode/CodeMode";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExportImportMenu } from "./components/ExportImportMenu";
 import { FilterBar, type Filters } from "./components/FilterBar";
+import { InstallBanner } from "./components/InstallBanner";
 import { LaneSyncPill } from "./components/LaneSyncPill";
+import { ModeToggle } from "./components/ModeToggle";
 import { Onboarding } from "./components/Onboarding";
 import type { Tab as SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -33,6 +36,7 @@ import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
 import { publishTerminalEvent } from "./hooks/terminalBus";
 import { useApiHealth } from "./hooks/useApiHealth";
+import { useAppMode } from "./hooks/useAppMode";
 import { useBrowserNotifications } from "./hooks/useBrowserNotifications";
 import { useEngines } from "./hooks/useEngines";
 import { useLanes } from "./hooks/useLanes";
@@ -131,14 +135,20 @@ function LoginScreen({
   error: string | null;
   onRetry: () => void;
 }) {
+  const [accessKey, setAccessKey] = useState("");
+
   return (
     <div className="min-h-screen bg-app text-primary flex items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-lg border border-default bg-surface p-6 shadow-xl">
-        <h1 className="text-lg font-semibold">Vibe Code</h1>
+        <div className="flex items-center gap-2.5">
+          <img src="/icons/icon-192.png" alt="" width={32} height={32} className="rounded-lg" />
+          <h1 className="text-lg font-semibold">Harness Remote</h1>
+        </div>
         <p className="mt-2 text-sm text-secondary">
-          Entre com GitHub para acessar o painel e autorizar operações em repositórios.
+          Drive your coding agents from anywhere. Sign in to reach the harness.
         </p>
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+
         <div className="mt-5 flex gap-2">
           <Button
             type="button"
@@ -149,16 +159,56 @@ function LoginScreen({
               window.location.href = api.auth.loginUrl();
             }}
           >
-            {loading ? "Verificando..." : "Entrar com GitHub"}
+            {loading ? "Checking…" : "Sign in with GitHub"}
           </Button>
           {error && (
             <Button type="button" variant="ghost" onClick={onRetry}>
-              Tentar
+              Retry
             </Button>
           )}
         </div>
+
+        {status?.enabled !== false && (
+          <div className="mt-5 border-t border-subtle pt-4">
+            <label
+              htmlFor="access-key"
+              className="text-[11px] font-medium uppercase tracking-wider text-muted"
+            >
+              Access key
+            </label>
+            <form
+              className="mt-2 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const value = accessKey.trim();
+                if (!value) return;
+                setApiKey(value);
+                onRetry();
+              }}
+            >
+              <input
+                id="access-key"
+                type="password"
+                value={accessKey}
+                onChange={(e) => setAccessKey(e.target.value)}
+                placeholder="Paste your access key"
+                autoComplete="current-password"
+                className="min-w-0 flex-1 rounded-md border border-strong bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <Button type="submit" variant="outline" disabled={accessKey.trim().length === 0}>
+                Use
+              </Button>
+            </form>
+            <p className="mt-2 text-[11px] text-muted">
+              For deployments protected with <code>VIBE_CODE_API_KEY</code>.
+            </p>
+          </div>
+        )}
+
         {status?.enabled === false && (
-          <p className="mt-3 text-xs text-warning">OAuth ainda não está configurado no servidor.</p>
+          <p className="mt-3 text-xs text-warning">
+            Authentication is not configured on the server.
+          </p>
         )}
       </div>
     </div>
@@ -322,6 +372,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showIssueImporter, setShowIssueImporter] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const isMobile = useIsMobile();
+  const { mode, setMode } = useAppMode();
+  const [codeBusy, setCodeBusy] = useState(false);
   const [initialSkillName, setInitialSkillName] = useState<string | null>(null);
   const [selectedTaskLoadedSkills, setSelectedTaskLoadedSkills] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filters>(() => {
@@ -777,6 +829,56 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     setShowAdvanced(false);
     setSelectedTask(null);
   }, [selectedTask, unsubscribe]);
+
+  // ─── Code mode (remote control) ───────────────────────────────────────────────
+  // The operator only types a task: the harness names the session and starts it.
+  const handleCreateSession = useCallback(
+    async ({ description, repoId }: { description: string; repoId: string }) => {
+      setCodeBusy(true);
+      try {
+        const task = await createTask({ description, repoId });
+        if (!task) return;
+        handleTaskClick(task);
+        await launchTask(task.id);
+        toast("Session started", "success");
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      } finally {
+        setCodeBusy(false);
+      }
+    },
+    [createTask, handleTaskClick, launchTask, toast]
+  );
+
+  const handleSessionStart = useCallback(
+    async (taskId: string) => {
+      setCodeBusy(true);
+      try {
+        await launchTask(taskId);
+        toast("Session started", "success");
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      } finally {
+        setCodeBusy(false);
+      }
+    },
+    [launchTask, toast]
+  );
+
+  const handleSessionStop = useCallback(
+    async (taskId: string) => {
+      setCodeBusy(true);
+      try {
+        await cancelTask(taskId);
+        toast("Session stopped", "info");
+      } catch (err) {
+        toast(err instanceof Error ? err.message : String(err), "error");
+      } finally {
+        setCodeBusy(false);
+      }
+    },
+    [cancelTask, toast]
+  );
 
   const handleDeleteTask = useCallback(
     async (taskId: string) => {
@@ -1291,90 +1393,103 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   <path d="M3 6h18M3 12h18M3 18h18" />
                 </svg>
               </button>
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                 <WorkspaceSelector />
-                <div className="hidden sm:block h-4 w-px bg-white/10" />
+                <div className="hidden sm:block h-4 w-px bg-white/10 shrink-0" />
                 <h2 className="hidden sm:block text-sm font-bold text-primary truncate max-w-[120px] lg:max-w-[200px]">
                   {selectedRepo ? selectedRepo.name : "All Projects"}
                 </h2>
               </div>
 
-              <div className="hidden md:flex items-center gap-2 flex-1 max-w-md ml-4">
-                <div className="relative w-full group">
-                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+              <ModeToggle mode={mode} onChange={setMode} className="ml-1 shrink-0" />
+
+              {mode === "kanban" && (
+                <div className="hidden md:flex items-center gap-2 flex-1 max-w-md ml-4">
+                  <div className="relative w-full group">
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-label="Search icon"
+                      >
+                        <circle cx="7" cy="7" r="5" />
+                        <path d="M11 11l4 4" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Quick search... (Ctrl+K)"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      onFocus={() => setShowCommandPalette(true)}
+                      className="w-full h-10 pl-10 pr-4 rounded-xl text-xs bg-input/40 border border-default hover:border-strong focus:border-accent/40 focus:ring-4 focus:ring-accent/10 transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-4 shrink-0">
+              {mode === "kanban" && (
+                <>
+                  {/* Mobile search / command palette trigger */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCommandPalette(true)}
+                    aria-label="Buscar"
+                    className="md:hidden p-2 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink"
+                  >
                     <svg
-                      width="14"
-                      height="14"
+                      width="18"
+                      height="18"
                       viewBox="0 0 16 16"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
-                      aria-label="Search icon"
+                      aria-hidden="true"
                     >
                       <circle cx="7" cy="7" r="5" />
                       <path d="M11 11l4 4" strokeLinecap="round" />
                     </svg>
+                  </button>
+                  <div className="hidden lg:flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default shadow-inner">
+                    <ExportImportMenu
+                      selectedRepoId={selectedRepoId}
+                      onExport={exportBoard}
+                      onImportIssues={() => setShowIssueImporter(true)}
+                      onImportSuccess={(msg) => toast(msg, "success")}
+                      onImportError={(msg) => toast(msg, "error")}
+                    />
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Quick search... (Ctrl+K)"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    onFocus={() => setShowCommandPalette(true)}
-                    className="w-full h-10 pl-10 pr-4 rounded-xl text-xs bg-input/40 border border-default hover:border-strong focus:border-accent/40 focus:ring-4 focus:ring-accent/10 transition-all outline-none"
+                  <LaneSyncPill
+                    lanes={lanes.lanes}
+                    onClick={() => {
+                      setSettingsTab("lanes");
+                      setShowSettings(true);
+                    }}
                   />
-                </div>
-              </div>
-            </div>
+                  <div className="h-6 w-px bg-white/10 mx-1 hidden lg:block" />
 
-            <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-4 shrink-0">
-              {/* Mobile search / command palette trigger */}
-              <button
-                type="button"
-                onClick={() => setShowCommandPalette(true)}
-                aria-label="Buscar"
-                className="md:hidden p-2 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <circle cx="7" cy="7" r="5" />
-                  <path d="M11 11l4 4" strokeLinecap="round" />
-                </svg>
-              </button>
-              <div className="hidden lg:flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default shadow-inner">
-                <ExportImportMenu
-                  selectedRepoId={selectedRepoId}
-                  onExport={exportBoard}
-                  onImportIssues={() => setShowIssueImporter(true)}
-                  onImportSuccess={(msg) => toast(msg, "success")}
-                  onImportError={(msg) => toast(msg, "error")}
-                />
-              </div>
-              <LaneSyncPill
-                lanes={lanes.lanes}
-                onClick={() => {
-                  setSettingsTab("lanes");
-                  setShowSettings(true);
-                }}
-              />
-              <div className="h-6 w-px bg-white/10 mx-1 hidden lg:block" />
-
-              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
-                <HeaderAction icon="plus" label="Task" onClick={openNewTask} variant="primary" />
-                <HeaderAction
-                  icon="filter"
-                  label={showFilterBar ? "Hide" : "Filter"}
-                  onClick={() => _setShowFilterBar(!showFilterBar)}
-                  active={showFilterBar}
-                />
-              </div>
+                  <div className="flex items-center gap-1.5 p-1 rounded-xl bg-input/30 border border-default mr-2 shadow-inner">
+                    <HeaderAction
+                      icon="plus"
+                      label="Task"
+                      onClick={openNewTask}
+                      variant="primary"
+                    />
+                    <HeaderAction
+                      icon="filter"
+                      label={showFilterBar ? "Hide" : "Filter"}
+                      onClick={() => _setShowFilterBar(!showFilterBar)}
+                      active={showFilterBar}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="h-6 w-px bg-white/10 mx-1" />
 
@@ -1391,8 +1506,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
             </div>
           </header>
 
+          <InstallBanner />
+
           {/* Filter Bar Panel */}
-          {showFilterBar && (
+          {mode === "kanban" && showFilterBar && (
             <div className="px-6 py-3 border-b border-white/5 bg-gradient-to-b from-white/3 to-transparent animate-in slide-in-from-top-2 duration-200 ease-out">
               <FilterBar
                 filters={filters}
@@ -1412,7 +1529,35 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
           {/* Board Main Area */}
           <main className="flex-1 overflow-hidden relative">
-            {tasksLoading || reposLoading ? (
+            {mode === "code" ? (
+              <ErrorBoundary>
+                <div className="flex h-full w-full flex-col">
+                  <CodeMode
+                    tasks={filteredTasks}
+                    repos={repos}
+                    selectedRepoId={selectedRepoId}
+                    selectedTask={selectedTask}
+                    liveLogs={selectedTask ? (liveLogs[selectedTask.id] ?? []) : []}
+                    connected={connected}
+                    loading={tasksLoading || reposLoading}
+                    busy={codeBusy}
+                    onSelectRepo={setSelectedRepoId}
+                    onOpenSession={handleTaskClick}
+                    onCloseSession={handleCloseDetail}
+                    onCreateSession={handleCreateSession}
+                    onSendInput={(taskId, text) =>
+                      send({ type: "agent_input", taskId, input: text })
+                    }
+                    onStart={handleSessionStart}
+                    onStop={handleSessionStop}
+                    onDetails={(task) => {
+                      setSelectedTask(task);
+                      setShowAdvanced(true);
+                    }}
+                  />
+                </div>
+              </ErrorBoundary>
+            ) : tasksLoading || reposLoading ? (
               <SkeletonBoard />
             ) : repos.length === 0 && !tasksError ? (
               <Onboarding
@@ -1443,7 +1588,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     Can't reach the server
                   </h3>
                   <p className="text-sm text-muted max-w-sm mx-auto leading-relaxed">
-                    The connection to vibe-code was lost. Make sure the server is running, then
+                    The connection to Harness Remote was lost. Make sure the server is running, then
                     retry.
                   </p>
                 </div>
@@ -1508,7 +1653,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
         {/* Task Detail Slide-over */}
         <Suspense fallback={null}>
-          {selectedTask && !showAdvanced && (
+          {mode === "kanban" && selectedTask && !showAdvanced && (
             <TaskPanel
               task={selectedTask}
               engines={engines}

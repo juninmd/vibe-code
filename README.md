@@ -1,7 +1,14 @@
-# 🚀 Vibe-Code
+# 🚀 Harness Remote
+
+> Remote control for autonomous coding agents. Ask for a task from your phone,
+> watch the harness work, and reply — installable as a PWA. Under the hood it is
+> the same **Autonomous Code Production Control Plane**: a kanban board, runs,
+> validation, reviews and PRs, with **code mode** as the default surface.
 
 ## Operator Note
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
+* Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.
+* Code mode doc: [docs/remote-control.md](docs/remote-control.md)
 - Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.
 - Terminal session workflow lives in WORKFLOW.md.
 
@@ -576,6 +583,29 @@ Mensagens enviadas:
 - `✅ Merge conflicts resolved!` — task de conflict-resolution concluiu
 
 **`VIBE_CODE_PUBLIC_URL`** controla a base URL usada nos links das notificações. Configure para a URL externa acessível (ex: `https://vibe.meudominio.com`) — internamente a API ainda usa o endereço interno do cluster.
+
+---
+
+## 📱 Harness Remote — code mode + PWA
+
+Harness Remote is the mobile-first surface of the same system. It ships as an
+installable PWA (Add to Home Screen) and works on desktop too.
+
+- **Code mode (default)** — a session list and a live chat transcript. Type a
+  task; the harness creates, names and launches the session, streams the agent
+  output as a conversation, and lets you reply while it runs.
+- **Board mode** — the full kanban board with every existing panel, filter and
+  dialog.
+- **No task title required** — the server derives the session name from the
+  prompt (`<prefix>-<slug>`, e.g. `harness-fix-the-login-bug`). Set
+  `VIBE_CODE_SESSION_NAME_PREFIX` to change the prefix.
+- **Skills come by default** — code mode has no skill picker; skills are
+  matched from the task text and loaded as session plugins.
+- **Offline shell** — a service worker caches the app shell; `/api`, `/ws` and
+  `/health` are never cached.
+
+Icons are generated with `bun run scripts/generate-pwa-icons.ts`. Details live
+in [docs/remote-control.md](docs/remote-control.md).
 
 ---
 

@@ -477,6 +477,7 @@ export function createTaskQueries(db: Database) {
     },
     create: (req: CreateTaskRequest & { status?: TaskStatus; parentTaskId?: string }): Task => {
       const status = req.status ?? "backlog";
+      const title = req.title?.trim() ? req.title.trim() : "Untitled session";
       const maxOrderRow = stmts.maxOrder.get(status);
       const order = (maxOrderRow?.max_order ?? 0) + 1;
       const tagsJson = JSON.stringify(req.tags ?? []);
@@ -495,7 +496,7 @@ export function createTaskQueries(db: Database) {
             "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
-            req.title,
+            title,
             req.description ?? "",
             req.repoId,
             req.engine ?? null,

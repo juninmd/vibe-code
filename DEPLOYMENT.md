@@ -1,3 +1,51 @@
+# Harness Remote — Deployment
+
+Harness Remote runs as a **single Bun container** (API + WebSocket + SPA on one
+port). Two supported paths:
+
+- **Kubernetes (k3s)** — `infrastructure/k8s/harness-remote.yaml`. This is how
+  the production instance at `https://vibe.antonio-code.duckdns.org` runs.
+- **Docker Compose** — the legacy stack documented below (Postgres + LiteLLM).
+  The k8s runtime uses SQLite at `/data`; treat Compose as a local option.
+
+## Kubernetes (k3s)
+
+```bash
+# 1. Create the namespace and the runtime secret (never committed).
+kubectl create namespace harness-remote --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n harness-remote create secret generic harness-remote-secret \
+  --from-literal=GITHUB_TOKEN=<pat-with-repo-scope> \
+  --from-literal=VIBE_CODE_API_KEY="$(openssl rand -hex 24)" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Build and load the image (or let CI publish ghcr.io/juninmd/vibe-code:latest).
+docker build -t ghcr.io/juninmd/vibe-code:latest .
+docker save ghcr.io/juninmd/vibe-code:latest | sudo k3s ctr images import -
+
+# 3. Apply and wait.
+kubectl apply -f infrastructure/k8s/harness-remote.yaml
+kubectl -n harness-remote rollout status deployment/harness-remote
+
+# 4. Update an already-running pod (Recreate strategy → brief downtime).
+kubectl -n harness-remote rollout restart deployment/harness-remote
+```
+
+Key points:
+
+- **One replica, `Recreate` strategy** — SQLite lives on the `harness-remote-data`
+  PVC and must never be shared by two pods.
+- **`VIBE_CODE_API_KEY`** protects the public ingress. Operators paste the key on
+  the login screen; the SPA sends it as `Authorization: Bearer` and the socket as
+  `?api_key=`. Without it (and without GitHub OAuth) the API is public.
+- **Skills** are refreshed into `harness-remote-skills` by the `skills-bootstrap`
+  init container from `SKILLS_REPO_URL`.
+- **Environment**: `VIBE_CODE_MAX_AGENTS=1` (memory-bound), `VIBE_CODE_INACTIVITY_MS=1200000`
+  and `VIBE_CODE_SESSION_NAME_PREFIX=harness`.
+- **Ingress**: Traefik with the cluster wildcard certificate (`wildcard-tls`) and
+  the shared `redirect-https` + `security-headers` middlewares.
+
+---
+
 # Vibe-Code v2 — Docker Deployment Guide
 
 ## Overview
