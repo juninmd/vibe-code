@@ -53,9 +53,18 @@ test.describe("API smoke", () => {
       )
       .toBe("ready");
 
-    // Validation: missing title is rejected
+    // Validation: a task with no title is fine — the harness names the session
+    const derived = await request.post(api("/api/tasks"), {
+      data: { repoId: repo.id, description: "auto named session" },
+    });
+    expect(derived.status()).toBe(201);
+    const derivedTask = (await derived.json()).data;
+    expect(typeof derivedTask.title).toBe("string");
+    expect(derivedTask.title).toContain("auto-named-session");
+
+    // Validation: missing repoId is rejected
     const invalid = await request.post(api("/api/tasks"), {
-      data: { repoId: repo.id },
+      data: { description: "no repo" },
     });
     expect(invalid.status()).toBe(400);
 

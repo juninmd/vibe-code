@@ -43,6 +43,28 @@ const BASE = "/api";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/** Storage key for the optional access key used by key-protected deployments. */
+const API_KEY_STORAGE = "harness-remote-api-key";
+
+/** Read the access key the operator entered on the login screen, if any. */
+export function getApiKey(): string | null {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE);
+  } catch {
+    return null;
+  }
+}
+
+/** Persist (or clear) the access key. Requires a reload to affect the socket. */
+export function setApiKey(key: string | null): void {
+  try {
+    if (key) localStorage.setItem(API_KEY_STORAGE, key);
+    else localStorage.removeItem(API_KEY_STORAGE);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 // NOTE: Workspace ID header disabled - API is now public (no authentication)
 // function getWorkspaceId(): string | null { ... }
 
@@ -73,6 +95,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const workspaceId = localStorage.getItem("vibe_workspace_id");
   if (workspaceId) {
     headers.set("x-workspace-id", workspaceId);
+  }
+
+  // API-key auth for key-protected (public) deployments.
+  const apiKey = getApiKey();
+  if (apiKey) {
+    headers.set("Authorization", `Bearer ${apiKey}`);
   }
 
   try {

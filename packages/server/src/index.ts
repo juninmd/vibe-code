@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { config } from "dotenv";
@@ -183,29 +183,65 @@ async function proxyDevFrontend(c: import("hono").Context, devFrontend: string):
   });
 }
 
-async function serveStatic(_c: import("hono").Context, filePath: string): Promise<Response> {
+/** True when the path points at a regular file inside the build output. */
+async function webFileExists(filePath: string): Promise<boolean> {
   try {
-    const content = await readFile(filePath);
-    const ext = filePath.split(".").pop() ?? "";
-    const mime: Record<string, string> = {
-      html: "text/html; charset=utf-8",
-      js: "application/javascript",
-      css: "text/css",
-      svg: "image/svg+xml",
-      png: "image/png",
-      ico: "image/x-icon",
-      json: "application/json",
-      woff2: "font/woff2",
-      woff: "font/woff",
-    };
-    return new Response(content, {
-      headers: { "Content-Type": mime[ext] ?? "application/octet-stream" },
-    });
+    const info = await stat(filePath);
+    return info.isFile();
   } catch {
-    // file not found — fall through to index.html (SPA routing)
-    const index = await readFile(join(WEB_DIST, "index.html"));
-    return new Response(index, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    return false;
   }
+}
+
+/** Resolve a URL pathname inside the web build, rejecting path traversal. */
+function resolveWebAsset(pathname: string): string | null {
+  const normalized = pathname.replace(/^\/+/, "");
+  if (normalized.length === 0 || normalized.includes("\0")) return null;
+  const resolved = resolve(WEB_DIST, normalized);
+  const rel = relative(WEB_DIST, resolved);
+  if (rel.startsWith("..") || isAbsolute(rel)) return null;
+  return resolved;
+}
+
+function cacheControlFor(pathname: string): string {
+  // Hashed build output never changes under the same name.
+  if (pathname.startsWith("/assets/")) return "public, max-age=31536000, immutable";
+  // The service worker and manifest must always be revalidated so updates land.
+  if (pathname === "/sw.js" || pathname === "/manifest.webmanifest") return "no-cache";
+  return "public, max-age=3600";
+}
+
+async function serveWebAsset(filePath: string, pathname: string): Promise<Response> {
+  const content = await readFile(filePath);
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const mime: Record<string, string> = {
+    html: "text/html; charset=utf-8",
+    js: "application/javascript",
+    css: "text/css",
+    svg: "image/svg+xml",
+    png: "image/png",
+    ico: "image/x-icon",
+    json: "application/json",
+    webmanifest: "application/manifest+json",
+    webp: "image/webp",
+    txt: "text/plain; charset=utf-8",
+    map: "application/json",
+    woff2: "font/woff2",
+    woff: "font/woff",
+  };
+  return new Response(content, {
+    headers: {
+      "Content-Type": mime[ext] ?? "application/octet-stream",
+      "Cache-Control": cacheControlFor(pathname),
+    },
+  });
+}
+
+async function serveSpaIndex(): Promise<Response> {
+  const index = await readFile(join(WEB_DIST, "index.html"));
+  return new Response(index, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
+  });
 }
 
 // Read-only projection of the local coding-CLI session stores (OpenCode,
@@ -258,11 +294,32 @@ app.route("/api", api);
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 if (isProduction) {
-  // Serve static assets
-  app.get("/assets/*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
-  app.get("/favicon.*", (c) => serveStatic(c, join(WEB_DIST, c.req.path)));
-  // SPA catch-all: must be registered AFTER all API routes
-  app.get("*", (c) => serveStatic(c, join(WEB_DIST, "index.html")));
+  // Serve real files from the build output (assets, icons, sw.js, manifest);
+  // fall back to index.html only for extension-less SPA routes.
+  app.get("*", async (c) => {
+    let pathname = c.req.path;
+    try {
+      pathname = decodeURIComponent(pathname);
+    } catch {
+      /* malformed escape — treat as-is */
+    }
+
+    const assetPath = resolveWebAsset(pathname);
+    if (assetPath && (await webFileExists(assetPath))) {
+      return serveWebAsset(assetPath, pathname);
+    }
+
+    // Never answer a missing asset/API path with the HTML shell.
+    if (
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/assets/") ||
+      /\.[a-z0-9]+$/i.test(pathname)
+    ) {
+      return c.notFound();
+    }
+    // SPA catch-all: must be registered AFTER all API routes
+    return serveSpaIndex();
+  });
 } else {
   if (process.env.VITE_DEV_URL) {
     const devFrontend = process.env.VITE_DEV_URL;

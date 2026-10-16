@@ -2,6 +2,7 @@ import { ReactQueryProvider } from "@vibe-code/core";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { registerServiceWorker } from "./pwa/register";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import "./index.css";
 
@@ -15,3 +16,5 @@ createRoot(document.getElementById("root")!).render(
     </ReactQueryProvider>
   </StrictMode>
 );
+
+registerServiceWorker();

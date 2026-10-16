@@ -11,6 +11,10 @@ export function WorkspaceSelector() {
 
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
+  // Nothing to switch with zero or one workspace — and the control is the
+  // widest thing in the mobile header, so hiding it keeps the bar usable.
+  if (workspaces.length <= 1) return null;
+
   return (
     <div className="flex items-center gap-2">
       <label
@@ -24,7 +28,7 @@ export function WorkspaceSelector() {
         value={workspaceId || ""}
         onChange={(e) => switchWorkspace(e.target.value)}
         disabled={isLoading}
-        className="px-2 py-1 border border-transparent hover:border-default rounded-md bg-transparent hover:bg-surface-hover text-primary text-sm font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent transition-all truncate max-w-[110px] sm:max-w-[150px] !bg-zinc-900"
+        className="px-2 py-1 border border-transparent hover:border-default rounded-md bg-transparent hover:bg-surface-hover text-primary text-sm font-bold cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent transition-all truncate w-[92px] max-w-[92px] sm:w-auto sm:max-w-[150px] !bg-zinc-900"
         aria-label="Select workspace"
       >
         {workspaces.length === 0 ? (
