@@ -1393,9 +1393,9 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   <path d="M3 6h18M3 12h18M3 18h18" />
                 </svg>
               </button>
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 overflow-hidden">
                 <WorkspaceSelector />
-                <div className="hidden sm:block h-4 w-px bg-white/10" />
+                <div className="hidden sm:block h-4 w-px bg-white/10 shrink-0" />
                 <h2 className="hidden sm:block text-sm font-bold text-primary truncate max-w-[120px] lg:max-w-[200px]">
                   {selectedRepo ? selectedRepo.name : "All Projects"}
                 </h2>

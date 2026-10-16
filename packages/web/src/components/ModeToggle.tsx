@@ -28,7 +28,7 @@ export function ModeToggle({ mode, onChange, className = "" }: ModeToggleProps) 
             role="tab"
             aria-selected={active}
             onClick={() => onChange(option.value)}
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors sm:px-2.5 ${
               active
                 ? "bg-accent text-white shadow-sm shadow-accent/25"
                 : "text-secondary hover:text-primary"
@@ -48,7 +48,8 @@ export function ModeToggle({ mode, onChange, className = "" }: ModeToggleProps) 
               <title>{option.label}</title>
               <path d={option.icon} />
             </svg>
-            <span>{option.label}</span>
+            {/* Labels are hidden on phones so the header never crowds. */}
+            <span className="hidden sm:inline">{option.label}</span>
           </button>
         );
       })}
