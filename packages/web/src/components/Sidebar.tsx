@@ -42,6 +42,7 @@ interface SidebarProps {
   onOpenInbox?: () => void;
   onOpenQuickView?: () => void;
   onOpenEngines?: () => void;
+  onOpenAgents?: () => void;
   onOpenSchedules?: () => void;
   onOpenSessions?: () => void;
   connected: boolean;
@@ -71,6 +72,7 @@ export function Sidebar({
   onOpenInbox,
   onOpenQuickView: _onOpenQuickView,
   onOpenEngines,
+  onOpenAgents,
   onOpenSchedules,
   onOpenSessions,
   connected,
@@ -487,6 +489,12 @@ export function Sidebar({
             collapsed={collapsed}
           />
           <SidebarNavItem
+            icon="agents"
+            label="Agents"
+            onClick={runAndClose(onOpenAgents)}
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
             icon="clock"
             label="Schedules"
             onClick={runAndClose(onOpenSchedules)}
@@ -614,6 +622,20 @@ function SidebarNavItem({
             aria-label="Engines"
           >
             <path d="M2 4h12M2 8h12M2 12h12M5 4v8M11 4v8" />
+          </svg>
+        )}
+        {icon === "agents" && (
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-label="Agents"
+          >
+            <rect x="2" y="5" width="12" height="9" rx="2" />
+            <path d="M8 2v3M3 9v2M13 9v2M6 9v1M10 9v1" />
           </svg>
         )}
         {icon === "clock" && (

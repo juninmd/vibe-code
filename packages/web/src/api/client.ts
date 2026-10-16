@@ -1,6 +1,7 @@
 import type {
   AgentLog,
   AgentRun,
+  AgentTemplate,
   AuthStatus,
   CreatePromptTemplateRequest,
   CreateRepoRequest,
@@ -392,6 +393,11 @@ export const api = {
   engines: {
     list: () => request<EngineInfo[]>("/engines"),
     models: (name: string) => request<string[]>(`/engines/${name}/models`),
+  },
+
+  agentTemplates: {
+    list: () => request<AgentTemplate[]>("/agent-templates"),
+    get: (slug: string) => request<AgentTemplate>(`/agent-templates/${slug}`),
   },
 
   settings: {

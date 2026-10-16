@@ -51,6 +51,9 @@ import { useWebSocket } from "./hooks/useWebSocket";
 const AddRepoDialog = lazy(() =>
   import("./components/AddRepoDialog").then((m) => ({ default: m.AddRepoDialog }))
 );
+const AgentsPanel = lazy(() =>
+  import("./components/AgentsPanel").then((m) => ({ default: m.AgentsPanel }))
+);
 const ChangelogModal = lazy(() =>
   import("./components/ChangelogModal").then((m) => ({ default: m.ChangelogModal }))
 );
@@ -360,6 +363,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   const [showEnginesPanel, setShowEnginesPanel] = useState(false);
   const [showSchedulesPanel, setShowSchedulesPanel] = useState(false);
   const [showSessionBoard, setShowSessionBoard] = useState(false);
+  const [showAgents, setShowAgents] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFilterBar, _setShowFilterBar] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -1154,6 +1158,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           setShowSessionBoard(false);
           return;
         }
+        if (showAgents) {
+          setShowAgents(false);
+          return;
+        }
         if (showEnginesPanel) {
           setShowEnginesPanel(false);
           return;
@@ -1298,6 +1306,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     showCommandPalette,
     showEnginesPanel,
     showSessionBoard,
+    showAgents,
     showSchedulesPanel,
     showNewTask,
     showAddRepo,
@@ -1360,6 +1369,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           onOpenInbox={() => setShowInbox(true)}
           onOpenQuickView={() => setShowQuickView(true)}
           onOpenEngines={() => setShowEnginesPanel(true)}
+          onOpenAgents={() => setShowAgents(true)}
           onOpenSchedules={() => setShowSchedulesPanel(true)}
           onOpenSessions={() => setShowSessionBoard(true)}
           connected={connected}
@@ -1541,7 +1551,6 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     connected={connected}
                     loading={tasksLoading || reposLoading}
                     busy={codeBusy}
-                    onSelectRepo={setSelectedRepoId}
                     onOpenSession={handleTaskClick}
                     onCloseSession={handleCloseDetail}
                     onCreateSession={handleCreateSession}
@@ -1748,6 +1757,17 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
           {showSessionBoard && (
             <SessionBoard open={showSessionBoard} onClose={() => setShowSessionBoard(false)} />
+          )}
+
+          {showAgents && (
+            <AgentsPanel
+              open={showAgents}
+              onClose={() => setShowAgents(false)}
+              onNewTask={() => {
+                setShowAgents(false);
+                openNewTask();
+              }}
+            />
           )}
 
           {showEnginesPanel && (
