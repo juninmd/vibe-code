@@ -66,6 +66,17 @@ export default defineConfig({
     baseURL: E2E.webUrl,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // The app defaults to code mode; the board-oriented specs pivot via this
+    // seeded preference. code-mode.spec.ts overrides it back to "code".
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: E2E.webUrl,
+          localStorage: [{ name: "harness-remote-mode", value: "kanban" }],
+        },
+      ],
+    },
   },
   webServer: [
     {
