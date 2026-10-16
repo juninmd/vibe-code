@@ -1,6 +1,11 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 export function initDatabase(dbPath: string): Database {
+  if (dbPath !== ":memory:") {
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
   const db = new Database(dbPath, { create: true });
 
   db.exec("PRAGMA journal_mode = WAL");

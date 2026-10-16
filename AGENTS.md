@@ -6,6 +6,7 @@
 - [WORKFLOW.md](file:///d:/Solutions/pessoal/vibe/vibe-code/WORKFLOW.md) — Contrato de ciclo de vida (Intake -> Run -> Validação -> Review).
 - [docs/repo-contract.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/repo-contract.md) — Boundaries e Quality Gates.
 - [docs/glossary.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/glossary.md) — Vocabulário padronizado do control plane.
+- [docs/remote-control.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/remote-control.md) — Harness Remote: modo code (default), nomes de sessão automáticos e PWA.
 - [README.md](file:///d:/Solutions/pessoal/vibe/vibe-code/README.md) & [CLAUDE.md](file:///d:/Solutions/pessoal/vibe/vibe-code/CLAUDE.md) — Setup local, surfaces e comandos técnicos.
 
 ## 2. Regras Operacionais Críticas

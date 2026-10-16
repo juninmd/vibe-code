@@ -1,0 +1,218 @@
+# Harness Remote — single-node k3s deployment.
+#
+# Applied directly with `kubectl apply -f` (see DEPLOYMENT.md). The runtime is
+# identical to the desktop app: one Bun process serving /api, /ws, /health and
+# the SPA. Image is published by .github/workflows/deploy.yml to
+# ghcr.io/juninmd/vibe-code.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: harness-remote
+  labels:
+    app.kubernetes.io/part-of: ai-stack
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harness-remote-data
+  namespace: harness-remote
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harness-remote-skills
+  namespace: harness-remote
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+  labels:
+    app: harness-remote
+    app.kubernetes.io/part-of: ai-stack
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  # SQLite + a single data volume: never run two pods against it at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: harness-remote
+  template:
+    metadata:
+      labels:
+        app: harness-remote
+    spec:
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      initContainers:
+        # Best-effort: refresh the shared skills checkout into the PVC.
+        - name: skills-bootstrap
+          image: ghcr.io/juninmd/vibe-code:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ -z "$SKILLS_REPO_URL" ]; then echo "no SKILLS_REPO_URL; skipping"; exit 0; fi
+              if [ -d /home/vibe/.agents/.git ]; then
+                cd /home/vibe/.agents && git remote set-url origin "$SKILLS_REPO_URL" && git fetch --depth 1 origin && git reset --hard origin/HEAD || true
+              else
+                git clone --depth 1 "$SKILLS_REPO_URL" /home/vibe/.agents || true
+              fi
+              echo "skills bootstrap done"
+          env:
+            - name: SKILLS_REPO_URL
+              value: https://github.com/juninmd/skills.git
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: harness-remote-secret
+                  key: GIT_TOKEN
+                  optional: true
+          volumeMounts:
+            - name: skills
+              mountPath: /home/vibe/.agents
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      containers:
+        - name: harness-remote
+          image: ghcr.io/juninmd/vibe-code:latest
+          # IfNotPresent lets a locally-imported image run; k3s still pulls from
+          # GHCR when the tag is absent. Bump the tag (or rollout restart) to
+          # pick up a new build.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: HOME
+              value: /home/vibe
+            - name: VIBE_CODE_DATA_DIR
+              value: /data
+            - name: VIBE_CODE_MAX_AGENTS
+              value: "1"
+            - name: VIBE_CODE_INACTIVITY_MS
+              value: "1200000"
+            - name: VIBE_CODE_PUBLIC_URL
+              value: https://vibe.antonio-code.duckdns.org
+            - name: VIBE_CODE_SESSION_NAME_PREFIX
+              value: harness
+          envFrom:
+            - secretRef:
+                name: harness-remote-secret
+                optional: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: skills
+              mountPath: /home/vibe/.agents
+          resources:
+            requests:
+              cpu: 50m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 3Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: harness-remote-data
+        - name: skills
+          persistentVolumeClaim:
+            claimName: harness-remote-skills
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+  labels:
+    app: harness-remote
+spec:
+  type: ClusterIP
+  selector:
+    app: harness-remote
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+  labels:
+    app: harness-remote
+    app.kubernetes.io/part-of: ai-stack
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: kube-system-redirect-https@kubernetescrd,kube-system-security-headers@kubernetescrd
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: vibe.antonio-code.duckdns.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: harness-remote
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - vibe.antonio-code.duckdns.org
+      secretName: wildcard-tls
