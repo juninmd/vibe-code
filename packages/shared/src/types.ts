@@ -996,6 +996,34 @@ export interface WorkflowEntry {
   governance?: GovernanceMetadata;
 }
 
+// ─── Agent Templates (built-in specialised agents) ──────────────────────────
+
+/**
+ * A skill a template pulls in when it runs. `source_url` is where the skill
+ * came from; the `cached_*` fields describe the local copy kept for it.
+ */
+export interface AgentTemplateSkillRef {
+  source_url: string;
+  cached_name: string;
+  cached_description: string;
+}
+
+/** A built-in specialised agent, loaded from `agents/templates/*.json`. */
+export interface AgentTemplate {
+  /** kebab-case id; always matches the template filename. */
+  slug: string;
+  name: string;
+  description: string;
+  /** Grouping label shown in the picker (e.g. "Engineering"). */
+  category?: string;
+  /** Icon hint from the template (names a lucide-style glyph). */
+  icon?: string;
+  /** Accent token name (e.g. "info"), resolved to a colour by the UI. */
+  accent?: string;
+  instructions: string;
+  skills: AgentTemplateSkillRef[];
+}
+
 export interface RegistryAssetRecord {
   id: string;
   name: string;
