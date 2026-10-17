@@ -86,6 +86,36 @@ export class TerminalSessionService {
   }
 
   /**
+   * Last `lines` rows of the rendered screen as plain text (no escape sequences),
+   * for card previews. Reads the headless model's buffer, so a TUI's relative cursor
+   * moves are already resolved into the visible text. Anchored on the last row that
+   * has content, so a short transcript is not padded away by the empty viewport.
+   */
+  preview(taskId: string, lines = 6): string[] {
+    const session = this.sessions.get(taskId);
+    if (!session) return [];
+    const buffer = session.screen.buffer.active;
+    const textAt = (y: number): string => {
+      const line = buffer.getLine(y);
+      return line ? line.translateToString(true).trimEnd() : "";
+    };
+
+    let end = -1;
+    for (let y = buffer.length - 1; y >= 0; y -= 1) {
+      if (textAt(y)) {
+        end = y;
+        break;
+      }
+    }
+    if (end < 0) return [];
+
+    const start = Math.max(0, end - lines + 1);
+    const out: string[] = [];
+    for (let y = start; y <= end; y += 1) out.push(textAt(y));
+    return out;
+  }
+
+  /**
    * Hand `deliver` the escape sequences that rebuild the current screen and scrollback
    * in a fresh terminal of the same size. It runs synchronously at the exact point of
    * the output stream where the snapshot was taken, so no live chunk can slip in between

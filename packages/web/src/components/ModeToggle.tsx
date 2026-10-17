@@ -9,9 +9,14 @@ interface ModeToggleProps {
 const OPTIONS: { value: AppMode; label: string; icon: string }[] = [
   { value: "code", label: "Code", icon: "M4 17l6-6-6-6M12 19h8" },
   { value: "kanban", label: "Board", icon: "M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z" },
+  {
+    value: "terminals",
+    label: "Terminals",
+    icon: "M2 4.5h20v15H2zM6 9.5l2.5 2.5L6 14.5M12 15h6",
+  },
 ];
 
-/** Segmented control that switches between code mode and the kanban board. */
+/** Segmented control that switches between code mode, the kanban board and terminals. */
 export function ModeToggle({ mode, onChange, className = "" }: ModeToggleProps) {
   return (
     <div

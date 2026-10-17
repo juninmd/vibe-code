@@ -15,6 +15,12 @@ vi.mock("../api/client", () => ({
   },
 }));
 
+// The real dock mounts an xterm instance; the board's own behaviour is what is under
+// test here, so the terminal is stubbed out.
+vi.mock("./terminals/ExternalSessions", () => ({
+  ExternalSessionDock: ({ card }: { card: SessionCard }) => <div>terminal-window:{card.title}</div>,
+}));
+
 function card(overrides: Partial<SessionCard> = {}): SessionCard {
   return {
     id: "opencode:ses_1",
@@ -133,14 +139,26 @@ describe("SessionBoard", () => {
     expect(screen.getByText("Ship the sessions board")).toBeTruthy();
   });
 
-  it("copies the CLI resume command for a card", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  it("opens the session terminal across the whole surface", async () => {
     list.mockResolvedValue(board([card()]));
 
     render(<SessionBoard open onClose={() => {}} />);
     fireEvent.click(
       (await screen.findByText("Ship the sessions board")).closest("button") as HTMLElement
+    );
+
+    expect(await screen.findByText("terminal-window:Ship the sessions board")).toBeTruthy();
+  });
+
+  it("copies the CLI resume command from a card's copy button", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    list.mockResolvedValue(board([card()]));
+
+    render(<SessionBoard open onClose={() => {}} />);
+    await screen.findByText("Ship the sessions board");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copiar comando de Ship the sessions board" })
     );
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("opencode --session ses_1"));

@@ -1,7 +1,20 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import * as fs from "node:fs";
 import * as playwright from "playwright";
 import * as processTree from "../../utils/process-tree";
+
+// mock.module() is process-wide and survives mock.restore(): put the real modules back when
+// this file is done, otherwise every file that runs later and touches the filesystem (the
+// session readers, the db tests) silently talks to these fakes — `existsSync: mock()`
+// returning undefined made the OpenCode store look empty, for example.
+const realFs = { ...fs };
+const realPlaywright = { ...playwright };
+const realProcessTree = { ...processTree };
+afterAll(() => {
+  mock.module("node:fs", () => realFs);
+  mock.module("playwright", () => realPlaywright);
+  mock.module("../../utils/process-tree", () => realProcessTree);
+});
 
 // Mock the dependencies
 mock.module("node:fs", () => ({
