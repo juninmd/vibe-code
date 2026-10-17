@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { RawSession, SessionReader } from "../types";
@@ -26,9 +27,14 @@ const DEFAULT_ROOTS = [
   "~/.antigravity/sessions",
   "~/.antigravity/cli/sessions",
   "~/.config/antigravity/sessions",
+  // The `agy` CLI keeps its conversations in a JSONL history index. It is not a
+  // per-session store, so it is read separately (grouped by conversationId).
+  "~/.gemini/antigravity-cli",
 ];
 
 const ID_KEYS = ["id", "sessionId", "session_id", "conversationId", "conversation_id"];
+/** Keys that identify a *conversation*, used when one file indexes many of them. */
+const CONVERSATION_KEYS = ["conversationId", "conversation_id"];
 const TITLE_KEYS = ["title", "name", "summary", "task", "prompt", "description"];
 const CWD_KEYS = [
   "cwd",
@@ -58,6 +64,32 @@ type Loose = Record<string, unknown>;
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Fields that *name or locate* a session. Deliberately narrower than everything the reader
+ * understands: a timestamp, a status or a count alone is not enough to tell a session from a
+ * config/manifest file that happens to carry one.
+ */
+const SESSION_FIELD_KEYS = [
+  ...ID_KEYS,
+  ...TITLE_KEYS,
+  ...CWD_KEYS,
+  "messages",
+  "events",
+  "turns",
+  "history",
+];
+
+/**
+ * Distinguishes a session object from a configuration file. Both are plain JSON objects in
+ * the same store, and only the former carries a field that names or describes a session.
+ */
+function looksLikeSession(obj: Loose): boolean {
+  return SESSION_FIELD_KEYS.some((key) => {
+    const value = obj[key];
+    return value !== undefined && value !== null && value !== "";
+  });
 }
 
 function normalizeStatus(value: unknown): "done" | "failed" | null {
@@ -182,6 +214,67 @@ async function collectFiles(dir: string, depth = 0): Promise<string[]> {
   return files;
 }
 
+/**
+ * Reads the CLI's `history.jsonl` index, which holds one line per interaction across
+ * *all* conversations. Entries are grouped by `conversationId` so each conversation
+ * becomes one session, with the last message as its title.
+ */
+async function readHistoryIndex(file: string): Promise<RawSession[]> {
+  interface Entry {
+    title: string;
+    cwd: string;
+    created: number;
+    updated: number;
+    count: number;
+  }
+  const byConversation = new Map<string, Entry>();
+
+  for await (const line of readLines(file)) {
+    if (!line.trim()) continue;
+    let rec: Loose;
+    try {
+      rec = JSON.parse(line) as Loose;
+    } catch {
+      continue;
+    }
+
+    // The index is grouped per *conversation*: `conversationId` must win over any per-line
+    // message id, or every interaction would become its own card.
+    const id = str(pick(rec, [...CONVERSATION_KEYS, ...ID_KEYS]));
+    if (!id) continue;
+
+    const ts = timeOf(rec, ["timestamp", "ts", ...UPDATED_KEYS, ...CREATED_KEYS]);
+    const text = str(pick(rec, ["display", "text", "message", ...TITLE_KEYS]));
+    const cwd = str(pick(rec, CWD_KEYS));
+
+    const entry = byConversation.get(id);
+    if (!entry) {
+      byConversation.set(id, { title: text, cwd, created: ts, updated: ts, count: 1 });
+      continue;
+    }
+
+    entry.count += 1;
+    if (ts > 0 && (entry.created === 0 || ts < entry.created)) entry.created = ts;
+    if (ts >= entry.updated) {
+      entry.updated = ts;
+      entry.title = text || entry.title;
+      entry.cwd = cwd || entry.cwd;
+    }
+  }
+
+  return [...byConversation.entries()].map(([id, entry]) => ({
+    sessionId: id,
+    source: "antigravity" as const,
+    title: toTitle(entry.title, "Untitled session"),
+    cwd: entry.cwd,
+    branch: null,
+    messageCount: entry.count,
+    createdAt: entry.created || entry.updated,
+    updatedAt: entry.updated || entry.created,
+    explicitStatus: null,
+  }));
+}
+
 export class AntigravitySessionReader implements SessionReader {
   readonly source = "antigravity" as const;
 
@@ -197,6 +290,15 @@ export class AntigravitySessionReader implements SessionReader {
     for (const root of this.configuredRoots) {
       if (!(await dirExists(root))) continue;
 
+      // The `agy` CLI store keeps its conversations in a shared history index (plus
+      // SQLite/protobuf files we do not parse), so it is read directly. Walking the whole
+      // tree would be both slow — it holds thousands of cache/log files — and useless.
+      const historyFile = join(root, "history.jsonl");
+      if (existsSync(historyFile)) {
+        sessions.push(...(await readHistoryIndex(historyFile)));
+        continue;
+      }
+
       for (const file of await collectFiles(root)) {
         const mtime = await safeMtime(file);
 
@@ -208,6 +310,11 @@ export class AntigravitySessionReader implements SessionReader {
 
         const raw = await safeReadJson<unknown>(file);
         for (const candidate of unwrap(raw)) {
+          // Configuration files (`settings.json`, `mcp_config.json`) describe no session and
+          // must not become cards. A file is a session when it names one (an id) or describes
+          // one (a title, a cwd, timestamps) — so the filename fallback still works for stores
+          // that key sessions by filename alone.
+          if (!looksLikeSession(candidate)) continue;
           const session = toRawSession(candidate, file, mtime);
           if (session) sessions.push(session);
         }

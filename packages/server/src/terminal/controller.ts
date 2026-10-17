@@ -4,10 +4,12 @@ import { join } from "node:path";
 import {
   HARNESS_ENGINES,
   type HarnessEngine,
+  type SessionSource,
   type SkillEntry,
   type SkillMode,
   type SkillPlan,
   type Task,
+  type TerminalLiveSession,
   type TerminalSignal,
   type TerminalStartRequest,
   type TerminalState,
@@ -19,10 +21,12 @@ import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
 import {
   buildHarnessLaunch,
+  externalResumeArgv,
   type InjectableSkill,
   installAgentPlugin,
   isHarnessEngine,
   readSkillPlan,
+  writeOpencodeModel,
   writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
@@ -52,6 +56,26 @@ interface LiveSession {
   cwd: string;
   plan: SkillPlan;
 }
+
+/** A terminal the app opened for a CLI session that was started outside vibe-code. */
+interface ExternalSession {
+  id: string;
+  source: SessionSource;
+  sessionId: string;
+  cwd: string;
+}
+
+/** Terminal id the app owns for a session started outside vibe-code. */
+export function externalTerminalId(source: SessionSource, sessionId: string): string {
+  return `ext:${source}:${sessionId}`;
+}
+
+/**
+ * Cap on terminals opened for external sessions. They are spawned per session and the
+ * session board can list thousands, so an authenticated caller could otherwise start a CLI
+ * process per card.
+ */
+const MAX_EXTERNAL_TERMINALS = 12;
 
 export interface SkillChoice {
   /** The operator's own list; makes the plan manual. */
@@ -98,6 +122,8 @@ export class TerminalController {
   readonly service: TerminalSessionService;
   private readonly live = new Map<string, LiveSession>();
   private readonly starting = new Map<string, Promise<TerminalState>>();
+  /** Terminals opened for sessions that live outside vibe-code, keyed by terminal id. */
+  private readonly external = new Map<string, ExternalSession>();
 
   constructor(private readonly deps: TerminalControllerDeps) {
     const { hub } = deps;
@@ -189,6 +215,104 @@ export class TerminalController {
   /** Rendered screen to restore on a client that (re)attaches to a live session. */
   snapshotTo(taskId: string, deliver: (snapshot: string) => void): boolean {
     return this.service.snapshotTo(taskId, deliver);
+  }
+
+  /**
+   * Every live terminal, with a text preview of its screen. This is the projection
+   * behind the unified Terminals view: one request lists all running worktrees.
+   */
+  listLive(): TerminalLiveSession[] {
+    const sessions: TerminalLiveSession[] = [];
+    for (const [taskId, live] of this.live) {
+      if (!this.service.isOpen(taskId)) continue;
+      const info = this.service.getInfo(taskId);
+      sessions.push({
+        taskId,
+        runId: live.runId,
+        engine: live.engine,
+        cwd: live.cwd,
+        skills: skillNames(live.plan),
+        cols: info?.cols ?? 0,
+        rows: info?.rows ?? 0,
+        preview: this.service.preview(taskId),
+      });
+    }
+    return sessions;
+  }
+
+  // ─── External sessions ──────────────────────────────────────────────────────
+
+  /**
+   * Open a terminal in the directory of a session the operator started outside
+   * vibe-code, resuming that session in its own CLI. We cannot attach to a PTY we did
+   * not spawn, so this is a fresh, attached terminal — not a takeover of the live one.
+   */
+  async startExternal(request: {
+    source: SessionSource;
+    sessionId: string;
+    cwd: string;
+    cols?: number;
+    rows?: number;
+  }): Promise<ExternalSession> {
+    const id = externalTerminalId(request.source, request.sessionId);
+    if (this.service.isOpen(id)) {
+      const known = this.external.get(id);
+      if (known) return known;
+    }
+    if (this.external.has(id)) {
+      throw new TerminalError("failed", "This terminal is already starting");
+    }
+    if (this.external.size >= MAX_EXTERNAL_TERMINALS) {
+      throw new TerminalError(
+        "unavailable",
+        `Too many external terminals are open (max ${MAX_EXTERNAL_TERMINALS}). Stop one first.`
+      );
+    }
+
+    // Reserve the slot *before* the first await: otherwise concurrent requests all observe a
+    // free slot and the cap becomes "12 + in-flight" instead of 12.
+    const session: ExternalSession = {
+      id,
+      source: request.source,
+      sessionId: request.sessionId,
+      cwd: request.cwd,
+    };
+    this.external.set(id, session);
+
+    try {
+      if (!(await pathExists(request.cwd))) {
+        throw new TerminalError("bad_request", "This session's working directory no longer exists");
+      }
+
+      const command = externalResumeArgv(request.source, request.sessionId);
+      const opened = this.service.openSession({
+        taskId: id,
+        runId: null,
+        cwd: request.cwd,
+        cols: request.cols,
+        rows: request.rows,
+        command,
+        env: {},
+      });
+      if (!opened) {
+        throw new TerminalError("failed", `Could not start ${command[0]}`);
+      }
+      return session;
+    } catch (error) {
+      this.external.delete(id);
+      throw error;
+    }
+  }
+
+  stopExternal(id: string): boolean {
+    const known = this.external.delete(id);
+    const stopped = this.service.closeSession(id);
+    return known || stopped;
+  }
+
+  /** Terminals currently attached to external sessions, for the Terminals view. */
+  listExternal(): ExternalSession[] {
+    return [...this.external.values()].filter((session) => this.service.isOpen(session.id));
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -466,6 +590,9 @@ export class TerminalController {
         ),
       };
       await writeSkillPlan(cwd, plan);
+      if (engine === "opencode") {
+        await writeOpencodeModel(cwd, request.model ?? task.model);
+      }
 
       launch = buildHarnessLaunch({
         engine,
@@ -545,6 +672,8 @@ export class TerminalController {
     const { db, hub } = this.deps;
     const session = this.live.get(taskId);
     this.live.delete(taskId);
+    // External terminals have no run to reconcile: just drop the bookkeeping.
+    this.external.delete(taskId);
     if (!runId) return;
 
     const userClosed = reason === "closed";

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 
-/** The two surfaces the operator can switch between. */
-export type AppMode = "code" | "kanban";
+/** The surfaces the operator can switch between. */
+export type AppMode = "code" | "kanban" | "terminals";
 
 const MODE_KEY = "harness-remote-mode";
 /** Code (chat/remote-control) mode is the default surface. */
 const DEFAULT_MODE: AppMode = "code";
 
+const MODES: AppMode[] = ["code", "kanban", "terminals"];
+
 function readInitialMode(): AppMode {
   if (typeof localStorage === "undefined") return DEFAULT_MODE;
   try {
     const stored = localStorage.getItem(MODE_KEY);
-    if (stored === "code" || stored === "kanban") return stored;
+    if (stored && (MODES as string[]).includes(stored)) return stored as AppMode;
   } catch {
     /* storage unavailable */
   }
@@ -38,7 +40,11 @@ export function useAppMode(): UseAppMode {
 
   const setMode = useCallback((next: AppMode) => setModeState(next), []);
   const toggleMode = useCallback(
-    () => setModeState((current) => (current === "code" ? "kanban" : "code")),
+    () =>
+      setModeState((current) => {
+        const index = MODES.indexOf(current);
+        return MODES[(index + 1) % MODES.length] ?? "code";
+      }),
     []
   );
 

@@ -8,6 +8,7 @@ const SHORTCUTS = [
   { keys: ["Ctrl", "O"], description: "Open in editor" },
   { keys: ["Ctrl", "1-9"], description: "Switch repository (workspace)" },
   { keys: ["S"], description: "Sessions board" },
+  { keys: ["T"], description: "Terminals view" },
   { keys: ["E"], description: "Engines" },
   { keys: ["Ctrl", "K"], description: "Command palette" },
   { keys: ["Ctrl", "S"], description: "Export board" },

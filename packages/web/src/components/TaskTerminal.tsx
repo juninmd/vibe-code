@@ -78,13 +78,17 @@ export const TaskTerminal = forwardRef<TaskTerminalHandle, TaskTerminalProps>(fu
     const host = hostRef.current;
     if (!host) return;
 
+    // Phones get a smaller font (and a shorter scrollback): a terminal CLI still draws at
+    // its own width, and a 13px monospace grid wraps every line twice on a 390px screen.
+    const narrow = typeof window !== "undefined" && window.innerWidth < 768;
+
     const term = new Terminal({
       cursorBlink: true,
       fontFamily:
         '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      fontSize: 13,
-      lineHeight: 1.2,
-      scrollback: 5000,
+      fontSize: narrow ? 11 : 13,
+      lineHeight: narrow ? 1.15 : 1.2,
+      scrollback: narrow ? 2_000 : 5_000,
       theme: THEME,
       allowProposedApi: false,
     });
@@ -154,5 +158,15 @@ export const TaskTerminal = forwardRef<TaskTerminalHandle, TaskTerminalProps>(fu
     sendRef.current({ type: "terminal_resize", taskId, cols: term.cols, rows: term.rows });
   }, [connected, taskId]);
 
-  return <div ref={hostRef} className="h-full w-full overflow-hidden bg-[#0b0b0f] p-2" />;
+  // Phones get the terminal edge to edge — it is the whole point of the screen. A wide
+  // desktop fits it into a centered column instead, because a CLI that cannot be told its
+  // size (Windows has no PTY) draws narrow and would otherwise hug the left edge.
+  return (
+    <div className="flex h-full w-full justify-center overflow-hidden bg-[#0b0b0f]">
+      <div
+        ref={hostRef}
+        className="h-full w-full overflow-hidden bg-[#0b0b0f] px-2 lg:max-w-[720px]"
+      />
+    </div>
+  );
 });

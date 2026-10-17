@@ -63,6 +63,22 @@ export function createTerminalRouter(db: Db, controller: TerminalController) {
     return c.json({ error: "terminal_error", message }, 500);
   };
 
+  // Every live terminal at once, for the unified Terminals view. Filtered to the
+  // requester's workspace so one operator never sees another's worktrees.
+  router.get("/", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    const context = access.context;
+    if (!access.ok || !context) {
+      const decision = access.error;
+      if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const sessions = controller
+      .listLive()
+      .filter((session) => !enforceTaskAccess(db, context, session.taskId));
+    return c.json({ data: sessions });
+  });
+
   router.get("/:taskId/state", async (c) => {
     try {
       return c.json({ data: await controller.state(c.req.param("taskId")) });

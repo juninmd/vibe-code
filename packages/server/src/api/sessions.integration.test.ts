@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { AntigravitySessionReader } from "../sessions/readers/antigravity";
 import { OpenCodeSessionReader } from "../sessions/readers/opencode";
 import { SessionService } from "../sessions/session-service";
+import type { TerminalController } from "../terminal/controller";
 import { createSessionsRouter } from "./sessions";
 
 const NOW = Date.parse("2026-08-05T12:00:00.000Z");
@@ -41,7 +42,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function buildApp() {
+function buildApp(overrides: Partial<Record<keyof TerminalController, unknown>> = {}) {
   const service = new SessionService({
     readers: [
       new OpenCodeSessionReader([join(root, "opencode")]),
@@ -50,8 +51,19 @@ function buildApp() {
     now: () => NOW,
     cacheTtlMs: 0,
   });
+  const terminals = {
+    listExternal: () => [],
+    startExternal: async () => ({
+      id: "ext:opencode:ses_1",
+      source: "opencode" as const,
+      sessionId: "ses_1",
+      cwd: "/home/user/dev/vibe-code",
+    }),
+    stopExternal: () => true,
+    ...overrides,
+  } as unknown as TerminalController;
   const app = new Hono();
-  app.route("/api/sessions", createSessionsRouter(service));
+  app.route("/api/sessions", createSessionsRouter(service, terminals));
   return app;
 }
 
@@ -93,5 +105,61 @@ describe("GET /api/sessions", () => {
   it("rejects a non-numeric limit", async () => {
     const res = await buildApp().request("/api/sessions?limit=abc");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("/api/sessions/:source/:sessionId/terminal", () => {
+  const post = (app: Hono, path: string, body: unknown = {}) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("opens a terminal in the session's own directory and resumes the CLI", async () => {
+    const calls: unknown[] = [];
+    const app = buildApp({
+      startExternal: async (request: unknown) => {
+        calls.push(request);
+        return { id: "ext:opencode:ses_1", source: "opencode", sessionId: "ses_1", cwd: "/d" };
+      },
+    });
+
+    const res = await post(app, "/api/sessions/opencode/ses_1/terminal", { cols: 100, rows: 30 });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.id).toBe("ext:opencode:ses_1");
+    expect(calls).toEqual([
+      {
+        source: "opencode",
+        sessionId: "ses_1",
+        cwd: "/home/user/dev/vibe-code",
+        cols: 100,
+        rows: 30,
+      },
+    ]);
+  });
+
+  it("refuses a session with no known working directory", async () => {
+    const res = await post(buildApp(), "/api/sessions/antigravity/ag-1/terminal");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("bad_request");
+  });
+
+  it("404s an unknown session and rejects an unknown CLI", async () => {
+    expect((await post(buildApp(), "/api/sessions/opencode/nope/terminal")).status).toBe(404);
+    expect((await post(buildApp(), "/api/sessions/cursor/ses_1/terminal")).status).toBe(400);
+  });
+
+  it("reports and stops the terminal it owns", async () => {
+    const app = buildApp({
+      listExternal: () => [
+        { id: "ext:opencode:ses_1", source: "opencode", sessionId: "ses_1", cwd: "/d" },
+      ],
+    });
+    const state = await app.request("/api/sessions/opencode/ses_1/terminal");
+    expect((await state.json()).data.id).toBe("ext:opencode:ses_1");
+
+    const stop = await app.request("/api/sessions/opencode/ses_1/terminal", { method: "DELETE" });
+    expect((await stop.json()).data.stopped).toBe(true);
   });
 });
