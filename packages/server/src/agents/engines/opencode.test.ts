@@ -940,7 +940,7 @@ describe("OpenCodeEngine MCP configuration", () => {
         _workdir: string,
         _resumeSessionId?: string
       ): string[] {
-        return ["bun", scriptPath];
+        return [process.execPath, scriptPath];
       }
     }
 
