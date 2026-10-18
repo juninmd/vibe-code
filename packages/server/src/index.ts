@@ -267,7 +267,7 @@ api.route("/agent-templates", createAgentTemplatesRouter(agentTemplates));
 api.route("/inbox", createInboxRouter(db, registry, orchestrator));
 api.route("/labels", createLabelsRouter(db));
 api.route("/prompts", createPromptsRouter(db));
-api.route("/sessions", createSessionsRouter(sessionService));
+api.route("/sessions", createSessionsRouter(sessionService, terminalController));
 
 api.get("/changelog", async (c) => {
   // Try cwd-relative first (works in Docker/production), fallback to dev path
@@ -332,6 +332,10 @@ const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 const server = Bun.serve({
   port: PORT,
   reusePort: true,
+  // A few endpoints are legitimately slow — `GET /api/sessions` scans every local CLI
+  // store on disk, and repo operations shell out to git. Bun's 10s default would drop
+  // those connections mid-flight, so the server waits longer before giving up.
+  idleTimeout: 60,
   fetch(req, server) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {

@@ -14,7 +14,7 @@ import { createDb } from "../db";
 import { GitService } from "../git/git-service";
 import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
-import { TerminalController, TerminalError } from "./controller";
+import { externalTerminalId, TerminalController, TerminalError } from "./controller";
 
 const posix = process.platform !== "win32";
 
@@ -329,5 +329,74 @@ describe.skipIf(!posix)("TerminalController", () => {
     expect(back.skillMode).toBe("auto");
     expect(back.skills).toEqual(["vibe-code-orchestrator", "tdd"]);
     controller.stop(task.id);
+  });
+});
+
+describe("external terminals", () => {
+  /**
+   * The PTY layer is stubbed out: this exercises the bookkeeping (the cap and the
+   * reservation), not a real CLI process.
+   */
+  async function withStubbedPty() {
+    const { controller } = await makeEnv();
+    const open = new Set<string>();
+    const service = controller.service as unknown as {
+      openSession: (options: { taskId: string }) => boolean;
+      isOpen: (id: string) => boolean;
+      closeSession: (id: string) => boolean;
+    };
+    service.openSession = ({ taskId }) => {
+      open.add(taskId);
+      return true;
+    };
+    service.isOpen = (id) => open.has(id);
+    service.closeSession = (id) => open.delete(id);
+    return controller;
+  }
+
+  it("caps how many external terminals run at once and frees a slot when one stops", async () => {
+    const controller = await withStubbedPty();
+    const start = (n: number) =>
+      controller.startExternal({ source: "opencode", sessionId: `ses_${n}`, cwd: root });
+
+    for (let n = 0; n < 12; n += 1) await start(n);
+
+    await expect(start(12)).rejects.toBeInstanceOf(TerminalError);
+
+    // At the cap, re-attaching an already open terminal still works.
+    expect((await start(0)).sessionId).toBe("ses_0");
+
+    // Stopping one frees its slot for a new session.
+    controller.stopExternal(externalTerminalId("opencode", "ses_0"));
+    expect((await start(12)).sessionId).toBe("ses_12");
+  });
+
+  it("reserves the slot before awaiting, so parallel starts cannot overshoot the cap", async () => {
+    const controller = await withStubbedPty();
+    const results = await Promise.allSettled(
+      Array.from({ length: 30 }, (_unused, n) =>
+        controller.startExternal({ source: "opencode", sessionId: `ses_${n}`, cwd: root })
+      )
+    );
+
+    const started = results.filter((r) => r.status === "fulfilled").length;
+    expect(started).toBe(12);
+    expect(controller.listExternal()).toHaveLength(12);
+  });
+
+  it("releases the reservation when the terminal cannot start", async () => {
+    const controller = await withStubbedPty();
+    await expect(
+      controller.startExternal({
+        source: "opencode",
+        sessionId: "ses_gone",
+        cwd: join(root, "does-not-exist"),
+      })
+    ).rejects.toBeInstanceOf(TerminalError);
+
+    expect(controller.listExternal()).toEqual([]);
+    // …and the failed attempt did not consume the cap.
+    await controller.startExternal({ source: "opencode", sessionId: "ses_ok", cwd: root });
+    expect(controller.listExternal()).toHaveLength(1);
   });
 });

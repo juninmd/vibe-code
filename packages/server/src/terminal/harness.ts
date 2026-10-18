@@ -4,6 +4,7 @@ import {
   type AppliedSkill,
   HARNESS_ENGINES,
   type HarnessEngine,
+  type SessionSource,
   type SkillMode,
   type SkillPlan,
 } from "@vibe-code/shared";
@@ -71,11 +72,46 @@ function initialPrompt(task: HarnessTask): string {
   return `Complete the task described in ${BRIEF_PATH}. Read it first.`;
 }
 
-/** Real model ids only — "auto"/"default" mean "let the CLI choose". */
+/** Placeholders that all mean "let the CLI choose a model". */
+const MODEL_PLACEHOLDERS = new Set(["auto", "default", "auto-free"]);
+
+/** Real model ids only — a placeholder must never be pinned into a config or a flag. */
 function usableModel(model: string | null | undefined): string | null {
   const value = model?.trim();
-  if (!value || value === "auto" || value === "default") return null;
+  if (!value || MODEL_PLACEHOLDERS.has(value)) return null;
   return value;
+}
+
+/** True when `relativePath` is tracked by the repository at `workdir`. */
+async function isTrackedByGit(workdir: string, relativePath: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["git", "ls-files", "--error-unmatch", relativePath], {
+      cwd: workdir,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    await proc.exited;
+    return proc.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Argv that resumes a session started *outside* vibe-code in its own CLI. The app never
+ * owns those processes' PTYs, so the Terminals view spawns a fresh, attached terminal in
+ * the session's directory instead of taking over the running one.
+ */
+export function externalResumeArgv(source: SessionSource, sessionId: string): string[] {
+  switch (source) {
+    case "opencode":
+      return [resolveOpencodeBinary(), "--session", sessionId];
+    case "claude-code":
+      return ["claude", "--resume", sessionId];
+    case "antigravity":
+      // The Antigravity CLI binary is `agy`; it resumes with `--conversation`.
+      return ["agy", "--conversation", sessionId];
+  }
 }
 
 export function buildHarnessLaunch(input: HarnessLaunchInput): HarnessLaunch {
@@ -102,10 +138,48 @@ export function buildHarnessLaunch(input: HarnessLaunchInput): HarnessLaunch {
     env.GOOGLE_GENERATIVE_AI_API_KEY = input.apiKeys.gemini;
   }
   const argv = [resolveOpencodeBinary()];
-  if (model) argv.push("--model", model);
+  // The interactive TUI has no `--model` flag (only `opencode run` does); the chosen
+  // model travels through the project config instead — see writeOpencodeModel().
   if (input.resume) argv.push("--continue");
   else argv.push("--prompt", prompt);
   return { argv, env };
+}
+
+/**
+ * OpenCode's TUI rejects `--model` ("Unrecognized flag"), so the operator's model choice
+ * is applied through the project config instead. Merges the key into the workspace's
+ * `opencode.json`, keeping any other settings, and keeps the file out of git. A placeholder
+ * or absent model clears only the key we own, so "auto" does not leave a stale pick behind.
+ *
+ * A repository that *tracks* its own `opencode.json` owns that file: it is left untouched,
+ * because the git exclude below does not apply to tracked files and the pin would otherwise
+ * be dragged into the task's commit and pull request.
+ */
+export async function writeOpencodeModel(workdir: string, model?: string | null): Promise<void> {
+  const file = join(workdir, "opencode.json");
+  const value = usableModel(model);
+
+  let config: Record<string, unknown> = {};
+  let existed = false;
+  try {
+    const parsed: unknown = JSON.parse(await readFile(file, "utf8"));
+    existed = true;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      config = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // No config yet (or unreadable): start from a fresh object.
+  }
+
+  if (value) config.model = value;
+  else delete config.model;
+
+  // Nothing to pin and nothing to keep in sync: leave the workspace untouched.
+  if (!existed && !value) return;
+  if (await isTrackedByGit(workdir, "opencode.json")) return;
+
+  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await excludeFromGit(workdir, ["opencode.json"]);
 }
 
 // ─── Workspace files ────────────────────────────────────────────────────────

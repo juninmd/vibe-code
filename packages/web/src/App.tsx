@@ -32,6 +32,7 @@ import { Onboarding } from "./components/Onboarding";
 import type { Tab as SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
+import { TerminalsMode } from "./components/terminals/TerminalsMode";
 import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/Toaster";
 import { publishTerminalEvent } from "./hooks/terminalBus";
@@ -1218,6 +1219,12 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
       if (isTyping || taskPanelOpen) return;
 
+      // T — terminals view
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        setMode("terminals");
+        return;
+      }
       // N — new task
       if (e.key === "n" || e.key === "N") {
         e.preventDefault();
@@ -1329,6 +1336,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
     showTemplates,
     repos.length,
     repos,
+    setMode,
   ]);
 
   return (
@@ -1566,6 +1574,30 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                   />
                 </div>
               </ErrorBoundary>
+            ) : mode === "terminals" ? (
+              <ErrorBoundary>
+                <div className="flex h-full w-full flex-col">
+                  <TerminalsMode
+                    tasks={filteredTasks}
+                    engines={engines}
+                    loading={tasksLoading || reposLoading}
+                    connected={connected}
+                    selectedTask={selectedTask}
+                    onOpenSession={handleTaskClick}
+                    onCloseSession={handleCloseDetail}
+                    onWsSend={sendWsMessage}
+                    onStop={handleSessionStop}
+                    onFinished={() => {
+                      void refresh();
+                    }}
+                    onDetails={(task) => {
+                      setSelectedTask(task);
+                      setShowAdvanced(true);
+                    }}
+                    onNotify={(message, kind) => toast(message, kind)}
+                  />
+                </div>
+              </ErrorBoundary>
             ) : tasksLoading || reposLoading ? (
               <SkeletonBoard />
             ) : repos.length === 0 && !tasksError ? (
@@ -1756,7 +1788,13 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           )}
 
           {showSessionBoard && (
-            <SessionBoard open={showSessionBoard} onClose={() => setShowSessionBoard(false)} />
+            <SessionBoard
+              open={showSessionBoard}
+              onClose={() => setShowSessionBoard(false)}
+              connected={connected}
+              onWsSend={sendWsMessage}
+              onNotify={(message, kind) => toast(message, kind)}
+            />
           )}
 
           {showAgents && (

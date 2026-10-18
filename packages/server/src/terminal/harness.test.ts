@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   buildHarnessLaunch,
   buildTaskBrief,
+  externalResumeArgv,
   type InjectableSkill,
   installAgentPlugin,
   isHarnessEngine,
@@ -13,6 +14,7 @@ import {
   readSkillPlan,
   SKILL_DIRS,
   syncSkills,
+  writeOpencodeModel,
   writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
@@ -79,7 +81,7 @@ describe("buildHarnessLaunch", () => {
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
   });
 
-  it("starts OpenCode's TUI (no `run`) with --prompt and --model", () => {
+  it("starts OpenCode's TUI (no `run`) with --prompt and no --model", () => {
     const { argv } = buildHarnessLaunch({
       engine: "opencode",
       task,
@@ -88,7 +90,9 @@ describe("buildHarnessLaunch", () => {
     expect(argv[0]).toContain("opencode");
     expect(argv).not.toContain("run");
     expect(argv).toContain("--prompt");
-    expect(argv[argv.indexOf("--model") + 1]).toBe("anthropic/claude-sonnet-4");
+    // The interactive TUI rejects `--model` ("Unrecognized flag"); the model is applied
+    // through the project config instead (writeOpencodeModel).
+    expect(argv).not.toContain("--model");
   });
 
   it("resumes the previous conversation instead of repeating the prompt", () => {
@@ -102,7 +106,7 @@ describe("buildHarnessLaunch", () => {
   });
 
   it("ignores placeholder models", () => {
-    for (const model of ["auto", "default", "", "  ", null, undefined]) {
+    for (const model of ["auto", "default", "auto-free", "", "  ", null, undefined]) {
       expect(buildHarnessLaunch({ engine: "claude-code", task, model }).argv).not.toContain(
         "--model"
       );
@@ -137,6 +141,72 @@ describe("buildHarnessLaunch", () => {
     expect(isHarnessEngine("opencode")).toBe(true);
     expect(isHarnessEngine("gemini")).toBe(false);
     expect(isHarnessEngine(null)).toBe(false);
+  });
+
+  it("builds the resume command each external CLI understands", () => {
+    expect(externalResumeArgv("opencode", "ses_1")).toEqual([
+      expect.stringContaining("opencode"),
+      "--session",
+      "ses_1",
+    ]);
+    expect(externalResumeArgv("claude-code", "abc")).toEqual(["claude", "--resume", "abc"]);
+    // The Antigravity CLI is `agy`, and it resumes with `--conversation`.
+    expect(externalResumeArgv("antigravity", "c1")).toEqual(["agy", "--conversation", "c1"]);
+  });
+});
+
+describe("writeOpencodeModel", () => {
+  const configOf = async (dir: string) =>
+    JSON.parse(await readFile(join(dir, "opencode.json"), "utf8")) as Record<string, unknown>;
+
+  it("pins the chosen model in opencode.json", async () => {
+    const dir = await tempDir("harness-oc-model-");
+    await writeOpencodeModel(dir, "anthropic/claude-sonnet-4");
+    expect(await configOf(dir)).toEqual({ model: "anthropic/claude-sonnet-4" });
+  });
+
+  it("keeps unrelated settings already in the file", async () => {
+    const dir = await tempDir("harness-oc-model-");
+    await writeFile(join(dir, "opencode.json"), JSON.stringify({ theme: "dark", model: "old" }));
+    await writeOpencodeModel(dir, "opencode/minimax");
+    expect(await configOf(dir)).toEqual({ theme: "dark", model: "opencode/minimax" });
+  });
+
+  it("clears only its own key for placeholder models", async () => {
+    const dir = await tempDir("harness-oc-model-");
+    await writeFile(join(dir, "opencode.json"), JSON.stringify({ theme: "dark", model: "old" }));
+    await writeOpencodeModel(dir, "auto");
+    expect(await configOf(dir)).toEqual({ theme: "dark" });
+  });
+
+  it("does not create a config when there is no model to pin", async () => {
+    const dir = await tempDir("harness-oc-model-");
+    await writeOpencodeModel(dir, null);
+    expect(existsSync(join(dir, "opencode.json"))).toBe(false);
+  });
+
+  it("never pins a placeholder model", async () => {
+    const dir = await tempDir("harness-oc-model-");
+    // `auto-free` is OpenCode's own sentinel for "pick a free model" — it is not a model id.
+    await writeOpencodeModel(dir, "auto-free");
+    expect(existsSync(join(dir, "opencode.json"))).toBe(false);
+  });
+
+  it("leaves a repository's own tracked opencode.json alone", async () => {
+    const dir = await tempDir("harness-oc-tracked-");
+    await git(dir, "init", "-q", "--initial-branch=main");
+    await git(dir, "config", "user.email", "t@t.t");
+    await git(dir, "config", "user.name", "t");
+    const original = '{\n  "model": "repo-choice"\n}\n';
+    await writeFile(join(dir, "opencode.json"), original);
+    await git(dir, "add", "opencode.json");
+    await git(dir, "commit", "-q", "-m", "own opencode config");
+
+    await writeOpencodeModel(dir, "anthropic/claude-sonnet-4");
+
+    // The pin would otherwise be staged into the task's commit: git exclude does not apply
+    // to tracked files.
+    expect(await readFile(join(dir, "opencode.json"), "utf8")).toBe(original);
   });
 });
 

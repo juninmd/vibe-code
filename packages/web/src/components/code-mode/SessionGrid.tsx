@@ -37,6 +37,10 @@ interface SessionGridProps {
   onOpen: (task: TaskWithRun) => void;
   /** Stop a running session (called when its card is dismissed while running). */
   onStop: (taskId: string) => void;
+  /** Tasks whose agent terminal is currently live (a running PTY on the server). */
+  liveTaskIds?: ReadonlySet<string>;
+  /** Last rendered lines per task, shown on the card when its terminal is live. */
+  previews?: Record<string, string[]>;
 }
 
 function Chip({
@@ -126,10 +130,14 @@ function Option({
 
 function SessionCard({
   task,
+  live,
+  preview,
   onOpen,
   onDismiss,
 }: {
   task: TaskWithRun;
+  live: boolean;
+  preview: string[];
   onOpen: (task: TaskWithRun) => void;
   onDismiss: (task: TaskWithRun) => void;
 }) {
@@ -145,12 +153,21 @@ function SessionCard({
     ? (elapsed ?? "live")
     : formatRelativeTime(task.latestRun?.finishedAt ?? task.updatedAt);
 
+  // A live terminal is a running PTY: show the last rendered lines instead of prose.
+  const previewLines = preview
+    .map((line) => line.replace(/\s+$/, ""))
+    .filter((line) => line.trim().length > 0)
+    .slice(-3)
+    .map((line) => (line.length > 72 ? `${line.slice(0, 72)}…` : line));
+
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => onOpen(task)}
-        className="flex h-full w-full flex-col rounded-2xl border border-white/6 bg-surface/50 p-4 pr-9 text-left transition-colors hover:border-white/12 hover:bg-surface-hover"
+        className={`flex h-full w-full flex-col rounded-2xl border bg-surface/50 p-4 pr-9 text-left transition-colors hover:border-white/12 hover:bg-surface-hover ${
+          live ? "border-info/30" : "border-white/6"
+        }`}
       >
         <div className="flex items-center gap-1.5 text-[11px] text-muted">
           <ProviderIcon size={13} className="shrink-0" />
@@ -169,9 +186,15 @@ function SessionCard({
           {sessionLabel(task)}
         </h3>
 
-        <p className="mt-1.5 line-clamp-2 min-h-[2rem] text-xs leading-relaxed text-dimmed">
-          {snippet || "No context yet"}
-        </p>
+        {previewLines.length > 0 ? (
+          <pre className="mt-2 max-h-16 overflow-hidden rounded-lg border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[10px] leading-[1.45] text-zinc-400">
+            {previewLines.join("\n")}
+          </pre>
+        ) : (
+          <p className="mt-1.5 line-clamp-2 min-h-[2rem] text-xs leading-relaxed text-dimmed">
+            {snippet || "No context yet"}
+          </p>
+        )}
 
         <div className="mt-auto flex items-center gap-2 pt-3 text-[11px]">
           <span className="inline-flex items-center gap-1.5">
@@ -181,6 +204,12 @@ function SessionCard({
             />
             <span className={meta.text}>{meta.label}</span>
           </span>
+          {live && (
+            <span className="inline-flex items-center gap-1 rounded-md border border-info/30 bg-info/10 px-1.5 py-px text-[9px] font-black uppercase tracking-widest text-info">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" aria-hidden="true" />
+              live
+            </span>
+          )}
           {task.prUrl && (
             <span className="font-medium text-success" title="Pull request open">
               PR
@@ -229,6 +258,8 @@ export function SessionGrid({
   connected = false,
   onOpen,
   onStop,
+  liveTaskIds,
+  previews,
 }: SessionGridProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<TaskStatus | null>(null);
@@ -466,7 +497,14 @@ export function SessionGrid({
                 )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {group.tasks.map((task) => (
-                    <SessionCard key={task.id} task={task} onOpen={onOpen} onDismiss={dismiss} />
+                    <SessionCard
+                      key={task.id}
+                      task={task}
+                      live={liveTaskIds?.has(task.id) ?? false}
+                      preview={previews?.[task.id] ?? []}
+                      onOpen={onOpen}
+                      onDismiss={dismiss}
+                    />
                   ))}
                 </div>
               </section>
