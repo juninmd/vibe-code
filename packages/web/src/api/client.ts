@@ -9,6 +9,7 @@ import type {
   DiffSummary,
   EngineEffectiveness,
   EngineInfo,
+  ExternalTerminal,
   InboxItem,
   LaneSettings,
   LaunchTaskRequest,
@@ -30,6 +31,7 @@ import type {
   TaskSchedule,
   TaskScheduleWithTask,
   TaskWithRun,
+  TerminalLiveSession,
   TerminalStartRequest,
   TerminalState,
   TestConnectionResult,
@@ -364,9 +366,32 @@ export const api = {
       const query = params.toString();
       return request<SessionBoardResponse>(`/sessions${query ? `?${query}` : ""}`);
     },
+    /**
+     * Terminal the app opened for a session started outside vibe-code. We cannot attach
+     * to the CLI's own PTY, so "start" opens a fresh terminal in the session's directory
+     * and resumes it there.
+     */
+    terminal: {
+      state: (source: SessionSource, sessionId: string) =>
+        request<ExternalTerminal | null>(
+          `/sessions/${encodeURIComponent(source)}/${encodeURIComponent(sessionId)}/terminal`
+        ),
+      start: (source: SessionSource, sessionId: string, size: { cols?: number; rows?: number }) =>
+        request<{ id: string; cwd: string }>(
+          `/sessions/${encodeURIComponent(source)}/${encodeURIComponent(sessionId)}/terminal`,
+          { method: "POST", body: JSON.stringify(size) }
+        ),
+      stop: (source: SessionSource, sessionId: string) =>
+        request<{ stopped: boolean }>(
+          `/sessions/${encodeURIComponent(source)}/${encodeURIComponent(sessionId)}/terminal`,
+          { method: "DELETE" }
+        ),
+    },
   },
 
   terminal: {
+    /** Every live terminal (with a screen preview), for the unified Terminals view. */
+    list: () => request<TerminalLiveSession[]>("/terminal"),
     state: (taskId: string) => request<TerminalState>(`/terminal/${taskId}/state`),
     start: (taskId: string, data: TerminalStartRequest = {}) =>
       request<TerminalState>(`/terminal/${taskId}/start`, {

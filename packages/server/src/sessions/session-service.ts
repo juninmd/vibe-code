@@ -16,7 +16,7 @@ const DEFAULT_ACTIVE_WINDOW_MS = 15 * 60_000;
 /** Beyond this, a session is treated as closed rather than merely paused. */
 const DEFAULT_IDLE_WINDOW_MS = 24 * 60 * 60_000;
 /** Board polls are frequent; disk scans are not free. */
-const DEFAULT_CACHE_TTL_MS = 5_000;
+const DEFAULT_CACHE_TTL_MS = 60_000;
 
 export interface SessionServiceOptions {
   readers?: SessionReader[];
@@ -37,6 +37,14 @@ export interface ListSessionsOptions {
   source?: SessionSource;
   limit?: number;
   refresh?: boolean;
+}
+
+/** Everything a scan produced, before it is projected onto cards. */
+interface RawScan {
+  sessions: RawSession[];
+  sources: SessionSourceStatus[];
+  /** When the scan ran, so a cached response reports its real age. */
+  scannedAt: number;
 }
 
 /**
@@ -66,8 +74,8 @@ export class SessionService {
   private readonly idleWindowMs: number;
   private readonly cacheTtlMs: number;
   private readonly now: () => number;
-  private cache: { at: number; response: SessionBoardResponse } | null = null;
-  private inflight: Promise<SessionBoardResponse> | null = null;
+  private cache: { at: number; result: RawScan } | null = null;
+  private inflight: Promise<RawScan> | null = null;
 
   constructor(options: SessionServiceOptions = {}) {
     this.readers = options.readers ?? [
@@ -85,25 +93,40 @@ export class SessionService {
   }
 
   async list(options: ListSessionsOptions = {}): Promise<SessionBoardResponse> {
-    const board = await this.scan(options.refresh === true);
+    const { sessions, sources, scannedAt } = await this.scanRaw(options.refresh === true);
+    const now = this.now();
 
-    let cards = board.cards;
+    let cards = sessions
+      .map((session) => this.toCard(session, now))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
     if (options.source) cards = cards.filter((card) => card.source === options.source);
     if (options.limit !== undefined && options.limit >= 0) cards = cards.slice(0, options.limit);
 
-    return cards === board.cards ? board : { ...board, cards };
+    // The scan timestamp, not the request time: a cached scan can be up to a TTL old.
+    return { cards, sources, scannedAt: new Date(scannedAt).toISOString() };
+  }
+
+  /**
+   * The raw session behind a card, including its working directory. Cards deliberately
+   * drop the cwd; this is how a caller (opening a terminal in that directory) gets it back.
+   * Uses the same short cache as `list`.
+   */
+  async find(source: SessionSource, sessionId: string): Promise<RawSession | null> {
+    const { sessions } = await this.scanRaw(false);
+    return sessions.find((s) => s.source === source && s.sessionId === sessionId) ?? null;
   }
 
   /** Scans every store, honouring the short cache unless `force` is set. */
-  private async scan(force: boolean): Promise<SessionBoardResponse> {
+  private async scanRaw(force: boolean): Promise<RawScan> {
     const now = this.now();
-    if (!force && this.cache && now - this.cache.at < this.cacheTtlMs) return this.cache.response;
+    if (!force && this.cache && now - this.cache.at < this.cacheTtlMs) return this.cache.result;
     if (this.inflight) return this.inflight;
 
     this.inflight = this.scanNow()
-      .then((response) => {
-        this.cache = { at: this.now(), response };
-        return response;
+      .then((result) => {
+        this.cache = { at: this.now(), result };
+        return result;
       })
       .finally(() => {
         this.inflight = null;
@@ -112,9 +135,8 @@ export class SessionService {
     return this.inflight;
   }
 
-  private async scanNow(): Promise<SessionBoardResponse> {
-    const now = this.now();
-    const cards: SessionCard[] = [];
+  private async scanNow(): Promise<RawScan> {
+    const sessions: RawSession[] = [];
     const sources: SessionSourceStatus[] = [];
 
     const results = await Promise.all(
@@ -134,20 +156,17 @@ export class SessionService {
     );
 
     for (const result of results) {
-      const projected = result.sessions.map((session) => this.toCard(session, now));
-      cards.push(...projected);
+      sessions.push(...result.sessions);
       sources.push({
         source: result.reader.source,
         available: result.roots.length > 0,
         roots: result.roots,
-        cards: projected.length,
+        cards: result.sessions.length,
         error: result.error,
       });
     }
 
-    cards.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-
-    return { cards, sources, scannedAt: new Date(now).toISOString() };
+    return { sessions, sources, scannedAt: this.now() };
   }
 
   private toCard(session: RawSession, now: number): SessionCard {

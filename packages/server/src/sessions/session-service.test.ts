@@ -264,12 +264,54 @@ describe("AntigravitySessionReader", () => {
     expect(session?.updatedAt).toBe(Date.parse("2026-08-05T09:03:00.000Z"));
   });
 
-  test("ignores files that carry no session at all", async () => {
+  test("ignores config files that carry no session at all", async () => {
     await writeJson(join(root, "ag", "config.json"), { theme: "dark" });
+    await writeJson(join(root, "ag", "mcp_config.json"), { mcpServers: {} });
     const sessions = await new AntigravitySessionReader([join(root, "ag")]).read();
-    // A bare object still yields a card keyed by filename only if it has no id;
-    // config-shaped files fall back to the filename, so assert it is not titled.
-    expect(sessions.every((s) => s.title === "Untitled session")).toBe(true);
+    expect(sessions).toEqual([]);
+  });
+
+  test("still reads a store that names its sessions by filename alone", async () => {
+    await writeJson(join(root, "ag", "abc-123.json"), {
+      name: "Named by file",
+      updatedAt: "2026-08-05T10:00:00.000Z",
+    });
+    const sessions = await new AntigravitySessionReader([join(root, "ag")]).read();
+    expect(sessions.map((s) => s.sessionId)).toEqual(["abc-123"]);
+    expect(sessions[0]?.title).toBe("Named by file");
+  });
+
+  test("splits the `history.jsonl` index into one session per conversation", async () => {
+    const file = join(root, "ag", "history.jsonl");
+    await writeLines(file, [
+      {
+        display: "first ask",
+        timestamp: NOW - 3 * HOUR,
+        workspace: "D:/dev/one",
+        conversationId: "c1",
+      },
+      {
+        display: "first ask follow-up",
+        timestamp: NOW - 2 * HOUR,
+        workspace: "D:/dev/one",
+        conversationId: "c1",
+      },
+      {
+        display: "other project",
+        timestamp: NOW - MINUTE,
+        workspace: "D:/dev/two",
+        conversationId: "c2",
+      },
+    ]);
+
+    const sessions = await new AntigravitySessionReader([join(root, "ag")]).read();
+    expect(sessions.map((s) => s.sessionId).sort()).toEqual(["c1", "c2"]);
+
+    const c1 = sessions.find((s) => s.sessionId === "c1");
+    expect(c1?.title).toBe("first ask follow-up");
+    expect(c1?.cwd).toBe("D:/dev/one");
+    expect(c1?.messageCount).toBe(2);
+    expect(c1?.updatedAt).toBe(NOW - 2 * HOUR);
   });
 });
 

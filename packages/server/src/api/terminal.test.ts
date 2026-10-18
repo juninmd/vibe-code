@@ -24,6 +24,7 @@ function buildApp(overrides: Partial<Record<keyof TerminalController, unknown>> 
       return { taskId, live: true, runId: "r1", engine: "claude-code", skills: [], cwd: "/w" };
     },
     stop: () => true,
+    listLive: () => [],
     previewSkills: async (taskId: string, choice: unknown) => {
       calls.push({ taskId, preview: choice });
       return { mode: "auto", applied: [] };
@@ -53,6 +54,49 @@ describe("/api/terminal", () => {
     const res = await app.request(`/api/terminal/${task.id}/state`);
     expect(res.status).toBe(200);
     expect((await res.json()).data.live).toBe(false);
+  });
+
+  it("lists every live terminal with its preview", async () => {
+    const { app, task } = buildApp({
+      listLive: () => [
+        {
+          taskId: task.id,
+          runId: "r1",
+          engine: "opencode",
+          cwd: "/worktrees/t1",
+          skills: ["tdd"],
+          cols: 120,
+          rows: 32,
+          preview: ["$ bun test", "9 pass"],
+        },
+      ],
+    });
+    const res = await app.request("/api/terminal");
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data).toHaveLength(1);
+    expect(data[0].taskId).toBe(task.id);
+    expect(data[0].preview).toEqual(["$ bun test", "9 pass"]);
+  });
+
+  it("hides live terminals of tasks the requester cannot access", async () => {
+    const { app } = buildApp({
+      listLive: () => [
+        {
+          taskId: "ghost",
+          runId: null,
+          engine: "shell",
+          cwd: "/elsewhere",
+          skills: [],
+          cols: 80,
+          rows: 24,
+          preview: [],
+        },
+      ],
+    });
+    const res = await app.request("/api/terminal");
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual([]);
   });
 
   it("starts a session with a validated body", async () => {

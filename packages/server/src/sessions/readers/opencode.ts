@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { RawSession, SessionReader } from "../types";
@@ -12,10 +13,14 @@ import {
 } from "../util";
 
 /**
- * OpenCode stores one JSON file per session under a `storage/session/`
- * directory. The exact prefix moved between releases (`storage/session/...`
- * vs `project/<hash>/storage/session/...`), so the reader locates any
- * directory named `session` under the data root instead of hardcoding a path.
+ * OpenCode has two on-disk shapes and both are supported:
+ *
+ * - **v2 (current)** — one SQLite database per data directory (`opencode.db`) with
+ *   `session_v2` / `session_message` tables. This is what `opencode` writes today, so
+ *   without it the reader finds nothing at all.
+ * - **legacy** — one JSON file per session under a `storage/session/` directory. The
+ *   prefix moved between releases (`storage/session/...` vs `project/<hash>/storage/
+ *   session/...`), so any directory named `session` under the data root is scanned.
  */
 const DEFAULT_ROOTS = ["~/.local/share/opencode"];
 
@@ -25,6 +30,72 @@ interface OpencodeSession {
   title?: string;
   directory?: string;
   time?: { created?: number; updated?: number; completed?: number };
+}
+
+interface SessionV2Row {
+  id: string;
+  title: string | null;
+  directory: string | null;
+  time_created: number | null;
+  time_updated: number | null;
+}
+
+/**
+ * Reads the v2 SQLite store read-only, so the CLI can keep writing (WAL) while the
+ * board scans. Any schema mismatch is swallowed: an unknown release simply adds no
+ * cards instead of breaking the whole board.
+ */
+function readV2Database(dbPath: string): RawSession[] {
+  let db: Database;
+  try {
+    // Opening directly (rather than stat-ing first) keeps this to one filesystem call and
+    // treats "unreadable store" the same as "no store".
+    db = new Database(dbPath, { readonly: true });
+  } catch {
+    return [];
+  }
+
+  try {
+    const rows = db
+      .query(
+        `select id, title, directory, time_created, time_updated
+         from session_v2
+         where parent_id is null and time_archived is null`
+      )
+      .all() as SessionV2Row[];
+
+    // Only the count of messages is kept — bodies never leave the reader.
+    const counts = new Map<string, number>();
+    for (const row of db
+      .query("select session_id, count(*) as n from session_message group by session_id")
+      .all() as Array<{ session_id: string; n: number }>) {
+      counts.set(row.session_id, row.n);
+    }
+
+    return rows.map((row) => {
+      const created = toEpochMs(row.time_created);
+      const updated = toEpochMs(row.time_updated) || created;
+      return {
+        sessionId: row.id,
+        source: "opencode" as const,
+        title: toTitle(row.title ?? "", "Untitled session"),
+        cwd: row.directory ?? "",
+        branch: null, // OpenCode does not record a branch in the session row
+        messageCount: counts.get(row.id) ?? 0,
+        createdAt: created,
+        updatedAt: updated,
+        explicitStatus: null,
+      };
+    });
+  } catch {
+    return [];
+  } finally {
+    try {
+      db.close();
+    } catch {
+      // already closed
+    }
+  }
 }
 
 /** Collects `*.json` files under `dir`, a couple of levels deep. */
@@ -54,6 +125,38 @@ async function countMessages(sessionDir: string, sessionId: string): Promise<num
   return (await safeReaddir(messageDir)).filter((f) => f.endsWith(".json")).length;
 }
 
+/** Sessions written by an OpenCode release that used the per-file JSON layout. */
+async function readLegacyStore(root: string): Promise<RawSession[]> {
+  const sessions: RawSession[] = [];
+
+  for (const sessionDir of await findDirsNamed(root, "session")) {
+    for (const file of await collectJsonFiles(sessionDir)) {
+      const raw = await safeReadJson<OpencodeSession>(file);
+      if (!raw?.id) continue;
+      // Sub-agent sessions are an implementation detail of the parent run,
+      // not work an operator tracks on a board.
+      if (raw.parentID) continue;
+
+      const created = toEpochMs(raw.time?.created);
+      const updated = toEpochMs(raw.time?.updated) || created;
+
+      sessions.push({
+        sessionId: raw.id,
+        source: "opencode",
+        title: toTitle(raw.title ?? "", "Untitled session"),
+        cwd: raw.directory ?? "",
+        branch: null, // OpenCode does not record a branch in the session file
+        messageCount: await countMessages(sessionDir, raw.id),
+        createdAt: created,
+        updatedAt: updated,
+        explicitStatus: raw.time?.completed ? "done" : null,
+      });
+    }
+  }
+
+  return sessions;
+}
+
 export class OpenCodeSessionReader implements SessionReader {
   readonly source = "opencode" as const;
 
@@ -68,31 +171,8 @@ export class OpenCodeSessionReader implements SessionReader {
 
     for (const root of this.configuredRoots) {
       if (!(await dirExists(root))) continue;
-
-      for (const sessionDir of await findDirsNamed(root, "session")) {
-        for (const file of await collectJsonFiles(sessionDir)) {
-          const raw = await safeReadJson<OpencodeSession>(file);
-          if (!raw?.id) continue;
-          // Sub-agent sessions are an implementation detail of the parent run,
-          // not work an operator tracks on a board.
-          if (raw.parentID) continue;
-
-          const created = toEpochMs(raw.time?.created);
-          const updated = toEpochMs(raw.time?.updated) || created;
-
-          sessions.push({
-            sessionId: raw.id,
-            source: this.source,
-            title: toTitle(raw.title ?? "", "Untitled session"),
-            cwd: raw.directory ?? "",
-            branch: null, // OpenCode does not record a branch in the session file
-            messageCount: await countMessages(sessionDir, raw.id),
-            createdAt: created,
-            updatedAt: updated,
-            explicitStatus: raw.time?.completed ? "done" : null,
-          });
-        }
-      }
+      sessions.push(...readV2Database(join(root, "opencode.db")));
+      sessions.push(...(await readLegacyStore(root)));
     }
 
     return sessions;

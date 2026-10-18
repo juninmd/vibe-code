@@ -623,6 +623,38 @@ export interface TerminalState {
   cwd: string | null;
 }
 
+/**
+ * A running (PTY-backed) terminal, as listed for the unified Terminals view.
+ * Only live sessions appear here — a worktree without a running process is just
+ * a task, and is not listed.
+ */
+export interface TerminalLiveSession {
+  taskId: string;
+  runId: string | null;
+  /** The harness running in the terminal, or "shell" for a plain shell. */
+  engine: HarnessEngine | "shell";
+  /** Workspace (worktree) the terminal is attached to. */
+  cwd: string;
+  /** Names of the skills injected into the session. */
+  skills: string[];
+  cols: number;
+  rows: number;
+  /** Last rendered lines of the terminal screen as plain text, for previews. */
+  preview: string[];
+}
+
+/**
+ * A terminal the app opened for a CLI session that was started *outside* vibe-code.
+ * The app never owns that process's PTY, so this is a fresh terminal in the session's
+ * own directory that resumes the session in its CLI.
+ */
+export interface ExternalTerminal {
+  id: string;
+  source: SessionSource;
+  sessionId: string;
+  cwd: string;
+}
+
 export type WsClientMessage =
   | { type: "subscribe"; taskId: string; version?: WsProtocolVersion }
   | { type: "unsubscribe"; taskId: string; version?: WsProtocolVersion }
@@ -1251,7 +1283,9 @@ export function sessionResumeCommand(card: Pick<SessionCard, "source" | "session
     case "claude-code":
       return `claude --resume ${card.sessionId}`;
     case "antigravity":
-      return `antigravity --resume ${card.sessionId}`;
+      // The Antigravity CLI binary is `agy` (the IDE is `Antigravity`); it resumes
+      // conversations by id with `--conversation`.
+      return `agy --conversation ${card.sessionId}`;
   }
 }
 
