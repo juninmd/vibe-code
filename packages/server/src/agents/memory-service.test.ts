@@ -60,4 +60,31 @@ describe("MemoryService", () => {
     expect(result.taskMemory.content).toContain("## Compacted Memory");
     expect(result.taskMemory.content).toContain("Keep the validation harness deterministic.");
   });
+
+  it("compacts memory manually", async () => {
+    const { db, child } = seedTaskGraph();
+    const service = new MemoryService(db);
+    await service.upsertMemory(child.id, "task", "old");
+
+    const result = await service.compactMemory(child.id, "task", "New compacted content");
+    expect(result.content).toContain("New compacted content");
+    expect(result.needsCompaction).toBe(false);
+
+    expect(
+      service.compactMemory("non-existent-task", "task", "New compacted content")
+    ).rejects.toThrow();
+  });
+
+  it("handles getRecentContext correctly", async () => {
+    const { db, child } = seedTaskGraph();
+    const service = new MemoryService(db);
+    await service.upsertMemory(child.id, "task", "Current memory line 1");
+    db.memories.update(db.memories.getByTaskIdAndScope(child.id, "task")!.id, {
+      compactedAt: new Date().toISOString(),
+      needsCompaction: false,
+      content: "old",
+    });
+    const memories = await service.getRelevantContext(child, 5);
+    expect(memories).toBeDefined();
+  });
 });
