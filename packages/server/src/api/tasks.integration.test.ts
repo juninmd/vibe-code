@@ -3,6 +3,7 @@
  * Uses a real SQLite :memory: database and stubbed Orchestrator/GitService.
  */
 import { describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import type { Orchestrator } from "../agents/orchestrator";
 import { createDb } from "../db";
@@ -47,8 +48,10 @@ function makeOrchestrator(overrides: Partial<Orchestrator> = {}): Orchestrator {
       createdAt: new Date().toISOString(),
     }),
     sendInput: () => {},
+    supportsSessionResume: () => true,
     activeCount: 0,
     maxConcurrentAgents: 4,
+    hub: { broadcastToTask: () => {} },
     ...overrides,
   } as unknown as Orchestrator;
 }
@@ -790,5 +793,222 @@ describe("DELETE /api/tasks/:id", () => {
   it("returns 404 for unknown task", async () => {
     const res = await buildApp(makeDb()).request("/api/tasks/ghost", { method: "DELETE" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("remote session messages", () => {
+  function setup() {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      description: "Initial request",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    const inputs: string[] = [];
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async (_task, _engine, _model, input) => {
+          inputs.push(input ?? "");
+          return db.runs.create(task.id, "opencode");
+        },
+      })
+    );
+    return { db, repo, task, app, inputs };
+  }
+  it("accepts a message, launches a turn and persists user input", async () => {
+    const { db, task, app, inputs } = setup();
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "  Add tests  " }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Add tests"]);
+    const run = (await response.json()).data;
+    expect(db.logs.listByRun(run.id)[0]).toMatchObject({ stream: "stdin", content: "Add tests" });
+  });
+  it("rejects empty input, concurrent turns and autonomous tasks", async () => {
+    const { db, task, app, inputs } = setup();
+    const send = (message: string) =>
+      app.request(`/api/tasks/${task.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+        headers: { "Content-Type": "application/json" },
+      });
+    expect((await send("  ")).status).toBe(400);
+    db.tasks.update(task.id, { status: "in_progress" });
+    expect((await send("Another turn")).status).toBe(409);
+    db.tasks.update(task.id, { status: "backlog", tags: [] });
+    expect((await send("Another turn")).status).toBe(409);
+    expect(inputs).toEqual([]);
+  });
+  it("rejects a continuation without a resumable CLI session", async () => {
+    const { db, task, app, inputs } = setup();
+    const run = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(run.id, "completed", { worktree_path: "/missing/remote-workspace" });
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(409);
+    expect(inputs).toEqual([]);
+  });
+  it("denies a message to a repository owned by another workspace", async () => {
+    const { db, repo, task, app, inputs } = setup();
+    const configuredKey = Boolean(process.env.VIBE_CODE_API_KEY);
+    const keyPresent = "VIBE_CODE_API_KEY" in process.env;
+    if (!configuredKey) process.env.VIBE_CODE_API_KEY = "remote-test-auth";
+    try {
+      db.settings.set("auth_enabled", "true");
+      const own = db.workspaces.create({ id: "remote-alice", name: "Alice", slug: "alice" });
+      const foreign = db.workspaces.create({ id: "remote-bob", name: "Bob", slug: "bob" });
+      db.settings.set("user_workspace:alice", own.id);
+      db.raw
+        .prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?")
+        .run(foreign.id, repo.id);
+      const token = "remote-test-session";
+      db.raw
+        .prepare(
+          "INSERT INTO auth_sessions (id, github_id, username, access_token, expires_at) VALUES (?, ?, ?, ?, ?)"
+        )
+        .run(
+          createHash("sha256").update(token).digest("hex"),
+          "fixture-alice",
+          "alice",
+          "fixture-unused",
+          "9999-01-01T00:00:00.000Z"
+        );
+      const response = await app.request(`/api/tasks/${task.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message: "Change a foreign repository" }),
+        headers: {
+          Cookie: `vibe_session=${token}`,
+          "x-workspace-id": own.id,
+          "Content-Type": "application/json",
+        },
+      });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error).toBe("repo_forbidden");
+      expect(inputs).toEqual([]);
+    } finally {
+      if (!configuredKey) {
+        if (keyPresent) process.env.VIBE_CODE_API_KEY = "";
+        else delete process.env.VIBE_CODE_API_KEY;
+      }
+    }
+  });
+  it("reloads conversation history across runs with a log cursor and task boundary", async () => {
+    const { db, repo, task, app } = setup();
+    const first = db.runs.create(task.id, "opencode");
+    const old = db.logs.create(first.id, "stdout", "First answer");
+    const second = db.runs.create(task.id, "opencode");
+    db.logs.create(second.id, "stdin", "Follow-up");
+    db.logs.create(second.id, "stdout", "Second answer");
+    const other = db.tasks.create({ title: "Other task", repoId: repo.id });
+    db.logs.create(db.runs.create(other.id, "opencode").id, "stdout", "Other conversation");
+    const response = await app.request(
+      `/api/tasks/poll?focused_task_id=${task.id}&focused_logs_after_id=${old.id}`
+    );
+    expect(response.status).toBe(200);
+    expect(
+      (await response.json()).data.focusedLogs.map((l: { content: string }) => l.content)
+    ).toEqual(["Follow-up", "Second answer"]);
+    const all = await app.request(`/api/tasks/poll?focused_task_id=${task.id}`);
+    expect((await all.json()).data.focusedLogs.map((l: { content: string }) => l.content)).toEqual([
+      "First answer",
+      "Follow-up",
+      "Second answer",
+    ]);
+  });
+
+  it("rejects a follow-up when the engine cannot resume conversations", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Legacy remote",
+      description: "Started before resume support",
+      repoId: repo.id,
+      engine: "claude-code",
+      tags: ["remote-session"],
+    });
+    const run = db.runs.create(task.id, "claude-code");
+    db.runs.updateStatus(run.id, "completed", {
+      worktree_path: "/tmp/legacy-worktree",
+    });
+    db.runs.updateSessionId(run.id, "acp-session");
+    const app = buildApp(db, makeOrchestrator({ supportsSessionResume: () => false }));
+
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe("session_unavailable");
+  });
+
+  it("refuses to create a remote session with a non-resumable engine", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const app = buildApp(db, makeOrchestrator({ supportsSessionResume: () => false }));
+
+    const response = await app.request("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        description: "Remote turn",
+        repoId: repo.id,
+        engine: "claude-code",
+        tags: ["remote-session"],
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("engine_not_resumable");
+  });
+
+  it("requires an explicit resumable engine for a remote session", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const app = buildApp(db);
+
+    const response = await app.request("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        description: "Remote turn",
+        repoId: repo.id,
+        tags: ["remote-session"],
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("engine_not_resumable");
+  });
+});
+
+describe("focused log history", () => {
+  it("opens a long run on its newest page instead of the oldest", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Long run", repoId: repo.id });
+    const run = db.runs.create(task.id, "opencode");
+    for (let line = 1; line <= 405; line++) {
+      db.logs.create(run.id, "stdout", `line ${line}`);
+    }
+
+    const response = await buildApp(db).request(`/api/tasks/poll?focused_task_id=${task.id}`);
+    expect(response.status).toBe(200);
+    const logs = (await response.json()).data.focusedLogs as { content: string }[];
+
+    expect(logs).toHaveLength(400);
+    expect(logs[0]?.content).toBe("line 6");
+    expect(logs[399]?.content).toBe("line 405");
   });
 });

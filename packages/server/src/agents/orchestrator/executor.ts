@@ -8,6 +8,7 @@ import type {
   Task,
   TaskArtifactKind,
 } from "@vibe-code/shared";
+import { REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import { createTelegramNotifier } from "../../notifications/telegram";
@@ -450,7 +451,8 @@ export async function executeAgent(
   model?: string,
   skillsLoader?: SkillsLoader,
   orchestrator?: import("../orchestrator").Orchestrator,
-  registry?: import("../registry").EngineRegistry
+  registry?: import("../registry").EngineRegistry,
+  remoteInput?: string
 ): Promise<void> {
   const barePath = repo.localPath ?? (await git.getBarePath(repo.name, repo.url));
   const slugTitle = task.title
@@ -459,6 +461,7 @@ export async function executeAgent(
     .slice(0, 40);
   let branch = `vibe-code/${run.id.slice(0, 8)}/${slugTitle}`;
   let resumeExistingBranch = false;
+  const isRemoteSession = task.tags?.includes(REMOTE_SESSION_TAG) ?? false;
 
   const TIMEOUT_MS = Number(process.env.VIBE_CODE_AGENT_TIMEOUT_MS) || 2 * 60 * 60 * 1000;
   const INACTIVITY_MS = Number(process.env.VIBE_CODE_INACTIVITY_MS) || 10 * 60 * 1000;
@@ -632,7 +635,10 @@ export async function executeAgent(
   try {
     let reusableWorkspacePath: string | null = null;
 
-    if ((task.status === "failed" || isConflictResolutionTask) && task.branchName) {
+    if (
+      (isRemoteSession || task.status === "failed" || isConflictResolutionTask) &&
+      task.branchName
+    ) {
       await git.fetchRepo(barePath);
       const exists = await git.branchExists(barePath, task.branchName);
       if (exists) {
@@ -640,23 +646,33 @@ export async function executeAgent(
         resumeExistingBranch = true;
 
         const previousRun =
-          task.status === "failed"
+          isRemoteSession || task.status === "failed"
             ? db.runs
                 .listByTask(task.id)
-                .find((r) => r.id !== run.id && r.status === "failed" && !!r.worktreePath)
+                .find(
+                  (r) =>
+                    r.id !== run.id &&
+                    (isRemoteSession || r.status === "failed") &&
+                    !!r.worktreePath
+                )
             : null;
 
         resumeSessionId = previousRun?.sessionId ?? undefined;
         activeSessionId = resumeSessionId;
+        if (activeSessionId) db.runs.updateSessionId(run.id, activeSessionId);
 
         if (previousRun?.worktreePath) {
           try {
             await access(previousRun.worktreePath);
             reusableWorkspacePath = previousRun.worktreePath;
           } catch {
+            if (isRemoteSession)
+              throw new Error("The remote session workspace is no longer available");
             reusableWorkspacePath = null;
           }
         }
+      } else if (isRemoteSession) {
+        throw new Error("The remote session branch is no longer available");
       }
     }
 
@@ -710,28 +726,31 @@ export async function executeAgent(
     }
 
     db.runs.updateStatus(run.id, "running", { worktree_path: wtPath });
+    if (isRemoteSession) db.tasks.updateField(task.id, "branch_name", branch);
     setRunPhase("worktree_ready");
 
-    // Auto-install dependencies if package.json exists
-    await autoInstallDependencies(wtPath, sysLog);
+    if (!reusableWorkspacePath) {
+      // Auto-install dependencies if package.json exists
+      await autoInstallDependencies(wtPath, sysLog);
 
-    // Run setup scripts if available
-    await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
+      // Run setup scripts if available
+      await runWorkspaceScripts("setup", wtPath, repo.name, sysLog);
 
-    // M4: Baseline verification — detect pre-existing breakage before the agent starts
-    {
-      const baseline = await runBaselineCheck(wtPath);
-      if (baseline.skipped) {
-        sysLog(`Baseline check: ${baseline.details}`);
-      } else if (baseline.passed) {
-        sysLog("Baseline check: passed ✓");
-      } else {
-        sysLog("Baseline check: FAILED — pre-existing issues detected (agent will be informed)");
-        sysLog(baseline.details);
+      // M4: Baseline verification — detect pre-existing breakage before the agent starts
+      {
+        const baseline = await runBaselineCheck(wtPath);
+        if (baseline.skipped) {
+          sysLog(`Baseline check: ${baseline.details}`);
+        } else if (baseline.passed) {
+          sysLog("Baseline check: passed ✓");
+        } else {
+          sysLog("Baseline check: FAILED — pre-existing issues detected (agent will be informed)");
+          sysLog(baseline.details);
+        }
       }
-    }
 
-    // Ensure opencode.json won't pollute git history
+      // Ensure opencode.json won't pollute git history
+    }
     await ensureGitignoreEntry(wtPath, "opencode.json");
 
     // Generate a per-run virtual key in LiteLLM when enabled.
@@ -900,7 +919,7 @@ export async function executeAgent(
 
     // M5: Planner micro-step — expand short descriptions into a full spec
     let plannerSpec: string | null = null;
-    if (litellmBaseUrl && litellmKey) {
+    if (!isRemoteSession && litellmBaseUrl && litellmKey) {
       try {
         const plannerResult = await runPlannerIfNeeded(
           task.title,
@@ -946,8 +965,19 @@ export async function executeAgent(
     setRunPhase("generating");
     // When resuming a session, the CLI already has the full context stored.
     // Sending the full prompt again would confuse it — just say "continue".
-    const effectivePrompt = activeSessionId ? "continue" : promptWithContext;
-    if (activeSessionId) {
+    const remotePrompt = [
+      "You are working interactively with the user in a remote coding session.",
+      "Work in the current isolated repository. Follow its AGENTS.md and validation instructions.",
+      "Respond to the user's message and report changes and validation honestly.",
+      "Preserve work for subsequent messages. Do not commit, push, open a PR or deploy unless the user asks.",
+      remoteInput ?? task.description,
+    ].join("\n\n");
+    const effectivePrompt = isRemoteSession
+      ? remotePrompt
+      : activeSessionId
+        ? "continue"
+        : promptWithContext;
+    if (activeSessionId && !isRemoteSession) {
       sysLog(`[resume] Sending "continue" to session ${activeSessionId} (${engine.name})`);
     }
     for await (const event of engine.execute(effectivePrompt, wtPath, {
@@ -966,6 +996,7 @@ export async function executeAgent(
       recordCliLoadedSkills();
       if (event.type === "session" && event.sessionId) {
         activeSessionId = event.sessionId;
+        db.runs.updateSessionId(run.id, activeSessionId);
         setRunPhase("generating", {}, false);
       }
       if (event.type === "complete") {
@@ -1043,6 +1074,24 @@ export async function executeAgent(
 
     if (agentExitCode !== null && agentExitCode !== 0) {
       throw new Error(`Agent exited with code ${agentExitCode}`);
+    }
+
+    if (isRemoteSession) {
+      sysLog(
+        "Turn completed. Workspace preserved; waiting for your next message. Validation is performed by the agent when requested."
+      );
+      const completed = db.runs.updateStatus(run.id, "completed", {
+        finished_at: new Date().toISOString(),
+        exit_code: 0,
+      });
+      if (capturedCostStats) db.runs.updateCostStats(run.id, capturedCostStats);
+      const idleTask = db.tasks.update(task.id, { status: "backlog" });
+      hub.flushLogs(task.id);
+      if (completed)
+        hub.broadcastAll({ type: "run_updated", run: sanitizeRunForExternal(db, completed) });
+      if (idleTask) hub.broadcastAll({ type: "task_updated", task: idleTask });
+      logAgentFinish(task.id, "completed", "turn complete");
+      return;
     }
 
     sysLog(`Running deterministic validation, max attempts: ${FINAL_VALIDATOR_MAX_ATTEMPTS}...`);
@@ -1674,115 +1723,118 @@ export async function executeAgent(
       db.runs.updateTokenUsage(run.id, accumulatedTokenUsage);
     }
 
-    // M5.2: Record run metrics
-    try {
-      const finalRun = db.runs.getById(run.id);
-      const qualityScore = computeRunQualityScore({
-        validatorAttempts: validatorAttempts ?? 0,
-        reviewBlockers: reviewBlockerCount,
-        reviewWarnings: reviewWarningCount,
-        finalStatus: finalRun?.status ?? "failed",
-        prCreated,
-      });
-      db.metrics.create({
-        runId: run.id,
-        taskId: task.id,
-        repoId: task.repoId,
-        engine: engine.name,
-        model,
-        matchedSkills: skillPayload?.skills.map((s) => s.name) ?? [],
-        matchedRules: skillPayload?.rules.map((r) => r.name) ?? [],
-        durationMs: Date.now() - runStartTime,
-        validatorAttempts: validatorAttempts ?? 0,
-        reviewBlockers: reviewBlockerCount,
-        reviewWarnings: reviewWarningCount,
-        finalStatus: finalRun?.status ?? "failed",
-        prCreated,
-      });
-      db.runs.updateStateSnapshot(
-        run.id,
-        ((finalRun?.currentStatus as RunPhase | null) ?? "reviewing") as RunPhase,
-        {
-          branch,
-          worktreePath: wtPath ?? null,
-          sessionId: activeSessionId ?? null,
-          validatorAttempts,
-          qualityScore,
-        }
-      );
-      recordTaskArtifact(db, task, run, {
-        kind: "other",
-        title: "Run summary",
-        uri: `run:${run.id}:summary`,
-        metadata: {
-          finalStatus: finalRun?.status ?? "failed",
-          branch,
-          validatorAttempts,
+    // Conversational turns have no deterministic quality score or validation artifacts.
+    if (!isRemoteSession) {
+      // M5.2: Record run metrics
+      try {
+        const finalRun = db.runs.getById(run.id);
+        const qualityScore = computeRunQualityScore({
+          validatorAttempts: validatorAttempts ?? 0,
           reviewBlockers: reviewBlockerCount,
           reviewWarnings: reviewWarningCount,
+          finalStatus: finalRun?.status ?? "failed",
           prCreated,
+        });
+        db.metrics.create({
+          runId: run.id,
+          taskId: task.id,
+          repoId: task.repoId,
+          engine: engine.name,
+          model,
+          matchedSkills: skillPayload?.skills.map((s) => s.name) ?? [],
+          matchedRules: skillPayload?.rules.map((r) => r.name) ?? [],
+          durationMs: Date.now() - runStartTime,
+          validatorAttempts: validatorAttempts ?? 0,
+          reviewBlockers: reviewBlockerCount,
+          reviewWarnings: reviewWarningCount,
+          finalStatus: finalRun?.status ?? "failed",
+          prCreated,
+        });
+        db.runs.updateStateSnapshot(
+          run.id,
+          ((finalRun?.currentStatus as RunPhase | null) ?? "reviewing") as RunPhase,
+          {
+            branch,
+            worktreePath: wtPath ?? null,
+            sessionId: activeSessionId ?? null,
+            validatorAttempts,
+            qualityScore,
+          }
+        );
+        recordTaskArtifact(db, task, run, {
+          kind: "other",
+          title: "Run summary",
+          uri: `run:${run.id}:summary`,
+          metadata: {
+            finalStatus: finalRun?.status ?? "failed",
+            branch,
+            validatorAttempts,
+            reviewBlockers: reviewBlockerCount,
+            reviewWarnings: reviewWarningCount,
+            prCreated,
+            qualityScore,
+          },
+        });
+        const reflection = [
+          `Final status ${finalRun?.status ?? "failed"} with quality score ${qualityScore}.`,
+          latestVerification?.summary ? `Validation summary: ${latestVerification.summary}.` : "",
+          reviewBlockerCount > 0
+            ? `Review blockers remained at ${reviewBlockerCount}; address them before reusing the same flow.`
+            : "Review blockers reached zero before handoff.",
+          prCreated
+            ? "A pull request was created successfully."
+            : "No pull request was created in this run.",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        recordTaskArtifact(db, task, run, {
+          kind: "replay",
+          title: "Validation replay",
+          uri: `run:${run.id}:replay`,
+          metadata: {
+            validationCommands: latestVerification?.commands ?? [],
+            validationSummary: latestVerification?.summary ?? null,
+            validatorAttempts,
+            finalStatus: finalRun?.status ?? "failed",
+            branch,
+            qualityScore,
+          },
+        });
+        recordTaskArtifact(db, task, run, {
+          kind: "reflection",
+          title: "Run reflection",
+          uri: `run:${run.id}:reflection`,
+          metadata: {
+            reflection,
+            finalStatus: finalRun?.status ?? "failed",
+            qualityScore,
+          },
+        });
+        const memories = await memoryService.appendRunSummary(task, {
+          runId: run.id,
+          finalStatus: finalRun?.status ?? "failed",
           qualityScore,
-        },
-      });
-      const reflection = [
-        `Final status ${finalRun?.status ?? "failed"} with quality score ${qualityScore}.`,
-        latestVerification?.summary ? `Validation summary: ${latestVerification.summary}.` : "",
-        reviewBlockerCount > 0
-          ? `Review blockers remained at ${reviewBlockerCount}; address them before reusing the same flow.`
-          : "Review blockers reached zero before handoff.",
-        prCreated
-          ? "A pull request was created successfully."
-          : "No pull request was created in this run.",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      recordTaskArtifact(db, task, run, {
-        kind: "replay",
-        title: "Validation replay",
-        uri: `run:${run.id}:replay`,
-        metadata: {
-          validationCommands: latestVerification?.commands ?? [],
+          validatorAttempts: validatorAttempts ?? 0,
+          reviewBlockers: reviewBlockerCount,
+          reviewWarnings: reviewWarningCount,
           validationSummary: latestVerification?.summary ?? null,
-          validatorAttempts,
-          finalStatus: finalRun?.status ?? "failed",
+          validationCommands: [...(latestVerification?.commands ?? [])],
           branch,
-          qualityScore,
-        },
-      });
-      recordTaskArtifact(db, task, run, {
-        kind: "reflection",
-        title: "Run reflection",
-        uri: `run:${run.id}:reflection`,
-        metadata: {
+          prCreated,
           reflection,
-          finalStatus: finalRun?.status ?? "failed",
-          qualityScore,
-        },
-      });
-      const memories = await memoryService.appendRunSummary(task, {
-        runId: run.id,
-        finalStatus: finalRun?.status ?? "failed",
-        qualityScore,
-        validatorAttempts: validatorAttempts ?? 0,
-        reviewBlockers: reviewBlockerCount,
-        reviewWarnings: reviewWarningCount,
-        validationSummary: latestVerification?.summary ?? null,
-        validationCommands: [...(latestVerification?.commands ?? [])],
-        branch,
-        prCreated,
-        reflection,
-      });
-      recordTaskArtifact(db, task, run, {
-        kind: "memory",
-        title: "Memory snapshot",
-        uri: `run:${run.id}:memory`,
-        metadata: {
-          taskMemoryId: memories.taskMemory.id,
-          sharedMemoryId: memories.sharedMemory.id,
-        },
-      });
-    } catch {
-      /* metrics recording is non-fatal */
+        });
+        recordTaskArtifact(db, task, run, {
+          kind: "memory",
+          title: "Memory snapshot",
+          uri: `run:${run.id}:memory`,
+          metadata: {
+            taskMemoryId: memories.taskMemory.id,
+            sharedMemoryId: memories.sharedMemory.id,
+          },
+        });
+      } catch {
+        /* metrics recording is non-fatal */
+      }
     }
 
     // M3.6: Cleanup engine-native context files
@@ -1800,7 +1852,7 @@ export async function executeAgent(
       await deleteVirtualKey(litellmTokenId, baseUrl);
     }
 
-    if (wtPath) {
+    if (wtPath && !isRemoteSession) {
       // Run teardown scripts before removing worktree
       await runWorkspaceScripts("teardown", wtPath, repo.name, sysLog);
 
