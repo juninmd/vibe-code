@@ -83,7 +83,11 @@ describe("streamProcess", () => {
       events.push(event);
     }
 
-    expect(events).toContainEqual({ type: "log", stream: "stderr", content: "[process] Exited with code 1" });
+    expect(events).toContainEqual({
+      type: "log",
+      stream: "stderr",
+      content: "[process] Exited with code 1",
+    });
     expect(events).toContainEqual({ type: "complete", exitCode: 1 });
   });
 

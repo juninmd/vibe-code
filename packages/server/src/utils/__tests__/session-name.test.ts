@@ -1,6 +1,6 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { slugifySessionText, sessionNamePrefix, deriveSessionTitle } from "../session-name";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as os from "node:os";
+import { deriveSessionTitle, sessionNamePrefix, slugifySessionText } from "../session-name";
 
 describe("session-name utils", () => {
   afterEach(() => {
@@ -23,7 +23,9 @@ describe("session-name utils", () => {
     });
 
     it("should limit the number of words", () => {
-      expect(slugifySessionText("one two three four five six seven eight")).toBe("one-two-three-four-five-six");
+      expect(slugifySessionText("one two three four five six seven eight")).toBe(
+        "one-two-three-four-five-six"
+      );
     });
 
     it("should enforce maximum length", () => {

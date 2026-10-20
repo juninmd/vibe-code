@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { rankSkills, planSkills, manualPicks, isSkillMode, ALWAYS_ON_SKILLS } from "../skill-plan";
 import type { SkillEntry } from "@vibe-code/shared";
+import { ALWAYS_ON_SKILLS, isSkillMode, manualPicks, planSkills, rankSkills } from "../skill-plan";
 
 describe("skill-plan", () => {
   const skills: SkillEntry[] = [
@@ -8,23 +8,31 @@ describe("skill-plan", () => {
       name: "vibe-code-orchestrator",
       description: "built in orchestrator",
       tags: ["orchestrator"],
+      category: "skill",
+      filePath: "test",
     },
     {
       name: "frontend-react",
       description: "useful for react apps and web development",
       tags: ["react", "frontend"],
+      category: "skill",
+      filePath: "test",
     },
     {
       name: "backend-node",
       description: "nodejs backend development",
       tags: ["backend", "node"],
+      category: "skill",
+      filePath: "test",
     },
     {
       name: "database-sql",
       description: "sql database migrations and queries",
       tags: ["db", "sql"],
-      dependencies: ["backend-node"]
-    }
+      dependencies: ["backend-node"],
+      category: "skill",
+      filePath: "test",
+    },
   ];
 
   describe("rankSkills", () => {
@@ -64,7 +72,7 @@ describe("skill-plan", () => {
         title: "some random task",
       });
 
-      expect(plan.applied.some(s => s.name === "vibe-code-orchestrator")).toBe(true);
+      expect(plan.applied.some((s) => s.name === "vibe-code-orchestrator")).toBe(true);
       expect(plan.mode).toBe("auto");
     });
 
@@ -76,9 +84,9 @@ describe("skill-plan", () => {
       });
 
       expect(plan.mode).toBe("auto");
-      expect(plan.applied.some(s => s.name === "database-sql")).toBe(true);
+      expect(plan.applied.some((s) => s.name === "database-sql")).toBe(true);
       // It should also include dependencies
-      expect(plan.applied.some(s => s.name === "backend-node")).toBe(true);
+      expect(plan.applied.some((s) => s.name === "backend-node")).toBe(true);
     });
 
     it("should respect manual picks and not auto-apply", () => {
@@ -89,9 +97,9 @@ describe("skill-plan", () => {
       });
 
       expect(plan.mode).toBe("manual");
-      expect(plan.applied.some(s => s.name === "backend-node")).toBe(true);
-      expect(plan.applied.some(s => s.name === "frontend-react")).toBe(false);
-      expect(plan.applied.some(s => s.name === "vibe-code-orchestrator")).toBe(true); // always on is still there
+      expect(plan.applied.some((s) => s.name === "backend-node")).toBe(true);
+      expect(plan.applied.some((s) => s.name === "frontend-react")).toBe(false);
+      expect(plan.applied.some((s) => s.name === "vibe-code-orchestrator")).toBe(true); // always on is still there
     });
   });
 
