@@ -249,6 +249,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data ?? {}),
       }),
+    message: (id: string, message: string) =>
+      request<AgentRun>(`/tasks/${id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
     unblock: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/unblock`, { method: "POST" }),
     retry: (id: string, data?: LaunchTaskRequest) =>

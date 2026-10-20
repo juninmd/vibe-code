@@ -89,6 +89,10 @@ export function buildChatItems(
         buffer.lines.push(content);
         break;
       }
+      case "stdin": {
+        push({ kind: "prompt", id: `user-${counter++}`, text: content, timestamp: log.timestamp });
+        break;
+      }
       default: {
         // system / review / stdin are discrete notices, never merged.
         push({
@@ -103,6 +107,18 @@ export function buildChatItems(
   flush();
 
   return items.length > MAX_ITEMS ? items.slice(items.length - MAX_ITEMS) : items;
+}
+
+/** Fold consecutive notices for a compact expandable activity row. */
+export function groupChatActivity(items: ChatItem[]): ChatItem[] {
+  const grouped: ChatItem[] = [];
+  for (const item of items) {
+    const previous = grouped[grouped.length - 1];
+    if (item.kind === "system" && previous?.kind === "system") {
+      grouped[grouped.length - 1] = { ...previous, text: `${previous.text}\n${item.text}` };
+    } else grouped.push(item);
+  }
+  return grouped;
 }
 
 /** Short human label for a session row. */

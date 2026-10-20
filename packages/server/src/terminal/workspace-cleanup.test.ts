@@ -45,6 +45,15 @@ async function setup() {
 }
 
 describe("cleanupWorkspaces", () => {
+  it("preserves remote conversations including failed turns across server restarts", async () => {
+    const { root, db, make, task, headlessRun } = await setup();
+    const remote = task("remote", "failed");
+    db.tasks.update(remote.id, { tags: ["remote-session"] });
+    const path = await make("app", "remote-turn");
+    headlessRun(remote.id, path);
+    expect(await cleanupWorkspaces(db, root)).toEqual({ removed: 0, kept: 1 });
+    expect(existsSync(join(path, "wip.txt"))).toBe(true);
+  });
   it("keeps the workspaces of unfinished terminal tasks and removes the rest", async () => {
     const { root, db, make, task, terminalRun, headlessRun } = await setup();
     const live = await make("app", "terminal-active");
