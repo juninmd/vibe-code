@@ -88,13 +88,15 @@ const orchestrator = new Orchestrator(
   resolveMaxAgents(MAX_AGENTS, storedMaxAgents)
 );
 const agentTemplates = new AgentTemplateRegistry();
-const skillsLoader = new SkillsLoader();
+const skillsBase =
+  process.env.VIBE_CODE_SKILLS_PATH || db.settings.get("skills_path") || "~/.agents";
+const skillsLoader = new SkillsLoader(skillsBase);
 validateSkills(skillsLoader)
   .then(logValidationReport)
   .catch((err) => {
     console.error("[startup] Skills validation failed with error:", err);
   });
-const skillRegistry = new SkillRegistryService();
+const skillRegistry = new SkillRegistryService(skillsBase);
 const terminalController = new TerminalController({
   db,
   git,
@@ -331,6 +333,7 @@ const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
 
 const server = Bun.serve({
   port: PORT,
+  hostname: process.env.VIBE_CODE_HOST || "0.0.0.0",
   reusePort: true,
   // A few endpoints are legitimately slow — `GET /api/sessions` scans every local CLI
   // store on disk, and repo operations shell out to git. Bun's 10s default would drop

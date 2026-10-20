@@ -6,6 +6,14 @@
 > validation, reviews and PRs, with **code mode** as the default surface.
 
 ## Operator Note
+
+An isolated, interactive UI candidate is available at **`/prototype`**: projects and
+sessions share one navigation, with Conversation, Terminal and Changes inside the
+same workspace. It also adapts Skills, GitHub plugin imports, agent templates,
+GitHub/provider/MCP settings and the current harness terminal, with dynamic model
+and effort selection. Demo interactions are labelled; real execution starts explicitly.
+See [the unified workspace prototype](docs/unified-remote-prototype.md).
+
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
 * Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.
 * Code mode doc: [docs/remote-control.md](docs/remote-control.md)

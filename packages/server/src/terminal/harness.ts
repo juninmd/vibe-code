@@ -53,6 +53,8 @@ export interface HarnessLaunchInput {
   engine: HarnessEngine;
   task: HarnessTask;
   model?: string | null;
+  effort?: string;
+  sessionId?: string;
   /** Continue the previous conversation of this workspace instead of starting a new one. */
   resume?: boolean;
   /** Absolute path of the generated agent plugin (Claude Code only). */
@@ -125,6 +127,7 @@ export function buildHarnessLaunch(input: HarnessLaunchInput): HarnessLaunch {
     if (input.apiKeys?.anthropic) env.ANTHROPIC_API_KEY = input.apiKeys.anthropic;
     const argv = ["claude"];
     if (model) argv.push("--model", model);
+    if (input.effort) argv.push("--effort", input.effort);
     if (input.pluginDir) argv.push("--plugin-dir", input.pluginDir);
     if (input.resume) argv.push("--continue");
     else argv.push(prompt);
@@ -140,8 +143,9 @@ export function buildHarnessLaunch(input: HarnessLaunchInput): HarnessLaunch {
   const argv = [resolveOpencodeBinary()];
   // The interactive TUI has no `--model` flag (only `opencode run` does); the chosen
   // model travels through the project config instead — see writeOpencodeModel().
-  if (input.resume) argv.push("--continue");
-  else argv.push("--prompt", prompt);
+  if (input.sessionId) argv.push("--session", input.sessionId);
+  else if (input.resume) argv.push("--continue");
+  if (!input.resume) argv.push("--prompt", prompt);
   return { argv, env };
 }
 
