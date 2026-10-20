@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { access, unlink } from "node:fs/promises";
+import { access as accessWorkspace, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type AgentRun,
   type DiffFileSummary,
   type DiffSummary,
+  REMOTE_SESSION_TAG,
   statusOfLane,
   type TaskUsageSummary,
   type TaskWithRun,
@@ -317,11 +318,17 @@ export function createTasksRouter(
 
       focusedTask = tasks.find((task) => task.id === focusedTaskId) ?? null;
       if (focusedTask?.latestRun?.id) {
-        focusedLogs = db.logs.listByRunAfter(
-          focusedTask.latestRun.id,
-          Number.isNaN(focusedLogsAfterId) ? 0 : focusedLogsAfterId,
-          400
-        );
+        const remote = focusedTask.tags.includes(REMOTE_SESSION_TAG);
+        const afterId = Number.isNaN(focusedLogsAfterId) ? 0 : focusedLogsAfterId;
+        if (remote) {
+          focusedLogs = db.logs.listByTaskAfter(focusedTask.id, afterId, 400);
+        } else if (afterId === 0) {
+          // Opening a session loads the latest page, not the first one: long
+          // runs would otherwise show stale output and hide the newest turn.
+          focusedLogs = db.logs.listByRunLatest(focusedTask.latestRun.id, 400);
+        } else {
+          focusedLogs = db.logs.listByRunAfter(focusedTask.latestRun.id, afterId, 400);
+        }
       }
     }
 
@@ -375,6 +382,22 @@ export function createTasksRouter(
     const repo = db.repos.getById(parsed.data.repoId);
     if (!repo) {
       return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    }
+
+    // A remote session is continued later by resuming the CLI conversation, so
+    // it needs an explicit engine that both honors the resume option and
+    // reports a session id; otherwise the context would silently be lost.
+    if (parsed.data.tags?.includes(REMOTE_SESSION_TAG)) {
+      const engineName = parsed.data.engine?.trim();
+      if (!engineName || !orchestrator.supportsSessionResume(engineName)) {
+        return c.json(
+          {
+            error: "engine_not_resumable",
+            message: `${engineName || "The selected engine"} cannot continue a conversation. Choose an engine that supports resuming sessions.`,
+          },
+          400
+        );
+      }
     }
 
     const title = parsed.data.title?.trim()
@@ -511,6 +534,88 @@ export function createTasksRouter(
     return c.json({ data: cloned }, 201);
   });
 
+  // A remote turn is an explicit user action; it never relies on a closed CLI stdin.
+  router.post("/:id/messages", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const id = c.req.param("id");
+    const decision = enforceTaskAccess(db, access.context, id);
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+    const task = db.tasks.getById(id);
+    if (!task) return c.json({ error: "not_found", message: "Session not found" }, 404);
+    if (
+      !task.tags.includes(REMOTE_SESSION_TAG) ||
+      !["backlog", "failed", "blocked"].includes(task.status)
+    ) {
+      return c.json(
+        {
+          error: "invalid_state",
+          message: "Wait for the current turn to finish or stop it before sending a message.",
+        },
+        409
+      );
+    }
+    const parsed = z
+      .object({ message: z.string().trim().min(1).max(100_000) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json(
+        { error: "invalid_input", message: "A message of 1–100000 characters is required." },
+        400
+      );
+    if (!task.engine || !orchestrator.supportsSessionResume(task.engine)) {
+      return c.json(
+        {
+          error: "session_unavailable",
+          message: `${task.engine ?? "This session"} cannot continue a conversation. Start a new session with an engine that supports resuming.`,
+        },
+        409
+      );
+    }
+    try {
+      const previous = db.runs.listByTask(id).find((r) => !!r.worktreePath);
+      if (previous) {
+        // Never silently switch branches or lose the CLI conversation on a follow-up.
+        if (!previous.sessionId || !previous.worktreePath || !task.branchName) {
+          return c.json(
+            {
+              error: "session_unavailable",
+              message: "The agent did not report a resumable session. Start a new session.",
+            },
+            409
+          );
+        }
+        await accessWorkspace(previous.worktreePath);
+      }
+      const run = await orchestrator.launch(task, undefined, undefined, parsed.data.message);
+      const log = db.logs.create(run.id, "stdin", parsed.data.message);
+      orchestrator.hub.broadcastToTask(id, {
+        type: "agent_log",
+        runId: run.id,
+        taskId: id,
+        stream: "stdin",
+        content: log.content,
+        timestamp: log.timestamp,
+      });
+      return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
+    } catch (err) {
+      const capacity = (err as Error & { capacityExceeded?: boolean }).capacityExceeded;
+      return c.json(
+        {
+          error: capacity ? "capacity_full" : "message_failed",
+          message: capacity
+            ? "All agent slots are in use. Try again when a slot is free."
+            : "Unable to continue the session. Check that its workspace is available.",
+        },
+        capacity ? 429 : 409
+      );
+    }
+  });
+
   router.post("/:id/launch", async (c) => {
     const access = await resolveAccessContext(c, db);
     if (!access.ok || !access.context) {
@@ -633,7 +738,7 @@ export function createTasksRouter(
     try {
       if (latestRun?.worktreePath) {
         try {
-          await access(latestRun.worktreePath);
+          await accessWorkspace(latestRun.worktreePath);
           previewWorktreePath = latestRun.worktreePath;
         } catch {
           previewWorktreePath = null;

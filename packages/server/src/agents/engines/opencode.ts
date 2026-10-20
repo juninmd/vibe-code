@@ -210,8 +210,10 @@ export function resolveOpencodeNativeFromShim(
 ): string | null {
   if (extname(shimPath).toLowerCase() !== ".cmd") return null;
   const prefix = dirname(shimPath);
-  const v2Native = join(prefix, "node_modules", "@opencode", "cli", "bin", "opencode.exe");
-  if (stat(v2Native)) return v2Native;
+  // OpenCode v2's @opencode/cli package bundles its executable directly.
+  const bundled = join(prefix, "node_modules", "@opencode", "cli", "bin", "opencode.exe");
+  if (stat(bundled)) return bundled;
+
   for (const pkg of opencodeWindowsPackageCandidates(arch)) {
     const candidate = join(
       prefix,
@@ -227,8 +229,8 @@ export function resolveOpencodeNativeFromShim(
   return null;
 }
 
-function findOnPath(executable: string): string | null {
-  const pathVar = process.env.PATH || process.env.Path || "";
+export function findOnPath(executable: string): string | null {
+  const pathVar = process.env.PATH ?? process.env.Path ?? "";
   const exts =
     process.platform === "win32" ? (process.env.PATHEXT || ".CMD;.EXE;.BAT").split(";") : [""];
   for (const dir of pathVar.split(delimiter)) {
@@ -272,6 +274,7 @@ export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
   binaryName = "opencode";
   displayName = "OpenCode";
+  supportsResume = true;
   private processes = new Map<string, Subprocess>();
 
   /** Heartbeat interval (ms). Overridable in tests via constructor arg or VIBE_CODE_HEARTBEAT_MS. */
@@ -294,10 +297,10 @@ export class OpenCodeEngine implements AgentEngine {
    * Override in tests to inject a fake subprocess.
    * Prompt is sent via stdin to avoid Windows command-line length limits.
    */
-  protected buildCommandArgs(model: string, workdir: string, resumeSessionId?: string): string[] {
+  protected buildCommandArgs(model: string, _workdir: string, resumeSessionId?: string): string[] {
     const args = [resolveOpencodeBinary(), "run", "--format", "json"];
     if (model) args.push("--model", model);
-    args.push("--dir", workdir);
+    // Bun.spawn sets cwd; OpenCode v2 does not accept --dir on `run`.
     if (resumeSessionId) args.push("--session", resumeSessionId);
     // Operator escape hatch: extra flags via env, with protocol-critical
     // flags filtered out (ported from multica's filterCustomArgs).
@@ -839,6 +842,14 @@ export class OpenCodeEngine implements AgentEngine {
     for (const jsonStr of jsonObjects) {
       try {
         const raw = JSON.parse(jsonStr) as Record<string, unknown>;
+        // OpenCode run emits sessionID on text/tool/step events as well as session events.
+        // Keep processing the event so capturing the conversation never drops its text.
+        const nested = (raw.part ?? raw.data ?? {}) as Record<string, unknown>;
+        const embeddedSession =
+          raw.sessionID ?? raw.sessionId ?? nested.sessionID ?? nested.sessionId;
+        if (typeof embeddedSession === "string" && embeddedSession) {
+          results.push({ type: "session", sessionId: embeddedSession });
+        }
 
         // Handle JSON-RPC 2.0 style messages
         if (raw.jsonrpc === "2.0" && raw.method) {
@@ -953,8 +964,10 @@ export class OpenCodeEngine implements AgentEngine {
         const part = (raw.part ?? raw.data ?? raw.message ?? raw) as Record<string, unknown>;
 
         // session events
-        if (eventType === "session" || part.type === "session" || raw.sessionId) {
-          const sessionId = String(raw.sessionId ?? part.sessionId ?? part.id ?? "");
+        if (eventType === "session" || part.type === "session") {
+          const sessionId = String(
+            raw.sessionID ?? raw.sessionId ?? part.sessionID ?? part.sessionId ?? part.id ?? ""
+          );
           if (sessionId) {
             results.push({ type: "session", sessionId });
             results.push({

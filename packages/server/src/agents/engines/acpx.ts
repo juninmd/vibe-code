@@ -8,6 +8,7 @@ export class AcpxEngine implements AgentEngine {
   name = "acpx";
   displayName = "ACPX";
   binaryName = "acpx";
+  supportsResume = true;
   private processes = new Map<string, Subprocess>();
 
   async isAvailable(): Promise<boolean> {

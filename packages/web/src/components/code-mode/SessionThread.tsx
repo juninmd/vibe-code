@@ -1,8 +1,9 @@
 import type { AgentLog, TaskWithRun } from "@vibe-code/shared";
+import { REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import { useEffect, useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { buildChatItems, type ChatItem, sessionLabel } from "./chat";
+import { buildChatItems, type ChatItem, groupChatActivity } from "./chat";
 import { sessionStatusMeta } from "./status";
 
 interface SessionThreadProps {
@@ -29,7 +30,7 @@ function ChatBubble({ item }: { item: ChatItem }) {
     case "prompt":
       return (
         <div className="flex justify-end">
-          <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-3.5 py-2.5 text-[14px] leading-relaxed text-white shadow-lg shadow-accent/20">
+          <div className="max-w-[92%] whitespace-pre-wrap rounded-xl border border-default bg-surface-hover px-4 py-3 text-[14px] leading-relaxed text-primary">
             {item.text}
           </div>
         </div>
@@ -37,7 +38,7 @@ function ChatBubble({ item }: { item: ChatItem }) {
     case "assistant":
       return (
         <div className="flex justify-start">
-          <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-white/6 bg-surface/55 px-3.5 py-2.5 text-secondary">
+          <div className="min-w-0 max-w-full py-2 text-secondary">
             <MarkdownBlock text={item.text} />
           </div>
         </div>
@@ -55,9 +56,12 @@ function ChatBubble({ item }: { item: ChatItem }) {
     default:
       return (
         <div className="flex justify-center">
-          <span className="rounded-full bg-surface-hover/70 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-muted">
-            {item.text}
-          </span>
+          <details className="w-full text-[11px] text-muted">
+            <summary className="cursor-pointer truncate py-1">
+              Agent activity · {item.text.split("\n").length} updates
+            </summary>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words py-2">{item.text}</pre>
+          </details>
         </div>
       );
   }
@@ -76,7 +80,8 @@ export function SessionThread({
 }: SessionThreadProps) {
   const meta = sessionStatusMeta(task.status);
   const running = task.status === "in_progress";
-  const items = useMemo(() => buildChatItems(task, logs), [task, logs]);
+  const remote = task.tags.includes(REMOTE_SESSION_TAG);
+  const items = useMemo(() => groupChatActivity(buildChatItems(task, logs)), [task, logs]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const atBottomRef = useRef(true);
@@ -91,7 +96,7 @@ export function SessionThread({
 
   return (
     <>
-      <header className="shrink-0 border-b border-white/8 bg-app/95 px-2 py-2 backdrop-blur-xl">
+      <header className="shrink-0 px-3 py-2">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -115,12 +120,15 @@ export function SessionThread({
             </svg>
           </button>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-primary">{sessionLabel(task)}</div>
             <div className="flex items-center gap-1.5 text-[11px] text-muted">
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${meta.dot} ${meta.pulse ? "animate-pulse" : ""}`}
               />
-              <span className={meta.text}>{meta.label}</span>
+              <span className={meta.text}>
+                {remote && !running && task.status === "backlog"
+                  ? "Waiting for message"
+                  : meta.label}
+              </span>
               {task.repo?.name && <span className="truncate">· {task.repo.name}</span>}
             </div>
           </div>
@@ -165,7 +173,7 @@ export function SessionThread({
             >
               Stop
             </button>
-          ) : (
+          ) : !remote ? (
             <button
               type="button"
               onClick={onStart}
@@ -174,7 +182,7 @@ export function SessionThread({
             >
               Start
             </button>
-          )}
+          ) : null}
         </div>
       </header>
 
@@ -184,25 +192,27 @@ export function SessionThread({
           const el = e.currentTarget;
           atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
-        className="flex-1 overflow-y-auto overscroll-contain px-3 py-4 space-y-3"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4"
       >
-        {items.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-            <p className="text-sm font-semibold text-primary">Session ready</p>
-            <p className="max-w-xs text-xs text-muted">
-              Send a message below to start the agent on this session.
-            </p>
-          </div>
-        )}
-        {items.map((item) => (
-          <ChatBubble key={item.id} item={item} />
-        ))}
-        {running && (
-          <div className="flex items-center gap-2 px-1 pt-1 text-[11px] text-muted">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
-            Harness is working…
-          </div>
-        )}
+        <div className="mx-auto max-w-3xl space-y-5">
+          {items.length === 0 && (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <p className="text-sm font-semibold text-primary">Session ready</p>
+              <p className="max-w-xs text-xs text-muted">
+                Send a message below to start the agent on this session.
+              </p>
+            </div>
+          )}
+          {items.map((item) => (
+            <ChatBubble key={item.id} item={item} />
+          ))}
+          {running && (
+            <div className="flex items-center gap-2 px-1 pt-1 text-[11px] text-muted">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
+              Harness is working…
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

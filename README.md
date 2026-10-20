@@ -17,6 +17,7 @@ See [the unified workspace prototype](docs/unified-remote-prototype.md).
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
 * Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.
 * Code mode doc: [docs/remote-control.md](docs/remote-control.md)
+* **Remote coding workspace**: session history on the left, conversation in the center and environment/activity on the right, with searchable repositories and dynamic branch/engine/model controls. OpenCode is the default engine; follow-up messages resume the same conversation and preserve the worktree. See [remote setup and behavior](docs/remote-control.md#running-remotely).
 - Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.
 - Terminal session workflow lives in WORKFLOW.md.
 

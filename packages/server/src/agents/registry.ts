@@ -110,6 +110,7 @@ export class EngineRegistry {
           version,
           activeRuns: runCount,
           setupIssue,
+          supportsResume: engine.supportsResume === true,
         } satisfies EngineInfo;
       })
     );
@@ -120,6 +121,11 @@ export class EngineRegistry {
     const engine = this.engines.get(engineName);
     if (!engine) return [];
     return engine.listModels();
+  }
+
+  /** Whether the engine can continue an existing conversation (remote turns). */
+  isResumable(engineName: string): boolean {
+    return this.engines.get(engineName)?.supportsResume === true;
   }
 
   /** Returns the first free model available for an engine (models ending in "-free" or containing "free"). */

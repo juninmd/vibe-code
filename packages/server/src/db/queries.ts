@@ -852,6 +852,12 @@ export function createLogQueries(db: Database) {
     listByRunAfter: db.prepare<LogRow, [string, number, number]>(
       "SELECT * FROM agent_logs WHERE run_id = ? AND id > ? ORDER BY id ASC LIMIT ?"
     ),
+    listByRunLatest: db.prepare<LogRow, [string, number]>(
+      "SELECT * FROM (SELECT * FROM agent_logs WHERE run_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC"
+    ),
+    listByTaskAfter: db.prepare<LogRow, [string, number, number]>(
+      "SELECT * FROM (SELECT l.* FROM agent_logs l JOIN agent_runs r ON r.id = l.run_id WHERE r.task_id = ? AND l.id > ? ORDER BY l.id DESC LIMIT ?) ORDER BY id ASC"
+    ),
     insert: db.prepare<LogRow, [string, string, string]>(
       "INSERT INTO agent_logs (run_id, stream, content) VALUES (?, ?, ?) RETURNING *"
     ),
@@ -861,6 +867,11 @@ export function createLogQueries(db: Database) {
     listByRun: (runId: string): AgentLog[] => stmts.listByRun.all(runId).map(mapLog),
     listByRunAfter: (runId: string, afterId: number, limit = 300): AgentLog[] =>
       stmts.listByRunAfter.all(runId, afterId, limit).map(mapLog),
+    /** Newest `limit` entries for a run, returned oldest-first. */
+    listByRunLatest: (runId: string, limit = 300): AgentLog[] =>
+      stmts.listByRunLatest.all(runId, limit).map(mapLog),
+    listByTaskAfter: (taskId: string, afterId: number, limit = 300): AgentLog[] =>
+      stmts.listByTaskAfter.all(taskId, afterId, limit).map(mapLog),
     create: (runId: string, stream: string, content: string): AgentLog => {
       const row = stmts.insert.get(runId, stream, content);
       if (!row) throw new Error("Failed to create log");

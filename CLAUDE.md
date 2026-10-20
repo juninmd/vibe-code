@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Code mode is a conversational remote workspace (history / chat / context), with
+OpenCode selected by default. Tasks tagged `remote-session` preserve their
+worktree and resume the CLI session for each `POST /api/tasks/:id/messages`.
+Keep them out of autonomous sweep/retry/cleanup and do not equate a finished
+turn with validated code. See [docs/remote-control.md](docs/remote-control.md).
+Models and branches must come from the existing API. OpenCode runs with process
+`cwd`, without `--dir` (unsupported by v2), and resumes with `--session`.
+
 ## Commands
 
 ```bash

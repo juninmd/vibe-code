@@ -50,9 +50,12 @@ test.beforeAll(async ({ request }) => {
 test.describe("Code mode", () => {
   test("is the default surface and exposes the task composer", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /Live now/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "What will you build?" })).toBeVisible();
     await expect(page.getByPlaceholder("Describe a task…")).toBeVisible();
     await expect(page.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("navigation", { name: "Sessions", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Agent engine")).toBeVisible();
+    await page.screenshot({ path: "test-results/remote-code-desktop.png", fullPage: true });
   });
 
   test("switching to Board shows the kanban view and sticks", async ({ page }) => {
@@ -71,9 +74,84 @@ test.describe("Code mode", () => {
     expect(created.ok()).toBeTruthy();
 
     await page.goto("/");
-    await page.getByText("e2e code mode session").first().click();
+    await page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/e2e-code-mode-session/).first().click();
 
     await expect(page.getByRole("button", { name: "Back to sessions" })).toBeVisible();
     await expect(page.getByPlaceholder(/Reply to the agent|Session is idle/)).toBeVisible();
+  });
+
+  test("creates a session with the chosen engine, model and branch", async ({ page }) => {
+    await page.route("**/api/engines", (route) => route.fulfill({ json: { data: [{ name: "opencode", displayName: "OpenCode", available: true, version: "test", activeRuns: 0, supportsResume: true }] } }));
+    await page.route("**/api/engines/opencode/models", (route) => route.fulfill({ json: { data: ["fixture/model"] } }));
+    // Only execution is intercepted; repository registration and task persistence use the real API.
+    await page.route("**/api/tasks/*/launch", (route) => route.fulfill({ status: 202, json: { data: { id: "fixture-run", engine: "opencode", status: "queued" } } }));
+    await page.goto("/");
+    await page.getByLabel("Agent model").selectOption("fixture/model");
+    await page.getByPlaceholder("Describe a task…").fill("e2e remote conversation");
+    const created = page.waitForResponse((response) => response.url().endsWith("/api/tasks") && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    const response = await created;
+    expect(response.ok()).toBeTruthy();
+    const task = (await response.json()).data;
+    expect(task.engine).toBe("opencode");
+    expect(task.model).toBe("fixture/model");
+    expect(task.baseBranch).toBe("main");
+    expect(task.tags).toContain("remote-session");
+    await expect(page.getByPlaceholder("Continue this session…")).toBeVisible();
+    await expect(page.getByText("e2e remote conversation", { exact: true })).toBeVisible();
+    await page.screenshot({ path: "test-results/remote-code-conversation.png", fullPage: true });
+  });
+
+  test("keeps history and repository controls usable on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route("**/api/engines", (route) => route.fulfill({ json: { data: [{ name: "opencode", displayName: "OpenCode", available: true, version: "test", activeRuns: 0, supportsResume: true }] } }));
+    await page.route("**/api/engines/opencode/models", (route) => route.fulfill({ json: { data: ["opencode/beam-free"] } }));
+    await page.goto("/");
+    await expect(page.getByPlaceholder("Describe a task…")).toBeVisible();
+    await page.getByRole("button", { name: "Session history", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Sessions", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "New session", exact: true }).click();
+    await page.getByLabel("Choose repository").click();
+    await expect(page.getByLabel("Search repositories")).toBeVisible();
+    // Close the picker so the capture shows the composer, not the fixture path.
+    await page.keyboard.press("Escape");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: "test-results/remote-code-mobile.png", fullPage: true });
+  });
+
+  test("continues a real OpenCode conversation and restores its history after reload", async ({ page, request }) => {
+    test.skip(process.env.VIBE_E2E_REAL_OPENCODE !== "1", "Opt in to a real model call with VIBE_E2E_REAL_OPENCODE=1");
+    test.setTimeout(120_000);
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    const listed = await request.get(`${E2E.serverUrl}/api/engines/opencode/models`);
+    expect(listed.ok()).toBeTruthy();
+    const models = (await listed.json()).data as string[];
+    const model = models.find((m) => m.startsWith("opencode/") && m.endsWith("-free"));
+    if (!model) throw new Error("No free model was reported by the installed OpenCode CLI");
+    await page.goto("/");
+    await page.getByLabel("Agent model").selectOption(model, { timeout: 30_000 });
+    await page.getByPlaceholder("Describe a task…").fill("Remember the marker REMOTE_BROWSER_742. Reply only REMOTE_READY.");
+    const created = page.waitForResponse((response) => response.url().endsWith("/api/tasks") && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    const task = (await (await created).json()).data;
+    await expect(page.locator(".chat-markdown").getByText("REMOTE_READY", { exact: true })).toBeVisible({ timeout: 60_000 });
+    const reply = page.getByPlaceholder("Continue this session…");
+    await expect(reply).toBeEnabled({ timeout: 30_000 });
+    await reply.fill("What marker did I ask you to remember? Reply only with that marker.");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect(page.locator(".chat-markdown").getByText("REMOTE_BROWSER_742", { exact: true })).toBeVisible({ timeout: 60_000 });
+    const runsResponse = await request.get(`${E2E.serverUrl}/api/tasks/${task.id}/runs`);
+    const runs = (await runsResponse.json()).data as Array<{ sessionId: string; worktreePath: string }>;
+    expect(runs).toHaveLength(2);
+    expect(runs[0].sessionId).toBeTruthy();
+    expect(runs[0].sessionId).toBe(runs[1].sessionId);
+    expect(runs[0].worktreePath).toBe(runs[1].worktreePath);
+    await page.reload();
+    await page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(task.title, { exact: true }).click();
+    await expect(page.locator(".chat-markdown").getByText("REMOTE_READY", { exact: true })).toBeVisible();
+    await expect(page.locator(".chat-markdown").getByText("REMOTE_BROWSER_742", { exact: true })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+    await page.screenshot({ path: "test-results/remote-code-real-opencode.png", fullPage: true });
   });
 });

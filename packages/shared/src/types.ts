@@ -387,6 +387,8 @@ export interface EngineInfo {
   version: string | null;
   activeRuns: number;
   setupIssue?: string | null;
+  /** True when the engine can continue an existing CLI conversation (`resumeSessionId`). */
+  supportsResume?: boolean;
 }
 
 export interface RuntimeCapacity {
@@ -571,6 +573,8 @@ export type HarnessEngine = (typeof HARNESS_ENGINES)[number];
  * Todo tasks, recovery after restarts) leaves them alone.
  */
 export const MANUAL_TASK_TAG = "manual";
+/** Conversational runs preserve their workspace and await the next remote message. */
+export const REMOTE_SESSION_TAG = "remote-session";
 
 /** Why a skill is part of a task's agent plugin. */
 export type SkillSource =
