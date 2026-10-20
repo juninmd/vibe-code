@@ -1,7 +1,7 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { listProtectedWorkspaces, cleanupWorkspaces } from "../workspace-cleanup";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import * as path from "node:path";
+import { cleanupWorkspaces, listProtectedWorkspaces } from "../workspace-cleanup";
 
 describe("workspace-cleanup", () => {
   beforeEach(() => {
@@ -55,9 +55,7 @@ describe("workspace-cleanup", () => {
           ] as any;
         }
         if (dirPath === path.join("/workspaces", "repo2")) {
-          return [
-            { name: "wt3", isDirectory: () => true },
-          ] as any;
+          return [{ name: "wt3", isDirectory: () => true }] as any;
         }
         return [];
       });
@@ -68,15 +66,32 @@ describe("workspace-cleanup", () => {
       expect(result.kept).toBe(1);
 
       // Verify rm calls
-      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo1", "wt2"), { recursive: true, force: true });
-      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo2", "wt3"), { recursive: true, force: true });
+      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo1", "wt2"), {
+        recursive: true,
+        force: true,
+      });
+      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo2", "wt3"), {
+        recursive: true,
+        force: true,
+      });
       // Should remove empty repo2
-      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo2"), { recursive: true, force: true });
+      expect(fsPromises.rm).toHaveBeenCalledWith(path.join("/workspaces", "repo2"), {
+        recursive: true,
+        force: true,
+      });
 
       // Should not remove protected wt1
-      expect((fsPromises.rm as any).mock.calls.some((args: any) => args[0] === path.join("/workspaces", "repo1", "wt1"))).toBe(false);
+      expect(
+        (fsPromises.rm as any).mock.calls.some(
+          (args: any) => args[0] === path.join("/workspaces", "repo1", "wt1")
+        )
+      ).toBe(false);
       // Should not remove non-empty repo1
-      expect((fsPromises.rm as any).mock.calls.some((args: any) => args[0] === path.join("/workspaces", "repo1"))).toBe(false);
+      expect(
+        (fsPromises.rm as any).mock.calls.some(
+          (args: any) => args[0] === path.join("/workspaces", "repo1")
+        )
+      ).toBe(false);
     });
 
     it("should handle readdir errors gracefully", async () => {

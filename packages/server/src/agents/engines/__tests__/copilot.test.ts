@@ -1,7 +1,7 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { CopilotEngine } from "../copilot";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as childProcess from "node:child_process";
 import * as litellmClient from "../../litellm-client";
+import { CopilotEngine } from "../copilot";
 
 describe("CopilotEngine", () => {
   let engine: CopilotEngine;
@@ -34,7 +34,9 @@ describe("CopilotEngine", () => {
     });
 
     it("should fallback to 'copilot' if execSync fails", () => {
-      spyOn(childProcess, "execSync").mockImplementation(() => { throw new Error("failed"); });
+      spyOn(childProcess, "execSync").mockImplementation(() => {
+        throw new Error("failed");
+      });
       expect((engine as any).getCopilotBinPath()).toBe("copilot");
     });
   });
@@ -62,7 +64,11 @@ describe("CopilotEngine", () => {
 
   describe("listModels", () => {
     it("should return litellm models", async () => {
-      spyOn(litellmClient, "listLiteLLMModels").mockResolvedValue(["github-copilot/gpt-4", "copilot/claude", "other/model"]);
+      spyOn(litellmClient, "listLiteLLMModels").mockResolvedValue([
+        "github-copilot/gpt-4",
+        "copilot/claude",
+        "other/model",
+      ]);
       const models = await engine.listModels();
       expect(models).toContain("github-copilot/gpt-4");
       expect(models).toContain("copilot/claude");

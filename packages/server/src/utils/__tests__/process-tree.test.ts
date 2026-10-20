@@ -1,7 +1,7 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { killProcessTree } from "../process-tree";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as childProcess from "node:child_process";
 import * as util from "node:util";
+import { killProcessTree } from "../process-tree";
 
 describe("killProcessTree", () => {
   let processPlatform: string;

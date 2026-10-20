@@ -1,8 +1,8 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { ConflictResolver } from "../conflict-resolver";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { Db } from "../../db";
-import type { Orchestrator } from "../orchestrator";
 import * as telegram from "../../notifications/telegram";
+import { ConflictResolver } from "../conflict-resolver";
+import type { Orchestrator } from "../orchestrator";
 
 describe("ConflictResolver", () => {
   let db: any;
@@ -60,18 +60,31 @@ describe("ConflictResolver", () => {
 
     await resolver.check();
 
-    expect(warnSpy).toHaveBeenCalledWith("[conflict-resolver] No GitHub token — skipping PR conflict check");
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[conflict-resolver] No GitHub token — skipping PR conflict check"
+    );
 
     process.env.GITHUB_TOKEN = originalEnv;
   });
 
   it("should create a conflict resolution task if a PR has conflicts", async () => {
     db.tasks.list.mockImplementation((_: any, status: string) => {
-      if (status === "review") return [{ id: "task-1", repoId: "repo-1", title: "Test task", prUrl: "https://github.com/owner/repo/pull/123", branchName: "feat/test" }];
+      if (status === "review")
+        return [
+          {
+            id: "task-1",
+            repoId: "repo-1",
+            title: "Test task",
+            prUrl: "https://github.com/owner/repo/pull/123",
+            branchName: "feat/test",
+          },
+        ];
       return [];
     });
 
-    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ mergeable: false }), { status: 200 }));
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ mergeable: false }), { status: 200 })
+    );
 
     const telegramMock = { isConfigured: () => true, send: mock().mockResolvedValue(undefined) };
     spyOn(telegram, "createTelegramNotifier").mockReturnValue(telegramMock as any);
@@ -87,10 +100,13 @@ describe("ConflictResolver", () => {
 
   it("should not create a conflict task if one already exists", async () => {
     db.tasks.list.mockImplementation((_: any, status: string) => {
-      if (status === "review") return [{ id: "task-1", prUrl: "https://github.com/owner/repo/pull/123" }];
+      if (status === "review")
+        return [{ id: "task-1", prUrl: "https://github.com/owner/repo/pull/123" }];
       return [];
     });
-    db.tasks.listChildren.mockReturnValue([{ id: "task-2", tags: ["conflict-resolution"], status: "in_progress" }]);
+    db.tasks.listChildren.mockReturnValue([
+      { id: "task-2", tags: ["conflict-resolution"], status: "in_progress" },
+    ]);
 
     const fetchSpy = spyOn(globalThis, "fetch");
 
@@ -104,7 +120,11 @@ describe("ConflictResolver", () => {
     const telegramMock = { isConfigured: () => true, send: mock().mockResolvedValue(undefined) };
     spyOn(telegram, "createTelegramNotifier").mockReturnValue(telegramMock as any);
 
-    await resolver.notifyConflictResolved({ title: "test task", repoId: "repo-1", branchName: "test" } as any);
+    await resolver.notifyConflictResolved({
+      title: "test task",
+      repoId: "repo-1",
+      branchName: "test",
+    } as any);
 
     expect(telegramMock.send).toHaveBeenCalled();
   });

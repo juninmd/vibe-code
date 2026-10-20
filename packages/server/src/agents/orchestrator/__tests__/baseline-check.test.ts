@@ -1,6 +1,6 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { runBaselineCheck } from "../baseline-check";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsPromises from "node:fs/promises";
+import { runBaselineCheck } from "../baseline-check";
 
 describe("runBaselineCheck", () => {
   beforeEach(() => {
@@ -10,7 +10,7 @@ describe("runBaselineCheck", () => {
         exitCode: 0,
         stdout: new Blob(["mock stdout"]).stream(),
         stderr: new Blob([""]).stream(),
-        kill: mock()
+        kill: mock(),
       } as any;
     });
   });
@@ -40,7 +40,9 @@ describe("runBaselineCheck", () => {
       throw new Error("ENOENT");
     });
 
-    spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({ scripts: { typecheck: "tsc" } }));
+    spyOn(fsPromises, "readFile").mockResolvedValue(
+      JSON.stringify({ scripts: { typecheck: "tsc" } })
+    );
 
     const result = await runBaselineCheck("/tmp/wt");
     expect(result.skipped).toBe(false);
@@ -54,7 +56,9 @@ describe("runBaselineCheck", () => {
       throw new Error("ENOENT");
     });
 
-    spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({ scripts: { "type-check": "tsc" } }));
+    spyOn(fsPromises, "readFile").mockResolvedValue(
+      JSON.stringify({ scripts: { "type-check": "tsc" } })
+    );
 
     const result = await runBaselineCheck("/tmp/wt");
     expect(result.skipped).toBe(false);
@@ -68,7 +72,7 @@ describe("runBaselineCheck", () => {
       throw new Error("ENOENT");
     });
 
-    spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({ scripts: { "test": "jest" } }));
+    spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({ scripts: { test: "jest" } }));
 
     const result = await runBaselineCheck("/tmp/wt");
     expect(result.skipped).toBe(true);
@@ -99,7 +103,7 @@ describe("runBaselineCheck", () => {
         exitCode: 1,
         stdout: new Blob(["failed stdout"]).stream(),
         stderr: new Blob(["failed stderr"]).stream(),
-        kill: mock()
+        kill: mock(),
       } as any;
     });
 

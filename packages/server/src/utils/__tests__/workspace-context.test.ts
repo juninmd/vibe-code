@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, spyOn, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { getWorkspaceContext, requireWorkspaceContext } from "../workspace-context";
 
 describe("workspace-context", () => {
@@ -126,7 +126,7 @@ describe("workspace-context", () => {
       const result = await getWorkspaceContext(mockContext, mockDb, mockUser);
       expect(mockDb.workspaces.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          slug: "personal-my-ws" // fallback slug 'personal' + workspaceId
+          slug: "personal-my-ws", // fallback slug 'personal' + workspaceId
         })
       );
     });

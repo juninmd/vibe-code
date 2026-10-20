@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { runPostRunEvaluator } from "../evaluator";
 
 describe("evaluator", () => {
@@ -13,7 +13,14 @@ describe("evaluator", () => {
 
   it("should return null if evaluator is disabled", async () => {
     process.env.VIBE_CODE_EVALUATOR_ENABLED = "false";
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -26,7 +33,14 @@ describe("evaluator", () => {
       } as any;
     });
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -39,11 +53,24 @@ describe("evaluator", () => {
       } as any;
     });
 
-    const mockFetch = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ score: 9, pass: true, feedback: "good" }) } }]
-    })));
+    const mockFetch = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            { message: { content: JSON.stringify({ score: 9, pass: true, feedback: "good" }) } },
+          ],
+        })
+      )
+    );
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
 
     expect(result).toEqual({ score: 9, pass: true, feedback: "good" });
     expect(mockFetch).toHaveBeenCalled();
@@ -66,11 +93,24 @@ describe("evaluator", () => {
       } as any;
     });
 
-    const mockFetch = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify({ score: 5, pass: false, feedback: "bad" }) } }]
-    })));
+    const mockFetch = spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            { message: { content: JSON.stringify({ score: 5, pass: false, feedback: "bad" }) } },
+          ],
+        })
+      )
+    );
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
 
     expect(result).toEqual({ score: 5, pass: false, feedback: "bad" });
 
@@ -92,7 +132,14 @@ describe("evaluator", () => {
 
     spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network Error"));
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -105,11 +152,22 @@ describe("evaluator", () => {
       } as any;
     });
 
-    spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
-      choices: [{ message: { content: "invalid json" } }]
-    })));
+    spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "invalid json" } }],
+        })
+      )
+    );
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
     expect(result).toBeNull();
   });
 
@@ -124,7 +182,14 @@ describe("evaluator", () => {
 
     spyOn(globalThis, "fetch").mockResolvedValue(new Response("error", { status: 500 }));
 
-    const result = await runPostRunEvaluator("title", "desc", "/wt", "main", "http://localhost", "key");
+    const result = await runPostRunEvaluator(
+      "title",
+      "desc",
+      "/wt",
+      "main",
+      "http://localhost",
+      "key"
+    );
     expect(result).toBeNull();
   });
 });

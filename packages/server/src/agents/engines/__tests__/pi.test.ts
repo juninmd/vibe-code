@@ -1,8 +1,8 @@
-import { describe, expect, it, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import { PiEngine } from "../pi";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import * as litellmClient from "../../litellm-client";
 import * as streamProcessModule from "../../stream-process";
+import { PiEngine } from "../pi";
 
 describe("PiEngine", () => {
   let engine: PiEngine;
@@ -106,7 +106,11 @@ describe("PiEngine", () => {
       }
 
       expect(events.length).toBe(2);
-      expect(events[0]).toEqual({ type: "log", stream: "system", content: "[pi] Starting in /tmp" });
+      expect(events[0]).toEqual({
+        type: "log",
+        stream: "system",
+        content: "[pi] Starting in /tmp",
+      });
       expect(events[1]).toEqual({ type: "log", stream: "stdout", content: "output" });
 
       expect(fsPromises.writeFile).toHaveBeenCalled();
@@ -126,7 +130,8 @@ describe("PiEngine", () => {
       spyOn(streamProcessModule, "streamProcess").mockImplementation(async function* () {});
 
       const generator = engine.execute("test", "/tmp", { runId: "run123" });
-      for await (const _ of generator) {}
+      for await (const _ of generator) {
+      }
 
       expect(staleProc.kill).toHaveBeenCalled();
     });
@@ -139,10 +144,11 @@ describe("PiEngine", () => {
       spyOn(streamProcessModule, "streamProcess").mockImplementation(async function* () {});
 
       const generator = engine.execute("test", "/tmp", {
-        litellmKey: "lite-key",
-        litellmBaseUrl: "http://lite"
+        runId: "run1", litellmKey: "lite-key",
+        litellmBaseUrl: "http://lite",
       });
-      for await (const _ of generator) {}
+      for await (const _ of generator) {
+      }
 
       const env = spawnSpy.mock.calls[0][1]?.env as any;
       expect(env.OPENAI_API_KEY).toBe("lite-key");
@@ -158,9 +164,10 @@ describe("PiEngine", () => {
       spyOn(streamProcessModule, "streamProcess").mockImplementation(async function* () {});
 
       const generator = engine.execute("test", "/tmp", {
-        nativeApiKeys: { openai: "native-openai", anthropic: "native-anthropic" }
+        runId: "run1", nativeApiKeys: { openai: "native-openai", anthropic: "native-anthropic" },
       });
-      for await (const _ of generator) {}
+      for await (const _ of generator) {
+      }
 
       const env = spawnSpy.mock.calls[0][1]?.env as any;
       expect(env.OPENAI_API_KEY).toBe("native-openai");
