@@ -145,7 +145,8 @@ describe("AiderEngine", () => {
       spyOn(streamProcessModule, "streamProcess").mockImplementation(async function* () {});
 
       const generator = engine.execute("test", "/tmp", {
-        runId: "run1", litellmKey: "lite-key",
+        runId: "run1",
+        litellmKey: "lite-key",
         litellmBaseUrl: "http://lite",
       });
       for await (const _ of generator) {
@@ -165,7 +166,8 @@ describe("AiderEngine", () => {
       spyOn(streamProcessModule, "streamProcess").mockImplementation(async function* () {});
 
       const generator = engine.execute("test", "/tmp", {
-        runId: "run1", nativeApiKeys: { openai: "native-openai", anthropic: "native-anthropic" },
+        runId: "run1",
+        nativeApiKeys: { openai: "native-openai", anthropic: "native-anthropic" },
       });
       for await (const _ of generator) {
       }
