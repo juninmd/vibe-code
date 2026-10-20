@@ -9,7 +9,7 @@ interface CodeComposerProps {
   autoFocus?: boolean;
   /** Optional control rendered to the left of the textarea (repo picker). */
   leading?: ReactNode;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string) => void | Promise<void>;
 }
 
 const MAX_ROWS_PX = 160;
@@ -25,6 +25,9 @@ export function CodeComposer({
   onSubmit,
 }: CodeComposerProps) {
   const [value, setValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pendingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Auto-grow up to MAX_ROWS_PX.
@@ -40,42 +43,57 @@ export function CodeComposer({
     if (autoFocus) textareaRef.current?.focus();
   }, [autoFocus]);
 
-  const submit = () => {
+  const submit = async () => {
     const text = value.trim();
-    if (!text || busy || disabled) return;
-    onSubmit(text);
-    setValue("");
+    if (!text || busy || disabled || pendingRef.current) return;
+    pendingRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(text);
+      setValue("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to send. Please try again.");
+    } finally {
+      pendingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="shrink-0 border-t border-white/8 bg-app/95 backdrop-blur-xl px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="shrink-0">
       {hint && <div className="mb-2 px-1 text-[11px] text-muted">{hint}</div>}
-      <div className="flex items-end gap-2 rounded-2xl border border-default bg-surface/80 p-2 shadow-lg shadow-black/20 focus-within:border-accent/40">
+      {error && (
+        <p role="alert" className="mb-2 text-xs text-danger">
+          {error}
+        </p>
+      )}
+      <div className="flex items-end gap-2 rounded-xl border border-default bg-input p-3 focus-within:border-accent/60">
         {leading && <div className="shrink-0">{leading}</div>}
         <textarea
           ref={textareaRef}
           rows={1}
           value={value}
-          disabled={disabled}
+          disabled={disabled || submitting || busy}
           placeholder={placeholder}
           aria-label={placeholder}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              submit();
+              void submit();
             }
           }}
           className="flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] leading-snug text-primary placeholder:text-muted outline-none disabled:opacity-60"
         />
         <button
           type="button"
-          onClick={submit}
-          disabled={busy || disabled || value.trim().length === 0}
+          onClick={() => void submit()}
+          disabled={busy || submitting || disabled || value.trim().length === 0}
           aria-label="Send"
           className="shrink-0 grid place-items-center w-10 h-10 rounded-xl bg-accent text-white transition-all hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed active-shrink"
         >
-          {busy ? (
+          {busy || submitting ? (
             <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
           ) : (
             <svg
