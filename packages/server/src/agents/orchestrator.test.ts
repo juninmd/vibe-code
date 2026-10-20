@@ -99,9 +99,11 @@ describe("Orchestrator - edge cases", () => {
     };
     const orch = new Orchestrator(mockDb as any, {} as any, {} as any, {} as any);
     orch.launch = mock().mockResolvedValue({} as any);
-
     await orch.sweepBacklog();
-
+    expect((orch.launch as any).mock.calls.map((call: any[]) => call[0].id)).toEqual(["plain"]);
+    tasks[0].tags = ["remote-session"];
+    (orch.launch as any).mockClear();
+    await orch.sweepBacklog();
     expect((orch.launch as any).mock.calls.map((call: any[]) => call[0].id)).toEqual(["plain"]);
   });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as fsPromises from "node:fs/promises";
 import {
   autoInstallDependencies,
@@ -18,6 +18,7 @@ import {
 } from "./executor";
 
 mock.module("playwright", () => ({ chromium: {} }));
+afterEach(() => mock.restore());
 
 describe("executor helper functions", () => {
   describe("taskSlug", () => {
@@ -194,9 +195,11 @@ describe("executeAgent (integration mock)", () => {
     const fakeRun = { id: "r1" } as any;
     const fakeEngine = {
       name: "test-engine",
-      execute: async function* () {
-        // Block indefinitely to trigger timeout
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      execute: async function* (_prompt: string, _cwd: string, options: { signal: AbortSignal }) {
+        if (!options.signal.aborted)
+          await new Promise((resolve) =>
+            options.signal.addEventListener("abort", resolve, { once: true })
+          );
       },
     } as any;
     const fakeRepo = { name: "repo", url: "url", localPath: "/tmp" } as any;
@@ -260,9 +263,11 @@ describe("executeAgent (integration mock)", () => {
     const fakeRun = { id: "r1" } as any;
     const fakeEngine = {
       name: "test-engine",
-      execute: async function* () {
-        // Block indefinitely to trigger inactivity monitor
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+      execute: async function* (_prompt: string, _cwd: string, options: { signal: AbortSignal }) {
+        if (!options.signal.aborted)
+          await new Promise((resolve) =>
+            options.signal.addEventListener("abort", resolve, { once: true })
+          );
       },
     } as any;
     const fakeRepo = { name: "repo", url: "url", localPath: "/tmp" } as any;
@@ -469,7 +474,8 @@ describe("executor additional coverage", () => {
 
   it("runWorkspaceScripts reads and executes scripts if config exists", async () => {
     spyOn(fsPromises, "access").mockImplementation((path) => {
-      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      if (String(path).replaceAll(String.fromCharCode(92), "/").includes(".superset/config.json"))
+        return Promise.resolve();
       return Promise.reject(new Error("enoent"));
     });
     spyOn(fsPromises, "readFile").mockResolvedValue(
@@ -495,7 +501,8 @@ describe("executor additional coverage", () => {
 
   it("runWorkspaceScripts handles missing setup script array gracefully", async () => {
     spyOn(fsPromises, "access").mockImplementation((path) => {
-      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      if (String(path).replaceAll(String.fromCharCode(92), "/").includes(".superset/config.json"))
+        return Promise.resolve();
       return Promise.reject(new Error("enoent"));
     });
     spyOn(fsPromises, "readFile").mockResolvedValue(JSON.stringify({}));
@@ -508,7 +515,8 @@ describe("executor additional coverage", () => {
 
   it("runWorkspaceScripts handles script execution failure", async () => {
     spyOn(fsPromises, "access").mockImplementation((path) => {
-      if (String(path).includes(".superset/config.json")) return Promise.resolve();
+      if (String(path).replaceAll(String.fromCharCode(92), "/").includes(".superset/config.json"))
+        return Promise.resolve();
       return Promise.reject(new Error("enoent"));
     });
     spyOn(fsPromises, "readFile").mockResolvedValue(
@@ -534,9 +542,10 @@ describe("executor additional coverage", () => {
 
   it("runWorkspaceScripts reads and executes scripts if vibe-code config exists", async () => {
     spyOn(fsPromises, "access").mockImplementation((path) => {
-      if (String(path).includes(".superset/config.json"))
+      if (String(path).replaceAll(String.fromCharCode(92), "/").includes(".superset/config.json"))
         return Promise.reject(new Error("enoent"));
-      if (String(path).includes(".vibe-code/config.json")) return Promise.resolve();
+      if (String(path).replaceAll(String.fromCharCode(92), "/").includes(".vibe-code/config.json"))
+        return Promise.resolve();
       return Promise.reject(new Error("enoent"));
     });
     spyOn(fsPromises, "readFile").mockResolvedValue(

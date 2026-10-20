@@ -4,7 +4,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "../engine";
-import { DEFAULT_OPENCODE_MODEL, humanizeStderr, OpenCodeEngine } from "./opencode";
+import { DEFAULT_OPENCODE_MODEL, findOnPath, humanizeStderr, OpenCodeEngine } from "./opencode";
 
 // ─── Test helper ──────────────────────────────────────────────────────────────
 // Replaces the opencode CLI with an inline Bun script for deterministic tests.
@@ -127,6 +127,22 @@ describe("humanizeStderr", () => {
 
 describe("OpenCodeEngine.parseLine", () => {
   const engine = new FakeOpenCodeEngine("");
+
+  it("captures sessionID from a text event without losing its output", () => {
+    const events = engine.parseLine(
+      JSON.stringify({
+        type: "text",
+        sessionID: "ses_remote",
+        part: { text: "Ready for the next turn" },
+      })
+    );
+    expect(events).toContainEqual({ type: "session", sessionId: "ses_remote" });
+    expect(events).toContainEqual({
+      type: "log",
+      stream: "stdout",
+      content: "Ready for the next turn",
+    });
+  });
 
   it("parses a text event into a stdout log", () => {
     const events = engine.parseLine(JSON.stringify({ type: "text", part: { text: "Hello" } }));
@@ -423,8 +439,6 @@ describe("OpenCodeEngine.buildCommand", () => {
       "json",
       "--model",
       "opencode/minimax-m2.5-free",
-      "--dir",
-      "/tmp/workdir",
     ]);
     expect(command).not.toContain("--file");
     expect(command).not.toContain("--prompt");
@@ -736,6 +750,14 @@ describe("OpenCodeEngine prepareWorkdir", () => {
 import { resolveOpencodeNativeFromShim } from "./opencode";
 
 describe("resolveOpencodeNativeFromShim", () => {
+  it("resolves the native executable from the v2 scoped CLI package", () => {
+    const result = resolveOpencodeNativeFromShim("C:\\npm\\opencode.cmd", "x64", (path) =>
+      path.includes("@opencode") ? ({} as any) : null
+    );
+    expect(result?.replace(/\\/g, "/")).toMatch(
+      /node_modules\/@opencode\/cli\/bin\/opencode\.exe$/
+    );
+  });
   it("returns null if shimPath does not end in .cmd", () => {
     expect(resolveOpencodeNativeFromShim("/usr/bin/opencode")).toBeNull();
   });
@@ -996,10 +1018,11 @@ describe("findOnPath missing coverage", () => {
   it("findOnPath returns null for empty PATH", async () => {
     const origPath = process.env.PATH;
     process.env.PATH = "";
-    // we need to call findOnPath, but it's not exported.
-    // it is used by isAvailable / getVersion which calls resolveCommand
-    const engine = new OpenCodeEngine();
-    expect(await engine.isAvailable()).toBe(false);
-    process.env.PATH = origPath;
+    try {
+      expect(findOnPath("opencode")).toBeNull();
+    } finally {
+      if (origPath === undefined) delete process.env.PATH;
+      else process.env.PATH = origPath;
+    }
   });
 });

@@ -13,6 +13,7 @@ import { defineConfig } from "@playwright/test";
 
 const SERVER_PORT = 3123;
 const WEB_PORT = 5199;
+const PRODUCTION_UI = process.env.VIBE_E2E_PRODUCTION_UI === "1";
 
 // This module is evaluated by the runner AND re-imported by worker processes
 // and spec files. Only the first evaluation (the runner) prepares the isolated
@@ -50,7 +51,7 @@ const FIXTURE_REPO = join(E2E_ROOT, "fixture-repo");
 
 export const E2E = {
   serverUrl: `http://localhost:${SERVER_PORT}`,
-  webUrl: `http://localhost:${WEB_PORT}`,
+  webUrl: `http://localhost:${PRODUCTION_UI ? SERVER_PORT : WEB_PORT}`,
   fixtureRepo: FIXTURE_REPO,
 };
 
@@ -87,6 +88,7 @@ export default defineConfig({
       env: {
         ...process.env,
         PORT: String(SERVER_PORT),
+        NODE_ENV: PRODUCTION_UI ? "production" : "development",
         VIBE_CODE_DATA_DIR: DATA_DIR,
         // Empty strings keep dotenv from re-enabling auth from the root .env.
         GITHUB_OAUTH_CLIENT_ID: "",
@@ -95,7 +97,7 @@ export default defineConfig({
         VIBE_CODE_MAX_AGENTS: "2",
       },
     },
-    {
+    ...(PRODUCTION_UI ? [] : [{
       command: `bunx vite --port ${WEB_PORT} --strictPort`,
       cwd: "./packages/web",
       url: E2E.webUrl,
@@ -107,6 +109,6 @@ export default defineConfig({
         // The dev client opens its WebSocket on this port.
         VITE_API_PORT: String(SERVER_PORT),
       },
-    },
+    }]),
   ],
 });

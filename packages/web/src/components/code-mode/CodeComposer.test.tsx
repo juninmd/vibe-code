@@ -4,6 +4,19 @@ import { describe, expect, it, vi } from "vitest";
 import { CodeComposer } from "./CodeComposer";
 
 describe("CodeComposer", () => {
+  it("preserves the draft and shows an error when delivery fails", async () => {
+    render(
+      <CodeComposer
+        placeholder="Message"
+        onSubmit={async () => {
+          throw new Error("Server unavailable");
+        }}
+      />
+    );
+    await userEvent.type(screen.getByPlaceholderText("Message"), "Keep my work{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Server unavailable");
+    expect(screen.getByPlaceholderText("Message")).toHaveValue("Keep my work");
+  });
   it("submits on Enter and clears the field", async () => {
     const onSubmit = vi.fn();
     render(<CodeComposer placeholder="Describe a task…" onSubmit={onSubmit} />);

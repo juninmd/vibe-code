@@ -1,6 +1,6 @@
 import type { AgentLog } from "@vibe-code/shared";
 import { describe, expect, it } from "vitest";
-import { buildChatItems, sessionLabel, stripAnsi } from "./chat";
+import { buildChatItems, groupChatActivity, sessionLabel, stripAnsi } from "./chat";
 
 const ESC = String.fromCharCode(27);
 
@@ -59,6 +59,28 @@ describe("buildChatItems", () => {
       log({ content: "phase:reviewing", stream: "system", id: 2 }),
     ]);
     expect(items.filter((item) => item.kind === "system")).toHaveLength(2);
+  });
+  it("folds consecutive activity notices without merging user or assistant turns", () => {
+    const items = buildChatItems(task, [
+      log({ id: 1, stream: "system", content: "Starting" }),
+      log({ id: 2, stream: "system", content: "Ready" }),
+      log({ id: 3, content: "Answer" }),
+    ]);
+    expect(groupChatActivity(items).map((item) => item.kind)).toEqual([
+      "prompt",
+      "system",
+      "assistant",
+    ]);
+    expect(groupChatActivity(items)[1].text).toBe("Starting\nReady");
+  });
+
+  it("renders follow-up input as a user turn between agent responses", () => {
+    const items = buildChatItems(task, [
+      log({ id: 1, content: "First response" }),
+      log({ id: 2, stream: "stdin", content: "Now add tests" }),
+      log({ id: 3, content: "Tests added" }),
+    ]);
+    expect(items.map((item) => item.kind)).toEqual(["prompt", "assistant", "prompt", "assistant"]);
   });
 
   it("orders items by timestamp", () => {

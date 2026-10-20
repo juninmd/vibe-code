@@ -87,6 +87,14 @@ export interface AgentEngine {
   /** Optional readiness issue when the engine is installed but not fully configured. */
   getSetupIssue?(): Promise<string | null>;
 
+  /**
+   * Whether `execute()` honors `EngineOptions.resumeSessionId` **and** reports
+   * the session id, so a follow-up can continue the same conversation.
+   * Conversational remote sessions require this: without it a follow-up turn
+   * silently starts a fresh CLI context or has nothing to resume.
+   */
+  supportsResume?: boolean;
+
   /** List available models by querying the CLI. Returns [] if not supported. */
   listModels(): Promise<string[]>;
 

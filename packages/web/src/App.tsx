@@ -6,7 +6,7 @@ import type {
   WsClientMessage,
   WsServerMessage,
 } from "@vibe-code/shared";
-import { HARNESS_ENGINES, MANUAL_TASK_TAG } from "@vibe-code/shared";
+import { HARNESS_ENGINES, MANUAL_TASK_TAG, REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import {
   lazy,
   Suspense,
@@ -21,7 +21,7 @@ import {
 import { api, setApiKey } from "./api/client";
 import { AppMenu } from "./components/AppMenu";
 import { Board } from "./components/Board";
-import { CodeMode } from "./components/code-mode/CodeMode";
+import { CodeMode, type NewRemoteSession } from "./components/code-mode/CodeMode";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ExportImportMenu } from "./components/ExportImportMenu";
 import { FilterBar, type Filters } from "./components/FilterBar";
@@ -724,11 +724,8 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
       focusedLogCursorRef.current = 0;
       return;
     }
-    if (connected) {
-      // WS will push focused logs when subscribed
-      focusedLogCursorRef.current = 0;
-      return;
-    }
+    // A subscription streams new events; load persisted history even when WS is connected.
+    let canceled = false;
 
     const pollFocused = async () => {
       try {
@@ -737,6 +734,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
           selectedTask.id,
           focusedLogCursorRef.current
         );
+        if (canceled) return;
 
         startTransition(() => {
           setTasksSnapshot(data.tasks);
@@ -759,8 +757,11 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
     focusedLogCursorRef.current = 0;
     pollFocused();
-    const id = setInterval(pollFocused, 3_000);
-    return () => clearInterval(id);
+    const id = connected ? null : setInterval(pollFocused, 3_000);
+    return () => {
+      canceled = true;
+      if (id) clearInterval(id);
+    };
   }, [selectedRepoId, selectedTask?.id, setTasksSnapshot, connected]);
 
   // Show toast on disconnect / reconnect
@@ -838,16 +839,17 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
   // ─── Code mode (remote control) ───────────────────────────────────────────────
   // The operator only types a task: the harness names the session and starts it.
   const handleCreateSession = useCallback(
-    async ({ description, repoId }: { description: string; repoId: string }) => {
+    async (input: NewRemoteSession) => {
       setCodeBusy(true);
       try {
-        const task = await createTask({ description, repoId });
+        const task = await createTask({ ...input, tags: [REMOTE_SESSION_TAG] });
         if (!task) return;
         handleTaskClick(task);
         await launchTask(task.id);
         toast("Session started", "success");
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), "error");
+        throw err;
       } finally {
         setCodeBusy(false);
       }
@@ -1341,51 +1343,53 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
 
   return (
     <ToastContext.Provider value={toastCtx}>
-      <div className="h-screen flex overflow-hidden bg-app/30 text-primary">
-        <Sidebar
-          repos={repos}
-          selectedRepoId={selectedRepoId}
-          onSelectRepo={setSelectedRepoId}
-          onAddRepo={() => setShowAddRepo(true)}
-          onRemoveRepo={removeRepo}
-          repoStats={repoStats}
-          onDeleteLocalClone={async (repoId) => {
-            const repo = repos.find((item) => item.id === repoId);
-            if (!repo) return;
-            if (!window.confirm(`Apagar o clone local de ${repo.name}?`)) return;
-            try {
-              await deleteLocalClone(repoId);
-              toast(`Clone local de ${repo.name} apagado.`, "success");
-            } catch (err) {
-              toast(err instanceof Error ? err.message : String(err), "error");
-            }
-          }}
-          onDeleteAllLocalClones={async () => {
-            if (!window.confirm("Apagar todos os clones locais ociosos?")) return;
-            try {
-              const result = await purgeLocalClones();
-              toast(`Clones limpos: ${result.deleted}. Pulados: ${result.skipped}.`, "success");
-            } catch (err) {
-              toast(err instanceof Error ? err.message : String(err), "error");
-            }
-          }}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenStats={() => setShowStats(true)}
-          onOpenSkills={() => setShowSkills(true)}
-          onOpenRuntimes={() => setShowRuntimes(true)}
-          onOpenTemplates={() => setShowTemplates(true)}
-          onOpenInbox={() => setShowInbox(true)}
-          onOpenQuickView={() => setShowQuickView(true)}
-          onOpenEngines={() => setShowEnginesPanel(true)}
-          onOpenAgents={() => setShowAgents(true)}
-          onOpenSchedules={() => setShowSchedulesPanel(true)}
-          onOpenSessions={() => setShowSessionBoard(true)}
-          connected={connected}
-          apiOk={apiOk}
-          isMobile={isMobile}
-          mobileOpen={mobileSidebarOpen}
-          onMobileClose={() => setMobileSidebarOpen(false)}
-        />
+      <div className="h-dvh flex overflow-hidden bg-app/30 text-primary">
+        {(mode !== "code" || mobileSidebarOpen) && (
+          <Sidebar
+            repos={repos}
+            selectedRepoId={selectedRepoId}
+            onSelectRepo={setSelectedRepoId}
+            onAddRepo={() => setShowAddRepo(true)}
+            onRemoveRepo={removeRepo}
+            repoStats={repoStats}
+            onDeleteLocalClone={async (repoId) => {
+              const repo = repos.find((item) => item.id === repoId);
+              if (!repo) return;
+              if (!window.confirm(`Apagar o clone local de ${repo.name}?`)) return;
+              try {
+                await deleteLocalClone(repoId);
+                toast(`Clone local de ${repo.name} apagado.`, "success");
+              } catch (err) {
+                toast(err instanceof Error ? err.message : String(err), "error");
+              }
+            }}
+            onDeleteAllLocalClones={async () => {
+              if (!window.confirm("Apagar todos os clones locais ociosos?")) return;
+              try {
+                const result = await purgeLocalClones();
+                toast(`Clones limpos: ${result.deleted}. Pulados: ${result.skipped}.`, "success");
+              } catch (err) {
+                toast(err instanceof Error ? err.message : String(err), "error");
+              }
+            }}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenStats={() => setShowStats(true)}
+            onOpenSkills={() => setShowSkills(true)}
+            onOpenRuntimes={() => setShowRuntimes(true)}
+            onOpenTemplates={() => setShowTemplates(true)}
+            onOpenInbox={() => setShowInbox(true)}
+            onOpenQuickView={() => setShowQuickView(true)}
+            onOpenEngines={() => setShowEnginesPanel(true)}
+            onOpenAgents={() => setShowAgents(true)}
+            onOpenSchedules={() => setShowSchedulesPanel(true)}
+            onOpenSessions={() => setShowSessionBoard(true)}
+            connected={connected}
+            apiOk={apiOk}
+            isMobile={isMobile || mode === "code"}
+            mobileOpen={mobileSidebarOpen}
+            onMobileClose={() => setMobileSidebarOpen(false)}
+          />
+        )}
 
         <div className="flex-1 flex flex-col min-w-0 bg-app overflow-hidden">
           {/* Top Header */}
@@ -1396,7 +1400,7 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                 type="button"
                 onClick={() => setMobileSidebarOpen(true)}
                 aria-label="Abrir menu"
-                className="md:hidden shrink-0 p-2 -ml-1 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink"
+                className={`${mode === "code" ? "hidden" : "md:hidden"} shrink-0 p-2 -ml-1 rounded-lg text-secondary hover:text-primary hover:bg-white/5 transition-colors active-shrink`}
               >
                 <svg
                   width="20"
@@ -1551,8 +1555,9 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
               <ErrorBoundary>
                 <div className="flex h-full w-full flex-col">
                   <CodeMode
-                    tasks={filteredTasks}
+                    tasks={tasks}
                     repos={repos}
+                    engines={engines}
                     selectedRepoId={selectedRepoId}
                     selectedTask={selectedTask}
                     liveLogs={selectedTask ? (liveLogs[selectedTask.id] ?? []) : []}
@@ -1562,9 +1567,21 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     onOpenSession={handleTaskClick}
                     onCloseSession={handleCloseDetail}
                     onCreateSession={handleCreateSession}
-                    onSendInput={(taskId, text) =>
-                      send({ type: "agent_input", taskId, input: text })
-                    }
+                    onSendInput={async (taskId, text) => {
+                      if (selectedTask?.tags.includes(REMOTE_SESSION_TAG)) {
+                        setCodeBusy(true);
+                        try {
+                          await api.tasks.message(taskId, text);
+                          await refresh();
+                        } finally {
+                          setCodeBusy(false);
+                        }
+                      } else {
+                        send({ type: "agent_input", taskId, input: text });
+                      }
+                    }}
+                    onManage={() => setMobileSidebarOpen(true)}
+                    onAddRepo={() => setShowAddRepo(true)}
                     onStart={handleSessionStart}
                     onStop={handleSessionStop}
                     onDetails={(task) => {

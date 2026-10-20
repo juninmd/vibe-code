@@ -1,5 +1,21 @@
 @import "tailwindcss";
 
+/* Conversation workspace: quiet surfaces and a readable, bounded transcript. */
+.code-workbench { background: var(--bg-app); }
+.code-composer-slot { width: 100%; max-width: 52rem; margin-inline: auto; padding: 1rem 1.25rem max(1rem, env(safe-area-inset-bottom)); }
+.code-composer-meta { display: flex; align-items: center; justify-content: space-between; gap: .4rem; margin-top: .65rem; font-size: .6875rem; color: var(--text-muted); }
+.code-setup-control { border-radius: .3rem; padding: .35rem .4rem; background: var(--bg-app); color: var(--text-secondary); font-size: .6875rem; }
+.code-setup-control:hover { background: var(--bg-surface-hover); }
+.code-icon-button { min-width: 2rem; min-height: 2rem; border-radius: .3rem; color: var(--text-secondary); }
+.code-icon-button:hover, .code-nav-button:hover, .code-session-row:hover { background: var(--bg-surface-hover); }
+.code-nav-button { display: flex; align-items: center; gap: .65rem; width: 100%; padding: .6rem; border-radius: .35rem; color: var(--text-secondary); font-size: .75rem; text-align: left; }
+.code-session-row { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .6rem; margin-bottom: .15rem; border-radius: .35rem; text-align: left; }
+.code-context-card { border: 1px solid var(--border-default); border-radius: .6rem; padding: .85rem; font-size: .75rem; line-height: 1.6; }
+.code-context-card h2 { margin-bottom: .5rem; color: var(--text-primary); font-size: .6875rem; font-weight: 600; }
+.code-workbench :is(button, summary, select, input, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.code-workbench .chat-markdown { overflow-wrap: anywhere; }
+@media (max-width: 767px) { .code-composer-slot { padding-inline: .75rem; } }
+
 /* ── Mobile / viewport hardening ─────────────────────── */
 html {
   /* Prevent iOS from auto-zooming text on orientation change. */
