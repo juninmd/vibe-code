@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { type AgentRun, MANUAL_TASK_TAG, type Task } from "@vibe-code/shared";
+import { type AgentRun, MANUAL_TASK_TAG, REMOTE_SESSION_TAG, type Task } from "@vibe-code/shared";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { SkillsLoader } from "../skills/loader";
@@ -103,6 +103,14 @@ export class Orchestrator {
     this.maxConcurrent = Math.max(1, Math.min(50, n));
   }
 
+  /** Whether an engine can continue a remote conversation instead of starting fresh. */
+  supportsSessionResume(engineName?: string | null): boolean {
+    // Fail closed: a task without a persisted engine may resolve to an engine
+    // that ignores the resume option, which would silently drop the context.
+    if (!engineName) return false;
+    return this.registry.isResumable(engineName);
+  }
+
   getActiveRunEngines(): Map<string, string> {
     const result = new Map<string, string>();
     for (const [taskId, active] of this.activeRuns) {
@@ -138,7 +146,8 @@ export class Orchestrator {
    * start a second, headless agent on the same branch.
    */
   private isHandDriven(task: Task): boolean {
-    if (task.tags?.includes(MANUAL_TASK_TAG)) return true;
+    if (task.tags?.includes(MANUAL_TASK_TAG) || task.tags?.includes(REMOTE_SESSION_TAG))
+      return true;
     // With lane sync on, issue labels move cards around: that must never start an agent.
     if (task.issueUrl && this.db.settings.get("lane_sync_enabled") === "true") return true;
     return this.db.runs.getLatestByTask(task.id)?.currentStatus === "terminal";
@@ -193,7 +202,13 @@ export class Orchestrator {
     }));
   }
 
-  async launch(task: Task, engineOverride?: string, modelOverride?: string): Promise<AgentRun> {
+  async launch(
+    task: Task,
+    engineOverride?: string,
+    modelOverride?: string,
+    remoteInput?: string
+  ): Promise<AgentRun> {
+    if (this.activeRuns.has(task.id)) throw new Error("This session is already running");
     if (this.activeCount >= this.maxConcurrent) {
       logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
       throw capacityError(this.maxConcurrent);
@@ -307,7 +322,8 @@ export class Orchestrator {
         this.hub,
         (c) => this.sysLog(run.id, task.id, c),
         () => {
-          this.activeRuns.delete(task.id);
+          const active = this.activeRuns.get(task.id);
+          if (active?.runId === run.id) this.activeRuns.delete(task.id);
           this.checkLoopAndRelaunch(task.id, engineOverride, modelOverride);
           if (this.db.tasks.getById(task.id)?.status !== "failed") {
             this.retryAttempts.delete(task.id);
@@ -317,9 +333,11 @@ export class Orchestrator {
         model,
         this.skillsLoader,
         this,
-        this.registry
+        this.registry,
+        remoteInput
       ).catch((err) => {
-        this.activeRuns.delete(task.id);
+        const active = this.activeRuns.get(task.id);
+        if (active?.runId === run.id) this.activeRuns.delete(task.id);
         console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
       });
 
@@ -360,7 +378,7 @@ export class Orchestrator {
 
     this.db.runs.updateStatus(active.runId, "cancelled", { finished_at: new Date().toISOString() });
     const task = this.db.tasks.update(taskId, { status: "backlog" });
-    this.activeRuns.delete(taskId);
+    if (!task?.tags.includes(REMOTE_SESSION_TAG)) this.activeRuns.delete(taskId);
     if (task) this.hub.broadcastAll({ type: "task_updated", task });
     this.hub.broadcastAll({ type: "run_status", runId: active.runId, taskId, status: "cancelled" });
   }
@@ -452,7 +470,7 @@ export class Orchestrator {
     modelOverride?: string
   ): void {
     const task = this.db.tasks.getById(taskId);
-    if (!task?.loopConfig?.enabled) return;
+    if (!task?.loopConfig?.enabled || task.tags.includes(REMOTE_SESSION_TAG)) return;
 
     const currentAttempt = task.loopConfig?.currentAttempt ?? 0;
     const maxAttempts = task.loopConfig?.maxAttempts ?? 3;
@@ -493,7 +511,7 @@ export class Orchestrator {
     modelOverride?: string
   ): void {
     const task = this.db.tasks.getById(taskId);
-    if (task?.status !== "failed") return;
+    if (task?.status !== "failed" || task.tags.includes(REMOTE_SESSION_TAG)) return;
 
     if (AUTO_RETRY_MAX <= 0) {
       this.blockFailedTask(taskId, "Agent failed and automatic retry is disabled.");

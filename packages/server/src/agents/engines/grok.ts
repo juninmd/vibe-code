@@ -8,6 +8,7 @@ export class GrokEngine implements AgentEngine {
   name = "grok";
   displayName = "Grok";
   binaryName = "grok";
+  supportsResume = true;
   private processes = new Map<string, Subprocess>();
 
   async isAvailable(): Promise<boolean> {

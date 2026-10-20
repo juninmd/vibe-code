@@ -95,8 +95,11 @@ describe("GeminiEngine", () => {
       expect(result).toBe(false);
     });
 
-    it("returns false when command resolution fails", async () => {
+    it("returns false when command resolution and the PATH fallback fail", async () => {
       mockAccessSuccess = false;
+      spyOn(Bun, "spawn").mockImplementation(() => {
+        throw new Error("Command not found");
+      });
       const result = await engine.isAvailable();
       expect(result).toBe(false);
     });

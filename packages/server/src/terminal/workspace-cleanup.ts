@@ -9,7 +9,9 @@ export function listProtectedWorkspaces(db: Db): Set<string> {
       `SELECT DISTINCT r.worktree_path AS path
          FROM agent_runs r
          JOIN tasks t ON t.id = r.task_id
-        WHERE r.current_status = 'terminal'
+        WHERE (r.current_status = 'terminal' OR EXISTS (
+          SELECT 1 FROM json_each(t.tags) WHERE value = 'remote-session'
+        ))
           AND r.worktree_path IS NOT NULL
           AND t.status NOT IN ('done', 'archived')`
     )

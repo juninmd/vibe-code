@@ -1,0 +1,5 @@
+# Keep Biome inputs consistent across Windows and Linux checkouts.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.css text eol=lf
