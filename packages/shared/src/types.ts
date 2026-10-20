@@ -595,6 +595,8 @@ export interface TerminalStartRequest {
   /** A harness, or "shell" for a plain shell in the task workspace. */
   engine?: HarnessEngine | "shell";
   model?: string;
+  /** Harness-native effort/variant, applied when the terminal starts. */
+  effort?: string;
   /** Names of skills the operator picked; makes the task's skills manual. */
   skills?: string[];
   /** Go back to automatic skill selection (ignored when `skills` is set). */
@@ -614,6 +616,8 @@ export interface TerminalState {
   live: boolean;
   runId: string | null;
   engine: HarnessEngine | "shell" | null;
+  model?: string | null;
+  effort?: string | null;
   /** Names of the skills currently injected into the task workspace. */
   skills: string[];
   /** Same skills with the reason each one was applied. */
@@ -1070,6 +1074,21 @@ export interface RegistryAssetRecord {
   version?: string;
   compatibility?: string | null;
   checksum: string;
+  bundleRoot?: string;
+  fileCount?: number;
+}
+
+export interface RemotePluginCatalog {
+  repo: string;
+  ref: string;
+  commit: string;
+  assets: { name: string; path: string; category: SkillCategory; files: number }[];
+}
+
+export interface HarnessModel {
+  id: string;
+  name: string;
+  efforts: string[];
 }
 
 export interface InstallRegistryAssetRequest {

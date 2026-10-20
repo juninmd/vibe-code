@@ -210,6 +210,8 @@ export function resolveOpencodeNativeFromShim(
 ): string | null {
   if (extname(shimPath).toLowerCase() !== ".cmd") return null;
   const prefix = dirname(shimPath);
+  const v2Native = join(prefix, "node_modules", "@opencode", "cli", "bin", "opencode.exe");
+  if (stat(v2Native)) return v2Native;
   for (const pkg of opencodeWindowsPackageCandidates(arch)) {
     const candidate = join(
       prefix,

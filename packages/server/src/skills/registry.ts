@@ -9,6 +9,7 @@ import type {
   SkillCategory,
 } from "@vibe-code/shared";
 import type { Db } from "../db";
+import { safeAssetPath } from "./github-catalog";
 
 export interface RemoteSkillSource {
   name: string;
@@ -184,16 +185,91 @@ export class SkillRegistryService {
     return this.readManifest();
   }
 
+  async stageBundle(bundle: {
+    repo: string;
+    commit: string;
+    path: string;
+    files: { path: string; content: Uint8Array }[];
+  }): Promise<RegistryAssetRecord> {
+    await this.init();
+    const entryPath = bundle.path.endsWith("SKILL.md") ? "SKILL.md" : basename(bundle.path);
+    const entry = bundle.files.find((file) => file.path === entryPath);
+    if (!entry) throw new Error("Arquivo de entrada ausente.");
+    const target = this.inferTarget(
+      bundle.repo,
+      bundle.commit,
+      bundle.path,
+      new TextDecoder().decode(entry.content)
+    );
+    if (!/^[\w.-]+$/.test(target.name) || target.name === "." || target.name === "..")
+      throw new Error("Nome de plugin inválido.");
+    if (bundle.files.some((file) => !safeAssetPath(file.path)))
+      throw new Error("Caminho de arquivo inválido.");
+    const manifest = await this.readManifest();
+    const id = `${target.category}:${target.name}`;
+    if (manifest.some((record) => record.id === id && record.reviewStatus !== "rejected"))
+      throw new Error(
+        "Este plugin já foi importado. Remova a versão anterior antes de importar novamente."
+      );
+    const bundleRoot =
+      target.category === "skill" ? join("skills", target.name) : target.localFilePath;
+    const root = this.resolveStoragePath("pending_review", bundleRoot);
+    const checksum = createHash("sha256");
+    for (const file of [...bundle.files].sort((a, b) => a.path.localeCompare(b.path))) {
+      const destination = target.category === "skill" ? join(root, file.path) : root;
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, file.content);
+      checksum.update(file.path).update("\0").update(file.content).update("\0");
+    }
+    const record: RegistryAssetRecord = {
+      id,
+      name: target.name,
+      category: target.category,
+      filePath: this.resolveStoragePath("pending_review", target.localFilePath),
+      bundleRoot,
+      fileCount: bundle.files.length,
+      sourceRepo: bundle.repo,
+      sourceRef: bundle.commit,
+      sourceUrl: target.sourceUrl,
+      reviewStatus: "pending_review",
+      installedAt: new Date().toISOString(),
+      reviewedAt: null,
+      checksum: checksum.digest("hex"),
+    };
+    await this.writeManifest([...manifest.filter((item) => item.id !== id), record]);
+    return record;
+  }
+
+  async content(id: string): Promise<string> {
+    const record = (await this.readManifest()).find(
+      (item) => item.id === id && item.reviewStatus !== "rejected"
+    );
+    if (!record) throw new Error("Plugin não encontrado.");
+    return readFile(record.filePath, "utf8");
+  }
+
   async approve(id: string): Promise<RegistryAssetRecord> {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === id);
     if (!record) throw new Error("Registry asset not found");
     if (record.reviewStatus === "active") return record;
 
+    if (record.reviewStatus !== "pending_review")
+      throw new Error("O plugin não está aguardando revisão.");
     const relativePath = record.filePath.replace(`${this.pendingDir}${sep}`, "");
     const activePath = this.resolveStoragePath("active", relativePath);
-    await mkdir(dirname(activePath), { recursive: true });
-    await rename(record.filePath, activePath);
+    if (record.bundleRoot) {
+      await mkdir(dirname(this.resolveStoragePath("active", record.bundleRoot)), {
+        recursive: true,
+      });
+      await rename(
+        this.resolveStoragePath("pending_review", record.bundleRoot),
+        this.resolveStoragePath("active", record.bundleRoot)
+      );
+    } else {
+      await mkdir(dirname(activePath), { recursive: true });
+      await rename(record.filePath, activePath);
+    }
 
     const updated: RegistryAssetRecord = {
       ...record,
@@ -210,7 +286,14 @@ export class SkillRegistryService {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === id);
     if (!record) throw new Error("Registry asset not found");
-    await rm(record.filePath, { force: true, recursive: true });
+    if (record.reviewStatus === "active")
+      throw new Error("Remova o plugin ativo antes de rejeitá-lo.");
+    await rm(
+      record.bundleRoot
+        ? this.resolveStoragePath(record.reviewStatus, record.bundleRoot)
+        : record.filePath,
+      { force: true, recursive: true }
+    );
     const updated: RegistryAssetRecord = {
       ...record,
       reviewStatus: "rejected",
@@ -224,7 +307,12 @@ export class SkillRegistryService {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === name || entry.name === name);
     if (!record) return;
-    await rm(record.filePath, { recursive: true, force: true });
+    await rm(
+      record.bundleRoot
+        ? this.resolveStoragePath(record.reviewStatus, record.bundleRoot)
+        : record.filePath,
+      { recursive: true, force: true }
+    );
     await this.writeManifest(manifest.filter((entry) => entry.id !== record.id));
   }
 

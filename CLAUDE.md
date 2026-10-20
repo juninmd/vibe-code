@@ -58,6 +58,8 @@ Repository contract entrypoints:
 
 ### Web internals (`packages/web/src/`)
 
+- **`prototypes/unified-remote/`** — isolated `/prototype` workspace candidate; inline skills/plugins/settings and task harness terminals, no board or task questionnaire. Preview with `./scripts/preview-unified.ps1` after building. See `docs/unified-remote-prototype.md` for real/demo boundaries and live verification commands.
+
 - **`api/client.ts`** — typed fetch wrapper over the REST API
 - **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)
 - **`components/`** — `TaskPanel` (terminal-first task view with `TaskTerminal` xterm + `SkillPicker`), `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)

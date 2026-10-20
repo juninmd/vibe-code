@@ -30,6 +30,7 @@ import {
   writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
+import { harnessModels, openCodeV2, prepareOpenCodeSession } from "./model-catalog";
 import { resolveShellCommand, TerminalSessionService } from "./session-service";
 import { manualPicks, planSkills, skillNames } from "./skill-plan";
 
@@ -55,6 +56,8 @@ interface LiveSession {
   engine: HarnessEngine | "shell";
   cwd: string;
   plan: SkillPlan;
+  model?: string | null;
+  effort?: string;
 }
 
 /** A terminal the app opened for a CLI session that was started outside vibe-code. */
@@ -179,6 +182,8 @@ export class TerminalController {
         live: true,
         runId: live.runId,
         engine: live.engine,
+        model: live.model,
+        effort: live.effort,
         skills: skillNames(live.plan),
         applied: live.plan.applied,
         skillMode: live.plan.mode,
@@ -551,6 +556,15 @@ export class TerminalController {
     const engine = shell
       ? this.pickDefaultEngine(task)
       : await this.resolveEngine(task, request.engine as HarnessEngine | undefined);
+    if (request.effort) {
+      const catalog = await harnessModels(engine, this.deps.registry);
+      const selected = catalog.find((item) => item.id === (request.model ?? task.model));
+      if (!selected?.efforts.includes(request.effort))
+        throw new TerminalError(
+          "bad_request",
+          "O effort selecionado não está disponível para este modelo no harness instalado."
+        );
+    }
     // A shell session is recorded under the task's harness so "Create PR" keeps working.
     const run = db.runs.create(taskId, engine);
 
@@ -569,44 +583,71 @@ export class TerminalController {
 
     let launch: { argv: string[]; env: Record<string, string> };
     let plan: SkillPlan = EMPTY_PLAN;
-    if (shell) {
-      launch = {
-        argv: resolveShellCommand(),
-        env: this.harnessEnv(task, run.id),
-      };
-    } else {
-      const resume = await this.canResume(cwd, engine);
-      await writeTaskBrief(cwd, task);
-      const { entries, injectable } = await this.loadSkills();
-      const wanted = await this.resolvePlan(task, cwd, entries, {
-        skills: request.skills,
-        mode: request.skillMode,
-      });
-      const installed = await installAgentPlugin(cwd, engine, skillNames(wanted), injectable);
-      plan = {
-        mode: wanted.mode,
-        applied: wanted.applied.filter(
-          (skill) => !installed.missing.includes(skill.name) || skill.source === "manual"
-        ),
-      };
-      await writeSkillPlan(cwd, plan);
-      if (engine === "opencode") {
-        await writeOpencodeModel(cwd, request.model ?? task.model);
-      }
+    try {
+      if (shell) {
+        launch = {
+          argv: resolveShellCommand(),
+          env: this.harnessEnv(task, run.id),
+        };
+      } else {
+        let resume = await this.canResume(cwd, engine);
+        await writeTaskBrief(cwd, task);
+        const { entries, injectable } = await this.loadSkills();
+        const wanted = await this.resolvePlan(task, cwd, entries, {
+          skills: request.skills,
+          mode: request.skillMode,
+        });
+        const installed = await installAgentPlugin(cwd, engine, skillNames(wanted), injectable);
+        plan = {
+          mode: wanted.mode,
+          applied: wanted.applied.filter(
+            (skill) => !installed.missing.includes(skill.name) || skill.source === "manual"
+          ),
+        };
+        await writeSkillPlan(cwd, plan);
+        let sessionId: string | undefined;
+        const v2 = engine === "opencode" && (await openCodeV2());
+        if (v2) {
+          const prepared = await prepareOpenCodeSession(
+            cwd,
+            task.title,
+            request.model ?? task.model,
+            request.effort
+          );
+          sessionId = prepared.id;
+          resume = prepared.resumed;
+        } else if (engine === "opencode") {
+          await writeOpencodeModel(cwd, request.model ?? task.model);
+        }
 
-      launch = buildHarnessLaunch({
-        engine,
-        task,
-        model: request.model ?? task.model ?? undefined,
-        resume,
-        pluginDir: installed.pluginDir,
-        apiKeys: {
-          anthropic: db.settings.get("anthropic_api_key") || undefined,
-          openai: db.settings.get("openai_api_key") || undefined,
-          gemini: db.settings.get("gemini_api_key") || undefined,
-        },
-        env: this.harnessEnv(task, run.id),
+        launch = buildHarnessLaunch({
+          engine,
+          task,
+          model: request.model ?? task.model ?? undefined,
+          effort: request.effort,
+          sessionId,
+          resume,
+          pluginDir: installed.pluginDir,
+          apiKeys: {
+            anthropic: db.settings.get("anthropic_api_key") || undefined,
+            openai: db.settings.get("openai_api_key") || undefined,
+            gemini: db.settings.get("gemini_api_key") || undefined,
+          },
+          env: this.harnessEnv(task, run.id),
+        });
+        if (engine === "opencode" && !v2 && request.effort) {
+          launch.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+            agent: { build: { model: request.model ?? task.model, variant: request.effort } },
+          });
+        }
+      }
+    } catch (error) {
+      db.runs.updateStatus(run.id, "failed", {
+        finished_at: new Date().toISOString(),
+        error_message: error instanceof Error ? error.message : String(error),
+        worktree_path: cwd,
       });
+      throw error;
     }
 
     db.runs.updateStatus(run.id, "running", {
@@ -620,6 +661,8 @@ export class TerminalController {
       engine: shell ? "shell" : engine,
       cwd,
       plan,
+      model: request.model ?? task.model,
+      effort: request.effort,
     });
     if (!shell) {
       await writeFile(join(cwd, SESSION_MARKER), JSON.stringify({ engine, runId: run.id }), "utf8");
