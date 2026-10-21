@@ -2,6 +2,7 @@ import { useCurrentWorkspace } from "@vibe-code/core";
 import type { WsClientMessage, WsServerMessage } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiKey } from "../api/client";
+import { getNativeWsOrigin } from "../native/server-url";
 
 type MessageHandler = (msg: WsServerMessage) => void;
 
@@ -49,9 +50,12 @@ export function useWebSocket(onMessage: MessageHandler) {
       const apiKey = getApiKey();
       if (apiKey) params.set("api_key", apiKey);
       const queryParam = params.toString() ? `?${params.toString()}` : "";
-      const wsUrl = import.meta.env.DEV
-        ? `${protocol}//${window.location.hostname}:${apiPort}/ws${queryParam}`
-        : `${protocol}//${window.location.host}/ws${queryParam}`;
+      const nativeOrigin = getNativeWsOrigin();
+      const wsUrl = nativeOrigin
+        ? `${nativeOrigin}/ws${queryParam}`
+        : import.meta.env.DEV
+          ? `${protocol}//${window.location.hostname}:${apiPort}/ws${queryParam}`
+          : `${protocol}//${window.location.host}/ws${queryParam}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
