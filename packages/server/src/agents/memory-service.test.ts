@@ -79,11 +79,13 @@ describe("MemoryService", () => {
     const { db, child } = seedTaskGraph();
     const service = new MemoryService(db);
     await service.upsertMemory(child.id, "task", "Current memory line 1");
-    db.memories.update(db.memories.getByTaskIdAndScope(child.id, "task")!.id, {
-      compactedAt: new Date().toISOString(),
-      needsCompaction: false,
-      content: "old",
-    });
+    const memoryId = db.memories.getByTaskIdAndScope(child.id, "task")?.id;
+    if (memoryId)
+      db.memories.update(memoryId, {
+        compactedAt: new Date().toISOString(),
+        needsCompaction: false,
+        content: "old",
+      });
     const memories = await service.getRelevantContext(child, 5);
     expect(memories).toBeDefined();
   });
