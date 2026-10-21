@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
-    extractDocsAssetPath,
     buildAssetBlobUrl,
-    normalizeRepoWebUrl,
     docsRelativePath,
+    extractDocsAssetPath,
+    normalizeRepoWebUrl,
     taskSlug
 } from "./executor";
 
