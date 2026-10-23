@@ -1,11 +1,31 @@
+<div align="center">
+
 # 🚀 Harness Remote
+
+**Remote control for autonomous coding agents.**<br/>
+Ask for a task from your phone, watch the harness work, and reply, installable as a PWA.
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.3+-orange?style=flat-square&logo=bun)](https://bun.sh/)
+[![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev/)
+[![Hono](https://img.shields.io/badge/Hono-4.12-red?style=flat-square)](https://hono.dev/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](#-license)
+[![Status](https://img.shields.io/badge/Status-Certified_Production_Ready-success?style=flat-square&logo=kubernetes)](https://vibe.antonio-code.duckdns.org/health)
+
+**[Quick Start](#-quick-start)** · **[Configuração](#-configuração-avançada)** · **[Troubleshooting](#-troubleshooting)** · **[License](#-license)**
+
+<br/>
+
+<img src=".github/assets/screenshots/home.png" alt="Tela inicial do Harness Remote no modo Code: lista de sessões à esquerda, campo 'Describe a task' na base e painel de contexto da sessão à direita" width="860" />
+
+</div>
 
 > Remote control for autonomous coding agents. Ask for a task from your phone,
 > watch the harness work, and reply — installable as a PWA. Under the hood it is
 > the same **Autonomous Code Production Control Plane**: a kanban board, runs,
 > validation, reviews and PRs, with **code mode** as the default surface.
 
-## Operator Note
+## 📌 Operator Note
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
 * Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.
 * Code mode doc: [docs/remote-control.md](docs/remote-control.md)
@@ -15,14 +35,6 @@
 
 
 > **Autonomous Code Production Control Plane** — Orquestra agentes de código IA (Claude Code, Aider, OpenCode) para transformar objetivos em mudanças validadas, evidências operacionais e handoffs previsíveis entre múltiplos repositórios Git.
-
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![Bun](https://img.shields.io/badge/Bun-1.3+-orange?style=flat-square&logo=bun)](https://bun.sh/)
-[![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev/)
-[![Hono](https://img.shields.io/badge/Hono-4.12-red?style=flat-square)](https://hono.dev/)
-[![SQLite](https://img.shields.io/badge/SQLite-3-lightblue?style=flat-square&logo=sqlite)](https://www.sqlite.org/)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](./LICENSE)
-[![Status](https://img.shields.io/badge/Status-Certified_Production_Ready-success?style=for-the-badge&logo=kubernetes)](https://vibe.antonio-code.duckdns.org/health)
 
 ---
 
@@ -168,6 +180,10 @@ por CLI, se o store foi encontrado e quantos cards vieram dele.
 ```
 vibe-code (Bun Monorepo)
 ├── packages/shared/        (TypeScript types kompartilhados)
+├── packages/core/          (queries, realtime e providers compartilhados)
+├── packages/db-adapter/    (contrato e migrações do banco)
+├── packages/db-sqlite/     (adaptador SQLite)
+├── packages/db-postgres/   (adaptador PostgreSQL)
 ├── packages/server/        (Hono + Bun + SQLite)
 └── packages/web/           (React 19 + Vite + Tailwind CSS 4)
 ```
@@ -180,7 +196,7 @@ vibe-code (Bun Monorepo)
 - 🛠️ **Zod** — Validação de tipos em runtime
 
 **Frontend:**
-- ⚛️ **React 19** — UI moderna com Server Components
+- ⚛️ **React 19** — UI moderna com componentes e hooks
 - 🎨 **Tailwind CSS 4** — Estilização rápida e responsiva
 - ⚡ **Vite** — Dev server ultrarrápido com HMR
 - 🎭 **dnd-kit** — Drag-and-drop sem dependências pesadas
@@ -328,7 +344,7 @@ flowchart TD
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/vibe-code.git
+git clone https://github.com/juninmd/vibe-code.git
 cd vibe-code
 
 # Instale dependências (Bun)
@@ -341,10 +357,13 @@ bun run build
 bun run typecheck
 ```
 
+> [!NOTE]
+> `bun install --frozen-lockfile` falha neste momento: o `bun.lock` está fora de sincronia com os `package.json`. Use `bun install` simples.
+
 ### 2️⃣ Inicie o Servidor
 
 ```bash
-# Ambos server e web (recomendado)
+# Ambos server e web (recomendado; no Windows rode em Git Bash ou WSL)
 bun run dev
 
 # Apenas o servidor/API (sem frontend dev)
@@ -354,18 +373,10 @@ bun run dev:server
 bun run dev:web
 ```
 
-**Saída esperada:**
+**Saída real** (trecho dos scripts `dev` de `packages/server` e `packages/web`, Windows 11, Bun 1.3.13):
 ```
-$ bun run dev
-
-@vibe-code/server dev
- ▶ http://localhost:3000   HTTP
- ▶ http://localhost:3000/ws  WebSocket
-
-@vibe-code/web dev
- ▶ http://localhost:5173   Local
-
-Press h to show help
+vibe-code server running on http://localhost:3000
+➜  Local:   http://localhost:5173/
 ```
 
 ### 3️⃣ Acesse a Interface Web
@@ -373,7 +384,7 @@ Press h to show help
 Abra seu navegador em **http://localhost:3000**
 
 No desenvolvimento local, `3000` é a entrada única do sistema:
-- `/` renderiza o frontend via Vite, usando `VITE_DEV_URL`.
+- `/` renderiza o frontend via Vite, usando `VITE_DEV_URL` (defina `VITE_DEV_URL=http://localhost:5173`, como em `.env.example`; sem ela, `/` responde `404 Not Found`).
 - `/api/*` é a API do backend.
 - `/ws` é o WebSocket da aplicação.
 
@@ -428,13 +439,13 @@ O repositório será clonado como **bare clone** em `~/.vibe-code/repos/`
 A imagem oficial inclui Bun, git, Claude Code CLI e OpenCode CLI prontos para uso. Skills (em `~/.agents`) **não** são embutidas na imagem — monte um volume nesse caminho e popule-o externamente conforme sua necessidade.
 
 ```bash
-# Build local
+# Build local (não verificado nesta revisão: Docker não foi executado)
 docker build -t vibe-code:local .
 
-# Run
+# Run (a chave é lida do ambiente do host, não escrita no comando)
 docker run --rm \
   -p 3000:3000 \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e ANTHROPIC_API_KEY \
   -v vibe-code-data:/data \
   -v vibe-code-skills:/home/vibe/.agents \
   vibe-code:local
@@ -446,7 +457,7 @@ docker run --rm \
 | --- | --- |
 | Porta HTTP/WS | `3000` (`/api/*`, `/ws`) |
 | Healthcheck | `GET /api/health` |
-| User | `vibe` (uid 1000) |
+| User | `vibe` (uid 10001) |
 | Volume — dados | `/data` (SQLite, repos bare, worktrees) |
 | Volume — skills | `/home/vibe/.agents` |
 | Env obrigatória | `ANTHROPIC_API_KEY` (ou outras keys conforme engine) |
@@ -458,40 +469,34 @@ docker run --rm \
 
 ### Variáveis de Ambiente
 
-```bash
-# Arquivo: .env (crie na raiz)
+Crie um `.env` na raiz (modelo em `.env.example`). Nunca versione o `.env`. Chaves e tokens aparecem só pelo nome.
 
-# Backend
-PORT=3000                                      # (default: 3000)
-VIBE_CODE_DATA_DIR=~/.vibe-code              # (default: ~/.vibe-code)
-VIBE_CODE_MAX_AGENTS=4                        # Max concurrent runs
-VIBE_CODE_AGENT_TIMEOUT_MS=7200000            # 2h timeout (default: 2h)
-VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS=3      # Tentativas do validador final (lint/test/build)
-VIBE_CODE_REVIEW_ENABLED=true                 # Enable review pipeline
-VIBE_CODE_REVIEW_STRICT=false                 # Block PR on review failures
-VIBE_CODE_REVIEW_AUTO_APPLY=true              # Apply frontend/backend/security/quality suggestions
-VIBE_CODE_DOCS_AUTO_APPLY=true                # Run docs finisher step before PR creation
-VIBE_CODE_PUBLIC_URL=https://vibe.example.com # URL pública para links em notificações externas
-
-# Session board (sessões de CLI → cards). Só defina se a CLI guardar as
-# sessões fora do caminho padrão; aceita lista separada por vírgula.
-# VIBE_OPENCODE_SESSIONS_DIR=~/.local/share/opencode
-# VIBE_CLAUDE_SESSIONS_DIR=~/.claude/projects
-# VIBE_ANTIGRAVITY_SESSIONS_DIR=~/.antigravity/sessions
-VIBE_SESSION_ACTIVE_WINDOW_MS=900000          # ≤ 15min de inatividade => active
-VIBE_SESSION_IDLE_WINDOW_MS=86400000          # > 24h => done
-
-# GitHub (Para criar PRs automaticamente)
-GITHUB_TOKEN=ghp_xxxxx...                     # (required para PRs)
-
-# OpenCode (se usar esse engine)
-OPENCODE_API_KEY=sk_xxxx...                   # (optional)
-
-# Telegram (notificações de conclusão de tasks)
-# Configure via Settings na UI ou via variáveis abaixo
-# TELEGRAM_BOT_TOKEN=...
-# TELEGRAM_CHAT_ID=...
-```
+| Variável | Para que serve | Padrão | Exemplo |
+|---|---|---|---|
+| `PORT` | Porta HTTP/WS do servidor | `3000` | `3000` |
+| `VITE_DEV_URL` | Frontend Vite servido em `/` no desenvolvimento | sem padrão (obrigatória no dev) | `http://localhost:5173` |
+| `VIBE_CODE_DATA_DIR` | Dados: SQLite, repos bare e worktrees | `~/.vibe-code` | `~/.vibe-code` |
+| `VIBE_CODE_MAX_AGENTS` | Máximo de runs concorrentes | `4` | `1` em ambientes com pouca memória |
+| `VIBE_CODE_AGENT_TIMEOUT_MS` | Timeout total de um run | `7200000` (2 h) | `10800000` |
+| `VIBE_CODE_INACTIVITY_MS` | Aborta run sem nenhuma atividade | `600000` (10 min) | `1200000` |
+| `VIBE_CODE_FINAL_VALIDATOR_MAX_ATTEMPTS` | Tentativas do validador final (lint/test/build) | `3` | `3` |
+| `VIBE_CODE_REVIEW_ENABLED` | Liga o pipeline de review (`false` desliga) | `true` | `true` |
+| `VIBE_CODE_REVIEW_STRICT` | Bloqueia o PR quando o review falha (`true` ativa) | `false` | `false` |
+| `VIBE_CODE_REVIEW_AUTO_APPLY` | Aplica sugestões de frontend/backend/security/quality (`false` desliga) | `true` | `true` |
+| `VIBE_CODE_DOCS_AUTO_APPLY` | Etapa final de docs antes do PR (`false` desliga) | `true` | `true` |
+| `VIBE_CODE_PUBLIC_URL` | Base pública dos links em notificações e do callback OAuth | sem padrão | `https://vibe.example.com` |
+| `VIBE_CODE_SESSION_NAME_PREFIX` | Prefixo dos nomes de sessão derivados do prompt | hostname da máquina | `harness` |
+| `VIBE_SESSION_ACTIVE_WINDOW_MS` | Até este tempo sem atividade, a sessão é `active` | `900000` (15 min) | `900000` |
+| `VIBE_SESSION_IDLE_WINDOW_MS` | Após este tempo, a sessão vira `done` | `86400000` (24 h) | `86400000` |
+| `VIBE_OPENCODE_SESSIONS_DIR` | Diretório de sessões do OpenCode (lista separada por vírgula) | padrão da CLI | `~/.local/share/opencode` |
+| `VIBE_CLAUDE_SESSIONS_DIR` | Diretório de sessões do Claude Code (lista separada por vírgula) | padrão da CLI | `~/.claude/projects` |
+| `VIBE_ANTIGRAVITY_SESSIONS_DIR` | Diretório de sessões do Antigravity CLI (lista separada por vírgula) | padrão da CLI | `~/.antigravity/sessions` |
+| `GITHUB_TOKEN` | **Secreto.** Token para criar PRs; obrigatório para PRs | sem padrão | — |
+| `ANTHROPIC_API_KEY` | **Secreto.** Chave dos engines Claude (ou outras keys, conforme o engine) | sem padrão | — |
+| `LITELLM_BASE_URL` | Gateway LiteLLM | `http://localhost:4000` | `http://localhost:4000` |
+| `LITELLM_MASTER_KEY` | **Secreto.** Chave mestra do LiteLLM | sem padrão | — |
+| `TELEGRAM_BOT_TOKEN` | **Secreto.** Token do bot de notificações (também configurável em Settings) | sem padrão | — |
+| `TELEGRAM_CHAT_ID` | Chat que recebe as notificações (também configurável em Settings) | sem padrão | `-1001234567890` |
 
 ### Estrutura de Configuração Local
 
@@ -512,6 +517,8 @@ OPENCODE_API_KEY=sk_xxxx...                   # (optional)
 
 ### Engines Disponíveis
 
+Os três engines abaixo são os principais. Os demais adaptadores ficam em `packages/server/src/agents/engines/`.
+
 #### Claude Code
 ```bash
 # Instale Claude Code
@@ -526,7 +533,6 @@ claude --version
 
 **Features:**
 - ✅ Suporte completo a tools (file read/write, bash, git, etc)
-- ✅ Modelo mais poderoso (Claude 3.5 Sonnet)
 - ✅ stdin aberto para interatividade
 - ✅ Excelente para tasks complexas
 
@@ -535,7 +541,7 @@ claude --version
 # Instale via pip
 pip install aider-chat
 
-# Ou condaonda update
+# Ou via conda
 conda install -c conda-forge aider
 
 # Verificar
@@ -611,6 +617,17 @@ in [docs/remote-control.md](docs/remote-control.md).
 ---
 
 ## 🎮 Interface Web — Guia Completo
+
+### Tour
+
+| Tela | Captura | O que mostra |
+|---|---|---|
+| **Code** (padrão) | ![Tela Code com lista de sessões, campo de tarefa e painel de contexto](.github/assets/screenshots/home.png) | Conversa com o agente, sessões à esquerda e contexto do ambiente à direita |
+| **Board** | TODO(screenshot): Board kanban com tasks nas colunas Backlog, In Progress, Review e Done | Pipeline de tasks com drag-and-drop |
+| **Detalhe da task** | TODO(screenshot): painel de detalhes com a aba Output e logs ao vivo | Status, engine, branch e logs do run |
+| **Session board** | TODO(screenshot): Session Board com sessões de CLI em dados fictícios | Sessões locais de OpenCode, Claude Code e Antigravity como cards |
+
+> A captura da tela Code foi feita com um diretório de dados vazio. As demais telas precisam de tasks e sessões de exemplo, ainda não capturadas.
 
 ### Session Board (sessões de CLI viram cards)
 
@@ -755,55 +772,50 @@ bun run build
 ```
 vibe-code/
 ├── packages/
-│   ├── shared/
-│   │   └── src/
-│   │       ├── types.ts          # Task, Run, Log types
-│   │       ├── api.ts            # Socket message types
-│   │       └── enums.ts          # TaskStatus, etc
+│   ├── shared/src/        # types.ts, lanes.ts: tipos compartilhados
+│   ├── core/src/          # queries/, realtime/, providers/, autopilots/
+│   ├── db-adapter/src/    # migrations.ts, errors.ts: contrato do banco
+│   ├── db-sqlite/src/     # adaptador SQLite
+│   ├── db-postgres/src/   # adaptador PostgreSQL
 │   │
 │   ├── server/
 │   │   ├── src/
 │   │   │   ├── agents/
-│   │   │   │   ├── engine.ts       # AgentEngine interface
-│   │   │   │   ├── registry.ts     # Engine discovery
-│   │   │   │   ├── orchestrator.ts # Task lifecycle
+│   │   │   │   ├── engine.ts         # interface AgentEngine
+│   │   │   │   ├── registry.ts       # descoberta de engines
+│   │   │   │   ├── orchestrator/     # ciclo de vida da task
 │   │   │   │   ├── schedule-runner.ts
-│   │   │   │   └── engines/        # engine adapters
+│   │   │   │   └── engines/          # adaptadores (claude-code.ts, aider.ts, opencode.ts, ...)
 │   │   │   ├── db/
-│   │   │   │   ├── index.ts        # Database singleton
-│   │   │   │   ├── migrations.ts
-│   │   │   │   └── tables.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── schema.ts
 │   │   │   ├── git/
-│   │   │   │   └── git-service.ts  # Worktree management
+│   │   │   │   └── git-service.ts    # gerenciamento de worktrees
 │   │   │   ├── ws/
-│   │   │   │   └── broadcast.ts    # WebSocket hub
-│   │   │   ├── api/
-│   │   │   │   ├── repos.ts
-│   │   │   │   ├── tasks.ts
-│   │   │   │   ├── runs.ts
-│   │   │   │   └── engines.ts
-│   │   │   └── index.ts            # Entry point
+│   │   │   │   └── broadcast.ts      # hub WebSocket
+│   │   │   ├── api/                  # repos.ts, tasks.ts, runs.ts, engines.ts, inbox.ts, runtimes.ts, sessions.ts
+│   │   │   └── index.ts              # entry point
 │   │   └── package.json
 │   │
 │   └── web/
 │       ├── src/
 │       │   ├── components/
-│       │   │   ├── Board.tsx       # Kanban board
+│       │   │   ├── Board.tsx         # kanban
 │       │   │   ├── TaskCard.tsx
-│       │   │   ├── TaskDetail.tsx  # Slide-over
-│       │   │   ├── AgentOutput.tsx # Logs viewer
+│       │   │   ├── TaskDetail.tsx    # painel de detalhes
+│       │   │   ├── AgentOutput.tsx   # visualizador de logs
 │       │   │   ├── Sidebar.tsx
 │       │   │   ├── EnginesPanel.tsx
 │       │   │   └── ...
 │       │   ├── hooks/
-│       │   │   ├── useTasks.ts     # Task CRUD
+│       │   │   ├── useTasks.ts
 │       │   │   ├── useRepos.ts
-│       │   │   ├── useWebSocket.ts # WS reconnection
+│       │   │   ├── useWebSocket.ts   # reconexão do WS
 │       │   │   └── useEngines.ts
 │       │   ├── api/
-│       │   │   └── client.ts       # Typed fetch wrapper
+│       │   │   └── client.ts         # wrapper de fetch tipado
 │       │   ├── App.tsx
-│       │   └── index.tsx
+│       │   └── main.tsx
 │       └── package.json
 │
 ├── CLAUDE.md          # Dev guide para Claude Code
@@ -813,10 +825,10 @@ vibe-code/
 
 ### Adicionar um Novo Engine
 
-Use o comando `/new-engine`:
+Use o comando `/new-engine` do Claude Code (definido em `.claude/commands/new-engine.md`):
 
-```bash
-bun run new-engine my-ai-tool
+```text
+/new-engine my-ai-tool
 ```
 
 Isso scaffolda:
@@ -867,26 +879,27 @@ export class MyAIToolEngine implements AgentEngine {
 | Configuração | Padrão | Ambiente |
 |---|---|---|
 | Agent timeout | 2 horas | `VIBE_CODE_AGENT_TIMEOUT_MS` |
-| Stall detection | 5 minutos de silêncio | (automático) |
+| Stall detection | 10 minutos de silêncio | `VIBE_CODE_INACTIVITY_MS` |
 | Max concurrent agents | 4 | `VIBE_CODE_MAX_AGENTS` |
 | Task log buffer | 500 linhas na UI | (otimização frontend) |
 
 ### Monitoramento de Atividade
 
-Se um agente fica sem atividade (nenhum log) por **5 minutos**, vibe-code assume que ele emperrou e aborta:
+Se um agente fica sem atividade (nenhum log) por **10 minutos**, vibe-code assume que ele emperrou e aborta:
 
 ```
 Activity timeline:
 [14:45] API called → activity reset
 [14:46] Log event → activity update
 [14:47] Error event → activity update
-[14:52] [STALL DETECTED] 5min de silêncio → ABORT
+[14:57] [STALL DETECTED] 10min de silêncio → ABORT
 ```
 
 Isso evita tarefas penduradas indefinidamente. Você pode customizar:
 
 ```bash
 VIBE_CODE_AGENT_TIMEOUT_MS=10800000  # 3 horas
+VIBE_CODE_INACTIVITY_MS=1200000      # 20 minutos sem atividade
 ```
 
 ---
@@ -941,6 +954,15 @@ Classes de review automático:
 
 ---
 
+## ⚠️ Limitações conhecidas
+
+- O session board é somente leitura: lê o store de cada CLI, não executa nem grava nada e não mostra transcrição no card.
+- O servidor não instala CLIs de engines. Cada engine precisa estar instalado na máquina que roda o servidor.
+- A imagem de container não inclui skills. Monte `~/.agents` como volume (ver [Rodando em Container](#-rodando-em-container)).
+
+> [!WARNING]
+> Sem `GITHUB_TOKEN`, o vibe-code não cria PRs automaticamente.
+
 ## 🐛 Troubleshooting
 
 ### "Engine not available"
@@ -954,7 +976,7 @@ opencode --version
 # Se não estiver instalado:
 # Claude Code: https://www.anthropic.com/claude-code
 # Aider: pip install aider-chat
-# OpenCode: pip install opencode
+# OpenCode: npm install -g opencode-ai
 ```
 
 ### "Agent timed out after X minutes"
@@ -970,7 +992,7 @@ VIBE_CODE_AGENT_TIMEOUT_MS=7200000 bun run dev:server  # 2 horas
 # Verifique GitHub token
 echo $GITHUB_TOKEN
 
-# Regenrese em: https://github.com/settings/tokens
+# Regenere em: https://github.com/settings/tokens
 # Permissões necessárias: repo (full), workflow
 ```
 
@@ -1006,7 +1028,7 @@ Agent pode estar travado. Verifique:
 
 ```bash
 # Clone e instale
-git clone https://github.com/seu-usuario/vibe-code.git
+git clone https://github.com/juninmd/vibe-code.git
 cd vibe-code
 bun install
 
@@ -1040,12 +1062,20 @@ git push origin feat/sua-feature
 
 | Recurso | Link |
 |---------|------|
-| **AGENTS.md** | Índice curto de navegação para humanos e agentes |
-| **WORKFLOW.md** | Contrato-alvo de workflow em compatibilidade |
-| **docs/index.md** | Mapa da documentação operacional |
-| **docs/repo-contract.md** | Quality gates, boundaries e rollout |
-| **docs/glossary.md** | Vocabulário comum do control plane |
-| **CLAUDE.md** | Dev guide para contribuidores |
+| **[AGENTS.md](AGENTS.md)** | Índice curto de navegação para humanos e agentes |
+| **[WORKFLOW.md](WORKFLOW.md)** | Contrato-alvo de workflow em compatibilidade |
+| **[docs/index.md](docs/index.md)** | Mapa da documentação operacional |
+| **[docs/repo-contract.md](docs/repo-contract.md)** | Quality gates, boundaries e rollout |
+| **[docs/glossary.md](docs/glossary.md)** | Vocabulário comum do control plane |
+| **[docs/remote-control.md](docs/remote-control.md)** | Code mode, PWA e execução remota |
+| **[docs/terminal.md](docs/terminal.md)** | Terminal de tasks |
+| **[docs/lanes.md](docs/lanes.md)** | Lanes do board e labels de issues |
+| **[docs/android.md](docs/android.md)** | App Android |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Deploy do Harness Remote |
+| **[SECURITY.md](SECURITY.md)** | Política de segurança e reporte de vulnerabilidades |
+| **[CHANGELOG.md](CHANGELOG.md)** | Histórico de versões |
+| **[ROADMAP.md](ROADMAP.md)** | Roadmap de integrações |
+| **[CLAUDE.md](CLAUDE.md)** | Dev guide para contribuidores |
 | **Community** | Discussões via GitHub Issues |
 | **Bugs** | Report via GitHub Issues |
 
@@ -1070,4 +1100,4 @@ MIT © 2026 Vibe-Code Contributors
 
 **Feito com ❤️ por devs que amam automação e IA**
 
-*Last updated: April 2026*
+*Last updated: 2026-10-23*
