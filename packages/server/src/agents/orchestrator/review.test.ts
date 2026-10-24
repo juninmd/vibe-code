@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { runReviewPipeline } from "./review";
 
 describe("runReviewPipeline", () => {
@@ -47,7 +47,7 @@ describe("runReviewPipeline", () => {
             persona: "quality",
             hasBlocker: false,
             content: "INFO: Code is readable",
-          }
+          },
         ]);
       }
       return originalPromiseAll(values);
@@ -74,17 +74,13 @@ describe("runReviewPipeline", () => {
       sysLogMock
     );
 
-    expect(result.blockers).toEqual([
-      "[Frontend] BLOCKER: Frontend must not crash",
-    ]);
+    expect(result.blockers).toEqual(["[Frontend] BLOCKER: Frontend must not crash"]);
     expect(result.actionableFindings).toEqual([
       "[Frontend] INFO: Use functional components",
       "[Backend] WARNING: Unsafe DB query",
-      "[Quality] INFO: Code is readable"
+      "[Quality] INFO: Code is readable",
     ]);
-    expect(result.docsFindings).toEqual([
-      "[Docs] WARNING: Missing JSDoc",
-    ]);
+    expect(result.docsFindings).toEqual(["[Docs] WARNING: Missing JSDoc"]);
 
     expect(sysLogMock).toHaveBeenCalledWith(
       "r1",
@@ -110,7 +106,7 @@ describe("runReviewPipeline", () => {
           { persona: "backend", hasBlocker: false, content: "All good" },
           { persona: "docs", hasBlocker: false, content: "All good" },
           { persona: "security", hasBlocker: false, content: "All good" },
-          { persona: "quality", hasBlocker: false, content: "All good" }
+          { persona: "quality", hasBlocker: false, content: "All good" },
         ]);
       }
       return originalPromiseAll(values);
