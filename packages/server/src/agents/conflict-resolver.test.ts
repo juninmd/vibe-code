@@ -302,7 +302,6 @@ describe("ConflictResolver", () => {
         status: "review",
       });
       db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
-
       const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce((() => {
         throw new Error("Network error during check");
       }) as unknown as typeof fetch);

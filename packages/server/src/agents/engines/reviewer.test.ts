@@ -4,6 +4,8 @@ import { PERSONA_LABELS, runPersonaReview } from "./reviewer";
 const originalSpawn = Bun.spawn;
 
 describe("reviewer engine", () => {
+  const originalSpawn = Bun.spawn;
+
   afterEach(() => {
     mock.restore();
     Bun.spawn = originalSpawn;
@@ -12,6 +14,30 @@ describe("reviewer engine", () => {
   test("PERSONA_LABELS exists", () => {
     expect(PERSONA_LABELS.frontend).toBe("Frontend");
   });
+
+  const getSpawnMock = (
+    stdoutContent: string,
+    stderrContent: string = "",
+    exitCode: number = 0
+  ) => {
+    return mock((args: string[], _options: any) => {
+      // Mock for `git diff`
+      if (args[0] === "git" && args[1] === "diff") {
+        return {
+          stdout: new Blob(["dummy diff"]).stream(),
+          stderr: new Blob([""]).stream(),
+          exited: Promise.resolve(0),
+        };
+      }
+
+      // Mock for review engines
+      return {
+        stdout: new Blob([stdoutContent]).stream(),
+        stderr: new Blob([stderrContent]).stream(),
+        exited: Promise.resolve(exitCode),
+      };
+    });
+  };
 
   test("runPersonaReview handles successful gemini execution", async () => {
     const _spawnMock = mock((args, _options) => {
