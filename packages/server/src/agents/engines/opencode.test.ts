@@ -813,11 +813,11 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
     originalSpawn = Bun.spawn;
   });
   afterEach(() => {
-    Bun.spawn = originalSpawn;
+    // Bun.spawn = originalSpawn;
   });
 
   it("isAvailable returns true on success", async () => {
-    Bun.spawn = mock(() => ({
+    spyOn(Bun, "spawn").mockImplementation(() => ({
       exited: Promise.resolve(),
       exitCode: 0,
     })) as any;
@@ -826,7 +826,7 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
   });
 
   it("isAvailable returns false on failure", async () => {
-    Bun.spawn = mock(() => ({
+    spyOn(Bun, "spawn").mockImplementation(() => ({
       exited: Promise.resolve(),
       exitCode: 1,
     })) as any;
@@ -835,7 +835,7 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
   });
 
   it("isAvailable returns false on exception", async () => {
-    Bun.spawn = mock(() => {
+    spyOn(Bun, "spawn").mockImplementation(() => {
       throw new Error("spawn ENOENT");
     }) as any;
     const engine = new OpenCodeEngine();
@@ -843,7 +843,7 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
   });
 
   it("getVersion returns version text on success", async () => {
-    Bun.spawn = mock(() => ({
+    spyOn(Bun, "spawn").mockImplementation(() => ({
       exited: Promise.resolve(),
       exitCode: 0,
       stdout: new Response("opencode version 1.2.3\n").body,
@@ -853,7 +853,7 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
   });
 
   it("getVersion returns null on failure", async () => {
-    Bun.spawn = mock(() => ({
+    spyOn(Bun, "spawn").mockImplementation(() => ({
       exited: Promise.resolve(),
       exitCode: 1,
       stdout: new Response("").body,
@@ -863,7 +863,7 @@ describe("OpenCodeEngine getVersion and isAvailable", () => {
   });
 
   it("getVersion returns null on exception", async () => {
-    Bun.spawn = mock(() => {
+    spyOn(Bun, "spawn").mockImplementation(() => {
       throw new Error("spawn ENOENT");
     }) as any;
     const engine = new OpenCodeEngine();
