@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 /** The surfaces the operator can switch between. */
-export type AppMode = "code" | "kanban" | "terminals";
+export type AppMode = "code" | "kanban" | "terminals" | "office3d";
 
 const MODE_KEY = "harness-remote-mode";
 /** Code (chat/remote-control) mode is the default surface. */
 const DEFAULT_MODE: AppMode = "code";
 
-const MODES: AppMode[] = ["code", "kanban", "terminals"];
+const MODES: AppMode[] = ["code", "kanban", "terminals", "office3d"];
 
 function readInitialMode(): AppMode {
   if (typeof localStorage === "undefined") return DEFAULT_MODE;
