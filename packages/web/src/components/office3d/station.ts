@@ -129,5 +129,40 @@ export function createDeskSet(screen: Screen, accent: string): THREE.Group {
   mug.position.set(-0.45, 1.04, 0.95);
   mug.castShadow = true;
   g.add(mug);
+
+  // desk lamp
+  const lampMat = std("#f8fafc", 0.4);
+  g.add(box(0.14, 0.02, 0.14, lampMat, [-0.7, 1.0, 1.25]));
+  const arm = box(0.025, 0.4, 0.025, lampMat, [-0.7, 1.2, 1.25]);
+  arm.rotation.z = 0.25;
+  g.add(arm);
+  const shade = new THREE.Mesh(
+    new THREE.ConeGeometry(0.12, 0.14, 16, 1, true),
+    new THREE.MeshStandardMaterial({
+      color: accent,
+      emissive: accent,
+      emissiveIntensity: 0.6,
+      side: THREE.DoubleSide,
+    })
+  );
+  shade.position.set(-0.6, 1.4, 1.25);
+  g.add(shade);
+
+  // rug + glowing ring (pulses while the session is active)
+  const rug = new THREE.Mesh(
+    new THREE.CircleGeometry(1.75, 48),
+    new THREE.MeshStandardMaterial({ color: "#3b4a63", roughness: 1 })
+  );
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(0.3, 0.012, 0.75);
+  rug.receiveShadow = true;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(1.75, 1.86, 64),
+    new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 1 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0.3, 0.016, 0.75);
+  g.add(rug, ring);
+  g.userData.ring = ring;
   return g;
 }

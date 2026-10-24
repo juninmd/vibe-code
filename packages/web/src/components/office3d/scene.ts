@@ -2,6 +2,7 @@ import type { SessionCard, SessionSource } from "@vibe-code/shared";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type Character, createCharacter } from "./character";
+import { createRoom } from "./room";
 import { createDeskSet, createScreen, type Screen } from "./station";
 
 export const SOURCE_SKIN: Record<SessionSource, { accent: string; hair: string; label: string }> = {
@@ -9,6 +10,10 @@ export const SOURCE_SKIN: Record<SessionSource, { accent: string; hair: string; 
   opencode: { accent: "#2dd4bf", hair: "#1e293b", label: "OC" },
   antigravity: { accent: "#8b5cf6", hair: "#a16207", label: "AG" },
 };
+
+const SKINS = ["#f6cfb2", "#e0a98a", "#c68863", "#8d5a3b"];
+const HAIRS = ["#3b2418", "#1e293b", "#a16207", "#7f1d1d", "#4c1d95"];
+const hash = (id: string) => [...id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
 
 const COLS = 3;
 const GAP_X = 4.4;
@@ -19,11 +24,12 @@ interface Station {
   root: THREE.Group;
   character: Character;
   screen: Screen;
+  ring: THREE.Mesh;
   active: boolean;
   phase: number;
 }
 
-function labelSprite(lines: string[], accent: string, w = 320): THREE.Sprite {
+function labelSprite(lines: string[], accent: string, w = 320, dot?: string): THREE.Sprite {
   const c = document.createElement("canvas");
   c.width = w;
   c.height = 96;
@@ -35,9 +41,15 @@ function labelSprite(lines: string[], accent: string, w = 320): THREE.Sprite {
     ctx.fill();
     ctx.fillStyle = accent;
     ctx.fillRect(2, 20, 6, 56);
+    if (dot) {
+      ctx.fillStyle = dot;
+      ctx.beginPath();
+      ctx.arc(w - 26, 28, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = "#f8fafc";
     ctx.font = "bold 26px system-ui, sans-serif";
-    ctx.fillText(lines[0] ?? "", 22, 42, w - 40);
+    ctx.fillText(lines[0] ?? "", 22, 42, w - 72);
     ctx.fillStyle = "#94a3b8";
     ctx.font = "20px system-ui, sans-serif";
     ctx.fillText(lines[1] ?? "", 22, 74, w - 40);
@@ -47,6 +59,34 @@ function labelSprite(lines: string[], accent: string, w = 320): THREE.Sprite {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
   s.scale.set(w / 150, 0.64, 1);
   s.renderOrder = 10;
+  return s;
+}
+
+function typingBubble(): THREE.Sprite {
+  const c = document.createElement("canvas");
+  c.width = 160;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "rgba(248,250,252,0.95)";
+    ctx.beginPath();
+    ctx.roundRect(8, 6, 144, 64, 30);
+    ctx.moveTo(40, 68);
+    ctx.lineTo(30, 90);
+    ctx.lineTo(62, 68);
+    ctx.fill();
+    ctx.fillStyle = "#475569";
+    for (const x of [48, 80, 112]) {
+      ctx.beginPath();
+      ctx.arc(x, 38, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  const s = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true })
+  );
+  s.position.set(0.55, 2.2, 0.1);
+  s.scale.set(0.85, 0.5, 1);
   return s;
 }
 
@@ -93,8 +133,8 @@ export function createOfficeScene(
   renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#0b1020");
-  scene.fog = new THREE.Fog("#0b1020", 18, 40);
+  scene.background = new THREE.Color("#0f172a");
+  scene.fog = new THREE.Fog("#0f172a", 18, 40);
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -110,14 +150,8 @@ export function createOfficeScene(
   Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, far: 40 });
   scene.add(sun);
 
-  const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(16, 64),
-    new THREE.MeshStandardMaterial({ color: "#2b3a55", roughness: 0.95 })
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  scene.add(floor);
-  scene.add(new THREE.GridHelper(32, 32, "#334155", "#1e293b"));
+  const room = createRoom(scene);
+  room.fit(12, 10, 0);
 
   const stations = new Map<string, Station>();
   const clickable: THREE.Object3D[] = [];
@@ -128,6 +162,8 @@ export function createOfficeScene(
 
   function frame(count: number) {
     const rows = Math.max(1, Math.ceil(count / COLS));
+    const cols = Math.min(count, COLS) || 1;
+    room.fit(cols * GAP_X + 5, rows * GAP_Z + 3, ((rows - 1) * GAP_Z) / 2);
     const dist = 9 + Math.max(rows, Math.min(count, COLS)) * 2.4;
     camera.position.set(dist * 0.9, dist * 0.5, dist * 0.32);
     controls.target.set(0, 1.1, ((rows - 1) * GAP_Z) / 2);
@@ -148,18 +184,27 @@ export function createOfficeScene(
   function addStation(card: SessionCard, index: number) {
     const skin = SOURCE_SKIN[card.source];
     const root = new THREE.Group();
-    const character = createCharacter(skin);
+    const h = hash(card.id);
+    const character = createCharacter({
+      ...skin,
+      hair: HAIRS[h % HAIRS.length] ?? skin.hair,
+      skin: SKINS[(h >> 3) % SKINS.length],
+      bun: h % 2 === 0,
+    });
     character.group.position.y = 0.0;
     character.head.rotation.y = 0.5;
     const screen = createScreen(skin.accent, index);
-    root.add(character.group, createDeskSet(screen, skin.accent));
+    const desk = createDeskSet(screen, skin.accent);
+    root.add(character.group, desk);
     const tag = labelSprite(
       [card.title.slice(0, 26), `${card.project} · ${card.status}`],
-      skin.accent
+      skin.accent,
+      320,
+      card.status === "active" ? "#22d3ee" : "#fbbf24"
     );
     tag.position.set(0.35, 0.35, 2.15);
     root.add(tag);
-    if (card.status === "idle") root.add(zzz());
+    root.add(card.status === "idle" ? zzz() : typingBubble());
     root.traverse((o) => {
       o.userData.cardId = card.id;
     });
@@ -170,6 +215,7 @@ export function createOfficeScene(
       root,
       character,
       screen,
+      ring: desk.userData.ring as THREE.Mesh,
       active: card.status === "active",
       phase: index * 1.7,
     });
@@ -191,10 +237,14 @@ export function createOfficeScene(
     const dt = clock.getDelta();
     const t = clock.elapsedTime;
     const calm = opts.reducedMotion;
+    if (!calm) room.update(t);
     for (const st of stations.values()) {
       const { character: c } = st;
       const p = t + st.phase;
       st.screen.draw(calm ? 0 : t, st.active);
+      (st.ring.material as THREE.MeshStandardMaterial).emissiveIntensity = st.active
+        ? 1.1 + (calm ? 0 : Math.sin(p * 3) * 0.6)
+        : 0.15;
       if (calm) continue;
       const typing = st.active ? 1 : 0;
       c.forearms[0].rotation.x = -0.9 + Math.sin(p * 16) * 0.07 * typing;
