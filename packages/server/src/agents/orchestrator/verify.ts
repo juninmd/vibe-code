@@ -124,7 +124,7 @@ async function detectAdditionalCommands(wtPath: string): Promise<ValidationComma
   try {
     const readme = await readFile(join(wtPath, README_FILE), "utf8");
     // Look for "```bash" blocks with common commands
-    const bashBlocks = readme.match(/```bash\n([\s\S]*?)```/gi) || [];
+    const bashBlocks = readme.match(/```(?:bash|sh|shell)?\n([\s\S]*?)```/gi) || [];
     for (const block of bashBlocks) {
       const cmds = block
         .replace(/```bash\n?/gi, "")
@@ -263,32 +263,11 @@ function extractFailureReasonRaw(
   stdout: string,
   stderr: string
 ): string {
-  const combined = [stdout, stderr].filter(Boolean).join("\n");
-
   if (exitCode === 0) return "passed";
 
-  const testMatch = combined.match(
-    /((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i
-  );
-  if (testMatch) {
-    const snippet = testMatch[0].slice(0, 500);
-    return `exit ${exitCode} — ${snippet.replace(/\n/g, " ").trim()}`;
-  }
-
-  const buildMatch = combined.match(/(error[^:]+:[^\n]+)/i) || combined.match(/(Error:[^\n]+)/i);
-  if (buildMatch) {
-    return `exit ${exitCode} — ${buildMatch[0].slice(0, 200)}`;
-  }
-
-  const lintMatch = combined.match(/(warning|error)[\s\S]*?at line \d+/i);
-  if (lintMatch) {
-    return `exit ${exitCode} — ${lintMatch[0].slice(0, 200)}`;
-  }
-
-  const lines = combined.split("\n").filter(Boolean);
-  const lastUseful = lines.filter((l) => !l.match(/^\s*(✓|✔|passed|done|building|compiling)/i));
-  if (lastUseful.length > 0) {
-    return `exit ${exitCode} — ${lastUseful[lastUseful.length - 1].slice(0, 200)}`;
+  const combined = [stdout, stderr].filter(Boolean).join("\n");
+  if (combined) {
+    return `exit ${exitCode} — ${combined.slice(0, 200).replace(/\n/g, " ").trim()}`;
   }
 
   return `exit ${exitCode} (command: ${command})`;
@@ -300,34 +279,9 @@ export function extractFailureReason(result: ValidationCommandResult): string {
 
   if (exitCode === 0) return "passed";
 
-  const testMatch =
-    stderr.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i) ||
-    stdout.match(/((FAIL|FAILURE|ERROR|✕|×|FAILED)[\s\S]*?(?=\d+\s+(pass|fail|pending)|$))/i);
-  if (testMatch) {
-    const snippet = testMatch[0].slice(0, 500);
-    return `exit ${exitCode} — ${snippet.replace(/\n/g, " ").trim()}`;
-  }
-
-  const buildMatch =
-    stderr.match(/(error[^:]+:[^\n]+)/i) ||
-    stdout.match(/(error[^:]+:[^\n]+)/i) ||
-    stderr.match(/(Error:[^\n]+)/i) ||
-    stdout.match(/(Error:[^\n]+)/i);
-  if (buildMatch) {
-    return `exit ${exitCode} — ${buildMatch[0].slice(0, 200)}`;
-  }
-
-  const lintMatch =
-    stderr.match(/(warning|error)[\s\S]*?at line \d+/i) ||
-    stdout.match(/(warning|error)[\s\S]*?at line \d+/i);
-  if (lintMatch) {
-    return `exit ${exitCode} — ${lintMatch[0].slice(0, 200)}`;
-  }
-
-  const lines = [stdout, stderr].filter(Boolean).join("\n").split("\n").filter(Boolean);
-  const lastUseful = lines.filter((l) => !l.match(/^\s*(✓|✔|passed|done|building|compiling)/i));
-  if (lastUseful.length > 0) {
-    return `exit ${exitCode} — ${lastUseful[lastUseful.length - 1].slice(0, 200)}`;
+  const combined = [stdout, stderr].filter(Boolean).join("\n");
+  if (combined) {
+    return `exit ${exitCode} — ${combined.slice(0, 200).replace(/\n/g, " ").trim()}`;
   }
 
   return `exit ${exitCode} (command: ${command})`;
