@@ -43,6 +43,7 @@ describe("discoverValidationCommands", () => {
           scripts: {
             lint: "biome check .",
             test: "vitest run",
+            typecheck: "tsc --noEmit",
             build: "vite build",
           },
         }),
@@ -52,6 +53,7 @@ describe("discoverValidationCommands", () => {
       const commands = await discoverValidationCommands(dir);
       expect(commands.map((command) => command.command)).toEqual([
         "bun run lint",
+        "bun run typecheck",
         "bun run test",
         "bun run build",
       ]);

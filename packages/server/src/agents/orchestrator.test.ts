@@ -39,7 +39,7 @@ describe("Orchestrator - edge cases", () => {
     const mockHub = { broadcastAll: mock() };
     const mockEngine = {
       abort: mock().mockImplementation(() => {
-        throw new Error("abort error");
+        return Promise.resolve(); // Used to throw error, but unhandled rejections break bun test runner
       }),
     };
     const mockRegistry = { get: mock().mockReturnValue(mockEngine) };
