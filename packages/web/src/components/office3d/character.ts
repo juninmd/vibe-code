@@ -9,7 +9,6 @@ export interface Character {
   eyes: THREE.Mesh[];
 }
 
-const SKIN = "#f6cfb2";
 const PANTS = "#1f2937";
 
 const std = (color: string, roughness = 0.65) =>
@@ -42,9 +41,13 @@ function chestTexture(label: string, accent: string): THREE.CanvasTexture {
   return tex;
 }
 
-function buildHead(hair: string): { head: THREE.Group; eyes: THREE.Mesh[] } {
+function buildHead(
+  hair: string,
+  skin: string,
+  bun: boolean
+): { head: THREE.Group; eyes: THREE.Mesh[] } {
   const head = new THREE.Group();
-  head.add(mesh(new THREE.SphereGeometry(0.27, 40, 32), std(SKIN, 0.5), [0, 0, 0]));
+  head.add(mesh(new THREE.SphereGeometry(0.27, 40, 32), std(skin, 0.5), [0, 0, 0]));
   // hair cap: upper sphere shell, open at the face
   const hairMat = std(hair, 0.8);
   const cap = mesh(
@@ -53,7 +56,8 @@ function buildHead(hair: string): { head: THREE.Group; eyes: THREE.Mesh[] } {
     [0, 0.01, -0.02]
   );
   head.add(cap);
-  head.add(mesh(new THREE.SphereGeometry(0.2, 24, 16), hairMat, [0, 0.12, -0.2]));
+  if (bun) head.add(mesh(new THREE.SphereGeometry(0.11, 20, 14), hairMat, [0, 0.33, -0.1]));
+  else head.add(mesh(new THREE.SphereGeometry(0.2, 24, 16), hairMat, [0, 0.12, -0.2]));
   const eyeMat = new THREE.MeshStandardMaterial({ color: "#111827", roughness: 0.2 });
   const eyes = [-0.095, 0.095].map((x) => {
     const eye = mesh(new THREE.SphereGeometry(0.036, 16, 12), eyeMat, [x, 0.0, 0.25]);
@@ -112,7 +116,7 @@ function addHeadphones(head: THREE.Group, accent: string) {
   }
 }
 
-function buildArm(side: -1 | 1, sleeve: THREE.Material) {
+function buildArm(side: -1 | 1, sleeve: THREE.Material, skin: string) {
   const shoulder = new THREE.Group();
   shoulder.position.set(side * 0.3, 1.12, 0.02);
   shoulder.rotation.set(-0.7, 0, side * -0.08);
@@ -121,13 +125,19 @@ function buildArm(side: -1 | 1, sleeve: THREE.Material) {
   elbow.position.set(0, -0.3, 0);
   elbow.rotation.x = -0.9;
   elbow.add(mesh(new THREE.CapsuleGeometry(0.063, 0.18, 6, 12), sleeve, [0, -0.13, 0]));
-  elbow.add(mesh(new THREE.SphereGeometry(0.065, 16, 12), std(SKIN, 0.5), [0, -0.29, 0]));
+  elbow.add(mesh(new THREE.SphereGeometry(0.065, 16, 12), std(skin, 0.5), [0, -0.29, 0]));
   shoulder.add(elbow);
   return { shoulder, elbow };
 }
 
 /** Seated cartoon dev: hoodie in the engine color, headphones, glasses. */
-export function createCharacter(opts: { label: string; accent: string; hair: string }): Character {
+export function createCharacter(opts: {
+  label: string;
+  accent: string;
+  hair: string;
+  skin?: string;
+  bun?: boolean;
+}): Character {
   const group = new THREE.Group();
   const hoodie = std(opts.accent, 0.75);
   const torso = mesh(new THREE.CapsuleGeometry(0.25, 0.32, 8, 20), hoodie, [0, 0.95, 0]);
@@ -153,12 +163,12 @@ export function createCharacter(opts: { label: string; accent: string; hair: str
     group.add(mesh(new THREE.BoxGeometry(0.16, 0.08, 0.28), std("#f8fafc", 0.5), [x, 0.07, 0.53]));
   }
 
-  const { head, eyes } = buildHead(opts.hair);
+  const { head, eyes } = buildHead(opts.hair, opts.skin ?? "#f6cfb2", opts.bun ?? true);
   head.position.set(0, 1.55, 0.02);
   addHeadphones(head, opts.accent);
   group.add(head);
 
-  const arms = ([-1, 1] as const).map((s) => buildArm(s, hoodie));
+  const arms = ([-1, 1] as const).map((s) => buildArm(s, hoodie, opts.skin ?? "#f6cfb2"));
   for (const a of arms) group.add(a.shoulder);
   return {
     group,
