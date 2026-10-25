@@ -29,6 +29,7 @@ import { InstallBanner } from "./components/InstallBanner";
 import { LaneSyncPill } from "./components/LaneSyncPill";
 import { ModeToggle } from "./components/ModeToggle";
 import { Onboarding } from "./components/Onboarding";
+import { Office3DMode } from "./components/office3d/Office3DMode";
 import type { Tab as SettingsTab } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { SkeletonBoard } from "./components/Skeleton";
@@ -1613,6 +1614,10 @@ function AuthenticatedApp({ auth, onLogout }: { auth: AuthStatus; onLogout: () =
                     }}
                   />
                 </div>
+              </ErrorBoundary>
+            ) : mode === "office3d" ? (
+              <ErrorBoundary>
+                <Office3DMode />
               </ErrorBoundary>
             ) : mode === "terminals" ? (
               <ErrorBoundary>
