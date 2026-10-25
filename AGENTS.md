@@ -54,3 +54,15 @@ Estado: o OpenCode free **não fecha fluxo completo (PR aberto)** no deploy atua
 2. **Gate de verificação falha em repos não-JS**: `Verification failed: unable to discover validation commands from WORKFLOW.md or package.json`. Repos Python/uv (ex: github-assistance) não têm `package.json` → o quality-gate aborta **antes do PR**. Precisa detectar `pyproject.toml`/`uv`/`Makefile` ou permitir validação opt-out por repo.
 3. **`MAX_AGENTS=1` não é respeitado**: observados 4 runs `in_progress` simultâneos. Enforcement de concorrência (`orchestrator.ts::launch` / `activeCount`) está furado — runs órfãos/zumbis não decrementam o contador.
 4. **Modelo default inválido**: [Resolvido] Trocado para o free funcional `github-models/openai/gpt-4o-mini`.
+
+<!-- base-actions-main-policy -->
+## GitHub Actions — padrão obrigatório (@main)
+
+- Referencie as actions internas sempre pelo branch, nunca por SHA:
+  - `uses: juninmd/base-actions/<action>@main`
+  - `uses: juninmd/base-actions/.github/workflows/<arquivo>.yml@main`
+- Não fixe `@<sha>` em `juninmd/base-actions`: a atualização é centralizada no
+  `main` e passa a valer no próximo run.
+- PRs cujos checks não iniciam por billing/spending limit são mesclados pelo bot central
+  `juninmd/base-actions/.github/workflows/auto-merge-billing-blocked.yml`.
+  Para impedir o merge automático de um PR, aplique a label `do-not-merge`.
