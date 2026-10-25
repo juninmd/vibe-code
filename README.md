@@ -16,18 +16,27 @@ Ask for a task from your phone, watch the harness work, and reply, installable a
 
 <br/>
 
-<img src=".github/assets/screenshots/home.png" alt="Tela inicial do Harness Remote no modo Code: lista de sessões à esquerda, campo 'Describe a task' na base e painel de contexto da sessão à direita" width="860" />
+<img src="docs/screenshots/unified-remote/live-workspace-desktop.png" alt="Workspace remoto: navegação por projetos e sessões, conversa central e painel de contexto" width="860" />
 
 </div>
 
 > Remote control for autonomous coding agents. Ask for a task from your phone,
 > watch the harness work, and reply — installable as a PWA. Under the hood it is
 > the same **Autonomous Code Production Control Plane**: a kanban board, runs,
-> validation, reviews and PRs, with **code mode** as the default surface.
+> validation, reviews and PRs, with a **unified remote workspace** as the default surface.
 
-## 📌 Operator Note
+## Operator Note
+
+The default interface at **`/`** is the unified remote workspace: projects,
+sessions, conversational turns, harness terminal and changes share one shell.
+Skills, GitHub plugins (including bulk skill imports), agents and settings open
+inline. Models and effort come from the installed harness. Authentication remains
+required on protected deployments. `/prototype` is an alias; `?demo=1` enables
+explicit sample sessions. The previous control panel remains at `/legacy`.
+See [the remote workspace guide](docs/unified-remote-prototype.md).
+
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
-* Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.
+* The advanced panel at `/legacy` retains **Code**, **Board**, **Terminals** and **3D Office**, switchable in its header.
 * Code mode doc: [docs/remote-control.md](docs/remote-control.md)
 * **Remote coding workspace**: session history on the left, conversation in the center and environment/activity on the right, with searchable repositories and dynamic branch/engine/model controls. OpenCode is the default engine; follow-up messages resume the same conversation and preserve the worktree. See [remote setup and behavior](docs/remote-control.md#running-remotely).
 - Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.

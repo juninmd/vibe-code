@@ -12,6 +12,11 @@ import { type TerminalController, TerminalError } from "../terminal/controller";
 const startSchema = z.object({
   engine: z.enum([...HARNESS_ENGINES, "shell"]).optional(),
   model: z.string().trim().min(1).max(200).optional(),
+  effort: z
+    .string()
+    .trim()
+    .regex(/^[\w.-]{1,40}$/)
+    .optional(),
   skills: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
   skillMode: z.enum(["auto", "manual"]).optional(),
   cols: z.number().int().min(20).max(500).optional(),

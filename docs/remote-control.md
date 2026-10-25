@@ -1,5 +1,10 @@
 # Harness Remote — code mode and the PWA
 
+> A entrada principal agora é o workspace unificado em `/`, com recursos e
+> configurações inline. `/prototype` é um alias e `/legacy` mantém as superfícies
+> avançadas descritas abaixo. Consulte [o guia atual](unified-remote-prototype.md)
+> para conversa, plugins, effort e terminal na experiência unificada.
+
 Harness Remote is the remote-control surface for the harness: an installable
 web app you open on your phone to start a coding session, watch the agent work
 and reply to it. It runs entirely against the same server and data as the

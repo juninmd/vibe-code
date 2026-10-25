@@ -130,6 +130,7 @@ beforeAll(async () => {
     [
       "#!/bin/sh",
       'echo "claude-args:[$*]"',
+      'echo "claude-ready"',
       "read line",
       'if [ "$line" = "work" ]; then echo generated > generated.txt; fi',
       'echo "typed:$line"',
@@ -178,7 +179,8 @@ describe.skipIf(!posix)("TerminalController", () => {
     expect(running?.branchName).toMatch(/^vibe-code\/.+\/fix-login$/);
     expect(db.runs.getLatestByTask(task.id)?.status).toBe("running");
 
-    await waitFor(() => output().includes("claude-args:"), "claude to start");
+    // PTY output can arrive in chunks; the argv prefix may precede the description.
+    await waitFor(() => output().includes("claude-ready"), "complete claude arguments");
     expect(output()).toContain("Fix login");
     expect(output()).toContain("Redirect loops");
     expect(output()).toContain(`--plugin-dir ${plugin}`);

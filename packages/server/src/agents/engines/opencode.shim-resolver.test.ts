@@ -9,6 +9,16 @@ function fakeStat(present: Set<string>) {
 }
 
 describe("resolveOpencodeNativeFromShim", () => {
+  it("resolves the native OpenCode 2 package before the legacy shim", () => {
+    const native = "C:/npm/node_modules/@opencode/cli/bin/opencode.exe";
+    expect(
+      resolveOpencodeNativeFromShim(
+        "C:/npm/opencode.cmd",
+        "x64",
+        fakeStat(new Set([native]))
+      )?.replace(/\\/g, "/")
+    ).toBe(native);
+  });
   it("returns null when path is not a .cmd shim", () => {
     expect(
       resolveOpencodeNativeFromShim("/usr/local/bin/opencode", "x64", fakeStat(new Set()))

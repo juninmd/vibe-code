@@ -383,6 +383,18 @@ export function createTasksRouter(
     if (!repo) {
       return c.json({ error: "not_found", message: "Repository not found" }, 404);
     }
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const decision = enforceRepoAccess(db, access.context, repo.id);
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+    if (parsed.data.parentTaskId) {
+      const parent = enforceTaskAccess(db, access.context, parsed.data.parentTaskId);
+      if (parent) return c.json(asForbiddenResponse(parent), parent.status);
+    }
 
     // A remote session is continued later by resuming the CLI conversation, so
     // it needs an explicit engine that both honors the resume option and
@@ -1083,6 +1095,14 @@ export function createTasksRouter(
   // ─── Diff Endpoints ─────────────────────────────────────────────────────────
 
   router.get("/:id/diff", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const decision = enforceTaskAccess(db, access.context, c.req.param("id"));
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
     if (!git) return c.json({ error: "unavailable", message: "Git service not configured" }, 500);
 
     const task = db.tasks.getById(c.req.param("id"));
@@ -1098,11 +1118,21 @@ export function createTasksRouter(
 
     try {
       // If there's a running agent with a worktree, diff in the worktree
-      const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
-      // biome-ignore lint/style/noNonNullAssertion: useWorktree guarantees worktreePath is set
-      const opts = useWorktree ? { cwd: latestRun.worktreePath! } : { gitDir: barePath };
+      const preserved = task.tags.includes(REMOTE_SESSION_TAG) || task.tags.includes("manual");
+      const useWorktree =
+        latestRun?.worktreePath &&
+        (latestRun.status === "running" || preserved) &&
+        (await accessWorkspace(latestRun.worktreePath).then(
+          () => true,
+          () => false
+        ));
+      const opts = useWorktree
+        ? { cwd: latestRun?.worktreePath ?? undefined, workingTree: true }
+        : { gitDir: barePath };
 
-      const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
+      const baseBranch = useWorktree
+        ? `origin/${task.baseBranch || repo.defaultBranch}`
+        : task.baseBranch || repo.defaultBranch;
       const headBranch = useWorktree ? "HEAD" : task.branchName;
 
       const files = await git.diffSummary(baseBranch, headBranch, opts);
@@ -1123,6 +1153,14 @@ export function createTasksRouter(
   });
 
   router.get("/:id/diff/file", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const decision = enforceTaskAccess(db, access.context, c.req.param("id"));
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
     if (!git) return c.json({ error: "unavailable", message: "Git service not configured" }, 500);
 
     const filePath = c.req.query("path");
@@ -1144,11 +1182,21 @@ export function createTasksRouter(
     const latestRun = db.runs.getLatestByTask(task.id);
 
     try {
-      const useWorktree = latestRun?.worktreePath && latestRun.status === "running";
-      // biome-ignore lint/style/noNonNullAssertion: useWorktree guarantees worktreePath is set
-      const opts = useWorktree ? { cwd: latestRun.worktreePath! } : { gitDir: barePath };
+      const preserved = task.tags.includes(REMOTE_SESSION_TAG) || task.tags.includes("manual");
+      const useWorktree =
+        latestRun?.worktreePath &&
+        (latestRun.status === "running" || preserved) &&
+        (await accessWorkspace(latestRun.worktreePath).then(
+          () => true,
+          () => false
+        ));
+      const opts = useWorktree
+        ? { cwd: latestRun?.worktreePath ?? undefined, workingTree: true }
+        : { gitDir: barePath };
 
-      const baseBranch = useWorktree ? `origin/${repo.defaultBranch}` : repo.defaultBranch;
+      const baseBranch = useWorktree
+        ? `origin/${task.baseBranch || repo.defaultBranch}`
+        : task.baseBranch || repo.defaultBranch;
       const headBranch = useWorktree ? "HEAD" : task.branchName;
 
       const patch = await git.diffFileContent(baseBranch, headBranch, filePath, opts);

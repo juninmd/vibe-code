@@ -1,5 +1,7 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import type { Db } from "../db";
+import { GitHubPluginCatalog } from "../skills/github-catalog";
 import type { SkillsLoader } from "../skills/loader";
 import type { SkillRegistryService } from "../skills/registry";
 
@@ -9,6 +11,55 @@ export function createSkillsRouter(
   db: Db
 ) {
   const app = new Hono();
+  let catalogToken: string | undefined;
+  let catalogService: GitHubPluginCatalog | undefined;
+  const github = () => {
+    const token = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+    if (!catalogService || token !== catalogToken) {
+      catalogToken = token;
+      catalogService = new GitHubPluginCatalog(token);
+    }
+    return catalogService;
+  };
+  const sourceSchema = z.object({
+    repo: z.string().trim().min(3).max(200),
+    ref: z.string().trim().max(200).optional(),
+  });
+
+  app.get("/remote/catalog", async (c) => {
+    const input = sourceSchema.safeParse(c.req.query());
+    if (!input.success) return c.json({ error: "Repositório inválido." }, 400);
+    try {
+      return c.json({ data: await github().discover(input.data.repo, input.data.ref) });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : "Falha ao consultar GitHub." },
+        400
+      );
+    }
+  });
+  app.post("/remote/import", async (c) => {
+    const input = sourceSchema
+      .extend({ commit: z.string().regex(/^[a-f0-9]{40}$/i), path: z.string().min(1).max(500) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!input.success) return c.json({ error: "Selecione um plugin válido do catálogo." }, 400);
+    try {
+      const bundle = await github().bundle(input.data.repo, input.data.commit, input.data.path);
+      return c.json({ data: await skillRegistry.stageBundle(bundle) });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : "Falha ao importar plugin." },
+        400
+      );
+    }
+  });
+  app.get("/registry/:id/content", async (c) => {
+    try {
+      return c.json({ data: { content: await skillRegistry.content(c.req.param("id")) } });
+    } catch {
+      return c.json({ error: "Plugin não encontrado." }, 404);
+    }
+  });
 
   // GET /api/skills — full index of all categories
   app.get("/", async (c) => {

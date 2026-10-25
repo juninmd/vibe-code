@@ -104,12 +104,16 @@ describe("/api/terminal", () => {
     const res = await post(app, `/api/terminal/${task.id}/start`, {
       engine: "opencode",
       skills: ["tdd"],
+      effort: "deep",
       cols: 100,
       rows: 30,
     });
     expect(res.status).toBe(200);
     expect(calls).toEqual([
-      { taskId: task.id, req: { engine: "opencode", skills: ["tdd"], cols: 100, rows: 30 } },
+      {
+        taskId: task.id,
+        req: { engine: "opencode", skills: ["tdd"], effort: "deep", cols: 100, rows: 30 },
+      },
     ]);
   });
 

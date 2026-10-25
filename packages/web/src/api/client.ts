@@ -10,10 +10,13 @@ import type {
   EngineEffectiveness,
   EngineInfo,
   ExternalTerminal,
+  HarnessModel,
   InboxItem,
   LaneSettings,
   LaunchTaskRequest,
   PromptTemplate,
+  RegistryAssetRecord,
+  RemotePluginCatalog,
   RemoteRepo,
   Repository,
   RepositoryIssue,
@@ -428,6 +431,8 @@ export const api = {
   engines: {
     list: () => request<EngineInfo[]>("/engines"),
     models: (name: string) => request<string[]>(`/engines/${name}/models`),
+    harnessModels: (name: string) =>
+      request<HarnessModel[]>(`/engines/${encodeURIComponent(name)}/harness-models`),
   },
 
   agentTemplates: {
@@ -502,14 +507,41 @@ export const api = {
       ),
     manifests: () => request<Record<string, string>>("/skills/manifests"),
     registry: {
-      list: () => request<string[]>("/skills/registry"),
+      list: () =>
+        request<RegistryAssetRecord[]>("/skills/registry").then((records) =>
+          records.map((record) => record.name)
+        ),
       install: (repoPath: string) =>
         request<{ name: string; path: string }>("/skills/registry/install", {
           method: "POST",
           body: JSON.stringify({ repoPath }),
         }),
       uninstall: (name: string) =>
-        request<{ success: true }>(`/skills/registry/${name}`, { method: "DELETE" }),
+        request<{ success: true }>(`/skills/registry/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+        }),
+    },
+    plugins: {
+      list: () => request<RegistryAssetRecord[]>("/skills/registry"),
+      catalog: (repo: string, ref?: string) =>
+        request<RemotePluginCatalog>(
+          `/skills/remote/catalog?${new URLSearchParams({ repo, ...(ref ? { ref } : {}) })}`
+        ),
+      import: (repo: string, commit: string, path: string) =>
+        request<RegistryAssetRecord>("/skills/remote/import", {
+          method: "POST",
+          body: JSON.stringify({ repo, commit, path }),
+        }),
+      content: (id: string) =>
+        request<{ content: string }>(`/skills/registry/${encodeURIComponent(id)}/content`),
+      approve: (id: string) =>
+        request<RegistryAssetRecord>(`/skills/registry/${encodeURIComponent(id)}/approve`, {
+          method: "POST",
+        }),
+      reject: (id: string) =>
+        request<RegistryAssetRecord>(`/skills/registry/${encodeURIComponent(id)}/reject`, {
+          method: "POST",
+        }),
     },
   },
 
