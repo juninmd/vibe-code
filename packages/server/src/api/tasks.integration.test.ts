@@ -895,6 +895,27 @@ describe("remote session messages", () => {
       expect(response.status).toBe(403);
       expect((await response.json()).error).toBe("repo_forbidden");
       expect(inputs).toEqual([]);
+      const headers = {
+        Cookie: `vibe_session=${token}`,
+        "x-workspace-id": own.id,
+        "Content-Type": "application/json",
+      };
+      const before = db.tasks.list().length;
+      const create = await app.request("/api/tasks", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ repoId: repo.id, title: "Foreign task" }),
+      });
+      expect(create.status).toBe(403);
+      expect(db.tasks.list().length).toBe(before);
+      for (const path of [
+        `/api/tasks/${task.id}/diff`,
+        `/api/tasks/${task.id}/diff/file?path=private.txt`,
+      ]) {
+        const denied = await app.request(path, { headers });
+        expect(denied.status).toBe(403);
+        expect((await denied.json()).error).toBe("repo_forbidden");
+      }
     } finally {
       if (!configuredKey) {
         if (keyPresent) process.env.VIBE_CODE_API_KEY = "";

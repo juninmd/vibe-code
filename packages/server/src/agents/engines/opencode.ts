@@ -213,6 +213,7 @@ export function resolveOpencodeNativeFromShim(
   // OpenCode v2's @opencode/cli package bundles its executable directly.
   const bundled = join(prefix, "node_modules", "@opencode", "cli", "bin", "opencode.exe");
   if (stat(bundled)) return bundled;
+
   for (const pkg of opencodeWindowsPackageCandidates(arch)) {
     const candidate = join(
       prefix,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "../db";
@@ -39,6 +39,19 @@ describe("SkillRegistryService", () => {
 
     const entries = await registry.listInstalled();
     expect(entries.find((entry) => entry.id === installed.id)?.reviewStatus).toBe("active");
+  });
+
+  test("rejects unsafe frontmatter names in legacy GitHub installs before writing files", async () => {
+    const registry = new SkillRegistryService(baseDir);
+    await registry.init();
+    for (const name of ["../../outside", "..\\outside", "C:\\outside", "CON", ".."]) {
+      fetchSpy.mockResolvedValueOnce(new Response(`---\nname: ${name}\n---\n# Skill`));
+      await expect(
+        registry.installFromGitHub({ repoPath: "owner/repo/skills/example" })
+      ).rejects.toThrow("Nome de plugin inválido");
+    }
+    expect(await registry.listInstalled()).toEqual([]);
+    expect(await readdir(join(baseDir, "registry-pending", "skills"))).toEqual([]);
   });
 
   test("builds hygiene reports from registry, memories, and failed dependencies", async () => {

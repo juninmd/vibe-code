@@ -49,7 +49,7 @@ test.beforeAll(async ({ request }) => {
 
 test.describe("Code mode", () => {
   test("is the default surface and exposes the task composer", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/legacy");
     await expect(page.getByRole("heading", { name: "What will you build?" })).toBeVisible();
     await expect(page.getByPlaceholder("Describe a task…")).toBeVisible();
     await expect(page.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
@@ -59,7 +59,7 @@ test.describe("Code mode", () => {
   });
 
   test("switching to Board shows the kanban view and sticks", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByRole("tab", { name: "Board" }).click();
     await expect(page.getByRole("button", { name: "Task", exact: true })).toBeVisible();
     // The choice is persisted for the next visit.
@@ -73,7 +73,7 @@ test.describe("Code mode", () => {
     });
     expect(created.ok()).toBeTruthy();
 
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/e2e-code-mode-session/).first().click();
 
     await expect(page.getByRole("button", { name: "Back to sessions" })).toBeVisible();
@@ -85,7 +85,7 @@ test.describe("Code mode", () => {
     await page.route("**/api/engines/opencode/models", (route) => route.fulfill({ json: { data: ["fixture/model"] } }));
     // Only execution is intercepted; repository registration and task persistence use the real API.
     await page.route("**/api/tasks/*/launch", (route) => route.fulfill({ status: 202, json: { data: { id: "fixture-run", engine: "opencode", status: "queued" } } }));
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByLabel("Agent model").selectOption("fixture/model");
     await page.getByPlaceholder("Describe a task…").fill("e2e remote conversation");
     const created = page.waitForResponse((response) => response.url().endsWith("/api/tasks") && response.request().method() === "POST");
@@ -106,7 +106,7 @@ test.describe("Code mode", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.route("**/api/engines", (route) => route.fulfill({ json: { data: [{ name: "opencode", displayName: "OpenCode", available: true, version: "test", activeRuns: 0, supportsResume: true }] } }));
     await page.route("**/api/engines/opencode/models", (route) => route.fulfill({ json: { data: ["opencode/beam-free"] } }));
-    await page.goto("/");
+    await page.goto("/legacy");
     await expect(page.getByPlaceholder("Describe a task…")).toBeVisible();
     await page.getByRole("button", { name: "Session history", exact: true }).click();
     await expect(page.getByRole("navigation", { name: "Sessions", exact: true })).toBeVisible();
@@ -129,7 +129,7 @@ test.describe("Code mode", () => {
     const models = (await listed.json()).data as string[];
     const model = models.find((m) => m.startsWith("opencode/") && m.endsWith("-free"));
     if (!model) throw new Error("No free model was reported by the installed OpenCode CLI");
-    await page.goto("/");
+    await page.goto("/legacy");
     await page.getByLabel("Agent model").selectOption(model, { timeout: 30_000 });
     await page.getByPlaceholder("Describe a task…").fill("Remember the marker REMOTE_BROWSER_742. Reply only REMOTE_READY.");
     const created = page.waitForResponse((response) => response.url().endsWith("/api/tasks") && response.request().method() === "POST");

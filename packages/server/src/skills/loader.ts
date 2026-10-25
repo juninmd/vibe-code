@@ -21,11 +21,20 @@ function parseFrontmatter(content: string): { meta: Record<string, string>; body
   if (end === -1) return { meta, body: content };
 
   const fmBlock = content.slice(3, end).trim();
-  for (const line of fmBlock.split("\n")) {
+  const fmLines = fmBlock.split("\n");
+  for (let index = 0; index < fmLines.length; index++) {
+    const line = fmLines[index];
+    if (/^\s/.test(line)) continue;
     const colonIdx = line.indexOf(":");
     if (colonIdx === -1) continue;
     const key = line.slice(0, colonIdx).trim();
     let value = line.slice(colonIdx + 1).trim();
+    if (value === "|" || value === ">") {
+      const block: string[] = [];
+      while (index + 1 < fmLines.length && /^\s/.test(fmLines[index + 1]))
+        block.push(fmLines[++index].trim());
+      value = block.join(" ");
+    }
     // Strip surrounding quotes
     if (
       (value.startsWith('"') && value.endsWith('"')) ||

@@ -49,6 +49,8 @@ import { useTasks } from "./hooks/useTasks";
 import { ToastContext, useToastState } from "./hooks/useToast";
 import { useWebSocket } from "./hooks/useWebSocket";
 
+const RemoteWorkspace = lazy(() => import("./features/remote-workspace/RemoteWorkspace"));
+
 // Lazy-loaded components for better performance
 const AddRepoDialog = lazy(() =>
   import("./components/AddRepoDialog").then((m) => ({ default: m.AddRepoDialog }))
@@ -243,6 +245,27 @@ export default function App() {
     return <LoginScreen status={auth} loading={authLoading} error={authError} onRetry={loadAuth} />;
   }
 
+  if (window.location.pathname.replace(/\/$/, "") !== "/legacy") {
+    return (
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div role="status" className="p-6">
+              Abrindo workspace…
+            </div>
+          }
+        >
+          <RemoteWorkspace
+            onLogout={async () => {
+              await api.auth.logout();
+              setApiKey(null);
+              loadAuth();
+            }}
+          />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
   return <AuthenticatedApp auth={auth} onLogout={loadAuth} />;
 }
 

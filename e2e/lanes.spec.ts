@@ -184,7 +184,7 @@ test("lanes follow issue labels in both directions", async ({ page, request }) =
   await expect.poll(async () => (await tasksByIssue(request)).get(1)?.status).toBe("blocked");
 
   // ── The board shows it ────────────────────────────────────────────────────
-  await page.goto("/");
+  await page.goto("/legacy");
   await expect(page.getByRole("button", { name: /labels synced/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Slow search" })).toBeVisible();
   await expect(page.getByRole("link", { name: "#3" })).toBeVisible();

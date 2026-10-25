@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ProviderRegistry } from "./providers/registry";
 
 export class GitService {
@@ -397,13 +397,19 @@ export class GitService {
   async diffSummary(
     baseBranch: string,
     headBranch: string,
-    opts: { cwd?: string; gitDir?: string }
+    opts: { cwd?: string; gitDir?: string; workingTree?: boolean }
   ): Promise<
     { path: string; status: string; additions: number; deletions: number; oldPath?: string }[]
   > {
     const args = ["git"];
     if (opts.gitDir) args.push("--git-dir", opts.gitDir);
-    args.push("diff", "--numstat", "-M", `${baseBranch}...${headBranch}`);
+    const revision =
+      opts.workingTree && opts.cwd
+        ? (
+            await this.exec(["git", "merge-base", baseBranch, "HEAD"], { cwd: opts.cwd })
+          ).stdout.trim()
+        : `${baseBranch}...${headBranch}`;
+    args.push("diff", "--numstat", "-M", revision);
 
     const numstat = await this.exec(args, { cwd: opts.cwd }).catch(() => ({
       stdout: "",
@@ -414,7 +420,7 @@ export class GitService {
     // Also get name-status for file status (A/M/D/R)
     const statusArgs = ["git"];
     if (opts.gitDir) statusArgs.push("--git-dir", opts.gitDir);
-    statusArgs.push("diff", "--name-status", "-M", `${baseBranch}...${headBranch}`);
+    statusArgs.push("diff", "--name-status", "-M", revision);
 
     const nameStatus = await this.exec(statusArgs, { cwd: opts.cwd }).catch(() => ({
       stdout: "",
@@ -458,18 +464,74 @@ export class GitService {
       });
     }
 
+    if (opts.workingTree && opts.cwd) {
+      const untracked = await this.exec(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        { cwd: opts.cwd }
+      );
+      for (const path of untracked.stdout.split("\0").filter(Boolean)) {
+        const content = await this.untrackedContent(opts.cwd, path);
+        if (content === undefined) continue;
+        files.push({
+          path,
+          status: "added",
+          additions:
+            content === null ? 0 : content.split("\n").length - (content.endsWith("\n") ? 1 : 0),
+          deletions: 0,
+          oldPath: undefined,
+        });
+      }
+    }
     return files;
+  }
+
+  private async untrackedContent(cwd: string, path: string): Promise<string | null | undefined> {
+    const target = resolve(cwd, path);
+    const local = relative(await realpath(cwd), await realpath(target));
+    if (
+      isAbsolute(local) ||
+      local === ".." ||
+      local.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    )
+      return undefined;
+    const info = await lstat(target);
+    if (!info.isFile()) return undefined;
+    if (info.size > 1024 * 1024) return null;
+    const content = await readFile(target);
+    return content.includes(0) ? null : content.toString("utf8");
   }
 
   async diffFileContent(
     baseBranch: string,
     headBranch: string,
     filePath: string,
-    opts: { cwd?: string; gitDir?: string }
+    opts: { cwd?: string; gitDir?: string; workingTree?: boolean }
   ): Promise<string> {
     const args = ["git"];
     if (opts.gitDir) args.push("--git-dir", opts.gitDir);
-    args.push("diff", "-M", `${baseBranch}...${headBranch}`, "--", filePath);
+    if (opts.workingTree && opts.cwd) {
+      const untracked = await this.exec(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z", "--", filePath],
+        { cwd: opts.cwd }
+      );
+      if (untracked.stdout.split("\0").includes(filePath)) {
+        const content = await this.untrackedContent(opts.cwd, filePath);
+        if (content === undefined) return "";
+        if (content === null)
+          return "Arquivo binário ou maior que 1 MiB; prévia de conteúdo indisponível.";
+        return `--- /dev/null\n+++ b/${filePath}\n${content
+          .split("\n")
+          .map((line) => `+${line}`)
+          .join("\n")}`;
+      }
+    }
+    const revision =
+      opts.workingTree && opts.cwd
+        ? (
+            await this.exec(["git", "merge-base", baseBranch, "HEAD"], { cwd: opts.cwd })
+          ).stdout.trim()
+        : `${baseBranch}...${headBranch}`;
+    args.push("diff", "-M", revision, "--", filePath);
 
     const result = await this.exec(args, { cwd: opts.cwd });
     return result.stdout;

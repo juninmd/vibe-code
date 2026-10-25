@@ -66,6 +66,8 @@ Repository contract entrypoints:
 
 ### Web internals (`packages/web/src/`)
 
+- **`features/remote-workspace/`** — default authenticated workspace at `/` (alias `/prototype`): inline skills/plugins/settings, real conversational tasks and current harness terminals, without board/questionnaire. `/legacy` retains the advanced control plane. Preview with `./scripts/preview-unified.ps1`; see `docs/unified-remote-prototype.md`.
+
 - **`api/client.ts`** — typed fetch wrapper over the REST API
 - **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)
 - **`components/`** — `TaskPanel` (terminal-first task view with `TaskTerminal` xterm + `SkillPicker`), `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)

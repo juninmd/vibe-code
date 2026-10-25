@@ -73,7 +73,8 @@ export function createSettingsRouter(
     const theme = db.settings.get("theme") || "dark";
     const litellmBaseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
     const litellmEnabled = db.settings.get("litellm_enabled") !== "false";
-    const skillsPath = db.settings.get("skills_path") || "~/.agents";
+    const skillsPath =
+      process.env.VIBE_CODE_SKILLS_PATH || db.settings.get("skills_path") || "~/.agents";
     const maxAgents =
       orchestrator?.maxConcurrentAgents ??
       Number(db.settings.get("max_agents") || process.env.VIBE_CODE_MAX_AGENTS || 4);

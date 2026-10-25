@@ -724,7 +724,12 @@ describe("Tasks Router (unit)", () => {
 
   // --- /:id/diff ---
   it("GET /:id/diff returns diff summary", async () => {
-    mockDb.tasks.getById.mockReturnValueOnce({ id: "t-1", repoId: "r-1", branchName: "b-1" });
+    mockDb.tasks.getById.mockReturnValueOnce({
+      id: "t-1",
+      repoId: "r-1",
+      branchName: "b-1",
+      tags: [],
+    });
     mockDb.repos.getById.mockReturnValueOnce({ id: "r-1", name: "R1", defaultBranch: "main" });
     mockDb.runs.getLatestByTask.mockReturnValueOnce(null);
     mockGitService.diffSummary.mockResolvedValueOnce([{ additions: 10, deletions: 5 }]);
@@ -738,7 +743,12 @@ describe("Tasks Router (unit)", () => {
 
   // --- /:id/diff/file ---
   it("GET /:id/diff/file returns file patch", async () => {
-    mockDb.tasks.getById.mockReturnValueOnce({ id: "t-1", repoId: "r-1", branchName: "b-1" });
+    mockDb.tasks.getById.mockReturnValueOnce({
+      id: "t-1",
+      repoId: "r-1",
+      branchName: "b-1",
+      tags: [],
+    });
     mockDb.repos.getById.mockReturnValueOnce({ id: "r-1", name: "R1", defaultBranch: "main" });
     mockDb.runs.getLatestByTask.mockReturnValueOnce(null);
     mockGitService.diffFileContent.mockResolvedValueOnce("patch-content");
