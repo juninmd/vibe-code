@@ -21,7 +21,7 @@ test("creates a real conversational task with model effort and keeps failed foll
     { name: "shell-agent", displayName: "Shell Agent", available: true, supportsResume: false },
     { name: "acpx", displayName: "ACP Adapter", available: false, supportsResume: true },
   ] } }));
-  await page.route("**/api/engines/grok/harness-models", (route) => route.fulfill({ json: { data: [{ id: "fixture/reasoner", name: "Reasoner", efforts: ["deep"] }] } }));
+  await page.route("**/api/engines/opencode/harness-models", (route) => route.fulfill({ json: { data: [{ id: "fixture/reasoner", name: "Reasoner", efforts: ["deep"] }] } }));
   const launches: string[] = [];
   await page.route("**/api/tasks/*/launch", (route) => { launches.push(route.request().url()); return route.fulfill({ json: { data: { id: "fixture-run", status: "running" } } }); });
   let reject = true;
@@ -41,6 +41,8 @@ test("creates a real conversational task with model effort and keeps failed foll
   await expect(engineSelect.locator('option[value="shell-agent"]')).toHaveCount(0);
   await expect(engineSelect.locator('option[value="acpx"]')).toHaveCount(0);
   await engineSelect.selectOption("grok");
+  await expect(engineSelect).toHaveValue("grok");
+  await engineSelect.selectOption("opencode");
   await page.getByLabel("Modelo da sessão", { exact: true }).selectOption("fixture/reasoner");
   await page.getByLabel("Effort do modelo", { exact: true }).selectOption("deep");
   const title = "Revisar o workspace de integração";
@@ -49,7 +51,7 @@ test("creates a real conversational task with model effort and keeps failed foll
   await expect(page.getByText(title, { exact: true })).toBeVisible();
   await expect.poll(() => launches.length).toBe(1);
   const task = (await (await request.get(`${E2E.serverUrl}/api/tasks`)).json()).data.find((item: { description: string }) => item.description === title);
-  expect(task.engine).toBe("grok");
+  expect(task.engine).toBe("opencode");
   expect(task.model).toBe("fixture/reasoner#deep");
   expect(task.tags).toEqual(expect.arrayContaining(["manual", "remote-session"]));
   await page.getByLabel("Mensagem para o agente").fill("Continue preservando o contexto");

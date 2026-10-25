@@ -45,7 +45,12 @@ import type {
   Workspace,
 } from "@vibe-code/shared";
 
+import { getServerUrl, isNativeApp } from "../native/server-url";
+
 const BASE = "/api";
+
+/** Absolute API prefix: the configured server in the Android shell, relative on the web. */
+const apiBase = () => (isNativeApp() ? `${getServerUrl() ?? ""}${BASE}` : BASE);
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -110,7 +115,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   try {
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await fetch(`${apiBase()}${path}`, {
       ...options,
       credentials: "same-origin",
       signal: options?.signal ?? controller.signal,
@@ -284,7 +289,7 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ scope, content, compactedAt }),
       }),
-    downloadUrl: (id: string) => `${BASE}/tasks/${id}/download`,
+    downloadUrl: (id: string) => `${apiBase()}/tasks/${id}/download`,
     openEditor: (id: string) =>
       request<{ ok: boolean; path?: string }>(`/tasks/${id}/open-editor`, { method: "POST" }),
     getTaskPath: (id: string) =>
@@ -558,6 +563,6 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name, overwrite }),
       }),
-    downloadUrl: (name: string) => `${BASE}/templates/${name}/download`,
+    downloadUrl: (name: string) => `${apiBase()}/templates/${name}/download`,
   },
 };

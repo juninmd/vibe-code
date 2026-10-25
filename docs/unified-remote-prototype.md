@@ -1,6 +1,7 @@
 # Workspace remoto unificado
 
-A interface principal em `/` reúne projetos, sessões, conversa, terminal e alterações.
+A interface inspirada no Claude Code Remote em `/` reúne projetos, sessões, conversa,
+terminal e alterações.
 Skills, plugins, agentes e configurações abrem na própria navegação, sem kanban ou
 questionário. `/prototype` permanece como alias. A autenticação GitHub ou por chave
 de acesso existente protege as duas entradas. `/legacy` preserva o painel avançado.
@@ -112,8 +113,10 @@ bunx playwright test --config playwright.prototype.config.ts
 O navegador usa servidor real e diretórios isolados. Cenários de contrato substituem
 apenas fronteiras externas; são distintos da homologação GitHub e do TUI instalado.
 O teste nativo cria uma conversa vazia antes de retomar e não envia prompt ao modelo.
-O lote real de `juninmd/skills`, revisão `915a14f542e620a2f6309083cc24265aafcfc049`,
-concluiu 35 skills: 30 novas, cinco preservadas, zero falhas no acesso autenticado.
+Na validação anterior, em 20/10/2026, o lote real de `juninmd/skills`, revisão
+`915a14f542e620a2f6309083cc24265aafcfc049`, concluiu 35 skills: 30 novas, cinco
+preservadas, zero falhas no acesso autenticado. Esse registro histórico não substitui
+uma nova execução das integrações opcionais.
 A skill já ativa foi mantida e as novas ficaram pendentes. Isso não certifica a
 qualidade das instruções importadas; a ativação exige revisão do conteúdo.
 
@@ -121,5 +124,9 @@ O transporte nativo existente usa PTY em POSIX e pipes no Windows. O TUI OpenCod
 foi exercitado no Windows; não há uma implementação nova de ConPTY. Testes POSIX
 são ignorados explicitamente no Windows. CI remota e implantação são evidências
 separadas dos gates locais. Capturas da UI e do terminal são anexadas ao PR.
+
+As capturas `docs/screenshots/unified-remote/live-workspace-*.png` mostram a versão
+compilada com um repositório e uma tarefa locais de teste, sem executar um modelo.
+As demais capturas dessa pasta documentam o protótipo e integrações anteriores.
 
 Código: `packages/web/src/features/remote-workspace/`; estilos restritos a `rw-*`.

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Remote workspace completion**: recover the Claude Code Remote inspired layout, discover resumable session engines from the server, preserve the Android setup and 3D Office integration, and expose the previous panel through the navigation. Legacy GitHub skill installation rejects unsafe metadata names before writing files.
 - **Unified remote workspace**: promote the unified UI to the authenticated app entrypoint, with conversational OpenCode turns, real branch/model/effort selection, inline project/GitHub/provider/MCP/harness settings, skills and agent templates. The terminal reuses the chat's exact OpenCode session; changes include committed, dirty and untracked files in preserved idle workspaces. The advanced panel remains available at `/legacy`.
 - **Remote instruction plugins**: discover GitHub catalogs and import complete skill folders pinned to a commit, stage/review/activate/remove them, or import all unique skills with progress, per-item results, preservation of existing imports and interruption between items. Registry mutations are serialized; pinned metadata is cached per credential, and quota errors explain how to retry.
 - **Conversational remote workspace**: Code mode now has searchable session history, a focused transcript, searchable repository selection, dynamic branch/engine/model controls (OpenCode by default), and an environment/background activity panel, responsive to phones. The existing grid remains under Session overview.

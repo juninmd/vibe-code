@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("an empty install explains what to do first", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/legacy");
   await expect(page.getByRole("heading", { name: "Welcome to vibe-code" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Installed agents" })).toBeVisible();
 
@@ -28,7 +28,7 @@ test("an empty install explains what to do first", async ({ page }) => {
 });
 
 test("New task without a repository leads to adding one", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/legacy");
   await expect(page.getByRole("heading", { name: "Welcome to vibe-code" })).toBeVisible();
 
   await page.getByRole("button", { name: "Task", exact: true }).click();
@@ -41,7 +41,7 @@ test("New task without a repository leads to adding one", async ({ page }) => {
 test("the header menu opens the shortcuts reference", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/legacy");
   await page.getByRole("button", { name: "Menu" }).click();
   await page.getByRole("menuitem", { name: "Keyboard shortcuts" }).click();
   await expect(page.getByText(/Board shortcuts are off while a task terminal has focus/)).toBeVisible();

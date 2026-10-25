@@ -14,6 +14,11 @@ const OPTIONS: { value: AppMode; label: string; icon: string }[] = [
     label: "Terminals",
     icon: "M2 4.5h20v15H2zM6 9.5l2.5 2.5L6 14.5M12 15h6",
   },
+  {
+    value: "office3d",
+    label: "3D",
+    icon: "M12 2l9 5v10l-9 5-9-5V7zM12 12l9-5M12 12v10M12 12L3 7",
+  },
 ];
 
 /** Segmented control that switches between code mode, the kanban board and terminals. */
