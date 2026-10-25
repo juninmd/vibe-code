@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { MANUAL_TASK_TAG } from "@vibe-code/shared";
+import { MANUAL_TASK_TAG, REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import {
@@ -45,12 +45,14 @@ function readSessions(): Session[] {
   return initialSessions();
 }
 
-export function usePrototype() {
+export function useRemoteWorkspace() {
   const [source, setSource] = useState<"demo" | "server">(() =>
     new URLSearchParams(window.location.search).get("demo") === "1" ? "demo" : "server"
   );
   const [demoSessions, setDemoSessions] = useState(readSessions);
-  const [selectedId, setSelectedId] = useState<string | null>("unified");
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("session") ?? "unified"
+  );
   const [projectId, setProjectId] = useState("control");
   const [engine, setEngine] = useState(() => preferences().engine);
   const [model, setModel] = useState(() => preferences().model);
@@ -68,7 +70,7 @@ export function usePrototype() {
     },
     enabled: server,
     staleTime: 10_000,
-    refetchInterval: server ? 15_000 : false,
+    refetchInterval: server ? 3_000 : false,
     retry: false,
   });
   const projects = server ? (data.data?.repos ?? []).map(projectFromRepo) : DEMO_PROJECTS;
@@ -77,6 +79,18 @@ export function usePrototype() {
     : demoSessions;
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const project = projects.find((p) => p.id === (selected?.projectId ?? projectId)) ?? projects[0];
+  const engines = useQuery({
+    queryKey: ["prototype-engines"],
+    queryFn: api.engines.list,
+    enabled: server,
+    staleTime: 60_000,
+  });
+  const branches = useQuery({
+    queryKey: ["remote-branches", project?.id],
+    queryFn: () => api.repos.branches(project?.id ?? ""),
+    enabled: server && !!project && !selected,
+    retry: false,
+  });
   const history = useQuery({
     queryKey: ["unified-prototype", "logs", selectedId],
     queryFn: async () => {
@@ -91,7 +105,7 @@ export function usePrototype() {
       return logs.flat();
     },
     enabled: server && !!selected,
-    refetchInterval: server && selected?.status === "working" ? 5_000 : false,
+    refetchInterval: server && selected?.status === "working" ? 1_000 : 5_000,
     retry: false,
   });
   const messages =
@@ -121,16 +135,27 @@ export function usePrototype() {
   );
   const selectSession = (id: string) => {
     setSelectedId(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("session", id);
+    window.history.replaceState(null, "", url);
     const session = sessions.find((s) => s.id === id);
     if (session) setProjectId(session.projectId);
   };
   const newSession = (repoId?: string) => {
     setSelectedId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("session");
+    window.history.replaceState(null, "", url);
     const targetId = repoId ?? selected?.projectId ?? project?.id ?? projectId;
     setProjectId(targetId);
     setBranch(projects.find((p) => p.id === targetId)?.branch ?? "main");
   };
   const changeSource = (next: "demo" | "server") => {
+    const url = new URL(window.location.href);
+    if (next === "demo") url.searchParams.set("demo", "1");
+    else url.searchParams.delete("demo");
+    url.searchParams.delete("session");
+    window.history.replaceState(null, "", url);
     setSource(next);
     setSelectedId(next === "demo" ? "unified" : null);
     setProjectId(next === "demo" ? "control" : "");
@@ -140,20 +165,38 @@ export function usePrototype() {
     const prompt = text.trim();
     if (!prompt || !project || selected?.status === "working" || sending) return false;
     if (server) {
-      if (selected) return false;
       setSending(true);
       setSendError(null);
       try {
+        if (selected) {
+          await api.tasks.message(selected.id, prompt);
+          await Promise.all([data.refetch(), history.refetch()]);
+          return true;
+        }
+        if (!engines.data)
+          throw new Error("Aguarde o carregamento dos harnesses e tente novamente.");
+        const conversational =
+          engines.data?.find((item) => item.name === engine)?.supportsResume === true;
         const task = await api.tasks.create({
           repoId: project.id,
           description: prompt,
           engine,
-          ...(model ? { model } : {}),
+          ...(model
+            ? {
+                model: engine === "opencode" && effort ? `${model.split("#")[0]}#${effort}` : model,
+              }
+            : {}),
           baseBranch: branch || project.branch,
-          tags: [MANUAL_TASK_TAG],
+          tags: [MANUAL_TASK_TAG, ...(conversational ? [REMOTE_SESSION_TAG] : [])],
         });
-        await data.refetch();
+        // Keep the created session selected even if launching fails, so retry cannot duplicate it.
         setSelectedId(task.id);
+        const url = new URL(window.location.href);
+        url.searchParams.set("session", task.id);
+        window.history.replaceState(null, "", url);
+        await data.refetch();
+        if (conversational) await api.tasks.launch(task.id);
+        await data.refetch();
         return true;
       } catch (error) {
         setSendError(error instanceof Error ? error.message : String(error));
@@ -211,8 +254,21 @@ export function usePrototype() {
     );
     return true;
   };
-  const stop = () => {
-    if (!selected || server) return;
+  const stop = async () => {
+    if (!selected) return;
+    if (server) {
+      setSending(true);
+      setSendError(null);
+      try {
+        await api.tasks.cancel(selected.id);
+        await data.refetch();
+      } catch (error) {
+        setSendError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     const timer = timers.current.get(selected.id);
     if (timer) clearTimeout(timer);
     timers.current.delete(selected.id);
@@ -228,6 +284,8 @@ export function usePrototype() {
     selected,
     project,
     projectId,
+    engines,
+    branches,
     setProjectId,
     engine,
     setEngine,

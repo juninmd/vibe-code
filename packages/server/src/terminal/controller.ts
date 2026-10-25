@@ -30,6 +30,7 @@ import {
   writeSkillPlan,
   writeTaskBrief,
 } from "./harness";
+import { managedStatePath, writeManagedState } from "./managed-state";
 import { harnessModels, openCodeV2, prepareOpenCodeSession } from "./model-catalog";
 import { resolveShellCommand, TerminalSessionService } from "./session-service";
 import { manualPicks, planSkills, skillNames } from "./skill-plan";
@@ -590,6 +591,7 @@ export class TerminalController {
           env: this.harnessEnv(task, run.id),
         };
       } else {
+        await managedStatePath(cwd, "terminal.json");
         let resume = await this.canResume(cwd, engine);
         await writeTaskBrief(cwd, task);
         const { entries, injectable } = await this.loadSkills();
@@ -608,14 +610,26 @@ export class TerminalController {
         let sessionId: string | undefined;
         const v2 = engine === "opencode" && (await openCodeV2());
         if (v2) {
+          const previous = db.runs
+            .listByTask(task.id)
+            .find(
+              (item) =>
+                item.id !== run.id &&
+                item.engine === engine &&
+                item.worktreePath === cwd &&
+                item.sessionId
+            );
           const prepared = await prepareOpenCodeSession(
             cwd,
             task.title,
             request.model ?? task.model,
-            request.effort
+            request.effort,
+            undefined,
+            previous?.sessionId ?? undefined
           );
           sessionId = prepared.id;
           resume = prepared.resumed;
+          db.runs.updateSessionId(run.id, sessionId);
         } else if (engine === "opencode") {
           await writeOpencodeModel(cwd, request.model ?? task.model);
         }
@@ -665,7 +679,7 @@ export class TerminalController {
       effort: request.effort,
     });
     if (!shell) {
-      await writeFile(join(cwd, SESSION_MARKER), JSON.stringify({ engine, runId: run.id }), "utf8");
+      await writeManagedState(cwd, "terminal.json", JSON.stringify({ engine, runId: run.id }));
     }
 
     const opened = this.service.openSession({
@@ -735,7 +749,13 @@ export class TerminalController {
     }
 
     const worked = session ? await this.workspaceHasWork(session.cwd, task) : true;
-    const nextStatus = !ok ? "failed" : worked ? "review" : "backlog";
+    const nextStatus = !ok
+      ? "failed"
+      : task.tags.includes("remote-session")
+        ? "backlog"
+        : worked
+          ? "review"
+          : "backlog";
     const updated = db.tasks.updateField(taskId, "status", nextStatus);
     if (updated) hub.broadcastAll({ type: "task_updated", task: updated });
     const run = db.runs.getById(runId);

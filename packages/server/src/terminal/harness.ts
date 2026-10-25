@@ -9,6 +9,7 @@ import {
   type SkillPlan,
 } from "@vibe-code/shared";
 import { resolveOpencodeBinary } from "../agents/engines/opencode";
+import { managedStatePath, writeManagedState } from "./managed-state";
 
 /**
  * Agent harness = the interactive CLI (Claude Code, OpenCode) that runs inside a
@@ -189,9 +190,8 @@ export async function writeOpencodeModel(workdir: string, model?: string | null)
 // ─── Workspace files ────────────────────────────────────────────────────────
 
 export async function writeTaskBrief(workdir: string, task: HarnessTask): Promise<string> {
-  const file = join(workdir, BRIEF_PATH);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, buildTaskBrief(task), "utf8");
+  const file = await managedStatePath(workdir, "TASK.md");
+  await writeManagedState(workdir, "TASK.md", buildTaskBrief(task));
   return file;
 }
 
@@ -215,9 +215,7 @@ async function readManifest(workdir: string): Promise<Manifest> {
 }
 
 async function writeManifest(workdir: string, manifest: Manifest): Promise<void> {
-  const file = join(workdir, MANIFEST_PATH);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(manifest, null, 2), "utf8");
+  await writeManagedState(workdir, "skills.json", JSON.stringify(manifest, null, 2));
 }
 
 /** Resolve the git "info/exclude" file of a (possibly linked) worktree. */
@@ -437,7 +435,5 @@ export async function readSkillPlan(workdir: string): Promise<SkillPlan | null> 
 }
 
 export async function writeSkillPlan(workdir: string, plan: SkillPlan): Promise<void> {
-  const file = join(workdir, PLAN_PATH);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(plan, null, 2), "utf8");
+  await writeManagedState(workdir, "plan.json", JSON.stringify(plan, null, 2));
 }

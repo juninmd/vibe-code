@@ -6,16 +6,20 @@ import { TaskTerminal, type TaskTerminalHandle } from "../../components/TaskTerm
 import { publishTerminalEvent } from "../../hooks/terminalBus";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { ErrorNotice } from "./ManagementViews";
-import type { usePrototype } from "./usePrototype";
+import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
-export function HarnessTerminal({ workspace }: { workspace: ReturnType<typeof usePrototype> }) {
+export function HarnessTerminal({
+  workspace,
+}: {
+  workspace: ReturnType<typeof useRemoteWorkspace>;
+}) {
   const session = workspace.selected;
   const taskId = session?.id ?? "";
   const ref = useRef<TaskTerminalHandle>(null);
   const [model, setModel] = useState(
     session?.model && session.model !== "Modelo padrão" ? session.model : workspace.model
   );
-  const [effort, setEffort] = useState(workspace.effort);
+  const [effort, setEffort] = useState(session?.effort ?? workspace.effort);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [showSkills, setShowSkills] = useState(false);

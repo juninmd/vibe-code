@@ -7,12 +7,13 @@
 
 ## Operator Note
 
-An isolated, interactive UI candidate is available at **`/prototype`**: projects and
-sessions share one navigation, with Conversation, Terminal and Changes inside the
-same workspace. It also adapts Skills, GitHub plugin imports, agent templates,
-GitHub/provider/MCP settings and the current harness terminal, with dynamic model
-and effort selection. Demo interactions are labelled; real execution starts explicitly.
-See [the unified workspace prototype](docs/unified-remote-prototype.md).
+The default interface at **`/`** is the unified remote workspace: projects,
+sessions, conversational turns, harness terminal and changes share one shell.
+Skills, GitHub plugins (including bulk skill imports), agents and settings open
+inline. Models and effort come from the installed harness. Authentication remains
+required on protected deployments. `/prototype` is an alias; `?demo=1` enables
+explicit sample sessions. The previous control panel remains at `/legacy`.
+See [the remote workspace guide](docs/unified-remote-prototype.md).
 
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
 * Two surfaces: **Code** (default, mobile-first chat) and **Board** (kanban). Switch in the header.

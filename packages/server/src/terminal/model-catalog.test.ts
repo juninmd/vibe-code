@@ -37,6 +37,31 @@ describe("harness model and effort contract", () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+  test("attaches the terminal to the preceding chat run instead of creating another conversation", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "vibe-chat-attach-"));
+    const commands: string[][] = [];
+    try {
+      const run = async (argv: string[]) => {
+        commands.push(argv);
+        return JSON.stringify({ data: { id: "ses_chat", location: { directory: cwd } } });
+      };
+      expect(
+        await prepareOpenCodeSession(
+          cwd,
+          "Chat",
+          "fixture/reasoner#high",
+          undefined,
+          run,
+          "ses_chat"
+        )
+      ).toEqual({ id: "ses_chat", resumed: true });
+      expect(commands.some((args) => args.includes("/api/session"))).toBe(false);
+      const model = commands.find((args) => args.includes("/api/session/ses_chat/model"));
+      expect(model?.join(" ")).toContain('"variant":"high"');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
   test("reads Claude model aliases and effort from the installed CLI contract", () => {
     const help =
       "  --model <model>  Choose an alias, e.g.\n                   'swift' or 'solver'.\n  --effort <level> Effort level\n                   (low, high)\n  --name <name> Display name";

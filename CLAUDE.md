@@ -66,7 +66,7 @@ Repository contract entrypoints:
 
 ### Web internals (`packages/web/src/`)
 
-- **`prototypes/unified-remote/`** — isolated `/prototype` workspace candidate; inline skills/plugins/settings and task harness terminals, no board or task questionnaire. Preview with `./scripts/preview-unified.ps1` after building. See `docs/unified-remote-prototype.md` for real/demo boundaries and live verification commands.
+- **`features/remote-workspace/`** — default authenticated workspace at `/` (alias `/prototype`): inline skills/plugins/settings, real conversational tasks and current harness terminals, without board/questionnaire. `/legacy` retains the advanced control plane. Preview with `./scripts/preview-unified.ps1`; see `docs/unified-remote-prototype.md`.
 
 - **`api/client.ts`** — typed fetch wrapper over the REST API
 - **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)

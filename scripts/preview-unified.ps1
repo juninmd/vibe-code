@@ -21,7 +21,7 @@ $env:GITHUB_OAUTH_CLIENT_ID = ""
 $env:GITHUB_OAUTH_CLIENT_SECRET = ""
 $env:VIBE_CODE_API_KEY = ""
 New-Item -ItemType Directory -Path $env:VIBE_CODE_DATA_DIR -Force | Out-Null
-Write-Output "Protótipo: http://127.0.0.1:$Port/prototype"
+Write-Output "Workspace: http://127.0.0.1:$Port/"
 Write-Output "Dados isolados: $previewRoot"
 & bun run packages/server/src/index.ts
 exit $LASTEXITCODE
