@@ -42,7 +42,7 @@ test("drives a real shell from the task panel and survives a reload", async ({ p
   });
   expect(created.ok()).toBe(true);
 
-  await page.goto("/");
+  await page.goto("/legacy");
   await page.getByRole("heading", { name: title }).click();
 
   // Idle card: pick the plain shell and start it.

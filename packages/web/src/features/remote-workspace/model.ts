@@ -1,4 +1,10 @@
-import type { AgentLog, Repository, TaskWithRun } from "@vibe-code/shared";
+import {
+  type AgentLog,
+  REMOTE_SESSION_TAG,
+  type Repository,
+  type TaskWithRun,
+} from "@vibe-code/shared";
+import { buildChatItems } from "../../components/code-mode/chat";
 
 export type SessionStatus = "working" | "waiting" | "review" | "failed";
 export interface Message {
@@ -28,6 +34,7 @@ export interface Session {
   engine: string;
   model: string;
   effort?: string;
+  conversational?: boolean;
   branch: string;
   updatedAt: string;
   messages: Message[];
@@ -170,7 +177,9 @@ export function sessionFromTask(task: TaskWithRun): Session {
             ? "failed"
             : "waiting",
     engine: task.latestRun?.engine ?? task.engine ?? "Automático",
-    model: task.model ?? "Modelo padrão",
+    model: task.model?.split("#")[0] ?? "Modelo padrão",
+    effort: task.model?.split("#")[1],
+    conversational: task.tags.includes(REMOTE_SESSION_TAG),
     branch: task.branchName ?? task.baseBranch ?? task.repo?.defaultBranch ?? "—",
     updatedAt: task.updatedAt,
     messages: [],
@@ -179,17 +188,22 @@ export function sessionFromTask(task: TaskWithRun): Session {
   };
 }
 export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] {
-  const messages: Message[] = session.description
-    ? [{ id: "initial", role: "user", text: session.description }]
-    : [];
-  for (const log of logs) {
-    if (log.stream !== "stdout" && log.stream !== "stdin") continue;
-    const role = log.stream === "stdin" ? "user" : "assistant";
-    const previous = messages[messages.length - 1];
-    if (previous?.role === role && role === "assistant") previous.text += `\n${log.content}`;
-    else messages.push({ id: `log-${log.id}`, role, text: log.content });
-  }
-  return messages;
+  return buildChatItems(
+    {
+      id: session.id,
+      description: session.description,
+      title: session.title,
+      goal: null,
+      createdAt: session.updatedAt,
+    },
+    logs
+  )
+    .filter((item) => item.kind !== "system")
+    .map((item) => ({
+      id: item.id,
+      role: item.kind === "prompt" ? "user" : "assistant",
+      text: item.kind === "error" ? `Erro do harness:\n\n${item.text}` : item.text,
+    }));
 }
 export function demoReply(prompt: string): string {
   if (/teste|valid|revis/i.test(prompt))

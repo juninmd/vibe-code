@@ -1,10 +1,11 @@
-# Workspace remoto unificado — protótipo v3
+# Workspace remoto unificado
 
-O candidato fica em **`/prototype`**. Projetos, sessões, conversa, terminal e revisão
-compartilham a navegação. Skills, plugins, agentes e configurações são páginas do
-workspace, sem kanban nem questionários em modal. A aplicação atual continua em `/`.
+A interface principal em `/` reúne projetos, sessões, conversa, terminal e alterações.
+Skills, plugins, agentes e configurações abrem na própria navegação, sem kanban ou
+questionário. `/prototype` permanece como alias. A autenticação GitHub ou por chave
+de acesso existente protege as duas entradas. `/legacy` preserva o painel avançado.
 
-## Experimentar no Windows
+## Executar com dados isolados
 
 ```powershell
 bun install --frozen-lockfile
@@ -12,119 +13,113 @@ bun run build
 ./scripts/preview-unified.ps1
 ```
 
-Abra [o protótipo local](http://127.0.0.1:5188/prototype). O script sobe o servidor
-real, com UI compilada e APIs, restrito a `127.0.0.1`. Banco, clones e registro de
-plugins ficam em `%TEMP%/vibe-code-unified-preview`, separados dos dados normais.
-É possível escolher `-Port` e `-PreviewDirectory`. Os dados não são apagados ao sair.
+Abra http://127.0.0.1:5188/. O servidor real escuta somente em `127.0.0.1`;
+banco, clones e registro ficam em `%TEMP%/vibe-code-unified-preview`.
+O script aceita `-Port` e `-PreviewDirectory` e preserva os dados ao encerrar.
+Para usar uma instalação existente, abra `/` na origem dela. O Vite preview sem
+backend permite apenas a demonstração explícita com `?demo=1`.
 
-Para usar o ambiente existente, sirva o build normalmente e abra `/prototype` na
-mesma origem. A autenticação e as permissões das APIs existentes são preservadas.
-O Vite preview sozinho permite avaliar a demonstração, mas não fornece as APIs.
-A rota abre as sessões reais por padrão. Para avaliar os exemplos fictícios, use
-`/prototype?demo=1` ou **Configurações → Interface → Demonstração interativa**.
+## Fluxos reais
 
-## Fluxos disponíveis
+- **Projetos:** conecte uma URL ou caminho Git em Configurações → Projetos.
+  O clone é preparado pelo servidor; a criação de sessão consulta as branches reais.
+- **Conversa:** enviar inicia uma tarefa conversacional quando o engine anuncia
+  suporte a retomada. O OpenCode usa o mesmo contexto e workspace nas mensagens
+  seguintes. Uma falha preserva o rascunho; parar a execução é uma ação explícita.
+  A seleção de sessão fica na URL para sobreviver ao reload. O histórico consulta
+  os últimos cinco runs e atualiza a cada segundo enquanto o agente trabalha.
+- **Terminal:** conecta o xterm ao harness atual. Abrir a aba não dispara outro
+  processo. Quando parado, iniciar/retomar prepara o workspace e as skills. Um run
+  headless ativo impede um segundo harness. No OpenCode 2, o terminal herda o
+  identificador da conversa e grava esse mesmo identificador no run para o chat.
+- **Modelo e effort:** catálogos consultados no CLI instalado; nenhum novo catálogo
+  estático. O OpenCode persiste a variante no identificador `provider/model#variant`
+  usado pelos turnos e aplica o modelo pela API nativa no terminal. Claude Code
+  recebe `--effort` no terminal; o CLI valida a compatibilidade com o modelo.
+- **Alterações:** mostra commits, arquivos modificados e arquivos novos no workspace,
+  inclusive enquanto a sessão está parada. A leitura não prepara arquivos nem cria
+  commits. Arquivos novos binários ou maiores que 1 MiB têm apenas indicação de
+  conteúdo indisponível; links que escapam do workspace não são lidos.
+- **Recursos:** biblioteca de skills globais e do projeto, leitura das instruções,
+  seleção de skills ao iniciar o terminal e consulta dos templates de agentes.
+- **Configurações:** acesso GitHub e teste de conexão; projetos; harness e concorrência;
+  chaves Anthropic/OpenAI/Gemini; LiteLLM; mapa JSON de servidores MCP. Segredos
+  mascarados nunca preenchem os campos e as novas credenciais não ficam no navegador.
 
-| Área | Comportamento |
-| --- | --- |
-| Sessões | Demonstração interativa ou tarefas reais do servidor; criar uma sessão real registra uma tarefa `manual`, sem autoexecução. |
-| Projetos | Configurações → Projetos conecta uma URL ou caminho Git e acompanha a preparação do clone. |
-| Terminal | Em sessões reais, conecta o xterm ao terminal do harness atual; uma sessão parada oferece iniciar/retomar explicitamente. Abrir uma aba não dispara agentes. |
-| Modelo e effort | OpenCode e Claude Code; catálogo consultado no harness instalado, com preferência local para novas sessões e seleção antes de iniciar o terminal. |
-| Skills | Busca, categorias, catálogo global e do projeto, leitura das instruções globais e seleção manual ou automática ao iniciar o harness. |
-| Plugins remotos | URL GitHub, descoberta da branch padrão, catálogo de skills/agentes/regras/workflows, importação por commit, revisão, ativação e remoção. |
-| Agentes | Templates existentes, instruções e skills associadas, com busca e detalhes na própria página. |
-| GitHub | Substituir token e testar conexão usando as APIs existentes. O token não é preenchido a partir da resposta mascarada nem persistido no navegador. |
-| Configurações | Harness padrão, concorrência, chaves Anthropic/OpenAI/Gemini, gateway LiteLLM e mapa JSON de servidores MCP. |
+Engines sem suporte a conversa retomável, como o adaptador headless atual do
+Claude Code, criam sessões manuais que usam o terminal nativo. Não há simulação de
+respostas em sessões reais. A demonstração é opcional e identifica seus exemplos;
+as páginas de recursos/configurações continuam consultando o servidor.
 
-As páginas de recursos e configurações usam o **servidor real**, mesmo quando a
-lista de sessões está em demonstração. O cabeçalho identifica esse contexto.
+## Plugins remotos e importação em lote
 
-Ao alternar entre Conversa, Terminal e Alterações, a sessão permanece selecionada.
-Fechar a aba ou sair da página apenas desconecta o cliente do terminal; parar o
-harness exige a ação correspondente. Runs headless em andamento são identificados
-e não recebem um segundo agente pelo botão do protótipo.
+Informe `owner/repo` ou uma URL GitHub. O servidor descobre a branch padrão e fixa
+um commit completo. A credencial configurada no servidor permite acesso privado
+e a cota autenticada; erros de cota orientam configurar acesso ou aguardar.
+Metadados de revisões fixas têm cache limitado e separado por credencial.
 
-## Plugins e harnesses
+Skills incluem toda a pasta, com referências e scripts: até 200 arquivos, 1 MiB
+por arquivo e 8 MiB por pacote. Para um `SKILL.md` na raiz, o pacote é o próprio
+repositório e está sujeito aos mesmos limites. Caminhos inseguros e links simbólicos
+são excluídos. Importar não executa scripts ou hooks: os recursos ficam pendentes
+para leitura, ativação ou rejeição. Ativos podem ser removidos.
 
-O catálogo aceita `owner/repo` ou URL GitHub e usa a credencial GitHub do servidor
-quando configurada. Cada importação fixa o commit completo. Skills incluem a pasta
-inteira, com referências e scripts, respeitando limites de 200 arquivos, 1 MiB por
-arquivo e 8 MiB por pacote. Links simbólicos e caminhos inseguros são rejeitados.
-O conteúdo fica pendente até a ativação; importar não executa scripts ou hooks.
+**Importar todas as skills** processa o catálogo inteiro, independentemente da busca.
+Cópias da mesma skill são deduplicadas, priorizando `.agents/skills`. As existentes
+são preservadas, inclusive pendentes. Progresso e resultados individuais mostram
+sucessos, itens existentes e falhas; repetir tenta os restantes. Parar aguarda a
+skill em andamento e preserva os resultados. Não há ativação automática. Mutações
+do registro são serializadas e o manifesto é substituído atomicamente.
 
-**Importar todas as skills** processa o catálogo completo, independentemente do
-filtro de busca. Cópias da mesma skill são deduplicadas e as já importadas são
-preservadas. O progresso informa sucessos, itens existentes e falhas individuais;
-uma falha não impede as demais importações. É possível parar após a skill em
-andamento ou repetir o botão para tentar os itens restantes. A ativação continua
-individual, após revisão.
+Estes plugins são recursos de instruções. Skills ativas podem compor o plugin
+Claude Code ou as skills OpenCode do workspace. Agentes/regras/workflows ficam no
+catálogo; o seletor do terminal injeta skills. A tela não instala extensões
+JavaScript arbitrárias do OpenCode.
 
-O fluxo em lote tem quatro testes unitários e dois cenários de navegador cobrindo
-deduplicação, preservação de importações, falhas parciais, repetição e interrupção.
-[Captura do cenário de falha parcial](screenshots/unified-remote/bulk-import.png).
+## Contratos adicionados
 
-Os plugins desta tela são recursos de instruções do registro existente. Skills
-ativas podem compor o plugin gerado para Claude Code ou as skills do workspace
-OpenCode. Não é um instalador de extensões JavaScript ou hooks arbitrários do
-OpenCode. Agentes, regras e workflows importados também ficam no catálogo; o
-seletor do terminal injeta skills.
+- `GET /api/engines/:engine/harness-models` retorna
+  `{ "data": [{ "id": "provider/model", "name": "Model", "efforts": ["high"] }] }`.
+  Os valores são exemplos de formato, não uma lista de modelos disponíveis.
+- `GET /api/skills/remote/catalog?repo=juninmd/skills` retorna `repo`, `ref`, `commit`
+  e `assets` com `name`, `path`, `category`, `files`.
+- `POST /api/skills/remote/import` recebe `{ "repo": "owner/repo", "commit": "<sha40>",
+  "path": ".agents/skills/example/SKILL.md" }`; retorna um registro pendente com
+  `id`, origem, checksum, `bundleRoot` e `fileCount`. Erros usam `{ "error": "mensagem" }`.
+- `GET /api/skills/registry/:id/content` retorna `{ "data": { "content": "..." } }`.
+  Aprovação, rejeição e remoção reutilizam as rotas existentes do registro.
+- `POST /api/terminal/:taskId/start` aceita `effort` opcional, validado no catálogo
+  do modelo. O estado do terminal inclui `model` e `effort` quando está ativo.
 
-No OpenCode 2, o backend cria ou retoma a conversa exata registrada em
-`.vibe-code/opencode-session.json` e aplica modelo e variante pela API nativa.
-O terminal abre com `--session`, mantendo o contexto. No OpenCode 1, as opções
-vêm do catálogo verbose e a variante usa configuração do agente no processo.
-Claude Code recebe o effort por `--effort`; os níveis vêm do help instalado, e
-a compatibilidade final com o modelo é validada pelo próprio harness.
+As extensões são aditivas. `VIBE_CODE_SKILLS_PATH` configura a mesma pasta para
+loader e registro; `VIBE_CODE_HOST` configura o endereço de escuta. Defaults mantidos.
+Não há nova migração de banco. Para voltar à interface anterior, abra `/legacy`;
+para reverter a promoção, retorne o entrypoint autenticado para `AuthenticatedApp`.
+Dados, APIs e repositórios existentes são preservados.
 
-O backend mantém o transporte de terminal existente: PTY em POSIX e pipes no
-Windows. O TUI nativo do OpenCode 2 foi verificado neste Windows; não há nova
-implementação ConPTY. O chat consulta os logs persistidos de até cinco runs;
-a conversa interativa do harness é acessada pelo terminal.
-
-## Validação
+## Validação e limites
 
 ```powershell
+bun run lint
 bun run typecheck
+bun run test
 bun run build
-bun run --filter @vibe-code/web test
-bunx playwright test --config playwright.prototype.config.ts
-
-# Homologações opcionais, em ambiente isolado; sem enviar prompts ao modelo:
 $env:VIBE_PROTOTYPE_LIVE_GITHUB = "1"
 $env:VIBE_PROTOTYPE_LIVE_HARNESS = "1"
 bunx playwright test --config playwright.prototype.config.ts
 ```
 
-O Playwright serve a UI compilada pelo servidor real, com banco, repositórios e
-registro de skills isolados. A homologação GitHub usa `juninmd/skills`, descobre
-`master`, importa `bot-engineering` com os dois arquivos e verifica a ativação na
-biblioteca. A homologação nativa abre o TUI instalado em um workspace descartável,
-confere modelo, effort, run e continuidade entre abas, sem enviar prompt ao modelo.
+O navegador usa servidor real e diretórios isolados. Cenários de contrato substituem
+apenas fronteiras externas; são distintos da homologação GitHub e do TUI instalado.
+O teste nativo cria uma conversa vazia antes de retomar e não envia prompt ao modelo.
+O lote real de `juninmd/skills`, revisão `915a14f542e620a2f6309083cc24265aafcfc049`,
+concluiu 35 skills: 30 novas, cinco preservadas, zero falhas no acesso autenticado.
+A skill já ativa foi mantida e as novas ficaram pendentes. Isso não certifica a
+qualidade das instruções importadas; a ativação exige revisão do conteúdo.
 
-Em 20/10/2026: build, typecheck, 190 testes web, 73 testes de servidor do escopo e
-12 cenários de navegador passaram; as homologações GitHub
-e OpenCode nativo passaram. Os testes de servidor do escopo cobrem pacote completo,
-injeção no workspace, revisão, caminhos inválidos, limites, falhas de download,
-seleção da conversa e contrato de effort. A suíte geral do servidor mantém as
-mesmas 11 falhas preexistentes observadas antes do candidato; o Biome do escopo
-passou, mas o lint geral também
-tem falhas de formatação em arquivos fora do escopo. Esses gates não estão aprovados.
+O transporte nativo existente usa PTY em POSIX e pipes no Windows. O TUI OpenCode
+foi exercitado no Windows; não há uma implementação nova de ConPTY. Testes POSIX
+são ignorados explicitamente no Windows. CI remota e implantação são evidências
+separadas dos gates locais. Capturas da UI e do terminal são anexadas ao PR.
 
-## Capturas
-
-![Terminal real com o TUI do OpenCode](screenshots/unified-remote/native-opencode.png)
-
-[Conversa](screenshots/unified-remote/conversation.png) ·
-[Plugins do GitHub](screenshots/unified-remote/plugin-catalog.png) ·
-[Revisão de plugin](screenshots/unified-remote/plugins-github.png) ·
-[Skills](screenshots/unified-remote/skills.png) ·
-[Configuração GitHub](screenshots/unified-remote/github.png) ·
-[Harness e effort](screenshots/unified-remote/harness-settings.png) ·
-[Celular](screenshots/unified-remote/mobile.png)
-· [Configurações no celular](screenshots/unified-remote/mobile-settings.png)
-
-O frontend do candidato fica em `packages/web/src/prototypes/unified-remote/`, com
-estilos restritos a `rw-*`. Os novos contratos de catálogo e effort são extensões
-das APIs de skills, engines e terminal existentes. `VIBE_CODE_SKILLS_PATH` permite
-isolar o catálogo/registro, e `VIBE_CODE_HOST` define o endereço de escuta do servidor.
+Código: `packages/web/src/features/remote-workspace/`; estilos restritos a `rw-*`.

@@ -1,9 +1,9 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { realpath } from "node:fs/promises";
 import type { HarnessModel } from "@vibe-code/shared";
 import { resolveOpencodeBinary } from "../agents/engines/opencode";
 import type { EngineRegistry } from "../agents/registry";
 import { killProcessTree } from "../utils/process-tree";
+import { readManagedState, writeManagedState } from "./managed-state";
 
 export async function harnessCli(argv: string[], cwd?: string): Promise<string> {
   const process = Bun.spawn(argv, { cwd, stdout: "pipe", stderr: "pipe" });
@@ -94,7 +94,7 @@ export function modelReference(model: string, effort?: string) {
   return {
     providerID: model.slice(0, separator),
     id: model.slice(separator + 1).split("#")[0],
-    ...(effort ? { variant: effort } : {}),
+    ...(effort || model.split("#")[1] ? { variant: effort || model.split("#")[1] } : {}),
   };
 }
 
@@ -112,15 +112,12 @@ export async function prepareOpenCodeSession(
   title: string,
   model?: string | null,
   effort?: string,
-  run = harnessCli
+  run = harnessCli,
+  previousId?: string
 ): Promise<{ id: string; resumed: boolean }> {
-  const marker = join(cwd, ".vibe-code", "opencode-session.json");
-  let id: string | undefined;
-  try {
-    id = (JSON.parse(await readFile(marker, "utf8")) as { id?: string }).id;
-  } catch {
-    /* First session in this workspace. */
-  }
+  const marker = await readManagedState(cwd, "opencode-session.json");
+  let id = marker ? (JSON.parse(marker) as { id?: string }).id : undefined;
+  id ??= previousId;
   if (id && !/^[\w-]+$/.test(id)) throw new Error("Identificador da sessão OpenCode inválido.");
   const reference = model ? modelReference(model, effort) : undefined;
   const binary = resolveOpencodeBinary();
@@ -141,6 +138,7 @@ export async function prepareOpenCodeSession(
         ],
         cwd
       );
+    await writeManagedState(cwd, "opencode-session.json", JSON.stringify({ id }));
     return { id, resumed: true };
   }
   const response = JSON.parse(
@@ -162,7 +160,6 @@ export async function prepareOpenCodeSession(
   ) as { data?: { id?: string; location?: { directory?: string } } };
   if (!response.data?.id) throw new Error("OpenCode não retornou a sessão criada.");
   await verifySessionWorkspace(cwd, response.data.location);
-  await mkdir(join(cwd, ".vibe-code"), { recursive: true });
-  await writeFile(marker, JSON.stringify({ id: response.data.id }), "utf8");
+  await writeManagedState(cwd, "opencode-session.json", JSON.stringify({ id: response.data.id }));
   return { id: response.data.id, resumed: false };
 }

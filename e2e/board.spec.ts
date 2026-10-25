@@ -41,12 +41,12 @@ async function openNewTaskModal(page: Page) {
 
 test.describe("Board UI", () => {
   test("board loads with header actions", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/legacy");
     await expect(page.getByRole("button", { name: "Task", exact: true })).toBeVisible();
   });
 
   test("new task modal exposes the expected fields", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/legacy");
     await openNewTaskModal(page);
 
     await expect(page.getByText("Repository", { exact: true })).toBeVisible();
@@ -71,7 +71,7 @@ test.describe("Board UI", () => {
 
   test("creates a task through the modal and opens its detail", async ({ page }) => {
     const title = `e2e ui task ${Date.now()}`;
-    await page.goto("/");
+    await page.goto("/legacy");
     await openNewTaskModal(page);
 
     // Repository

@@ -112,8 +112,11 @@ test.describe("Unified remote prototype", () => {
     expect(mutations).toEqual([]);
   });
 
-  test("preserves the existing application at the root route", async ({ page }) => {
+  test("opens the real workspace at root and preserves the advanced surface at /legacy", async ({ page }) => {
     await page.goto("/");
+    await expect(page.locator(".rw-root")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Servidor conectado", exact: true })).toBeVisible();
+    await page.goto("/legacy");
     await expect(page.getByRole("tab", { name: "Code", exact: true })).toBeVisible();
     await expect(page.locator(".rw-root")).toHaveCount(0);
   });
@@ -252,6 +255,9 @@ test.describe("Unified remote prototype", () => {
     const seed = join(root, "seed-native-terminal.ts");
     writeFileSync(seed, `import { createDb } from ${JSON.stringify(pathToFileURL(resolve("packages/server/src/db/index.ts")).href)};\nconst db = createDb(${JSON.stringify(join(root,"data/vibe.db"))});\nconst run = db.runs.create(${JSON.stringify(task.id)}, "opencode");\ndb.runs.updateStatus(run.id, "completed", { worktree_path: ${JSON.stringify(cwd)}, finished_at: new Date().toISOString() });\ndb.raw.close();\n`);
     execFileSync("bun", [seed], { stdio: "pipe" });
+    const prepare = join(root, "prepare-empty-native-session.ts");
+    writeFileSync(prepare, `import { prepareOpenCodeSession } from ${JSON.stringify(pathToFileURL(resolve("packages/server/src/terminal/model-catalog.ts")).href)};\nawait prepareOpenCodeSession(${JSON.stringify(cwd)}, "Native terminal fixture", ${JSON.stringify(model.id)}, "high");\n`);
+    execFileSync("bun", [prepare], { stdio: "pipe" });
     try {
       await page.goto("/prototype?demo=1");
       await page.locator(".rw-sidebar").getByRole("button", { name: "Configurações", exact: true }).click();
@@ -301,6 +307,7 @@ test.describe("Unified remote prototype", () => {
     await page.getByRole("button", { name: /Consultar servidor/ }).click();
     await page.getByRole("button", { name: "Escolher projeto", exact: true }).click();
     await page.getByRole("button", { name: /servidor\/project-added-through-ui/ }).click();
+    await page.getByLabel("Engine da sessão", { exact: true }).selectOption("claude-code");
     const prompt = "Verificar o projeto conectado pelo protótipo";
     await page.getByLabel("Mensagem para o agente").fill(prompt);
     await page.getByRole("button", { name: "Criar sessão", exact: true }).click();

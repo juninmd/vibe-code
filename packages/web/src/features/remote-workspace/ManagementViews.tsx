@@ -6,9 +6,9 @@ import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
-import type { usePrototype } from "./usePrototype";
+import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
-type Workspace = ReturnType<typeof usePrototype>;
+type Workspace = ReturnType<typeof useRemoteWorkspace>;
 export type ManagementPage = "skills" | "plugins" | "agents" | "settings";
 const LABELS = { skill: "Skill", agent: "Agente", rule: "Regra", workflow: "Workflow" };
 export function ErrorNotice({ error }: { error: unknown }) {
@@ -830,6 +830,11 @@ function SettingsPage({
     staleTime: 60_000,
   });
   const selectedModel = models.data?.find((model) => model.id === workspace.model);
+  const engineOptions = (engines.data ?? []).filter(
+    (engine) =>
+      engine.available &&
+      (engine.supportsResume || engine.name === "opencode" || engine.name === "claude-code")
+  );
   const action = useAction();
   const save = (data: UpdateSettingsRequest, reset?: () => void) =>
     action.run(
@@ -1013,8 +1018,17 @@ function SettingsPage({
                     workspace.setEffort("");
                   }}
                 >
-                  <option value="opencode">OpenCode</option>
-                  <option value="claude-code">Claude Code</option>
+                  {!engineOptions.some((engine) => engine.name === workspace.engine) && (
+                    <option value={workspace.engine}>
+                      {engines.data?.find((engine) => engine.name === workspace.engine)
+                        ?.displayName ?? workspace.engine}
+                    </option>
+                  )}
+                  {engineOptions.map((engine) => (
+                    <option value={engine.name} key={engine.name}>
+                      {engine.displayName}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label>

@@ -4,7 +4,7 @@ import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
 import { STATUS } from "./model";
-import { usePrototype } from "./usePrototype";
+import { useRemoteWorkspace } from "./useRemoteWorkspace";
 import {
   ChangesView,
   Composer,
@@ -12,7 +12,7 @@ import {
   SessionOverview,
   TerminalView,
 } from "./WorkspaceViews";
-import "./prototype.css";
+import "./workspace.css";
 
 type Tab = "conversation" | "terminal" | "changes";
 type Dialog = "projects" | "commands" | null;
@@ -61,8 +61,8 @@ function Modal({
   );
 }
 
-export default function UnifiedRemotePrototype() {
-  const workspace = usePrototype();
+export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void }) {
+  const workspace = useRemoteWorkspace();
   const [view, setView] = useState<"session" | "overview" | "activity" | ManagementPage>("session");
   const [tab, setTab] = useState<Tab>("conversation");
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -161,7 +161,7 @@ export default function UnifiedRemotePrototype() {
           >
             <Icon name="close" />
           </button>
-          <span className="rw-prototype-label">PRÉVIA</span>
+          {!workspace.server && <span className="rw-prototype-label">DEMO</span>}
         </div>
         <button
           type="button"
@@ -326,10 +326,13 @@ export default function UnifiedRemotePrototype() {
             <Icon name="settings" />
             Configurações
           </button>
-          <a className="rw-nav-item" href="/">
-            <Icon name="external" />
-            Versão atual
-          </a>
+
+          {onLogout && (
+            <button type="button" className="rw-nav-item" onClick={onLogout}>
+              <Icon name="external" />
+              Sair
+            </button>
+          )}
           <div className="rw-source-status">
             <span
               className={`rw-status-dot ${workspace.server && workspace.data.isError ? "failed" : "waiting"}`}
@@ -338,7 +341,7 @@ export default function UnifiedRemotePrototype() {
               ? workspace.data.isLoading
                 ? "Consultando servidor…"
                 : "Consulta ao servidor"
-              : "Protótipo interativo"}
+              : "Demonstração interativa"}
             <span className="rw-version">v3</span>
           </div>
         </div>

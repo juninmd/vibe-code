@@ -6,9 +6,9 @@ import { api } from "../../api/client";
 import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
 import { type Change, STATUS } from "./model";
-import type { usePrototype } from "./usePrototype";
+import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
-export type Workspace = ReturnType<typeof usePrototype>;
+export type Workspace = ReturnType<typeof useRemoteWorkspace>;
 
 export function Conversation({
   workspace,
@@ -178,14 +178,29 @@ export function Composer({
   const efforts = server
     ? (models.data?.find((model) => model.id === workspace.model)?.efforts ?? [])
     : ["low", "medium", "high"];
+  const engineOptions = server
+    ? (workspace.engines.data ?? []).filter(
+        (engine) =>
+          engine.available &&
+          (engine.supportsResume || engine.name === "opencode" || engine.name === "claude-code")
+      )
+    : [
+        { name: "opencode", displayName: "OpenCode" },
+        { name: "claude-code", displayName: "Claude Code" },
+      ];
+  const selectedEngine = selected?.engine ?? workspace.engine;
   const send = async () => {
     if (!draft.trim() || working || workspace.sending) return;
     if (await workspace.send(draft)) setDraft("");
   };
   return (
     <div className="rw-composer-wrap">
-      <ErrorNotice error={workspace.sendError || models.error} />
-      {server && selected ? (
+      <ErrorNotice
+        error={
+          workspace.sendError || models.error || workspace.branches.error || workspace.engines.error
+        }
+      />
+      {server && selected && !selected.conversational ? (
         <div className="rw-readonly-note">
           <Icon name="terminal" /> Continue a sessão no harness atual.
           <button type="button" className="rw-button primary" onClick={onTerminal}>
@@ -230,14 +245,14 @@ export function Composer({
                 <Icon name="plus" />
               </button>
               <span className="rw-composer-hint">
-                {working ? "A demonstração está respondendo" : "Enter para enviar"}
+                {working ? "O agente está trabalhando" : "Enter para enviar"}
               </span>
               {working ? (
                 <button
                   type="button"
                   className="rw-send"
                   onClick={workspace.stop}
-                  aria-label="Parar demonstração"
+                  aria-label={server ? "Parar execução" : "Parar demonstração"}
                 >
                   <Icon name="stop" size={15} />
                 </button>
@@ -245,8 +260,13 @@ export function Composer({
                 <button
                   type="submit"
                   className="rw-send"
-                  disabled={!draft.trim() || workspace.sending}
-                  aria-label={server ? "Criar sessão" : "Enviar mensagem"}
+                  disabled={
+                    !draft.trim() ||
+                    workspace.sending ||
+                    !project ||
+                    (server && !selected && !workspace.engines.data)
+                  }
+                  aria-label={server && !selected ? "Criar sessão" : "Enviar mensagem"}
                 >
                   <Icon name="arrow" size={18} />
                 </button>
@@ -273,15 +293,21 @@ export function Composer({
                     onChange={(e) => workspace.setBranch(e.target.value)}
                   >
                     <option value={project?.branch ?? "main"}>{project?.branch ?? "main"}</option>
-                    <option value="demo/interface-preview">demo/interface-preview</option>
+                    {(server ? (workspace.branches.data ?? []) : ["demo/interface-preview"])
+                      .filter((branch) => branch !== project?.branch)
+                      .map((branch) => (
+                        <option key={branch} value={branch}>
+                          {branch}
+                        </option>
+                      ))}
                   </select>
                 )}
               </span>
             </div>
             <div className="rw-composer-model">
               <select
-                aria-label="Engine do protótipo"
-                value={selected?.engine ?? workspace.engine}
+                aria-label="Engine da sessão"
+                value={selectedEngine}
                 disabled={!!selected}
                 onChange={(e) => {
                   workspace.setEngine(e.target.value);
@@ -289,11 +315,20 @@ export function Composer({
                   workspace.setEffort("");
                 }}
               >
-                <option value="opencode">OpenCode</option>
-                <option value="claude-code">Claude Code</option>
+                {!engineOptions.some((engine) => engine.name === selectedEngine) && (
+                  <option value={selectedEngine}>
+                    {workspace.engines.data?.find((engine) => engine.name === selectedEngine)
+                      ?.displayName ?? selectedEngine}
+                  </option>
+                )}
+                {engineOptions.map((engine) => (
+                  <option value={engine.name} key={engine.name}>
+                    {engine.displayName}
+                  </option>
+                ))}
               </select>
               <select
-                aria-label="Modelo do protótipo"
+                aria-label="Modelo da sessão"
                 value={selected ? "" : workspace.model}
                 disabled={!!selected}
                 onChange={(e) => {
@@ -332,8 +367,13 @@ export function Composer({
       <p className="rw-composer-caption">
         {server
           ? selected
-            ? "O terminal mantém o contexto e a conversa do harness."
-            : "Crie a sessão e abra o terminal para iniciar o harness."
+            ? selected.conversational
+              ? "Sua mensagem continua a mesma conversa e o mesmo workspace."
+              : "O terminal mantém o contexto e a conversa do harness."
+            : workspace.engines.data?.find((engine) => engine.name === workspace.engine)
+                  ?.supportsResume
+              ? "Enviar inicia o agente no workspace isolado."
+              : "Crie a sessão e abra o terminal para iniciar este harness."
           : "Protótipo interativo · respostas e comandos demonstrativos"}
       </p>
     </div>
@@ -454,6 +494,7 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
       !!workspace.selected?.branch &&
       workspace.selected.branch !== "—",
     retry: false,
+    refetchInterval: workspace.server ? 5_000 : false,
   });
   const changes: Change[] = workspace.server
     ? (diff.data?.files ?? []).map((file) => ({ ...file, patch: "" }))
@@ -463,6 +504,7 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
     queryKey: ["unified-prototype", "patch", workspace.selected?.id, current?.path],
     queryFn: () => api.tasks.diffFile(workspace.selected?.id ?? "", current?.path ?? ""),
     enabled: workspace.server && !!current,
+    refetchInterval: workspace.server ? 5_000 : false,
     retry: false,
   });
   const content = workspace.server ? (patch.data?.patch ?? "") : (current?.patch ?? "");

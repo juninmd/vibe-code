@@ -53,6 +53,57 @@ function fixture(options: { truncated?: boolean; large?: boolean; failure?: bool
 }
 
 describe("GitHub plugin bundles", () => {
+  test("reuses pinned tree metadata during a batch but refreshes branch discovery", async () => {
+    const catalog = fixture();
+    const source = await catalog.discover("team/catalog");
+    const spy = global.fetch as unknown as { mock: { calls: [string][] } };
+    const count = () =>
+      spy.mock.calls.filter(([url]) => String(url).includes("/git/trees/")).length;
+    expect(count()).toBe(1);
+    await catalog.bundle(source.repo, source.commit, source.assets[0].path);
+    expect(count()).toBe(1);
+    await catalog.discover("team/catalog");
+    expect(count()).toBe(2);
+  });
+  test("preserves concurrent imports and rejects duplicate activation paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibe-registry-concurrent-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const registry = new SkillRegistryService(root);
+    const bundle = (name: string) => ({
+      repo: "team/catalog",
+      commit,
+      path: `skills/${name}/SKILL.md`,
+      files: [
+        {
+          path: "SKILL.md",
+          content: new TextEncoder().encode(`---\nname: ${name}\n---\nInstructions`),
+        },
+      ],
+    });
+    await Promise.all([registry.stageBundle(bundle("one")), registry.stageBundle(bundle("two"))]);
+    expect((await registry.listInstalled()).map((item) => item.name).sort()).toEqual([
+      "one",
+      "two",
+    ]);
+    await expect(registry.stageBundle(bundle("ONE"))).rejects.toThrow("já foi importado");
+    await expect(registry.stageBundle(bundle("CON"))).rejects.toThrow("Nome de plugin inválido");
+    await Promise.all([registry.approve("skill:one"), registry.approve("skill:two")]);
+    expect((await registry.listInstalled()).every((item) => item.reviewStatus === "active")).toBe(
+      true
+    );
+  });
+  test("explains exhausted GitHub quota without exposing credentials", async () => {
+    const spy = spyOn(global, "fetch").mockResolvedValue(
+      new Response("rate limit", { status: 403, headers: { "x-ratelimit-remaining": "0" } })
+    );
+    try {
+      await expect(new GitHubPluginCatalog().discover("team/catalog")).rejects.toThrow(
+        "Limite de consultas"
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
   test("resolves the default branch, pins the commit, reviews and injects the complete skill", async () => {
     const catalog = fixture();
     const source = await catalog.discover("https://github.com/team/catalog");

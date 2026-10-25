@@ -52,6 +52,13 @@ export class SkillRegistryService {
   private activeDir: string;
   private pendingDir: string;
   private manifestPath: string;
+  private mutation: Promise<unknown> = Promise.resolve();
+
+  private serialize<T>(action: () => Promise<T>): Promise<T> {
+    const next = this.mutation.then(action, action);
+    this.mutation = next.catch(() => undefined);
+    return next;
+  }
 
   constructor(basePath = "~/.agents") {
     const resolvedBase = basePath.startsWith("~/") ? join(homedir(), basePath.slice(2)) : basePath;
@@ -81,7 +88,9 @@ export class SkillRegistryService {
   }
 
   private async writeManifest(entries: RegistryAssetRecord[]): Promise<void> {
-    await writeFile(this.manifestPath, JSON.stringify(entries, null, 2), "utf8");
+    const temporary = `${this.manifestPath}.tmp`;
+    await writeFile(temporary, JSON.stringify(entries, null, 2), "utf8");
+    await rename(temporary, this.manifestPath);
   }
 
   private inferTarget(repoPath: string, ref: string, assetPath?: string, content?: string) {
@@ -100,6 +109,8 @@ export class SkillRegistryService {
     const fallbackName =
       basename(remotePath).replace(/\.(instructions|agent|prompt)?\.md$/i, "") || repo;
     const name = meta.name || fallbackName.replace(/SKILL$/i, repo);
+    if (!/^[\w.-]+$/.test(name) || !safeAssetPath(name))
+      throw new Error("Nome de plugin inválido.");
     const categoryDir = CATEGORY_DIRS[category];
     const localFilePath =
       category === "skill"
@@ -131,6 +142,12 @@ export class SkillRegistryService {
    * Format: username/repo/path/to/skill
    */
   async installFromGitHub(
+    request: string | InstallRegistryAssetRequest
+  ): Promise<RegistryAssetRecord> {
+    return this.serialize(() => this.installFromGitHubLocked(request));
+  }
+
+  private async installFromGitHubLocked(
     request: string | InstallRegistryAssetRequest
   ): Promise<RegistryAssetRecord> {
     const normalizedRequest =
@@ -191,6 +208,15 @@ export class SkillRegistryService {
     path: string;
     files: { path: string; content: Uint8Array }[];
   }): Promise<RegistryAssetRecord> {
+    return this.serialize(() => this.stageBundleLocked(bundle));
+  }
+
+  private async stageBundleLocked(bundle: {
+    repo: string;
+    commit: string;
+    path: string;
+    files: { path: string; content: Uint8Array }[];
+  }): Promise<RegistryAssetRecord> {
     await this.init();
     const entryPath = bundle.path.endsWith("SKILL.md") ? "SKILL.md" : basename(bundle.path);
     const entry = bundle.files.find((file) => file.path === entryPath);
@@ -201,13 +227,18 @@ export class SkillRegistryService {
       bundle.path,
       new TextDecoder().decode(entry.content)
     );
-    if (!/^[\w.-]+$/.test(target.name) || target.name === "." || target.name === "..")
+    if (!/^[\w.-]+$/.test(target.name) || !safeAssetPath(target.name))
       throw new Error("Nome de plugin inválido.");
     if (bundle.files.some((file) => !safeAssetPath(file.path)))
       throw new Error("Caminho de arquivo inválido.");
     const manifest = await this.readManifest();
     const id = `${target.category}:${target.name}`;
-    if (manifest.some((record) => record.id === id && record.reviewStatus !== "rejected"))
+    if (
+      manifest.some(
+        (record) =>
+          record.id.toLowerCase() === id.toLowerCase() && record.reviewStatus !== "rejected"
+      )
+    )
       throw new Error(
         "Este plugin já foi importado. Remova a versão anterior antes de importar novamente."
       );
@@ -249,6 +280,10 @@ export class SkillRegistryService {
   }
 
   async approve(id: string): Promise<RegistryAssetRecord> {
+    return this.serialize(() => this.approveLocked(id));
+  }
+
+  private async approveLocked(id: string): Promise<RegistryAssetRecord> {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === id);
     if (!record) throw new Error("Registry asset not found");
@@ -283,6 +318,10 @@ export class SkillRegistryService {
   }
 
   async reject(id: string): Promise<RegistryAssetRecord> {
+    return this.serialize(() => this.rejectLocked(id));
+  }
+
+  private async rejectLocked(id: string): Promise<RegistryAssetRecord> {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === id);
     if (!record) throw new Error("Registry asset not found");
@@ -304,6 +343,10 @@ export class SkillRegistryService {
   }
 
   async uninstall(name: string): Promise<void> {
+    return this.serialize(() => this.uninstallLocked(name));
+  }
+
+  private async uninstallLocked(name: string): Promise<void> {
     const manifest = await this.readManifest();
     const record = manifest.find((entry) => entry.id === name || entry.name === name);
     if (!record) return;
