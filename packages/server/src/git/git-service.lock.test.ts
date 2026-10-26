@@ -37,4 +37,20 @@ describe("GitService per-repo lock", () => {
     // y completes before x because they don't share a lock.
     expect(order.indexOf("y:end")).toBeLessThan(order.indexOf("x:end"));
   });
+
+  it("releases the map entry after success and after an error", async () => {
+    const locks = (GitService as unknown as { repoLocks: Map<string, unknown> }).repoLocks;
+    await withRepoLock("/bare/D", async () => {});
+    await expect(
+      withRepoLock("/bare/D", async () => {
+        throw new Error("boom");
+      })
+    ).rejects.toThrow("boom");
+    let ran = false;
+    await withRepoLock("/bare/D", async () => {
+      ran = true;
+    });
+    expect(ran).toBe(true);
+    expect(locks.has("/bare/D")).toBe(false);
+  });
 });
