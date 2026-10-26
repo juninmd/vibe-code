@@ -1,22 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { runReviewPipeline } from "./review";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 describe("runReviewPipeline", () => {
-  let dbMock: any;
-  let hubMock: any;
-  let sysLogMock: any;
-  let promiseAllSpy: any;
+  let _dbMock: any;
+  let _hubMock: any;
+  let _sysLogMock: any;
+  let _promiseAllSpy: any;
 
   beforeEach(() => {
-    dbMock = {
+    _dbMock = {
       logs: {
         create: mock(() => {}),
       },
     };
-    hubMock = {
+    _hubMock = {
       broadcastToTask: mock(() => {}),
     };
-    sysLogMock = mock(() => {});
+    _sysLogMock = mock(() => {});
 
     // In a parallel execution environment without module isolation, `Promise.all` intercepts
     // are highly unstable and can cause hanging or cross-talk between concurrently executing tests.
