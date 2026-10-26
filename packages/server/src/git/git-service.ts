@@ -14,21 +14,19 @@ export class GitService {
   private static repoLocks = new Map<string, Promise<unknown>>();
 
   private static async withRepoLock<T>(barePath: string, fn: () => Promise<T>): Promise<T> {
-    const prev = GitService.repoLocks.get(barePath) ?? Promise.resolve();
+    const prev = (GitService.repoLocks.get(barePath) ?? Promise.resolve()).catch(() => {});
     let release: () => void = () => {};
     const next = new Promise<void>((r) => {
       release = r;
     });
-    GitService.repoLocks.set(
-      barePath,
-      prev.then(() => next)
-    );
+    const tail = prev.then(() => next);
+    GitService.repoLocks.set(barePath, tail);
     try {
       await prev;
       return await fn();
     } finally {
       release();
-      if (GitService.repoLocks.get(barePath) === prev.then(() => next)) {
+      if (GitService.repoLocks.get(barePath) === tail) {
         GitService.repoLocks.delete(barePath);
       }
     }
