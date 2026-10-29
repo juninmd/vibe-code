@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock, spyOn, beforeEach } from "bun:test";
 import { Hono } from "hono";
 import { createDb } from "../db";
 import { createSettingsRouter } from "./settings";
@@ -188,3 +188,160 @@ describe("Settings API - Additional provider logic part 2", () => {
     process.env.GITHUB_TOKEN = originalEnv;
   });
 });
+
+  import { ProviderRegistry } from "../git/providers/registry";
+import * as litellmCheck from "../agents/litellm-client";
+
+describe("API settings extra branch coverage", () => {
+    let db: any;
+    let registry: any;
+    let app: any;
+
+    beforeEach(() => {
+      db = createDb(":memory:");
+      registry = new ProviderRegistry(db);
+      app = new Hono().route("/", createSettingsRouter(db, registry));
+    });
+
+    it("PUT / updates githubToken and fetches user", async () => {
+      db.settings.set("github_token", "old");
+      const mockAdapter = {
+        getUser: mock(async () => ({ username: "gh_user" }))
+      };
+      registry.get = mock((p: string) => p === "github" ? mockAdapter : undefined);
+
+      const res = await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ githubToken: "new_token" })
+      });
+
+      expect(res.status).toBe(200);
+      expect(db.settings.get("github_token")).toBe("new_token");
+      expect(db.settings.get("github_username")).toBe("gh_user");
+
+      // With exception
+      mockAdapter.getUser.mockRejectedValueOnce(new Error("fail"));
+      await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ githubToken: "newer_token" })
+      });
+      expect(db.settings.get("github_username")).toBe("gh_user"); // unchanged
+
+      // Empty token
+      await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ githubToken: "" })
+      });
+      expect(db.settings.get("github_username")).toBe("");
+    });
+
+    it("PUT / updates gitlabToken and fetches user", async () => {
+      const mockAdapter = {
+        getUser: mock(async () => ({ username: "gl_user" }))
+      };
+      registry.get = mock((p: string) => p === "gitlab" ? mockAdapter : undefined);
+      registry.rebuildGitLab = mock(() => {});
+
+      const res = await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gitlabToken: "new_token", gitlabBaseUrl: "https://new.gl" })
+      });
+
+      expect(res.status).toBe(200);
+      expect(db.settings.get("gitlab_token")).toBe("new_token");
+      expect(db.settings.get("gitlab_base_url")).toBe("https://new.gl");
+      expect(db.settings.get("gitlab_username")).toBe("gl_user");
+
+      // With exception
+      mockAdapter.getUser.mockRejectedValueOnce(new Error("fail"));
+      await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gitlabToken: "newer_token" })
+      });
+      expect(db.settings.get("gitlab_username")).toBe("gl_user"); // unchanged
+
+      // Empty token
+      await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gitlabToken: "" })
+      });
+      expect(db.settings.get("gitlab_username")).toBe("");
+    });
+
+    it("POST /test/telegram handles success and failure", async () => {
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "test_bot");
+      db.settings.set("telegram_chat_id", "1234");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response("ok") as any);
+
+      const res1 = await app.request("/test/telegram", { method: "POST" });
+      expect(res1.status).toBe(200);
+      expect(await res1.json()).toEqual({ data: { ok: true } });
+
+      fetchSpy.mockResolvedValueOnce(new Response("bad request", { status: 400 }) as any);
+      const res2 = await app.request("/test/telegram", { method: "POST" });
+      expect(res2.status).toBe(200);
+      expect((await res2.json() as any).data.ok).toBe(false);
+
+      fetchSpy.mockRejectedValueOnce(new Error("Network fail"));
+      const res3 = await app.request("/test/telegram", { method: "POST" });
+      expect(res3.status).toBe(200);
+      expect((await res3.json() as any).data.ok).toBe(false);
+
+      fetchSpy.mockRestore();
+    });
+
+    it("POST /test/:provider handles success and failure", async () => {
+      const mockAdapter = {
+        getUser: mock(async () => ({ username: "gh_user" }))
+      };
+      registry.get = mock((p: string) => p === "github" ? mockAdapter : undefined);
+      registry.getToken = mock((p: string) => p === "github" ? "token" : undefined);
+
+      const res1 = await app.request("/test/github", { method: "POST" });
+      expect(res1.status).toBe(200);
+      expect(await res1.json()).toEqual({ data: { ok: true, username: "gh_user" } });
+      expect(db.settings.get("github_username")).toBe("gh_user");
+
+      mockAdapter.getUser.mockRejectedValueOnce(new Error("bad token"));
+      const res2 = await app.request("/test/github", { method: "POST" });
+      expect(res2.status).toBe(200);
+      expect((await res2.json() as any).data.ok).toBe(false);
+
+      const res4 = await app.request("/test/gitlab", { method: "POST" });
+      expect(res4.status).toBe(200);
+      expect((await res4.json() as any).data.ok).toBe(false);
+    });
+
+    it("GET /litellm/health", async () => {
+      db.settings.set("litellm_base_url", "http://l");
+
+      const checkSpy = spyOn(litellmCheck, "checkLiteLLMHealth").mockResolvedValueOnce(true);
+
+      const res = await app.request("/litellm/health");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ data: { ok: true, baseUrl: "http://l" } });
+
+      checkSpy.mockRestore();
+    });
+
+    it("PUT / handles invalid input", async () => {
+      const res = await app.request("/", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maxAgents: "not a number"
+        })
+      });
+
+      expect(res.status).toBe(400);
+      expect((await res.json() as any).error).toBe("validation");
+    });
+  });
