@@ -21,7 +21,10 @@ export class EngineRegistry {
   private versionCache: Map<string, string | null> = new Map();
   private versionFetchInFlight: Map<string, Promise<string | null>> = new Map();
 
-  constructor() {
+  constructor(options: { seedDefaults?: boolean } = {}) {
+    // Tests create isolated registries and register their own mocks; production
+    // keeps the default set of engines.
+    if (options.seedDefaults === false) return;
     this.register(new ClaudeCodeEngine());
     this.register(new AiderEngine());
     this.register(new OpenCodeEngine());
