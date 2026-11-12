@@ -12,15 +12,15 @@
     "@vibe-code/shared": "workspace:*",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
-    "croner": "^10.0.1",
-    "dotenv": "^17.4.2",
-    "hono": "^4.12.26",
+    "croner": "^11.0.0",
+    "dotenv": "^18.0.9",
+    "hono": "^4.13.16",
     "playwright": "^1.62.1",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "fast-check": "^4.8.0",
-    "typescript": "^5.8.3"
+    "@types/bun": "^1.4.4",
+    "fast-check": "^4.10.2",
+    "typescript": "^7.0.2"
   }
 }
