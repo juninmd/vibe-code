@@ -49,7 +49,7 @@ export function installNativeFetch(): void {
   if (!server) return;
   const original = window.fetch.bind(window);
   window.fetch = Object.assign(
-    (input: RequestInfo | URL, init?: RequestInit) => {
+    (input: RequestInfo | URL, init?: RequestInit & { preconnect?: unknown }) => {
       if (typeof input === "string" && input.startsWith("/api")) {
         return original(`${server}${input}`, init);
       }
