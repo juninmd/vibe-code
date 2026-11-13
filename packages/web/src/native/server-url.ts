@@ -54,7 +54,6 @@ export function installNativeFetch(): void {
         return original(`${server}${input}`, init);
       }
       return original(input, init);
-    },
-    { preconnect: window.fetch.preconnect }
+    }
   ) as typeof fetch;
 }
