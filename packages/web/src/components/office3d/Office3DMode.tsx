@@ -3,7 +3,24 @@ import { SESSION_SOURCE_LABELS } from "@vibe-code/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSessions } from "../../hooks/useSessions";
 import { DEMO_SESSIONS } from "./demo";
+import { ENVIRONMENTS, type EnvironmentId, isEnvironment } from "./environments";
 import { createOfficeScene, type OfficeScene, SOURCE_SKIN } from "./scene";
+import { AVATAR_SKINS, type AvatarSkinId, isAvatarSkin } from "./skins";
+
+const readPref = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const writePref = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable (private mode): the choice just isn't remembered
+  }
+};
 
 const useDemo = () =>
   typeof window !== "undefined" && new URLSearchParams(window.location.search).has("office-demo");
@@ -16,6 +33,15 @@ export function Office3DMode() {
   const sceneRef = useRef<OfficeScene | null>(null);
   const [selected, setSelected] = useState<SessionCard | null>(null);
   const [failed, setFailed] = useState(false);
+  const [environment, setEnvironment] = useState<EnvironmentId>(() => {
+    const v = readPref("office3d.environment");
+    return isEnvironment(v) ? v : "office";
+  });
+  const [skin, setSkin] = useState<AvatarSkinId | "auto">(() => {
+    const v = readPref("office3d.skin");
+    return isAvatarSkin(v) ? v : "auto";
+  });
+  const initial = useRef({ environment, skin });
 
   const open = useMemo(() => {
     const cards = demo ? DEMO_SESSIONS : board.cards;
@@ -30,6 +56,8 @@ export function Office3DMode() {
       office = createOfficeScene(canvas, {
         reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
         onSelect: setSelected,
+        environment: initial.current.environment,
+        skin: initial.current.skin,
       });
     } catch {
       setFailed(true);
@@ -49,6 +77,16 @@ export function Office3DMode() {
   useEffect(() => {
     sceneRef.current?.setSessions(open);
   }, [open]);
+
+  useEffect(() => {
+    sceneRef.current?.setEnvironment(environment);
+    writePref("office3d.environment", environment);
+  }, [environment]);
+
+  useEffect(() => {
+    sceneRef.current?.setSkin(skin);
+    writePref("office3d.skin", skin);
+  }, [skin]);
 
   const active = open.filter((c) => c.status === "active").length;
   return (
@@ -73,6 +111,45 @@ export function Office3DMode() {
         {demo && (
           <span className="rounded-full bg-amber-500/15 px-3 py-1 text-amber-300">demo</span>
         )}
+      </div>
+      <div className="absolute right-4 top-4 flex gap-2 text-xs">
+        <label className="flex items-center gap-1 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-white backdrop-blur">
+          Ambiente
+          <select
+            aria-label="Ambiente"
+            className="bg-transparent outline-none"
+            value={environment}
+            onChange={(e) => isEnvironment(e.target.value) && setEnvironment(e.target.value)}
+          >
+            {ENVIRONMENTS.map((e) => (
+              <option key={e.id} value={e.id} className="text-black">
+                {e.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-white backdrop-blur">
+          Avatar
+          <select
+            aria-label="Avatar"
+            className="bg-transparent outline-none"
+            value={skin}
+            onChange={(e) =>
+              e.target.value === "auto"
+                ? setSkin("auto")
+                : isAvatarSkin(e.target.value) && setSkin(e.target.value)
+            }
+          >
+            <option value="auto" className="text-black">
+              Automático
+            </option>
+            {AVATAR_SKINS.map((s) => (
+              <option key={s.id} value={s.id} className="text-black">
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       {open.length === 0 && (
         <p className="pointer-events-none absolute inset-x-0 bottom-10 text-center text-sm text-secondary">
