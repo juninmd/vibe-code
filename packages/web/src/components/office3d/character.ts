@@ -47,7 +47,9 @@ function buildHead(
   bun: boolean
 ): { head: THREE.Group; eyes: THREE.Mesh[] } {
   const head = new THREE.Group();
-  head.add(mesh(new THREE.SphereGeometry(0.27, 40, 32), std(skin, 0.5), [0, 0, 0]));
+  const face = mesh(new THREE.SphereGeometry(0.27, 40, 32), std(skin, 0.5), [0, 0, 0]);
+  face.name = "skin";
+  head.add(face);
   // hair cap: upper sphere shell, open at the face
   const hairMat = std(hair, 0.8);
   const cap = mesh(
@@ -55,9 +57,13 @@ function buildHead(
     hairMat,
     [0, 0.01, -0.02]
   );
+  cap.name = "hair";
   head.add(cap);
-  if (bun) head.add(mesh(new THREE.SphereGeometry(0.11, 20, 14), hairMat, [0, 0.33, -0.1]));
-  else head.add(mesh(new THREE.SphereGeometry(0.2, 24, 16), hairMat, [0, 0.12, -0.2]));
+  const back = bun
+    ? mesh(new THREE.SphereGeometry(0.11, 20, 14), hairMat, [0, 0.33, -0.1])
+    : mesh(new THREE.SphereGeometry(0.2, 24, 16), hairMat, [0, 0.12, -0.2]);
+  back.name = "hair";
+  head.add(back);
   const eyeMat = new THREE.MeshStandardMaterial({ color: "#111827", roughness: 0.2 });
   const eyes = [-0.095, 0.095].map((x) => {
     const eye = mesh(new THREE.SphereGeometry(0.036, 16, 12), eyeMat, [x, 0.0, 0.25]);
@@ -90,9 +96,13 @@ function buildHead(
   // glasses
   const frame = std("#0f172a", 0.3);
   for (const x of [-0.095, 0.095]) {
-    head.add(mesh(new THREE.TorusGeometry(0.06, 0.007, 8, 24), frame, [x, 0.0, 0.262]));
+    const lens = mesh(new THREE.TorusGeometry(0.06, 0.007, 8, 24), frame, [x, 0.0, 0.262]);
+    lens.name = "glasses";
+    head.add(lens);
   }
-  head.add(mesh(new THREE.BoxGeometry(0.05, 0.008, 0.008), frame, [0, 0.015, 0.265]));
+  const bridge = mesh(new THREE.BoxGeometry(0.05, 0.008, 0.008), frame, [0, 0.015, 0.265]);
+  bridge.name = "glasses";
+  head.add(bridge);
   return { head, eyes };
 }
 
@@ -105,13 +115,16 @@ function addHeadphones(head: THREE.Group, accent: string) {
   });
   const band = mesh(new THREE.TorusGeometry(0.3, 0.018, 10, 40, Math.PI), mat, [0, 0.0, 0]);
   band.rotation.z = 0;
+  band.name = "headphones";
   head.add(band);
   for (const x of [-0.3, 0.3]) {
     const cup = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.07, 24), mat, [x, 0, 0]);
     cup.rotation.z = Math.PI / 2;
+    cup.name = "headphones";
     head.add(cup);
     const ring = mesh(new THREE.TorusGeometry(0.06, 0.008, 8, 24), glow, [x * 1.1, 0, 0]);
     ring.rotation.y = Math.PI / 2;
+    ring.name = "headphones";
     head.add(ring);
   }
 }

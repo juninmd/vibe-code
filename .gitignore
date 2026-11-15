@@ -20,3 +20,4 @@ playwright-report/
 
 # Android build output
 *.apk
+docs/previews/avatar-skins/bundle.js
