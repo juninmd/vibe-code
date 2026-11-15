@@ -2,7 +2,8 @@ import type { SessionCard, SessionSource } from "@vibe-code/shared";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type Character, createCharacter } from "./character";
-import { createRoom } from "./room";
+import { createEnvironment, type Environment, type EnvironmentId } from "./environments";
+import { AVATAR_SKINS, type AvatarSkinId, applyAvatarSkin } from "./skins";
 import { createDeskSet, createScreen, type Screen } from "./station";
 
 export const SOURCE_SKIN: Record<SessionSource, { accent: string; hair: string; label: string }> = {
@@ -113,13 +114,21 @@ function zzz(): THREE.Sprite {
 
 export interface OfficeScene {
   setSessions: (cards: SessionCard[]) => void;
+  setEnvironment: (id: EnvironmentId) => void;
+  /** "auto" gives each session a skin derived from its id. */
+  setSkin: (id: AvatarSkinId | "auto") => void;
   resize: () => void;
   dispose: () => void;
 }
 
 export function createOfficeScene(
   canvas: HTMLCanvasElement,
-  opts: { reducedMotion: boolean; onSelect: (card: SessionCard | null) => void }
+  opts: {
+    reducedMotion: boolean;
+    onSelect: (card: SessionCard | null) => void;
+    environment?: EnvironmentId;
+    skin?: AvatarSkinId | "auto";
+  }
 ): OfficeScene {
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -142,7 +151,8 @@ export function createOfficeScene(
   controls.minDistance = 4;
   controls.maxDistance = 26;
 
-  scene.add(new THREE.HemisphereLight("#c7d2fe", "#1e1b4b", 1.1));
+  const hemi = new THREE.HemisphereLight("#c7d2fe", "#1e1b4b", 1.1);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight("#fff4e0", 2.2);
   sun.position.set(6, 12, 4);
   sun.castShadow = true;
@@ -150,8 +160,26 @@ export function createOfficeScene(
   Object.assign(sun.shadow.camera, { left: -14, right: 14, top: 14, bottom: -14, far: 40 });
   scene.add(sun);
 
-  const room = createRoom(scene);
-  room.fit(12, 10, 0);
+  let environment: Environment;
+  let room: Environment["room"];
+  let envSize = { w: 12, d: 10, cz: 0 };
+  let skinChoice: AvatarSkinId | "auto" = opts.skin ?? "auto";
+  let current: SessionCard[] = [];
+  const applyEnvironment = (id: EnvironmentId) => {
+    environment?.dispose();
+    environment = createEnvironment(id, scene);
+    room = environment.room;
+    const t = environment.theme;
+    scene.background = new THREE.Color(t.background);
+    scene.fog = new THREE.Fog(...t.fog);
+    hemi.color.set(t.hemi[0]);
+    hemi.groundColor.set(t.hemi[1]);
+    hemi.intensity = t.hemi[2];
+    sun.color.set(t.sun[0]);
+    sun.intensity = t.sun[1];
+    room.fit(envSize.w, envSize.d, envSize.cz);
+  };
+  applyEnvironment(opts.environment ?? "office");
 
   const stations = new Map<string, Station>();
   const clickable: THREE.Object3D[] = [];
@@ -163,7 +191,8 @@ export function createOfficeScene(
   function frame(count: number) {
     const rows = Math.max(1, Math.ceil(count / COLS));
     const cols = Math.min(count, COLS) || 1;
-    room.fit(cols * GAP_X + 5, rows * GAP_Z + 3, ((rows - 1) * GAP_Z) / 2);
+    envSize = { w: cols * GAP_X + 5, d: rows * GAP_Z + 3, cz: ((rows - 1) * GAP_Z) / 2 };
+    room.fit(envSize.w, envSize.d, envSize.cz);
     const dist = 9 + Math.max(rows, Math.min(count, COLS)) * 2.4;
     camera.position.set(dist * 0.9, dist * 0.5, dist * 0.32);
     controls.target.set(0, 1.1, ((rows - 1) * GAP_Z) / 2);
@@ -191,6 +220,9 @@ export function createOfficeScene(
       skin: SKINS[(h >> 3) % SKINS.length],
       bun: h % 2 === 0,
     });
+    const skinId =
+      skinChoice === "auto" ? (AVATAR_SKINS[h % AVATAR_SKINS.length]?.id ?? "dev") : skinChoice;
+    applyAvatarSkin(character, skinId, skin.accent);
     character.group.position.y = 0.0;
     character.head.rotation.y = 0.5;
     const screen = createScreen(skin.accent, index);
@@ -292,7 +324,19 @@ export function createOfficeScene(
   canvas.addEventListener("click", onPointer);
 
   return {
+    setEnvironment(id) {
+      applyEnvironment(id);
+    },
+    setSkin(id) {
+      skinChoice = id;
+      for (const sid of [...stations.keys()]) removeStation(sid);
+      current.forEach((card, i) => {
+        addStation(card, i);
+      });
+      layout(current);
+    },
     setSessions(cards) {
+      current = cards;
       const ids = new Set(cards.map((c) => c.id));
       for (const id of [...stations.keys()]) if (!ids.has(id)) removeStation(id);
       cards.forEach((card, i) => {
