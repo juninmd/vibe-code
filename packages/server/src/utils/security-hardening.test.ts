@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { blockUnauthenticatedRemote, isLoopbackAddress } from "../security/network-guard";
+import {
+  blockUnauthenticatedRemote,
+  isLoopbackAddress,
+  rejectUnauthenticatedSocket,
+} from "../security/network-guard";
 import { agentProcessEnv, isServerOnlyEnv } from "./agent-env";
 import { REDACTED, redactSecrets, registerSecretSource, resetSecretCache } from "./secret-redactor";
 
@@ -85,6 +89,20 @@ describe("network guard", () => {
         VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE: "true",
       })
     ).toBeNull();
+  });
+});
+
+describe("live socket", () => {
+  it("refuses the upgrade instead of opening an unauthenticated socket", async () => {
+    // Task updates and agent transcripts are broadcast over /ws: a client that
+    // failed authentication must never get a socket to subscribe with.
+    const refused = rejectUnauthenticatedSocket(false);
+    expect(refused?.status).toBe(401);
+    expect(await refused?.json()).toEqual({
+      error: "unauthorized",
+      message: "Authentication required",
+    });
+    expect(rejectUnauthenticatedSocket(true)).toBeNull();
   });
 });
 

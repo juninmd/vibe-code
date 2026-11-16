@@ -5,7 +5,7 @@ test("guards both the workspace and prototype alias with the existing login", as
   await page.route("**/api/auth/me", (route) => route.fulfill({ json: { data: { enabled: true, authenticated: false } } }));
   for (const path of ["/", "/prototype"]) {
     await page.goto(path);
-    await expect(page.getByRole("button", { name: "Sign in with GitHub", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Entrar com GitHub", exact: true })).toBeVisible();
     await expect(page.locator(".rw-root")).toHaveCount(0);
   }
 });
@@ -63,7 +63,7 @@ test("creates a real conversational task with model effort and keeps failed foll
   await expect(page.getByLabel("Mensagem para o agente")).toHaveValue("");
   expect(messages.map((item) => item.task)).toEqual([task.id, task.id]);
   await page.reload();
-  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.screenshot({ path: "test-results/unified-prototype/real-workspace.png", fullPage: true });
 });

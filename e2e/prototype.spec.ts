@@ -105,9 +105,9 @@ test.describe("Unified remote prototype", () => {
     await page.goto("/prototype?demo=1");
     await page.getByRole("button", { name: "Configurações", exact: true }).click();
     await page.getByRole("button", { name: /Consultar servidor/ }).click();
-    await page.getByRole("navigation", { name: "Projetos e sessões" }).getByRole("button", { name: "Sessão real da fixture", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Sessão real da fixture" })).toBeVisible();
-    await expect(page.getByText("Histórico persistido na API de teste.", { exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Projetos e sessões" }).getByRole("button", { name: "Histórico persistido na API de teste.", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Histórico persistido na API de teste." })).toBeVisible();
+    await expect(page.getByLabel("Mensagem do usuário").getByText("Histórico persistido na API de teste.", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Servidor conectado", exact: true })).toBeVisible();
     expect(mutations).toEqual([]);
   });

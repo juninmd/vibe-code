@@ -77,6 +77,24 @@ export function setApiKey(key: string | null): void {
   }
 }
 
+/**
+ * Shared hooks (`@vibe-code/core`) call `fetch("/api/...")` directly, without
+ * this client. On a key-protected server those calls were answered 401, so the
+ * access key is added to every relative API request that carries no credentials.
+ */
+export function installApiKeyFetch(): void {
+  const original = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const apiKey = getApiKey();
+    if (!apiKey || typeof input !== "string" || !input.startsWith("/api")) {
+      return original(input, init);
+    }
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${apiKey}`);
+    return original(input, { ...init, headers });
+  }) as typeof fetch;
+}
+
 // NOTE: Workspace ID header disabled - API is now public (no authentication)
 // function getWorkspaceId(): string | null { ... }
 
