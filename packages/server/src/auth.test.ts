@@ -224,11 +224,11 @@ describe("createAuthRouter", () => {
     const req = new Request("http://localhost/github/callback?code=foo&state=invalid");
     spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
     const res = await router.request(req);
-    expect(res.status).toBe(400);
-    expect(await res.text()).toBe("Invalid OAuth state.");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/?auth_error=invalid_state");
   });
 
-  it("GET /github/callback returns 500 on fetch error", async () => {
+  it("GET /github/callback sends a failed exchange back to the login screen", async () => {
     const router = createAuthRouter({} as any);
     const req = new Request("http://localhost/github/callback?code=foo&state=valid");
     spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
@@ -237,8 +237,8 @@ describe("createAuthRouter", () => {
     );
 
     const res = await router.request(req);
-    expect(res.status).toBe(500);
-    expect(await res.text()).toContain("GitHub login failed: bad");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/?auth_error=github_failed");
     fetchSpy.mockRestore();
   });
 
@@ -280,7 +280,7 @@ describe("createAuthRouter", () => {
     fetchSpy.mockRestore();
   });
 
-  it("GET /github/callback returns 403 if user not in allowlist", async () => {
+  it("GET /github/callback rejects a user outside the allowlist", async () => {
     process.env.GITHUB_ALLOWED_USERS = "user2,user3";
     const router = createAuthRouter({} as any);
     const req = new Request("http://localhost/github/callback?code=foo&state=valid");
@@ -288,8 +288,8 @@ describe("createAuthRouter", () => {
     const fetchSpy = setupGitHubCallbackMocks();
 
     const res = await router.request(req);
-    expect(res.status).toBe(403);
-    expect(await res.text()).toBe("GitHub user is not allowed for this deployment.");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/?auth_error=not_allowed");
 
     delete process.env.GITHUB_ALLOWED_USERS;
     fetchSpy.mockRestore();
@@ -318,12 +318,40 @@ describe("createAuthRouter", () => {
     const db = {
       raw: {
         prepare: mock().mockReturnValue({ run: mock() }),
+        query: mock().mockReturnValue({ get: () => null }),
       },
+      settings: { get: mock(() => null), set: mock() },
     };
     spyOn(honoCookie, "getCookie").mockReturnValueOnce("test-token");
     const router = createAuthRouter(db as any);
     const req = new Request("http://localhost/logout", { method: "POST" });
     const res = await router.request(req);
     expect(res.status).toBe(200);
+    expect(db.settings.set).not.toHaveBeenCalled();
+  });
+
+  it("POST /logout drops the GitHub token the signed-out user left for the agents", async () => {
+    const values: Record<string, string> = { github_token: "gho_user", github_username: "u" };
+    const db = {
+      raw: {
+        prepare: mock().mockReturnValue({ run: mock() }),
+        query: mock().mockReturnValue({
+          get: () => ({ id: "h", username: "u", access_token: "gho_user" }),
+        }),
+      },
+      settings: {
+        get: (key: string) => values[key] ?? null,
+        set: mock((key: string, value: string) => {
+          values[key] = value;
+        }),
+      },
+    };
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("test-token");
+    const res = await createAuthRouter(db as any).request(
+      new Request("http://localhost/logout", { method: "POST" })
+    );
+    expect(res.status).toBe(200);
+    expect(values.github_token).toBe("");
+    expect(values.github_username).toBe("");
   });
 });
