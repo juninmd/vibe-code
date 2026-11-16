@@ -136,6 +136,9 @@ Models come from the gateway's `/v1/models`, plus the optional fixed list
   other client, and says so at startup. Set a key or OAuth before opening it
   from your phone (`VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE=true` opts out,
   e.g. behind your own authenticating proxy).
+- **The live socket is authenticated too.** `/ws` carries task updates and agent
+  transcripts, so an upgrade without a valid key or session is refused with `401`
+  (the browser sends the key as `?api_key=`).
 - **Agents never get server secrets.** Every agent and terminal process starts
   from a sanitized environment: `VIBE_CODE_API_KEY`, OAuth client secret,
   `LITELLM_MASTER_KEY`, database URLs, bot tokens and any `*_SECRET`,

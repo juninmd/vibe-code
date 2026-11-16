@@ -216,6 +216,22 @@ describe("harness model and effort contract", () => {
       mockSpawn.mockRestore();
     });
 
+    test("recognises a colored v2 banner (FORCE_COLOR in the server environment)", async () => {
+      // Bytes printed by `FORCE_COLOR=1 opencode --version` on 2.2.6: the escape
+      // codes sit between "v" and the digits.
+      const colored = "\u001b[1mopencode\u001b[0m \u001b[2mv\u001b[0m\u001b[1m2.2.6\u001b[0m\n";
+      const mockSpawn = spyOn(Bun, "spawn").mockImplementation(() => {
+        return {
+          stdout: new Blob([colored]).stream(),
+          stderr: new Blob([]).stream(),
+          exited: Promise.resolve(0),
+        } as any;
+      });
+      const result = await openCodeV2();
+      expect(result).toBe(true);
+      mockSpawn.mockRestore();
+    });
+
     test("returns false if version does not match v2 pattern", async () => {
       const mockSpawn = spyOn(Bun, "spawn").mockImplementation(() => {
         return {

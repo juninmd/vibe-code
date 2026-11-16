@@ -20,6 +20,7 @@ Debug APK without Studio: `cd packages/web/android && ./gradlew assembleDebug`.
 ## Notes
 
 - WebView scheme is `http` with cleartext allowed so LAN servers work; prefer HTTPS when exposed publicly.
+- The server address accepts `host:port` (`http://` is assumed) or a full `https://` URL.
 - Key-protected servers: enter the access key on the login screen (sent as Bearer / `api_key`).
 - GitHub OAuth login is cookie based and is not supported in the app; use an access key.
 - The service worker is not registered inside the app.
