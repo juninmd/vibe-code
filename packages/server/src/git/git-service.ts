@@ -310,14 +310,42 @@ export class GitService {
     }
   }
 
-  async listRemoteBranches(repo: { url: string; provider: string }): Promise<string[]> {
-    if (!this._providers) return [repo.url.split("/").pop() ?? "main"];
-    const resolved = this._providers.resolve(repo.url);
-    if (!resolved) return [repo.url.split("/").pop() ?? "main"];
+  async listRemoteBranches(repo: {
+    url: string;
+    provider: string;
+    localPath?: string | null;
+  }): Promise<string[]> {
+    const resolved = this._providers?.resolve(repo.url);
+    if (resolved) {
+      try {
+        return await resolved.adapter.listBranches(resolved.token, repo.url);
+      } catch {
+        /* no token, API down or rate-limited: fall back to the local clone */
+      }
+    }
+    // Never invent a branch (the repo name used to be returned here): read the clone's own refs.
+    return repo.localPath ? this.listLocalBranches(repo.localPath) : [];
+  }
+
+  /** Branch names known to a local (bare) clone: its heads plus origin's remote-tracking refs. */
+  async listLocalBranches(barePath: string): Promise<string[]> {
     try {
-      return await resolved.adapter.listBranches(resolved.token, repo.url);
+      const result = await this.exec([
+        "git",
+        "--git-dir",
+        barePath,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/heads",
+        "refs/remotes/origin",
+      ]);
+      const names = result.stdout
+        .split("\n")
+        .map((ref) => ref.trim().replace(/^refs\/(heads|remotes\/origin)\//, ""))
+        .filter((name) => name && name !== "HEAD");
+      return [...new Set(names)];
     } catch {
-      return [repo.url.split("/").pop() ?? "main"];
+      return [];
     }
   }
 
