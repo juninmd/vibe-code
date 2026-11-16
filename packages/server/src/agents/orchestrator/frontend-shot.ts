@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
 import { chromium } from "playwright";
 import type { Db } from "../../db";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { killProcessTree } from "../../utils/process-tree";
 
 export async function captureFrontendScreenshotIfNeeded(
@@ -75,7 +76,7 @@ export async function captureFrontendScreenshotIfNeeded(
   sysLog(`[verify] Starting dev server using ${pm} run ${devScript}...`);
   const devProc = Bun.spawn([pm, "run", devScript], {
     cwd: wtPath,
-    env: { ...process.env, PORT: "5174" }, // suggest 5174 to avoid conflict
+    env: { ...agentProcessEnv(), PORT: "5174" }, // suggest 5174 to avoid conflict
     stdout: "pipe",
     stderr: "pipe",
   });

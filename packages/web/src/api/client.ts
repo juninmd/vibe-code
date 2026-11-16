@@ -39,6 +39,7 @@ import type {
   TerminalState,
   TestConnectionResult,
   UpdateLaneSettingsRequest,
+  UpdateRepoDefaultsRequest,
   UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
@@ -175,6 +176,9 @@ export const api = {
   repos: {
     list: () => request<Repository[]>("/repos"),
     get: (id: string) => request<Repository>(`/repos/${id}`),
+    /** Default engine/model for new sessions in this project (null clears it). */
+    updateDefaults: (id: string, data: UpdateRepoDefaultsRequest) =>
+      request<Repository>(`/repos/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     create: (data: CreateRepoRequest) =>
       request<Repository>("/repos", { method: "POST", body: JSON.stringify(data) }),
     remove: (id: string) => request<{ ok: boolean }>(`/repos/${id}`, { method: "DELETE" }),
@@ -257,10 +261,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data ?? {}),
       }),
-    message: (id: string, message: string) =>
+    message: (id: string, message: string, model?: string) =>
       request<AgentRun>(`/tasks/${id}/messages`, {
         method: "POST",
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(model ? { message, model } : { message }),
       }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
     unblock: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/unblock`, { method: "POST" }),
