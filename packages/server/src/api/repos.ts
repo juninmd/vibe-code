@@ -3,7 +3,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
-import { resolveAccessContext } from "../security/access-control";
+import {
+  asForbiddenResponse,
+  enforceRepoAccess,
+  resolveAccessContext,
+} from "../security/access-control";
 import { RepoSkillsLoader } from "../skills/repo-loader";
 import type { BroadcastHub } from "../ws/broadcast";
 
@@ -203,6 +207,40 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
     return c.json({ data: repo });
+  });
+
+  // Per-project defaults for new sessions (engine + model, e.g. "litellm/gpt-4o#high").
+  const modelRef = z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^[\w.@:-]+\/[\w./@:+-]+(#[\w-]+)?$/, "Use provider/model[#effort]");
+  const updateDefaultsSchema = z.object({
+    defaultEngine: z
+      .string()
+      .trim()
+      .max(64)
+      .regex(/^[\w-]+$/)
+      .nullable()
+      .optional(),
+    defaultModel: modelRef.nullable().optional(),
+  });
+  router.patch("/:id", async (c) => {
+    const repo = db.repos.getById(c.req.param("id"));
+    if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const decision = enforceRepoAccess(db, access.context, repo.id);
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+    const parsed = updateDefaultsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "validation", message: parsed.error.message }, 400);
+    const updated = db.repos.updateDefaults(repo.id, parsed.data);
+    if (updated) hub.broadcastAll({ type: "repo_updated", repo: updated });
+    return c.json({ data: updated });
   });
 
   router.get("/:id/branches", async (c) => {
