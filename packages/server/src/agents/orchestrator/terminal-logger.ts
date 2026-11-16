@@ -3,6 +3,8 @@
  * All agent events that go to the browser also appear here in real-time.
  */
 
+import { redactSecrets } from "../../utils/secret-redactor";
+
 const c = {
   reset: "\x1b[0m",
   bold: "\x1b[1m",
@@ -67,7 +69,8 @@ export function logAgentEvent(taskId: string, stream: string, content: string): 
   const tag = taskTag(taskId);
   const time = `${c.dim}[${ts()}]${c.reset}`;
 
-  const lines = content.split("\n");
+  // Server stdout ends up in docker/journal logs: scrub credentials like the WS and DB paths do.
+  const lines = redactSecrets(content).split("\n");
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
