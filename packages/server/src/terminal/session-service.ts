@@ -1,6 +1,7 @@
 import type { TerminalSignal } from "@vibe-code/shared";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as ScreenModel } from "@xterm/headless";
+import { agentProcessEnv } from "../utils/agent-env";
 import { processDirEnv } from "../utils/process-dir-env";
 import { killProcessTree } from "../utils/process-tree";
 
@@ -163,7 +164,7 @@ export class TerminalSessionService {
       const cols = Math.max(20, options.cols ?? DEFAULT_COLS);
       const rows = Math.max(5, options.rows ?? DEFAULT_ROWS);
       const env = {
-        ...process.env,
+        ...agentProcessEnv(),
         ...options.env,
         TERM: "xterm-256color",
         COLORTERM: "truecolor",

@@ -105,6 +105,15 @@ describe("publishRemoteSession", () => {
     expect(second.created).toBe(false);
     expect(createPR).toHaveBeenCalledTimes(1);
     expect(sh(origin, "log", "-1", "--format=%s", "vibe-code/abc/session")).toBe("Wire the toggle");
+
+    // Without an explicit title, the update commit names the latest request.
+    const run = db.runs.listByTask(task.id)[0];
+    db.logs.create(run.id, "stdin", "Add a keyboard shortcut");
+    await writeFile(join(workspace, "shortcut.ts"), "export const key = 'd';\n");
+    await publishRemoteSession(task.id, {}, deps);
+    expect(sh(origin, "log", "-1", "--format=%s", "vibe-code/abc/session")).toBe(
+      "Add a keyboard shortcut"
+    );
   });
 
   it("refuses when there is nothing to publish", async () => {
