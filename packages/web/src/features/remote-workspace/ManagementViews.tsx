@@ -186,7 +186,15 @@ function SkillsPage({ workspace }: { workspace: Workspace }) {
             <option value="project">Projeto: {workspace.project.name}</option>
           )}
         </select>
-        <button type="button" className="rw-button" onClick={() => void query.refetch()}>
+        <button
+          type="button"
+          className="rw-button"
+          onClick={async () => {
+            // The server caches the skill index; reload it so skills added on disk show up.
+            if (scope === "global" && workspace.server) await api.skills.refresh().catch(() => {});
+            void query.refetch();
+          }}
+        >
           Atualizar
         </button>
       </div>

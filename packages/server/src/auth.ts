@@ -236,6 +236,16 @@ export function authMiddleware(db: Db): MiddlewareHandler {
   };
 }
 
+export type LoginErrorCode = "invalid_state" | "not_allowed" | "github_failed";
+
+/**
+ * A failed OAuth callback goes back to the app's login screen with a short
+ * code, instead of leaving the user on a bare text page on the callback URL.
+ */
+function loginError(c: Context, code: LoginErrorCode) {
+  return c.redirect(`/?auth_error=${code}`);
+}
+
 export function createAuthRouter(db: Db) {
   const app = new Hono();
 
@@ -270,14 +280,14 @@ export function createAuthRouter(db: Db) {
       deleteCookie(c, STATE_COOKIE, { path: "/" });
 
       if (!code || !state || !storedState || !safeEqual(state, storedState)) {
-        return c.text("Invalid OAuth state.", 400);
+        return loginError(c, "invalid_state");
       }
 
       const accessToken = await exchangeCodeForToken(c, code);
       const ghUser = await fetchGitHubUser(accessToken);
       const allowlist = allowedUsers();
       if (allowlist.size > 0 && !allowlist.has(ghUser.login.toLowerCase())) {
-        return c.text("GitHub user is not allowed for this deployment.", 403);
+        return loginError(c, "not_allowed");
       }
 
       const sessionToken = randomToken();
@@ -312,12 +322,21 @@ export function createAuthRouter(db: Db) {
       return c.redirect("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return c.text(`GitHub login failed: ${message}`, 500);
+      console.warn(`[auth] GitHub login failed: ${message}`);
+      return loginError(c, "github_failed");
     }
   });
 
   app.post("/logout", (c: Context) => {
-    deleteSession(db, getCookie(c, SESSION_COOKIE));
+    const token = getCookie(c, SESSION_COOKIE);
+    const row = getSession(db, token);
+    // The login copied its GitHub token into the server settings for the agents;
+    // do not leave it behind once that user signs out.
+    if (row && db.settings.get("github_token") === row.access_token) {
+      db.settings.set("github_token", "");
+      db.settings.set("github_username", "");
+    }
+    deleteSession(db, token);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return c.json({ data: { ok: true } });
   });

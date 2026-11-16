@@ -131,6 +131,22 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
 }
 
+const LOGIN_ERRORS: Record<string, string> = {
+  invalid_state: "O login com GitHub expirou ou foi interrompido. Tente de novo.",
+  not_allowed: "Esta conta do GitHub não tem permissão neste servidor (GITHUB_ALLOWED_USERS).",
+  github_failed: "O GitHub recusou o login. Confira o OAuth app e tente de novo.",
+};
+
+/** Error code the OAuth callback left in the URL; removed so a reload does not repeat it. */
+function takeLoginError(): string | null {
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("auth_error");
+  if (!code) return null;
+  url.searchParams.delete("auth_error");
+  window.history.replaceState(null, "", url);
+  return LOGIN_ERRORS[code] ?? LOGIN_ERRORS.github_failed;
+}
+
 function LoginScreen({
   status,
   loading,
@@ -143,6 +159,7 @@ function LoginScreen({
   onRetry: () => void;
 }) {
   const [accessKey, setAccessKey] = useState("");
+  const [oauthError] = useState(takeLoginError);
   const github = status?.methods?.github ?? status?.enabled !== false;
   const keyLogin = status?.methods?.apiKey ?? status?.enabled !== false;
   // A stored key that the server still rejects is a wrong (or rotated) key.
@@ -159,6 +176,11 @@ function LoginScreen({
           Converse com seus agentes de código de qualquer lugar. Entre para acessar o servidor.
         </p>
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+        {oauthError && (
+          <p role="alert" className="mt-3 text-xs text-danger">
+            {oauthError}
+          </p>
+        )}
 
         {keyLogin && (
           <form
