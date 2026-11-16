@@ -48,7 +48,7 @@ export function Conversation({
           <h1>O que vamos construir?</h1>
           <p>
             {server
-              ? "Abra uma sessão na lateral para consultar a conversa, os logs e as alterações do servidor."
+              ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
               : "Do primeiro prompt à revisão do código.\nTudo na mesma sessão, de onde você estiver."}
           </p>
           {!server && (
@@ -361,6 +361,18 @@ export function Composer({
                       ? `Padrão do projeto (${projectDefault})`
                       : "Modelo padrão"}
                 </option>
+                {server &&
+                  !selected &&
+                  workspace.model &&
+                  !models.data?.some((m) => m.id === workspace.model) && (
+                    // Keep a saved/default model visible even while the list loads or its
+                    // provider is unreachable, instead of silently showing "Modelo padrão".
+                    <option value={workspace.model}>
+                      {models.isFetching
+                        ? workspace.model
+                        : `${workspace.model} (indisponível agora)`}
+                    </option>
+                  )}
                 {server ? (
                   models.data
                     ?.filter((model) => !selected || model.id !== selected.model)
@@ -534,15 +546,22 @@ export function PullRequestActions({ workspace }: { workspace: Workspace }) {
   return (
     <span className="rw-pr-actions">
       {selected.prUrl && (
-        <a className="rw-button" href={selected.prUrl} target="_blank" rel="noreferrer">
+        <a
+          className="rw-button"
+          href={selected.prUrl}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Ver PR"
+        >
           <Icon name="branch" size={13} />
-          Ver PR
+          <span className="rw-desktop-label">Ver PR</span>
         </a>
       )}
       <button
         type="button"
         className={`rw-button ${selected.prUrl ? "" : "primary"}`}
         disabled={busy}
+        aria-label={selected.prUrl ? "Atualizar PR" : "Criar PR"}
         title={
           selected.status === "working"
             ? "Aguarde o turno terminar"
@@ -552,7 +571,15 @@ export function PullRequestActions({ workspace }: { workspace: Workspace }) {
         }
         onClick={() => void workspace.createPullRequest()}
       >
-        {workspace.publishing ? "Publicando…" : selected.prUrl ? "Atualizar PR" : "Criar PR"}
+        {workspace.publishing ? (
+          "Publicando…"
+        ) : selected.prUrl ? (
+          <>
+            Atualizar<span className="rw-desktop-label"> PR</span>
+          </>
+        ) : (
+          "Criar PR"
+        )}
       </button>
       {workspace.publishError && (
         <span className="rw-pr-error" role="alert">

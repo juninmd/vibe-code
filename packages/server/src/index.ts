@@ -380,7 +380,12 @@ const server = Bun.serve({
   // those connections mid-flight, so the server waits longer before giving up.
   idleTimeout: 60,
   fetch(req, server) {
-    const blocked = blockUnauthenticatedRemote(server.requestIP(req)?.address, isAuthEnabled());
+    const blocked = blockUnauthenticatedRemote(
+      server.requestIP(req)?.address,
+      isAuthEnabled(),
+      process.env,
+      new URL(req.url).pathname
+    );
     if (blocked) return blocked;
     const url = new URL(req.url);
     if (url.pathname === "/ws") {

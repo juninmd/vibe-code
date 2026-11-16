@@ -322,6 +322,13 @@
   .rw-pr-error { position: absolute; left: 12px; right: 12px; top: 100%; margin-top: 4px; white-space: normal; background: var(--rw-panel); border: 1px solid var(--rw-border); border-radius: 6px; padding: 6px 8px; z-index: 5; }
   .rw-session-toolbar { position: relative; }
   .rw-tabs button { font-size: 12px; min-height: 44px; }
+  /* Tabs scroll and PR actions shrink so the toolbar never widens the page. */
+  .rw-main-shell { overflow-x: hidden; }
+  .rw-session-toolbar { gap: 8px; padding-inline: 12px; }
+  .rw-tabs { flex: 1; min-width: 0; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+  .rw-tabs::-webkit-scrollbar { display: none; }
+  .rw-pr-actions { flex-shrink: 0; }
+  .rw-desktop-label { display: none; }
   .rw-inspector.is-open { top: 52px; width: min(290px, calc(100vw - 35px)); }
   .rw-context-backdrop { inset: 52px 0 0; }
   .rw-terminal-view, .rw-changes-view { padding: 22px 14px; }
@@ -459,3 +466,4 @@
   .rw-terminal-heading { flex-wrap: wrap; }
   .rw-terminal-heading > div { flex-basis: 100%; }
 }
+.rw-project-default { display: block; margin-top: 2px; color: var(--rw-muted); font-size: 11px; }

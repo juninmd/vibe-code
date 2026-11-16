@@ -204,6 +204,10 @@ export function authStatus(db: Db, c: Context): AuthStatus {
     authenticated: !enabled || apiKeyAuth || Boolean(user),
     user: apiKeyAuth ? { githubId: "api-key", username: "api-key", displayName: "API Key" } : user,
     loginUrl: "/api/auth/github/start",
+    methods: {
+      github: Boolean(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET),
+      apiKey: Boolean(process.env.VIBE_CODE_API_KEY),
+    },
   };
 }
 

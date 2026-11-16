@@ -87,3 +87,13 @@ describe("network guard", () => {
     ).toBeNull();
   });
 });
+
+describe("blocked page", () => {
+  it("serves a readable page to browsers and JSON to the API", async () => {
+    const page = blockUnauthenticatedRemote("192.168.0.9", false, {}, "/");
+    expect(page?.headers.get("content-type")).toContain("text/html");
+    expect(await page?.text()).toContain("VIBE_CODE_API_KEY");
+    const api = blockUnauthenticatedRemote("192.168.0.9", false, {}, "/api/tasks");
+    expect(await api?.json()).toMatchObject({ error: "auth_required" });
+  });
+});

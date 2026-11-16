@@ -943,6 +943,8 @@ export interface AuthStatus {
   authenticated: boolean;
   user: AuthUser | null;
   loginUrl: string;
+  /** Sign-in methods the server accepts, so the login screen only offers working ones. */
+  methods?: { github: boolean; apiKey: boolean };
 }
 
 // ─── Statistics Types ────────────────────────────────────────────────────────
