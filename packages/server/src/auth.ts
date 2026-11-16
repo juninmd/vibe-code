@@ -30,7 +30,7 @@ interface SessionRow {
   expires_at: string;
 }
 
-function isAuthEnabled(): boolean {
+export function isAuthEnabled(): boolean {
   return Boolean(
     (process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET) ||
       process.env.VIBE_CODE_API_KEY

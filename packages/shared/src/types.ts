@@ -107,8 +107,17 @@ export interface Repository {
   status: RepoStatus;
   provider: GitProvider;
   errorMessage: string | null;
+  /** Engine new sessions in this project start with (null = workspace preference). */
+  defaultEngine?: string | null;
+  /** Model new sessions start with, `provider/model[#effort]` (null = engine default). */
+  defaultModel?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UpdateRepoDefaultsRequest {
+  defaultEngine?: string | null;
+  defaultModel?: string | null;
 }
 
 export interface Label {

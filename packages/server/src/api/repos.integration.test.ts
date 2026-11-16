@@ -667,3 +667,35 @@ describe("GET /api/repos/:id/manifests", () => {
     expect(res.status).toBe(500); // Because it attempts to load from non-existent git dir probably
   });
 });
+
+describe("PATCH /api/repos/:id (project defaults)", () => {
+  const patch = (body: unknown) => ({
+    method: "PATCH",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+  it("sets, keeps and clears the default engine and model", async () => {
+    const db = makeDb();
+    db.settings.set("auth_enabled", "false");
+    const repo = db.repos.create({ url: "https://github.com/org/app.git" });
+    const app = buildApp(db);
+    const set = await app.request(
+      `/api/repos/${repo.id}`,
+      patch({ defaultEngine: "opencode", defaultModel: "opencode-go/glm-5.3#high" })
+    );
+    expect(set.status).toBe(200);
+    expect((await set.json()).data).toMatchObject({
+      defaultEngine: "opencode",
+      defaultModel: "opencode-go/glm-5.3#high",
+    });
+    const cleared = await app.request(`/api/repos/${repo.id}`, patch({ defaultModel: null }));
+    expect((await cleared.json()).data).toMatchObject({
+      defaultEngine: "opencode",
+      defaultModel: null,
+    });
+    expect(
+      (await app.request(`/api/repos/${repo.id}`, patch({ defaultModel: "$(curl x)" }))).status
+    ).toBe(400);
+    expect((await app.request("/api/repos/nope", patch({ defaultModel: null }))).status).toBe(404);
+  });
+});

@@ -168,13 +168,26 @@ export function Composer({
 }) {
   const { selected, project, server } = workspace;
   const working = selected?.status === "working";
+  // A conversational session can switch model for its next turn, like Claude Code.
+  const canSwitchModel = !!selected?.conversational && server;
+  const modelEngine = selected ? selected.engine : workspace.engine;
   const models = useQuery({
-    queryKey: ["prototype-harness-models", workspace.engine],
-    queryFn: () => api.engines.harnessModels(workspace.engine),
-    enabled: server && !selected,
+    queryKey: ["prototype-harness-models", modelEngine],
+    queryFn: () => api.engines.harnessModels(modelEngine),
+    enabled: server && (!selected || canSwitchModel),
     staleTime: 60_000,
     retry: false,
   });
+  const composedModel = workspace.model
+    ? workspace.effort
+      ? `${workspace.model}#${workspace.effort}`
+      : workspace.model
+    : "";
+  const projectDefault = project?.defaultModel ?? "";
+  const isProjectDefault =
+    !!projectDefault &&
+    projectDefault === composedModel &&
+    (project?.defaultEngine ?? workspace.engine) === workspace.engine;
   const efforts = server
     ? (models.data?.find((model) => model.id === workspace.model)?.efforts ?? [])
     : ["low", "medium", "high"];
@@ -329,20 +342,33 @@ export function Composer({
               </select>
               <select
                 aria-label="Modelo da sessão"
-                value={selected ? "" : workspace.model}
-                disabled={!!selected}
+                title={selected ? "Modelo do próximo turno" : "Modelo da nova sessão"}
+                value={selected ? workspace.nextModel : workspace.model}
+                disabled={!!selected && !canSwitchModel}
                 onChange={(e) => {
+                  if (selected) {
+                    workspace.setNextModel(e.target.value);
+                    return;
+                  }
                   workspace.setModel(e.target.value);
                   workspace.setEffort("");
                 }}
               >
-                <option value="">{selected?.model ?? "Modelo padrão"}</option>
+                <option value="">
+                  {selected
+                    ? selected.model
+                    : projectDefault && !workspace.model
+                      ? `Padrão do projeto (${projectDefault})`
+                      : "Modelo padrão"}
+                </option>
                 {server ? (
-                  models.data?.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.id}
-                    </option>
-                  ))
+                  models.data
+                    ?.filter((model) => !selected || model.id !== selected.model)
+                    .map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.id}
+                      </option>
+                    ))
                 ) : (
                   <option value="demo/modelo-exemplo">demo/modelo-exemplo</option>
                 )}
@@ -360,6 +386,23 @@ export function Composer({
                   </option>
                 ))}
               </select>
+              {server && !selected && project && (
+                <button
+                  type="button"
+                  className={`rw-default-toggle ${isProjectDefault ? "is-default" : ""}`}
+                  disabled={workspace.savingDefault || (!workspace.model && !projectDefault)}
+                  aria-pressed={isProjectDefault}
+                  title={
+                    isProjectDefault
+                      ? "Remover o padrão deste projeto"
+                      : "Usar este harness e modelo em novas sessões deste projeto"
+                  }
+                  onClick={() => void workspace.saveProjectDefault(isProjectDefault)}
+                >
+                  <Icon name={isProjectDefault ? "check" : "plus"} size={11} />
+                  {isProjectDefault ? "Padrão do projeto" : "Definir padrão"}
+                </button>
+              )}
             </div>
           </div>
         </>
@@ -368,10 +411,12 @@ export function Composer({
         {server
           ? selected
             ? selected.conversational
-              ? "Sua mensagem continua a mesma conversa e o mesmo workspace."
+              ? workspace.nextModel
+                ? `Próximo turno com ${workspace.nextModel}, na mesma conversa e workspace.`
+                : "Sua mensagem continua a mesma conversa e o mesmo workspace."
               : "O terminal mantém o contexto e a conversa do harness."
-            : workspace.engines.data?.find((engine) => engine.name === workspace.engine)
-                  ?.supportsResume
+            : (workspace.engines.data?.find((engine) => engine.name === workspace.engine)
+                  ?.supportsResume ?? workspace.engine === "opencode")
               ? "Enviar inicia o agente no workspace isolado."
               : "Crie a sessão e abra o terminal para iniciar este harness."
           : "Protótipo interativo · respostas e comandos demonstrativos"}
