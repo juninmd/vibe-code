@@ -56,7 +56,7 @@ COPY --from=builder --chown=vibe:vibe /app/packages/web/dist ./packages/web/dist
 
 # OpenCode default config — use free models, no external API key required
 RUN mkdir -p /home/vibe/.config/opencode \
- && echo '{"$schema":"https://opencode.ai/config.json","model":"opencode/deepseek-v4-flash-free","share":"disabled","permission":{"*":"allow"}}' \
+ && echo '{"$schema":"https://opencode.ai/config.json","model":"opencode/deepseek-v4.1-flash-free","share":"disabled","permission":{"*":"allow"}}' \
       > /home/vibe/.config/opencode/opencode.json
 
 # Mount points expected by the operator
