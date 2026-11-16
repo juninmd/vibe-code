@@ -1,6 +1,7 @@
 import type { TerminalSignal } from "@vibe-code/shared";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as ScreenModel } from "@xterm/headless";
+import { processDirEnv } from "../utils/process-dir-env";
 import { killProcessTree } from "../utils/process-tree";
 
 interface TerminalSession {
@@ -166,6 +167,8 @@ export class TerminalSessionService {
         ...options.env,
         TERM: "xterm-256color",
         COLORTERM: "truecolor",
+        // Harnesses (OpenCode) resolve the project from $PWD, not the process cwd.
+        ...(options.cwd ? processDirEnv(options.cwd) : {}),
       } as Record<string, string>;
 
       const session = {

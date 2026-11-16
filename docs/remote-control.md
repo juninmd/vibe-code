@@ -61,6 +61,12 @@ restarts. They stay out of the automatic backlog/retry loops. A completed turn
 means the agent finished responding; it does **not** certify deterministic
 validation. Ask the agent to run checks and review **Changes & validation**.
 The harness does not automatically commit, push or create a PR after each turn.
+**Create PR** (next to the session status) does it on demand, like Claude Code on
+the web: it commits what the agent left in the workspace, pushes the session
+branch and opens the PR (`POST /api/tasks/:id/pull-request`). Once a PR exists
+the button becomes **Update PR** and later turns are pushed to the same PR. The
+workspace and CLI session stay intact, so the conversation continues. The agent
+can also open PRs itself when asked (GitHub MCP is injected when a token is set).
 Existing autonomous tasks retain their validation/review/publication pipeline.
 
 History stays visible on desktop and opens as a drawer on phones. The context
@@ -96,11 +102,34 @@ OpenCode `run` uses its native executable on Windows, the worktree as process
 (OpenCode 2.0.30 rejects it). Both `sessionID` and `sessionId` event fields are
 accepted without discarding the accompanying text.
 
+## Model providers (OpenCode)
+
+Configure them in **Settings → Providers**; the model picker then lists them
+next to whatever `opencode auth login` already provides.
+
+| Provider | Models | Credentials |
+|---|---|---|
+| OpenCode Go (subscription) | `opencode-go/*` | key in Settings or `OPENCODE_API_KEY`; otherwise the server's `opencode auth login` |
+| LiteLLM / any OpenAI-compatible gateway | `litellm/<gateway model id>` | base URL + key in Settings, or `LITELLM_BASE_URL` + `LITELLM_API_KEY` (`LITELLM_MASTER_KEY` also mints per-run virtual keys) |
+
+LiteLLM is declared as an `@ai-sdk/openai-compatible` provider in an inline
+config (`OPENCODE_CONFIG_CONTENT`); the key travels in `VIBE_LITELLM_API_KEY` and
+is referenced as `{env:VIBE_LITELLM_API_KEY}`, never written to disk or argv.
+Models come from the gateway's `/v1/models`, plus the optional fixed list
+(`litellm_models` / `LITELLM_MODELS`). The effort selector maps to OpenCode's
+`--variant`. `VIBE_OPENCODE_FREE_ONLY=true` restores the free-models-only list.
+
 ## Skills
 
-Code mode has no skill picker. Skills are resolved automatically from the task
-text by the existing matcher (`packages/server/src/skills/matcher.ts`) and
-loaded as session plugins — the operator only supplies the task.
+Skills follow OpenCode's official `SKILL.md` format and discovery. The inline
+config is an overlay, so OpenCode still reads the user's global config and the
+repository's own `opencode.json`, and loads skills from `.opencode/skills`,
+`.claude/skills`, `.agents/skills` (walking up to the git root) and
+`~/.config/opencode/skills`. vibe-code's catalog (`<skills path>/skills` and the
+reviewed `registry/skills`) is added through the `skills` config key, so the
+agent picks skills on demand with OpenCode's `skill` tool. The process gets
+`PWD` set to the workspace: OpenCode resolves the project from `$PWD`, and an
+inherited value hid the repository's skills and `AGENTS.md`.
 
 ## PWA
 
@@ -122,6 +151,11 @@ loaded as session plugins — the operator only supplies the task.
 | Variable | Default | Purpose |
 |---|---|---|
 | `VIBE_CODE_SESSION_NAME_PREFIX` | hostname | Prefix for auto-generated session names |
+| `OPENCODE_API_KEY` | — | OpenCode Go key (Settings value wins) |
+| `LITELLM_BASE_URL` / `LITELLM_API_KEY` | `http://localhost:4000` / — | LiteLLM gateway for `litellm/*` models |
+| `LITELLM_MODELS` | — | Extra LiteLLM model ids to always offer |
+| `VIBE_OPENCODE_FREE_ONLY` | `false` | Only offer free OpenCode models |
+| `VIBE_OPENCODE_E2E_BIN` | — | Path to `opencode` to run `opencode.e2e.test.ts` |
 
 ## Tests
 

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { checkLiteLLMHealth, getLiteLLMBaseUrl } from "../agents/litellm-client";
+import { checkLiteLLMHealth, getLiteLLMBaseUrl, listLiteLLMModels } from "../agents/litellm-client";
+import { readOpenCodeProviderSettings } from "../agents/opencode-providers";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
@@ -44,6 +45,9 @@ const updateSettingsSchema = z.object({
   gitlabBaseUrl: z.string().optional(),
   litellmBaseUrl: z.string().optional(),
   litellmEnabled: z.boolean().optional(),
+  litellmApiKey: z.string().max(4096).optional(),
+  litellmModels: z.string().max(10_000).optional(),
+  opencodeGoApiKey: z.string().max(4096).optional(),
   geminiApiKey: z.string().optional(),
   anthropicApiKey: z.string().optional(),
   openaiApiKey: z.string().optional(),
@@ -81,6 +85,7 @@ export function createSettingsRouter(
     const geminiApiKey = db.settings.get("gemini_api_key");
     const anthropicApiKey = db.settings.get("anthropic_api_key");
     const openaiApiKey = db.settings.get("openai_api_key");
+    const providers = readOpenCodeProviderSettings(db.settings);
     const telegram = resolveTelegramConfig(db);
 
     const mcpServersStr = db.settings.get("mcp_servers") || "{}";
@@ -119,6 +124,13 @@ export function createSettingsRouter(
         litellm: {
           baseUrl: litellmBaseUrl,
           enabled: litellmEnabled,
+          apiKeySet: !!providers.litellm.apiKey,
+          apiKey: maskToken(providers.litellm.apiKey),
+          models: providers.litellm.models,
+        },
+        opencodeGo: {
+          tokenSet: !!providers.goApiKey,
+          token: maskToken(providers.goApiKey),
         },
         apiKeys: {
           gemini: { token: maskToken(geminiApiKey), tokenSet: !!geminiApiKey },
@@ -194,6 +206,15 @@ export function createSettingsRouter(
     }
     if (parsed.data.litellmEnabled !== undefined) {
       db.settings.set("litellm_enabled", parsed.data.litellmEnabled ? "true" : "false");
+    }
+    if (parsed.data.litellmApiKey !== undefined) {
+      db.settings.set("litellm_api_key", parsed.data.litellmApiKey.trim());
+    }
+    if (parsed.data.litellmModels !== undefined) {
+      db.settings.set("litellm_models", parsed.data.litellmModels.trim());
+    }
+    if (parsed.data.opencodeGoApiKey !== undefined) {
+      db.settings.set("opencode_go_api_key", parsed.data.opencodeGoApiKey.trim());
     }
     if (parsed.data.geminiApiKey !== undefined) {
       db.settings.set("gemini_api_key", parsed.data.geminiApiKey.trim());
@@ -317,8 +338,15 @@ export function createSettingsRouter(
   // GET /api/settings/litellm/health — proxy to LiteLLM health endpoint
   app.get("/litellm/health", async (c) => {
     const baseUrl = getLiteLLMBaseUrl(db.settings.get("litellm_base_url"));
-    const healthy = await checkLiteLLMHealth(baseUrl);
-    return c.json({ data: { ok: healthy, baseUrl } });
+    const providers = readOpenCodeProviderSettings(db.settings);
+    // Any OpenAI-compatible gateway works: reachable /v1/models with the key counts as healthy.
+    const [healthy, models] = await Promise.all([
+      checkLiteLLMHealth(baseUrl),
+      providers.litellm.apiKey
+        ? listLiteLLMModels(baseUrl, providers.litellm.apiKey)
+        : Promise.resolve([] as string[]),
+    ]);
+    return c.json({ data: { ok: healthy || models.length > 0, baseUrl, models } });
   });
 
   return app;

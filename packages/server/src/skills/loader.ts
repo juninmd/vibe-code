@@ -228,6 +228,14 @@ export class SkillsLoader {
     this.basePath = resolvePath(basePath);
   }
 
+  /**
+   * Directories with official `<name>/SKILL.md` skills, handed to harnesses that
+   * discover skills natively (OpenCode `skills` config, Claude Code plugins).
+   */
+  skillDirs(): string[] {
+    return [join(this.basePath, "skills"), join(this.basePath, "registry", "skills")];
+  }
+
   updatePath(newPath: string): void {
     this.basePath = resolvePath(newPath);
     this.cache = null;
