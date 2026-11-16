@@ -2,6 +2,7 @@ import { existsSync, type Stats, statSync } from "node:fs";
 import { delimiter, dirname, extname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
+import { processDirEnv } from "../../utils/process-dir-env";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import {
   getOpenCodeProviderSettings,
@@ -495,9 +496,7 @@ export class OpenCodeEngine implements AgentEngine {
           ...launch.env,
           ...options.env,
           // OpenCode resolves the project from $PWD, not from the process cwd.
-          // An inherited PWD (the server's own directory) hides the workspace's
-          // AGENTS.md, opencode.json and .opencode/skills.
-          PWD: workdir,
+          ...processDirEnv(workdir),
         },
       });
 
