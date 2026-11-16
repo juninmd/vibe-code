@@ -109,12 +109,12 @@ export async function checkLiteLLMHealth(baseUrl: string): Promise<boolean> {
  *
  * Returns an empty array if the proxy is unreachable or the list is empty.
  */
-export async function listLiteLLMModels(baseUrl?: string): Promise<string[]> {
-  const url = baseUrl ?? getLiteLLMBaseUrl();
+export async function listLiteLLMModels(baseUrl?: string, apiKey?: string): Promise<string[]> {
+  const url = (baseUrl ?? getLiteLLMBaseUrl()).replace(/\/+$/, "").replace(/\/v1$/, "");
   try {
-    const masterKey = getMasterKey();
+    const key = apiKey || getMasterKey();
     const res = await fetch(`${url}/v1/models`, {
-      headers: { Authorization: `Bearer ${masterKey}` },
+      headers: { Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return [];

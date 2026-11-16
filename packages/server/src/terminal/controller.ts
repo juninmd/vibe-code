@@ -14,6 +14,7 @@ import {
   type TerminalStartRequest,
   type TerminalState,
 } from "@vibe-code/shared";
+import { openCodeProviderLaunch } from "../agents/opencode-providers";
 import type { EngineRegistry } from "../agents/registry";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
@@ -649,9 +650,20 @@ export class TerminalController {
           },
           env: this.harnessEnv(task, run.id),
         });
-        if (engine === "opencode" && !v2 && request.effort) {
-          launch.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
-            agent: { build: { model: request.model ?? task.model, variant: request.effort } },
+        if (engine === "opencode") {
+          // OpenCode Go / LiteLLM credentials plus the inline provider config.
+          const providers = await openCodeProviderLaunch({
+            model: request.model ?? task.model ?? undefined,
+            skillDirs: this.deps.skills.skillDirs?.(),
+          });
+          const overlay: Record<string, unknown> = { ...providers.config };
+          if (!v2 && request.effort) {
+            overlay.agent = {
+              build: { model: request.model ?? task.model, variant: request.effort },
+            };
+          }
+          Object.assign(launch.env, providers.env, {
+            OPENCODE_CONFIG_CONTENT: JSON.stringify(overlay),
           });
         }
       }
