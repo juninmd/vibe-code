@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, setApiKey } from "./api/client";
+import { api, getApiKey, setApiKey } from "./api/client";
 import { AppMenu } from "./components/AppMenu";
 import { Board } from "./components/Board";
 import { CodeMode, type NewRemoteSession } from "./components/code-mode/CodeMode";
@@ -143,79 +143,97 @@ function LoginScreen({
   onRetry: () => void;
 }) {
   const [accessKey, setAccessKey] = useState("");
+  const github = status?.methods?.github ?? status?.enabled !== false;
+  const keyLogin = status?.methods?.apiKey ?? status?.enabled !== false;
+  // A stored key that the server still rejects is a wrong (or rotated) key.
+  const keyRejected = !loading && !!status && !status.authenticated && !!getApiKey();
 
   return (
     <div className="min-h-screen bg-app text-primary flex items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-lg border border-default bg-surface p-6 shadow-xl">
         <div className="flex items-center gap-2.5">
           <img src="/icons/icon-192.png" alt="" width={32} height={32} className="rounded-lg" />
-          <h1 className="text-lg font-semibold">Harness Remote</h1>
+          <h1 className="text-lg font-semibold">vibe remote</h1>
         </div>
         <p className="mt-2 text-sm text-secondary">
-          Drive your coding agents from anywhere. Sign in to reach the harness.
+          Converse com seus agentes de código de qualquer lugar. Entre para acessar o servidor.
         </p>
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
 
-        <div className="mt-5 flex gap-2">
-          <Button
-            type="button"
-            variant="primary"
-            className="flex-1"
-            disabled={loading || status?.enabled === false}
-            onClick={() => {
-              window.location.href = api.auth.loginUrl();
+        {keyLogin && (
+          <form
+            className="mt-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const value = accessKey.trim();
+              if (!value) return;
+              setApiKey(value);
+              setAccessKey("");
+              onRetry();
             }}
           >
-            {loading ? "Checking…" : "Sign in with GitHub"}
-          </Button>
-          {error && (
-            <Button type="button" variant="ghost" onClick={onRetry}>
-              Retry
-            </Button>
-          )}
-        </div>
-
-        {status?.enabled !== false && (
-          <div className="mt-5 border-t border-subtle pt-4">
             <label
               htmlFor="access-key"
               className="text-[11px] font-medium uppercase tracking-wider text-muted"
             >
-              Access key
+              Chave de acesso
             </label>
-            <form
-              className="mt-2 flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const value = accessKey.trim();
-                if (!value) return;
-                setApiKey(value);
-                onRetry();
-              }}
-            >
+            <div className="mt-2 flex gap-2">
               <input
                 id="access-key"
                 type="password"
                 value={accessKey}
                 onChange={(e) => setAccessKey(e.target.value)}
-                placeholder="Paste your access key"
+                placeholder="Cole a chave de acesso"
                 autoComplete="current-password"
-                className="min-w-0 flex-1 rounded-md border border-strong bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+                aria-invalid={keyRejected}
+                className="min-w-0 flex-1 rounded-md border border-strong bg-surface px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-violet-500"
               />
-              <Button type="submit" variant="outline" disabled={accessKey.trim().length === 0}>
-                Use
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={loading || accessKey.trim().length === 0}
+              >
+                Entrar
               </Button>
-            </form>
-            <p className="mt-2 text-[11px] text-muted">
-              For deployments protected with <code>VIBE_CODE_API_KEY</code>.
-            </p>
+            </div>
+            {keyRejected ? (
+              <p role="alert" className="mt-2 text-xs text-danger">
+                Chave inválida. Confira o valor de <code>VIBE_CODE_API_KEY</code> no servidor.
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-muted">
+                O valor de <code>VIBE_CODE_API_KEY</code> configurado no servidor. Fica salvo só
+                neste aparelho.
+              </p>
+            )}
+          </form>
+        )}
+
+        {github && (
+          <div className={keyLogin ? "mt-5 border-t border-subtle pt-4" : "mt-5"}>
+            <Button
+              type="button"
+              variant={keyLogin ? "outline" : "primary"}
+              className="w-full"
+              disabled={loading}
+              onClick={() => {
+                window.location.href = api.auth.loginUrl();
+              }}
+            >
+              {loading ? "Verificando…" : "Entrar com GitHub"}
+            </Button>
           </div>
         )}
 
+        {error && (
+          <Button type="button" variant="ghost" className="mt-3 w-full" onClick={onRetry}>
+            Tentar de novo
+          </Button>
+        )}
+
         {status?.enabled === false && (
-          <p className="mt-3 text-xs text-warning">
-            Authentication is not configured on the server.
-          </p>
+          <p className="mt-3 text-xs text-warning">Autenticação não configurada no servidor.</p>
         )}
       </div>
     </div>

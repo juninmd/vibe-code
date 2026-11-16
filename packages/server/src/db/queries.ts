@@ -24,6 +24,7 @@ import type {
   TaskStatus,
   UpdateTaskRequest,
 } from "@vibe-code/shared";
+import { redactSecrets } from "../utils/secret-redactor";
 
 interface RunResult {
   changes: number;
@@ -65,6 +66,8 @@ interface RepoRow {
   status: string;
   provider: string;
   error_message: string | null;
+  default_engine?: string | null;
+  default_model?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -159,6 +162,8 @@ function mapRepo(row: RepoRow): Repository {
     status: row.status as Repository["status"],
     provider: (row.provider || "github") as GitProvider,
     errorMessage: row.error_message,
+    defaultEngine: row.default_engine ?? null,
+    defaultModel: row.default_model ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -413,6 +418,29 @@ export function createRepoQueries(db: Database) {
       error?: string | null
     ): Repository | null => {
       const row = stmts.updateStatus.get(status, localPath ?? null, error ?? null, id);
+      return row ? mapRepo(row) : null;
+    },
+    updateDefaults: (
+      id: string,
+      defaults: { defaultEngine?: string | null; defaultModel?: string | null }
+    ): Repository | null => {
+      const current = db
+        .prepare<RepoRow, [string]>("SELECT * FROM repositories WHERE id = ?")
+        .get(id);
+      if (!current) return null;
+      const engine =
+        defaults.defaultEngine === undefined
+          ? (current.default_engine ?? null)
+          : defaults.defaultEngine;
+      const model =
+        defaults.defaultModel === undefined
+          ? (current.default_model ?? null)
+          : defaults.defaultModel;
+      const row = db
+        .prepare<RepoRow, [string | null, string | null, string]>(
+          "UPDATE repositories SET default_engine = ?, default_model = ?, updated_at = datetime('now') WHERE id = ? RETURNING *"
+        )
+        .get(engine, model, id);
       return row ? mapRepo(row) : null;
     },
     remove: (id: string): void => {
@@ -873,7 +901,7 @@ export function createLogQueries(db: Database) {
     listByTaskAfter: (taskId: string, afterId: number, limit = 300): AgentLog[] =>
       stmts.listByTaskAfter.all(taskId, afterId, limit).map(mapLog),
     create: (runId: string, stream: string, content: string): AgentLog => {
-      const row = stmts.insert.get(runId, stream, content);
+      const row = stmts.insert.get(runId, stream, redactSecrets(content));
       if (!row) throw new Error("Failed to create log");
       return mapLog(row);
     },

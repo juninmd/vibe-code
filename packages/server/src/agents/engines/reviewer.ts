@@ -2,9 +2,11 @@
  * Reviewer engine — runs a specialized persona prompt (Claude/Gemini)
  * against the current git diff before PR creation.
  */
+
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { agentProcessEnv } from "../../utils/agent-env";
 
 export type ReviewPersona = "frontend" | "backend" | "security" | "quality" | "docs";
 
@@ -191,7 +193,7 @@ export async function runPersonaReview(opts: {
     const childEnv =
       runtime === "gemini"
         ? (() => {
-            const env = { ...process.env };
+            const env = { ...agentProcessEnv() };
             // Detached review worktrees should not attach to VS Code Gemini IDE client.
             delete env.GEMINI_CLI_IDE_SERVER_PORT;
             delete env.GEMINI_CLI_IDE_WORKSPACE_PATH;
@@ -213,7 +215,7 @@ export async function runPersonaReview(opts: {
             return env;
           })()
         : (() => {
-            const env = { ...process.env };
+            const env = { ...agentProcessEnv() };
             if (litellmKey) {
               // Route through LiteLLM proxy when available.
               env.ANTHROPIC_BASE_URL = litellmBaseUrl;

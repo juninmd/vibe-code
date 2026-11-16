@@ -20,6 +20,11 @@ export function HarnessTerminal({
     session?.model && session.model !== "Modelo padrão" ? session.model : workspace.model
   );
   const [effort, setEffort] = useState(session?.effort ?? workspace.effort);
+  // Follow model switches made in the conversation while this tab stays mounted.
+  const sessionModel = session?.model && session.model !== "Modelo padrão" ? session.model : "";
+  useEffect(() => {
+    if (sessionModel) setModel(sessionModel);
+  }, [sessionModel]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [showSkills, setShowSkills] = useState(false);

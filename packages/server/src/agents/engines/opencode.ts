@@ -2,6 +2,7 @@ import { existsSync, type Stats, statSync } from "node:fs";
 import { delimiter, dirname, extname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { processDirEnv } from "../../utils/process-dir-env";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import {
@@ -400,7 +401,7 @@ export class OpenCodeEngine implements AgentEngine {
       const proc = Bun.spawn([binary, "models"], {
         stdout: "pipe",
         stderr: "pipe",
-        env: { ...process.env, ...(launch?.env ?? {}) },
+        env: { ...agentProcessEnv(), ...(launch?.env ?? {}) },
       });
       if (await waitForModelsProcess(proc)) {
         const text = await new Response(proc.stdout).text();
@@ -487,7 +488,7 @@ export class OpenCodeEngine implements AgentEngine {
         stderr: "pipe",
         stdin: "pipe",
         env: {
-          ...process.env,
+          ...agentProcessEnv(),
           NODE_ENV: "development",
           // Belt-and-suspenders auto-allow (complements opencode.json) — ported
           // from multica's daemon: this works even if opencode.json is missing.
