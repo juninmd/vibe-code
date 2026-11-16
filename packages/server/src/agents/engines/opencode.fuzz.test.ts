@@ -4,7 +4,6 @@ import {
   DEFAULT_OPENCODE_MODEL,
   humanizeStderr,
   isFreeOpencodeModel,
-  LITELLM_ANTHROPIC_COMPAT_MODEL,
   OPENCODE_BLOCKED_ARGS,
   OPENCODE_FALLBACK_MODELS,
   OpenCodeEngine,
@@ -170,8 +169,9 @@ describe("DEFAULT_OPENCODE_MODEL invariant", () => {
     }
   });
 
-  it("LITELLM_ANTHROPIC_COMPAT_MODEL is NOT in free models (it's a proxy route)", () => {
-    expect(isFreeOpencodeModel(LITELLM_ANTHROPIC_COMPAT_MODEL)).toBe(false);
+  it("LiteLLM and OpenCode Go models are not free models", () => {
+    expect(isFreeOpencodeModel("litellm/gpt-4o-mini")).toBe(false);
+    expect(isFreeOpencodeModel("opencode-go/glm-5.3")).toBe(false);
   });
 });
 

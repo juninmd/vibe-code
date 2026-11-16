@@ -481,6 +481,43 @@ export function TerminalView({ workspace }: { workspace: Workspace }) {
   );
 }
 
+/** Claude Code–style "Create PR" / "View PR" for a conversational session. */
+export function PullRequestActions({ workspace }: { workspace: Workspace }) {
+  const { selected, server } = workspace;
+  if (!server || !selected?.conversational) return null;
+  const busy = workspace.publishing || selected.status === "working";
+  return (
+    <span className="rw-pr-actions">
+      {selected.prUrl && (
+        <a className="rw-button" href={selected.prUrl} target="_blank" rel="noreferrer">
+          <Icon name="branch" size={13} />
+          Ver PR
+        </a>
+      )}
+      <button
+        type="button"
+        className={`rw-button ${selected.prUrl ? "" : "primary"}`}
+        disabled={busy}
+        title={
+          selected.status === "working"
+            ? "Aguarde o turno terminar"
+            : selected.prUrl
+              ? "Commit e push das novas alterações no mesmo PR"
+              : "Commit, push e abertura do pull request"
+        }
+        onClick={() => void workspace.createPullRequest()}
+      >
+        {workspace.publishing ? "Publicando…" : selected.prUrl ? "Atualizar PR" : "Criar PR"}
+      </button>
+      {workspace.publishError && (
+        <span className="rw-pr-error" role="alert">
+          {workspace.publishError}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function ChangesView({ workspace }: { workspace: Workspace }) {
   const [path, setPath] = useState("");
   const [filter, setFilter] = useState("");
