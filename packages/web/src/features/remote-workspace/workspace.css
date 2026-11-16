@@ -151,6 +151,10 @@
 .rw-composer-model { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
 .rw-composer-model select { color: var(--rw-secondary); font-size: 9px; background: var(--rw-bg); border: 0; max-width: 120px; padding: 3px; }
 .rw-composer-model select:disabled { opacity: 1; appearance: none; }
+.rw-default-toggle { display: inline-flex; align-items: center; gap: 4px; border: 1px dashed var(--rw-border); border-radius: 5px; padding: 2px 6px; font-size: 9px; color: var(--rw-muted); white-space: nowrap; }
+.rw-default-toggle:hover:not(:disabled) { color: var(--rw-text); border-color: var(--rw-secondary); }
+.rw-default-toggle.is-default { border-style: solid; border-color: var(--rw-accent); color: var(--rw-accent); }
+.rw-default-toggle:disabled { opacity: .45; cursor: not-allowed; }
 .rw-composer-caption { margin: 10px 0 0; color: var(--rw-muted); opacity: .9; text-align: center; font-size: 8px; }
 .rw-readonly-note { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px; padding: 14px; border: 1px solid var(--rw-border); border-radius: 7px; color: var(--rw-secondary); font-size: 10px; }
 .rw-readonly-note a { display: inline-flex; align-items: center; gap: 5px; color: var(--rw-accent); }
@@ -291,7 +295,6 @@
   .rw-source-badge > .rw-status-dot { display: none; }
   .rw-session-toolbar { min-height: 45px; padding-inline: 17px; }
   .rw-tabs { gap: 22px; }
-  .rw-session-state { display: none; }
   .rw-tabs button { font-size: 11px; }
   .rw-transcript { padding: 23px 19px 10px; }
   .rw-session-intro { padding-bottom: 24px; }
@@ -301,13 +304,31 @@
   .rw-composer-wrap { padding: 8px 13px max(11px, env(safe-area-inset-bottom)); }
   .rw-composer { padding: 12px 12px 7px; }
   .rw-composer textarea { font-size: 16px; min-height: 49px; }
-  .rw-composer-caption { font-size: 8px; margin-top: 8px; }
   .rw-composer-settings { gap: 7px; align-items: flex-start; }
   .rw-composer-target { flex-wrap: wrap; gap: 4px; }
   .rw-inline-button > span { max-width: 130px; }
   .rw-branch { max-width: 140px; font-size: 8px; }
-  .rw-composer-model { flex-direction: column; align-items: flex-end; gap: 0; }
-  .rw-composer-model select { font-size: 8px; max-width: 120px; padding: 1px 2px; }
+  /* Phone: controls are finger-sized and the model row scrolls instead of shrinking. */
+  .rw-composer-settings { flex-direction: column; align-items: stretch; }
+  .rw-composer-model { flex-direction: row; align-items: center; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .rw-composer-model select, .rw-default-toggle { flex-shrink: 0; font-size: 12px; min-height: 34px; max-width: 62vw; padding: 4px 8px; border: 1px solid var(--rw-border); border-radius: 7px; }
+  .rw-composer-model select:disabled { opacity: .7; }
+  .rw-inline-button, .rw-branch, .rw-branch select { font-size: 12px; }
+  .rw-inline-button { min-height: 32px; }
+  .rw-send { width: 40px; height: 40px; }
+  .rw-composer-caption { font-size: 10px; }
+  .rw-session-state { display: inline-flex; font-size: 0; gap: 0; }
+  .rw-pr-actions .rw-button { min-height: 34px; font-size: 12px; padding-inline: 12px; }
+  .rw-pr-error { position: absolute; left: 12px; right: 12px; top: 100%; margin-top: 4px; white-space: normal; background: var(--rw-panel); border: 1px solid var(--rw-border); border-radius: 6px; padding: 6px 8px; z-index: 5; }
+  .rw-session-toolbar { position: relative; }
+  .rw-tabs button { font-size: 12px; min-height: 44px; }
+  /* Tabs scroll and PR actions shrink so the toolbar never widens the page. */
+  .rw-main-shell { overflow-x: hidden; }
+  .rw-session-toolbar { gap: 8px; padding-inline: 12px; }
+  .rw-tabs { flex: 1; min-width: 0; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+  .rw-tabs::-webkit-scrollbar { display: none; }
+  .rw-pr-actions { flex-shrink: 0; }
+  .rw-desktop-label { display: none; }
   .rw-inspector.is-open { top: 52px; width: min(290px, calc(100vw - 35px)); }
   .rw-context-backdrop { inset: 52px 0 0; }
   .rw-terminal-view, .rw-changes-view { padding: 22px 14px; }
@@ -445,3 +466,4 @@
   .rw-terminal-heading { flex-wrap: wrap; }
   .rw-terminal-heading > div { flex-basis: 100%; }
 }
+.rw-project-default { display: block; margin-top: 2px; color: var(--rw-muted); font-size: 11px; }

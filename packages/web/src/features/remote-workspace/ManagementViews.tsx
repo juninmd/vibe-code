@@ -777,7 +777,35 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
                     ? (repo.errorMessage ?? "Falha ao clonar")
                     : "Preparando repositório…"}
               </small>
+              <small className="rw-project-default">
+                {repo.defaultModel || repo.defaultEngine
+                  ? `Modelo padrão: ${[repo.defaultEngine, repo.defaultModel].filter(Boolean).join(" · ")}`
+                  : "Sem modelo padrão. Defina na nova sessão com “Definir padrão”."}
+              </small>
             </div>
+            {(repo.defaultModel || repo.defaultEngine) && (
+              <button
+                type="button"
+                className="rw-button"
+                disabled={!!action.busy}
+                onClick={() =>
+                  void action.run(
+                    `default-${repo.id}`,
+                    async () => {
+                      await api.repos.updateDefaults(repo.id, {
+                        defaultEngine: null,
+                        defaultModel: null,
+                      });
+                      await projects.refetch();
+                      if (workspace.server) await workspace.data.refetch();
+                    },
+                    "Padrão do projeto removido."
+                  )
+                }
+              >
+                Limpar padrão
+              </button>
+            )}
           </div>
         ))}
         {projects.isLoading && <p role="status">Carregando projetos…</p>}
@@ -1006,8 +1034,8 @@ function SettingsPage({
             <div className="rw-card-heading">
               <h2>Harness padrão para novas sessões</h2>
               <p>
-                A preferência fica neste navegador. Sessões existentes mantêm seu harness e
-                workspace.
+                A preferência fica neste navegador. Quando o projeto tem um modelo padrão, ele tem
+                prioridade. Sessões existentes mantêm seu harness e workspace.
               </p>
             </div>
             <div className="rw-settings-form">

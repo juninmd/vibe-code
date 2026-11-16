@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { agentProcessEnv } from "../../utils/agent-env";
 
 export interface BaselineCheckResult {
   passed: boolean;
@@ -119,7 +120,7 @@ async function runCmd(args: string[], cwd: string): Promise<{ ok: boolean; outpu
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        ...process.env,
+        ...agentProcessEnv(),
         NODE_ENV: "development",
       },
       // 60 s timeout — fast commands only

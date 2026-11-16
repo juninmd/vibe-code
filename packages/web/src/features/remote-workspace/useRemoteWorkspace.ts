@@ -60,6 +60,9 @@ export function useRemoteWorkspace() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [branch, setBranch] = useState("main");
+  /** Model chosen for the next turn of the open session (empty = keep the session's). */
+  const [nextModel, setNextModel] = useState("");
+  const [savingDefault, setSavingDefault] = useState(false);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const server = source === "server";
   const data = useQuery({
@@ -113,6 +116,23 @@ export function useRemoteWorkspace() {
       ? messagesFromLogs(selected, history.data ?? [])
       : (selected?.messages ?? []);
 
+  // A new session starts with the project's default engine/model, like CC's per-repo default.
+  const projectDefaultKey = `${project?.id ?? ""}|${project?.defaultEngine ?? ""}|${project?.defaultModel ?? ""}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: apply only when the project (or its default) changes.
+  useEffect(() => {
+    if (selectedId && sessions.some((s) => s.id === selectedId)) return;
+    if (!project?.defaultModel && !project?.defaultEngine) return;
+    if (project.defaultEngine) setEngine(project.defaultEngine);
+    if (project.defaultModel) {
+      const [base, variant] = project.defaultModel.split("#");
+      setModel(base);
+      setEffort(variant ?? "");
+    }
+  }, [projectDefaultKey]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a model switch belongs to one session.
+  useEffect(() => {
+    setNextModel("");
+  }, [selectedId]);
   useEffect(() => {
     try {
       localStorage.setItem("vibe-prototype-harness", JSON.stringify({ engine, model, effort }));
@@ -169,7 +189,8 @@ export function useRemoteWorkspace() {
       setSendError(null);
       try {
         if (selected) {
-          await api.tasks.message(selected.id, prompt);
+          await api.tasks.message(selected.id, prompt, nextModel || undefined);
+          setNextModel("");
           await Promise.all([data.refetch(), history.refetch()]);
           return true;
         }
@@ -276,6 +297,28 @@ export function useRemoteWorkspace() {
       all.map((s) => (s.id === selected.id ? { ...s, status: "waiting" } : s))
     );
   };
+  /** Save the composer's engine/model as this project's default for new sessions. */
+  const saveProjectDefault = async (clear = false) => {
+    if (!server || !project) return;
+    setSavingDefault(true);
+    setSendError(null);
+    try {
+      await api.repos.updateDefaults(
+        project.id,
+        clear
+          ? { defaultEngine: null, defaultModel: null }
+          : {
+              defaultEngine: engine,
+              defaultModel: model ? (effort ? `${model}#${effort}` : model) : null,
+            }
+      );
+      await data.refetch();
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingDefault(false);
+    }
+  };
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   /** "Create PR": commit the session's work, push its branch and open/update the PR. */
@@ -327,6 +370,10 @@ export function useRemoteWorkspace() {
     send,
     stop,
     createPullRequest,
+    nextModel,
+    setNextModel,
+    saveProjectDefault,
+    savingDefault,
     publishing,
     publishError,
   };

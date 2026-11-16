@@ -662,7 +662,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                   </div>
                   <div>
                     <dt>Modelo</dt>
-                    <dd>{selected?.model ?? "Modelo padrão"}</dd>
+                    <dd>{selected?.model ?? (workspace.model || "Modelo padrão")}</dd>
                   </div>
                   <div>
                     <dt>Estado</dt>
