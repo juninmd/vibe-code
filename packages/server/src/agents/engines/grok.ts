@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
 import { streamProcess } from "../stream-process";
@@ -91,7 +92,7 @@ export class GrokEngine implements AgentEngine {
     args.push("--disable-web-search");
     args.push("--single", prompt);
 
-    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv(), ...options.env };
 
     const proc = Bun.spawn(args, {
       cwd: workdir,

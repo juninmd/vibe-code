@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -24,7 +25,7 @@ export class GeminiEngine implements AgentEngine {
     geminiBinDir?: string,
     extraEnv?: Record<string, string>
   ): NodeJS.ProcessEnv {
-    const env = { ...process.env, ...extraEnv };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv(), ...extraEnv };
     if (geminiBinDir) {
       env.PATH = env.PATH ? `${geminiBinDir}${delimiter}${env.PATH}` : geminiBinDir;
     }

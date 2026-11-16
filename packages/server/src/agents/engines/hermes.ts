@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -46,7 +47,7 @@ export class HermesEngine implements AgentEngine {
     const args = ["hermes", "acp", "--message", prompt];
     if (options.model) args.push("--model", options.model);
 
-    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv(), ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;
