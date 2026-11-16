@@ -1,12 +1,22 @@
 import { realpath } from "node:fs/promises";
 import type { HarnessModel } from "@vibe-code/shared";
 import { resolveOpencodeBinary } from "../agents/engines/opencode";
+import { openCodeProviderLaunch } from "../agents/opencode-providers";
 import type { EngineRegistry } from "../agents/registry";
 import { killProcessTree } from "../utils/process-tree";
 import { readManagedState, writeManagedState } from "./managed-state";
 
-export async function harnessCli(argv: string[], cwd?: string): Promise<string> {
-  const process = Bun.spawn(argv, { cwd, stdout: "pipe", stderr: "pipe" });
+export async function harnessCli(
+  argv: string[],
+  cwd?: string,
+  env?: Record<string, string>
+): Promise<string> {
+  const process = Bun.spawn(argv, {
+    cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+    ...(env ? { env: { ...globalThis.process.env, ...env } } : {}),
+  });
   const timer = setTimeout(() => void killProcessTree(process.pid), 20_000);
   try {
     const [out, , code] = await Promise.all([
@@ -61,12 +71,19 @@ export async function harnessModels(
   registry: EngineRegistry
 ): Promise<HarnessModel[]> {
   if (name === "opencode") {
+    // Same providers as the runs: OpenCode Go key + LiteLLM gateway models.
+    const providers = await openCodeProviderLaunch({ discoverModels: true }).catch(() => null);
+    const env = providers?.env;
     if (await openCodeV2())
       return parseOpenCodeCatalog(
-        await harnessCli([resolveOpencodeBinary(), "api", "get", "/api/model"])
+        await harnessCli([resolveOpencodeBinary(), "api", "get", "/api/model"], undefined, env)
       );
     // V1 verbose output consists of a model id followed by a JSON block.
-    const verbose = await harnessCli([resolveOpencodeBinary(), "models", "--verbose"]);
+    const verbose = await harnessCli(
+      [resolveOpencodeBinary(), "models", "--verbose"],
+      undefined,
+      env
+    );
     const models: HarnessModel[] = [];
     for (const match of verbose.matchAll(/^([^\s{}]+\/[^\s{}]+)\r?\n(\{[\s\S]*?^\})/gm)) {
       const model = JSON.parse(match[2]) as { name?: string; variants?: Record<string, unknown> };

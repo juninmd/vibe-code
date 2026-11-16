@@ -8,6 +8,7 @@ config({ path: resolve(import.meta.dir, "../../../.env") });
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { AgentTemplateRegistry } from "./agents/agent-templates";
+import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
@@ -77,6 +78,7 @@ const DB_PATH = join(DATA_DIR, "vibe.db");
 const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 
 const db = createDb(DB_PATH);
+useDbForOpenCodeProviders(db);
 const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
@@ -95,6 +97,8 @@ const agentTemplates = new AgentTemplateRegistry();
 const skillsBase =
   process.env.VIBE_CODE_SKILLS_PATH || db.settings.get("skills_path") || "~/.agents";
 const skillsLoader = new SkillsLoader(skillsBase);
+// Runs need the catalog: OpenCode discovers these SKILL.md dirs natively.
+orchestrator.skillsLoader = skillsLoader;
 validateSkills(skillsLoader)
   .then(logValidationReport)
   .catch((err) => {
