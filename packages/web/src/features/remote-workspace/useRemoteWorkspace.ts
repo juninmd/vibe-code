@@ -276,6 +276,24 @@ export function useRemoteWorkspace() {
       all.map((s) => (s.id === selected.id ? { ...s, status: "waiting" } : s))
     );
   };
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  /** "Create PR": commit the session's work, push its branch and open/update the PR. */
+  const createPullRequest = async () => {
+    if (!server || !selected || selected.status === "working" || publishing) return null;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await api.tasks.pullRequest(selected.id);
+      await Promise.all([data.refetch(), history.refetch()]);
+      return result;
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : String(error));
+      return null;
+    } finally {
+      setPublishing(false);
+    }
+  };
   return {
     source,
     server,
@@ -308,5 +326,8 @@ export function useRemoteWorkspace() {
     changeSource,
     send,
     stop,
+    createPullRequest,
+    publishing,
+    publishError,
   };
 }

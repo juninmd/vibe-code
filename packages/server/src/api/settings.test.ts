@@ -327,7 +327,7 @@ describe("API settings extra branch coverage", () => {
 
     const res = await app.request("/litellm/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ data: { ok: true, baseUrl: "http://l" } });
+    expect(await res.json()).toEqual({ data: { ok: true, baseUrl: "http://l", models: [] } });
 
     checkSpy.mockRestore();
   });
@@ -343,5 +343,30 @@ describe("API settings extra branch coverage", () => {
 
     expect(res.status).toBe(400);
     expect(((await res.json()) as any).error).toBe("validation");
+  });
+});
+
+describe("OpenCode provider settings", () => {
+  it("stores OpenCode Go and LiteLLM credentials without returning them", async () => {
+    const db = createDb(":memory:");
+    const app = createSettingsRouter(db);
+    const put = await app.request("/", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        opencodeGoApiKey: " go-secret-1234 ",
+        litellmApiKey: "sk-litellm-5678",
+        litellmModels: "gpt-4o, claude-sonnet",
+        litellmBaseUrl: "https://gw.example.com",
+      }),
+    });
+    expect(put.status).toBe(200);
+    expect(db.settings.get("opencode_go_api_key")).toBe("go-secret-1234");
+    const body = (await (await app.request("/")).json()) as { data: any };
+    expect(body.data.opencodeGo.tokenSet).toBe(true);
+    expect(body.data.litellm.apiKeySet).toBe(true);
+    expect(body.data.litellm.models).toEqual(["gpt-4o", "claude-sonnet"]);
+    expect(JSON.stringify(body)).not.toContain("go-secret");
+    expect(JSON.stringify(body)).not.toContain("sk-litellm");
   });
 });
