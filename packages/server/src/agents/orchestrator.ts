@@ -6,6 +6,7 @@ import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
 import { executeAgent } from "./orchestrator/executor";
 import { retryPR } from "./orchestrator/pr-retry";
+import { publishRemoteSession, type RemotePullRequestInput } from "./orchestrator/remote-pr";
 import { logOrchestratorEvent } from "./orchestrator/terminal-logger";
 import type { EngineRegistry } from "./registry";
 
@@ -385,6 +386,16 @@ export class Orchestrator {
 
   async retryPR(taskId: string): Promise<string> {
     return retryPR(taskId, this.db, this.git, this.registry, this.hub);
+  }
+
+  /** Commit, push and open/update the PR of a conversational session. */
+  async publishRemoteSession(taskId: string, input: RemotePullRequestInput = {}) {
+    return publishRemoteSession(taskId, input, {
+      db: this.db,
+      git: this.git,
+      hub: this.hub,
+      isRunning: (id) => this.activeRuns.has(id),
+    });
   }
 
   async triggerScheduled(templateTaskId: string): Promise<AgentRun> {
