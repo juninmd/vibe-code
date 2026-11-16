@@ -1,6 +1,7 @@
 import type { LogStream, WsServerMessage } from "@vibe-code/shared";
 import type { ServerWebSocket } from "bun";
 import type { Db } from "../db";
+import { redactSecrets } from "../utils/secret-redactor";
 
 export interface WsClient {
   ws: ServerWebSocket<any>;
@@ -110,7 +111,7 @@ export class BroadcastHub {
   /** Broadcast to all connected clients */
   broadcastAll(message: WsServerMessage): void {
     const msgWorkspaceId = this.getWorkspaceIdForMessage(message);
-    const data = JSON.stringify(message);
+    const data = redactSecrets(JSON.stringify(message));
     for (const client of this.clients) {
       if (
         msgWorkspaceId === null ||
@@ -130,7 +131,7 @@ export class BroadcastHub {
   /** Broadcast to clients subscribed to a specific task */
   broadcastToTask(taskId: string, message: WsServerMessage): void {
     const msgWorkspaceId = this.getWorkspaceIdForMessage(message);
-    const data = JSON.stringify(message);
+    const data = redactSecrets(JSON.stringify(message));
     for (const client of this.clients) {
       if (client.subscribedTasks.has(taskId)) {
         if (

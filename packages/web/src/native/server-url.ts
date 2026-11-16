@@ -3,7 +3,6 @@ export function installNativeFetch(): void {
   const server = getServerUrl();
   if (!server) return;
   const original = window.fetch.bind(window);
-  // `preconnect` exists only in Bun's fetch typings, so it is not carried over.
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === "string" && input.startsWith("/api")) {
       return original(`${server}${input}`, init);

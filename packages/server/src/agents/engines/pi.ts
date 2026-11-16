@@ -1,5 +1,6 @@
 import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -51,7 +52,7 @@ export class PiEngine implements AgentEngine {
     if (options.model) args.push("--model", options.model);
     args.push("--message", `@${promptFile}`);
 
-    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv(), ...options.env };
     if (options.litellmKey) {
       delete env.ANTHROPIC_API_KEY;
       delete env.GEMINI_API_KEY;

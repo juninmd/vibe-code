@@ -51,7 +51,7 @@ function makeOrchestrator(overrides: Partial<Orchestrator> = {}): Orchestrator {
     supportsSessionResume: () => true,
     activeCount: 0,
     maxConcurrentAgents: 4,
-    hub: { broadcastToTask: () => {} },
+    hub: { broadcastToTask: () => {}, broadcastAll: () => {} },
     ...overrides,
   } as unknown as Orchestrator;
 }
@@ -1031,5 +1031,72 @@ describe("focused log history", () => {
     expect(logs).toHaveLength(400);
     expect(logs[0]?.content).toBe("line 6");
     expect(logs[399]?.content).toBe("line 405");
+  });
+});
+
+describe("project default model and per-turn model switch", () => {
+  const json = (body: unknown) => ({
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+  it("new sessions inherit the project's default engine and model", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.repos.updateDefaults(repo.id, {
+      defaultEngine: "opencode",
+      defaultModel: "litellm/qwen3-coder#high",
+    });
+    const app = buildApp(db);
+    const res = await app.request(
+      "/api/tasks",
+      json({ title: "x", description: "Fix login", repoId: repo.id, tags: ["remote-session"] })
+    );
+    const body = await res.json();
+    expect(res.status, JSON.stringify(body)).toBe(201);
+    const task = body.data;
+    expect(task.engine).toBe("opencode");
+    expect(task.model).toBe("litellm/qwen3-coder#high");
+
+    // An explicit choice wins, and the default model never leaks to another engine.
+    const other = await app.request(
+      "/api/tasks",
+      json({ title: "y", description: "z", repoId: repo.id, engine: "claude-code" })
+    );
+    expect((await other.json()).data.model ?? null).toBeNull();
+  });
+  it("switches the session model for the next turn", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      description: "Initial",
+      repoId: repo.id,
+      engine: "opencode",
+      model: "opencode-go/glm-5.3",
+      tags: ["remote-session"],
+    });
+    const models: (string | undefined)[] = [];
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async (t) => {
+          models.push(t.model ?? undefined);
+          return db.runs.create(task.id, "opencode");
+        },
+      })
+    );
+    const ok = await app.request(
+      `/api/tasks/${task.id}/messages`,
+      json({ message: "go", model: "litellm/qwen3-coder" })
+    );
+    expect(ok.status).toBe(202);
+    expect(models).toEqual(["litellm/qwen3-coder"]);
+    expect(db.tasks.getById(task.id)?.model).toBe("litellm/qwen3-coder");
+    const bad = await app.request(
+      `/api/tasks/${task.id}/messages`,
+      json({ message: "go", model: "rm -rf /" })
+    );
+    expect(bad.status).toBe(400);
   });
 });

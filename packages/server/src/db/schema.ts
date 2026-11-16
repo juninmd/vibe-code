@@ -209,6 +209,13 @@ export function initDatabase(dbPath: string): Database {
   if (!repoColNames.includes("provider")) {
     db.exec("ALTER TABLE repositories ADD COLUMN provider TEXT NOT NULL DEFAULT 'github'");
   }
+  // Per-project defaults for new remote sessions (rollback: columns are ignored by older builds).
+  if (!repoColNames.includes("default_engine")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN default_engine TEXT");
+  }
+  if (!repoColNames.includes("default_model")) {
+    db.exec("ALTER TABLE repositories ADD COLUMN default_model TEXT");
+  }
   if (!repoColNames.includes("workspace_id")) {
     db.exec(
       "ALTER TABLE repositories ADD COLUMN workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE"
