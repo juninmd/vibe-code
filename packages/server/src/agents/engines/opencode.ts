@@ -1,11 +1,14 @@
 import { existsSync, type Stats, statSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { delimiter, dirname, extname, join } from "node:path";
 import type { SkillPayload } from "@vibe-code/shared";
 import type { Subprocess } from "bun";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
-import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
+import {
+  getOpenCodeProviderSettings,
+  isLiteLLMModel,
+  LITELLM_PROVIDER_ID,
+  openCodeProviderLaunch,
+} from "../opencode-providers";
 import { type BlockedArgs, filterCustomArgs } from "./blocked-args";
 import { getHeartbeatIntervalMs } from "./heartbeat";
 
@@ -152,20 +155,33 @@ export function humanizeStderr(line: string): string | null {
  */
 export const DEFAULT_OPENCODE_MODEL = "auto-free";
 
-// Model name opencode uses when routing via LiteLLM's Anthropic-compatible endpoint.
-// opencode uses /v1/messages (Anthropic SDK) for anthropic/* models — avoids the
-// /responses endpoint incompatibility that affects openai/* models in LiteLLM.
-// LiteLLM maps this alias to the actual backend (see litellm configmap entry).
-// Must be a model name that opencode's Anthropic provider allowlist recognizes.
-export const LITELLM_ANTHROPIC_COMPAT_MODEL = "claude-3-5-haiku-latest";
-
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL];
 
-/**
- * Only the dynamic `auto-free` selector and models reported as free are exposed.
- */
+/** Permissions for non-interactive runs (the agent never waits on a prompt). */
+export const OPENCODE_RUN_PERMISSION: Record<string, string> = {
+  "*": "allow",
+  question: "allow",
+  plan_enter: "allow",
+  plan_exit: "allow",
+};
+
 export function isFreeOpencodeModel(model: string): boolean {
   return model === DEFAULT_OPENCODE_MODEL || model.endsWith("-free");
+}
+
+/**
+ * Deployments that must only expose free models set VIBE_OPENCODE_FREE_ONLY=true.
+ * Otherwise every model the configured providers offer (OpenCode Go, LiteLLM,
+ * `opencode auth login` providers) is selectable, like in Claude Code.
+ */
+export function freeModelsOnly(env: Record<string, string | undefined> = process.env): boolean {
+  return env.VIBE_OPENCODE_FREE_ONLY === "true";
+}
+
+/** `provider/model#effort` → model + OpenCode `--variant`. */
+export function splitModelVariant(model: string): { model: string; variant?: string } {
+  const [base, variant] = model.split("#");
+  return variant ? { model: base, variant } : { model: base };
 }
 
 const MODEL_LIST_TIMEOUT_MS = 10_000;
@@ -299,7 +315,11 @@ export class OpenCodeEngine implements AgentEngine {
    */
   protected buildCommandArgs(model: string, _workdir: string, resumeSessionId?: string): string[] {
     const args = [resolveOpencodeBinary(), "run", "--format", "json"];
-    if (model) args.push("--model", model);
+    if (model) {
+      const selected = splitModelVariant(model);
+      args.push("--model", selected.model);
+      if (selected.variant) args.push("--variant", selected.variant);
+    }
     // Bun.spawn sets cwd; OpenCode v2 does not accept --dir on `run`.
     if (resumeSessionId) args.push("--session", resumeSessionId);
     // Operator escape hatch: extra flags via env, with protocol-critical
@@ -365,23 +385,28 @@ export class OpenCodeEngine implements AgentEngine {
 
   async listModels(): Promise<string[]> {
     const models = new Set<string>();
-
-    try {
-      const litellm = await listLiteLLMModels(getLiteLLMBaseUrl());
-      for (const model of litellm) models.add(model);
-    } catch (err) {
-      console.warn("[opencode] Failed to list LiteLLM models", err);
+    const launch = await openCodeProviderLaunch({ discoverModels: true }).catch(() => null);
+    for (const id of Object.keys(
+      ((launch?.config.provider as Record<string, { models?: object }> | undefined)?.[
+        LITELLM_PROVIDER_ID
+      ]?.models ?? {}) as Record<string, unknown>
+    )) {
+      models.add(`${LITELLM_PROVIDER_ID}/${id}`);
     }
 
     try {
       const binary = resolveOpencodeBinary();
-      const proc = Bun.spawn([binary, "models"], { stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawn([binary, "models"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, ...(launch?.env ?? {}) },
+      });
       if (await waitForModelsProcess(proc)) {
         const text = await new Response(proc.stdout).text();
         for (const model of text
           .split("\n")
           .map((m) => m.trim())
-          .filter(Boolean)) {
+          .filter((m) => m.includes("/"))) {
           models.add(model);
         }
       }
@@ -390,8 +415,8 @@ export class OpenCodeEngine implements AgentEngine {
     }
 
     for (const model of OPENCODE_FALLBACK_MODELS) models.add(model);
-    // Cluster deployment only exposes free models.
-    return Array.from(models).filter(isFreeOpencodeModel);
+    const all = Array.from(models);
+    return freeModelsOnly() ? all.filter(isFreeOpencodeModel) : all;
   }
 
   async *execute(
@@ -409,55 +434,41 @@ export class OpenCodeEngine implements AgentEngine {
       content: `[opencode] Starting in ${workdir} (model: ${model})`,
     };
 
-    // Build config for opencode.json
-    interface OpenCodeConfig {
-      permission: Record<string, string>;
-      tools?: Record<string, unknown>;
-      mcp?: Record<string, unknown>;
-    }
-    const config: OpenCodeConfig = {
-      permission: {
-        "*": "allow",
-        question: "allow",
-        plan_enter: "allow",
-        plan_exit: "allow",
+    // Inline config overlay (OPENCODE_CONFIG_CONTENT): permissions, MCP, the
+    // LiteLLM provider and vibe-code's skill catalog. It is merged on top of the
+    // user's global config and the repository's own opencode.json, so the
+    // official skill locations (.opencode/skills, .claude/skills,
+    // .agents/skills, ~/.config/opencode/skills) keep working.
+    const providerSettings = getOpenCodeProviderSettings();
+    const launch = await openCodeProviderLaunch(
+      {
+        model,
+        permission: OPENCODE_RUN_PERMISSION,
+        mcp: options.mcpServers,
+        skillDirs: options.skillDirs,
+        litellmKey: options.litellmKey,
+        litellmBaseUrl: options.litellmBaseUrl,
       },
-      tools: {
-        file_write: true,
-        bash: true,
-        web_fetch: true,
-      },
-    };
-
-    if (options.mcpServers) {
-      config.mcp = options.mcpServers;
+      providerSettings
+    );
+    if (isLiteLLMModel(model) && !launch.config.provider) {
+      yield {
+        type: "log",
+        stream: "stderr",
+        content:
+          "[opencode] LiteLLM model selected but the gateway has no API key. Configure it in Settings → Providers.",
+      };
     }
 
-    // opencode 1.15.13 does not support `providers` key in opencode.json.
-    // Route LiteLLM via the Anthropic SDK path (ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL)
-    // because opencode uses POST /v1/messages for anthropic/* models, which LiteLLM
-    // supports correctly — unlike POST /responses used for openai/* models.
-    const litellmEnv: Record<string, string> = {};
-    if (options.litellmKey) {
-      litellmEnv.ANTHROPIC_API_KEY = options.litellmKey;
-      // opencode appends /messages to ANTHROPIC_BASE_URL; LiteLLM serves Anthropic
-      // proxy at /v1/messages, so we must include /v1 in the base URL.
-      litellmEnv.ANTHROPIC_BASE_URL = `${(options.litellmBaseUrl ?? "").replace(/\/$/, "")}/v1`;
-      // Remap any model to the Anthropic-compat alias LiteLLM maps to the real backend.
-      model = `anthropic/${LITELLM_ANTHROPIC_COMPAT_MODEL}`;
-    } else if (
-      options.nativeApiKeys?.anthropic ||
-      options.nativeApiKeys?.openai ||
-      options.nativeApiKeys?.gemini
-    ) {
-      // Inject native keys as env vars (opencode 1.15.13 reads them directly)
-      if (options.nativeApiKeys.anthropic)
-        litellmEnv.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
-      if (options.nativeApiKeys.openai) litellmEnv.OPENAI_API_KEY = options.nativeApiKeys.openai;
-      if (options.nativeApiKeys.gemini) litellmEnv.GEMINI_API_KEY = options.nativeApiKeys.gemini;
+    const nativeEnv: Record<string, string> = {};
+    if (options.nativeApiKeys?.anthropic)
+      nativeEnv.ANTHROPIC_API_KEY = options.nativeApiKeys.anthropic;
+    if (options.nativeApiKeys?.openai) nativeEnv.OPENAI_API_KEY = options.nativeApiKeys.openai;
+    if (options.nativeApiKeys?.gemini) {
+      nativeEnv.GEMINI_API_KEY = options.nativeApiKeys.gemini;
+      nativeEnv.GOOGLE_GENERATIVE_AI_API_KEY = options.nativeApiKeys.gemini;
     }
 
-    let isolatedDir: string | null = null;
     let proc: Subprocess | null = null;
     let stdoutTask: Promise<void> | null = null;
     let stderrTask: Promise<void> | null = null;
@@ -466,12 +477,6 @@ export class OpenCodeEngine implements AgentEngine {
     let heartbeatActive = true;
 
     try {
-      isolatedDir = await mkdtemp(join(tmpdir(), "opencode-config-"));
-      const opencodeSubdir = join(isolatedDir, "opencode");
-      await mkdir(opencodeSubdir, { recursive: true });
-      const configPath = join(opencodeSubdir, "opencode.json");
-      await writeFile(configPath, JSON.stringify(config, null, 2), "utf8");
-
       const args = this.buildCommandArgs(model, workdir, options.resumeSessionId);
       yield { type: "log", stream: "system", content: `[opencode] running: ${args.join(" ")}` };
 
@@ -486,10 +491,13 @@ export class OpenCodeEngine implements AgentEngine {
           // Belt-and-suspenders auto-allow (complements opencode.json) — ported
           // from multica's daemon: this works even if opencode.json is missing.
           OPENCODE_PERMISSION: '{"*":"allow"}',
-          OPENCODE_DISABLE_PROJECT_CONFIG: "true",
-          XDG_CONFIG_HOME: isolatedDir,
-          ...litellmEnv,
+          ...nativeEnv,
+          ...launch.env,
           ...options.env,
+          // OpenCode resolves the project from $PWD, not from the process cwd.
+          // An inherited PWD (the server's own directory) hides the workspace's
+          // AGENTS.md, opencode.json and .opencode/skills.
+          PWD: workdir,
         },
       });
 
@@ -734,15 +742,6 @@ export class OpenCodeEngine implements AgentEngine {
       }
 
       if (options.runId) this.processes.delete(options.runId);
-
-      // Cleanup temp config directory recursively
-      if (isolatedDir) {
-        try {
-          await rm(isolatedDir, { recursive: true, force: true });
-        } catch {
-          /* best effort */
-        }
-      }
 
       if (proc && exitCode !== 0) {
         yield { type: "log", stream: "stderr", content: `[process] Exited with code ${exitCode}` };

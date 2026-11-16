@@ -166,6 +166,8 @@ export class TerminalSessionService {
         ...options.env,
         TERM: "xterm-256color",
         COLORTERM: "truecolor",
+        // Harnesses (OpenCode) resolve the project from $PWD, not the process cwd.
+        ...(options.cwd ? { PWD: options.cwd } : {}),
       } as Record<string, string>;
 
       const session = {

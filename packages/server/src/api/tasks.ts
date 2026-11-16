@@ -21,6 +21,7 @@ import {
   buildContextAsync,
   buildPrompt,
 } from "../agents/orchestrator/prompt";
+import { RemotePullRequestError } from "../agents/orchestrator/remote-pr";
 import {
   buildTaskExecutionPlan,
   materializeTaskExecutionPlan,
@@ -972,6 +973,37 @@ export function createTasksRouter(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: "retry_pr_failed", message: msg }, 500);
+    }
+  });
+
+  // "Create PR" for a conversational session: commit, push and open/update the PR.
+  router.post("/:id/pull-request", async (c) => {
+    const access = await resolveAccessContext(c, db);
+    if (!access.ok || !access.context) {
+      const error = access.error;
+      if (error) return c.json(asForbiddenResponse(error), error.status);
+      return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+    }
+    const id = c.req.param("id");
+    const decision = enforceTaskAccess(db, access.context, id);
+    if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+    const parsed = z
+      .object({
+        title: z.string().trim().max(200).optional(),
+        body: z.string().max(50_000).optional(),
+      })
+      .safeParse((await c.req.json().catch(() => ({}))) ?? {});
+    if (!parsed.success)
+      return c.json({ error: "invalid_input", message: parsed.error.message }, 400);
+    try {
+      const result = await orchestrator.publishRemoteSession(id, parsed.data);
+      return c.json({ data: result }, result.created ? 201 : 200);
+    } catch (err) {
+      if (err instanceof RemotePullRequestError) {
+        const status = err.code === "not_found" ? 404 : err.code === "publish_failed" ? 502 : 409;
+        return c.json({ error: err.code, message: err.message }, status);
+      }
+      throw err;
     }
   });
 
