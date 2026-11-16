@@ -62,6 +62,8 @@ export interface EngineOptions {
   env?: Record<string, string>;
   /** MCP servers to be configured for the run. */
   mcpServers?: Record<string, any>;
+  /** Directories holding official SKILL.md skills the harness should discover natively. */
+  skillDirs?: string[];
 }
 
 export interface AgentEngine {

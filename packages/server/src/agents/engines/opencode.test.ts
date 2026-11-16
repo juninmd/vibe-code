@@ -461,67 +461,37 @@ describe("OpenCodeEngine.buildCommand", () => {
 // ─── execute: opencode.json lifecycle ─────────────────────────────────────────
 
 describe("execute: opencode.json lifecycle", () => {
-  it("creates opencode.json in isolated directory and configures XDG_CONFIG_HOME", async () => {
+  it("passes an inline config overlay and keeps project config and skills enabled", async () => {
     const engine = new FakeOpenCodeEngine(
       `
-      const fs = require("node:fs");
-      const path = require("node:path");
-      const xdgConfigHome = process.env.XDG_CONFIG_HOME;
-      const disableProj = process.env.OPENCODE_DISABLE_PROJECT_CONFIG;
-      const configPath = xdgConfigHome ? path.join(xdgConfigHome, "opencode", "opencode.json") : "";
-      const exists = configPath && fs.existsSync(configPath);
-      let config = {};
-      if (exists) {
-        try { config = JSON.parse(fs.readFileSync(configPath, "utf8")); } catch {}
-      }
       const payload = JSON.stringify({
         type: "text",
         part: {
-          text: "CONFIG_EXISTS:exists=" + exists + ";disableProj=" + disableProj + ";config=" + JSON.stringify(config) + ";xdg=" + xdgConfigHome
+          text: "CONFIG:" + JSON.stringify({
+            content: process.env.OPENCODE_CONFIG_CONTENT,
+            disableProj: process.env.OPENCODE_DISABLE_PROJECT_CONFIG ?? null,
+            xdg: process.env.XDG_CONFIG_HOME ?? null,
+          })
         }
       });
       process.stdout.write(payload + "\\n");
       `
     );
-
+    const before = process.env.XDG_CONFIG_HOME;
     const events = await collectAll(engine, workdir);
     const textEvent = events.find(
-      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("CONFIG_EXISTS")
+      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("CONFIG:")
     );
     expect(textEvent).toBeDefined();
-    expect(textEvent?.content).toContain("exists=true");
-    expect(textEvent?.content).toContain("disableProj=true");
-    expect(textEvent?.content).toContain('"*"');
-    expect(textEvent?.content).toContain('"allow"');
-  }, 10_000);
-
-  it("deletes the isolated config directory and leaves workspace clean after execution", async () => {
-    const engine = new FakeOpenCodeEngine(
-      `
-      const payload = JSON.stringify({
-        type: "text",
-        part: {
-          text: "XDG_PATH:" + process.env.XDG_CONFIG_HOME
-        }
-      });
-      process.stdout.write(payload + "\\n");
-      `
-    );
-    const events = await collectAll(engine, workdir);
-    const xdgEvent = events.find(
-      (e) => e.type === "log" && e.stream === "stdout" && e.content?.startsWith("XDG_PATH:")
-    );
-    expect(xdgEvent).toBeDefined();
-    const xdgPath = xdgEvent?.content?.substring("XDG_PATH:".length);
-    expect(xdgPath).toBeTruthy();
-
-    // Verify workspace file does not exist
-    const workspaceConfigExists = await Bun.file(join(workdir, "opencode.json")).exists();
-    expect(workspaceConfigExists).toBe(false);
-
-    // Verify temp isolated directory was deleted
-    const fs = require("node:fs");
-    expect(fs.existsSync(xdgPath)).toBe(false);
+    const seen = JSON.parse(textEvent?.content?.slice("CONFIG:".length) ?? "{}");
+    // Project config (and therefore .opencode/skills) must stay discoverable.
+    expect(seen.disableProj).toBeNull();
+    // The user's global config dir (~/.config/opencode/skills) is not swapped out.
+    expect(seen.xdg).toBe(before ?? null);
+    const config = JSON.parse(seen.content);
+    expect(config.permission["*"]).toBe("allow");
+    // Nothing is written to the workspace.
+    expect(await Bun.file(join(workdir, "opencode.json")).exists()).toBe(false);
   }, 10_000);
 });
 
@@ -945,14 +915,13 @@ describe("OpenCodeEngine model listing", () => {
 });
 
 describe("OpenCodeEngine MCP configuration", () => {
-  it("serializes options.mcpServers into opencode.json", async () => {
+  it("serializes options.mcpServers into the inline config", async () => {
     const scriptPath = join(workdir, "inspect-mcp.js");
     await Bun.write(
       scriptPath,
       `const fs = require('node:fs');
        const path = require('node:path');
-       const configPath = path.join(process.env.XDG_CONFIG_HOME, 'opencode', 'opencode.json');
-       const content = fs.readFileSync(configPath, 'utf8').replace(/\\n/g, ' ');
+       const content = process.env.OPENCODE_CONFIG_CONTENT;
        console.log(JSON.stringify({ type: 'text', part: { text: 'MCP_CONFIG:' + content } }));`
     );
 
