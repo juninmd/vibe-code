@@ -33,8 +33,10 @@ export default function ServerSetup() {
           Informe o endereço do servidor (ex.: 192.168.0.10:3000).
         </p>
         <input
-          type="url"
+          // Not type="url": that rejects the scheme-less "192.168.0.10:3000" this screen suggests.
+          type="text"
           inputMode="url"
+          aria-label="Endereço do servidor"
           autoCapitalize="none"
           autoCorrect="off"
           value={value}
