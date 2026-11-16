@@ -810,6 +810,10 @@ function SettingsPage({
   const [maxAgents, setMaxAgents] = useState("");
   const [litellmUrl, setLitellmUrl] = useState<string | null>(null);
   const [litellmEnabled, setLitellmEnabled] = useState<boolean | null>(null);
+  const [litellmKey, setLitellmKey] = useState("");
+  const [litellmModels, setLitellmModels] = useState<string | null>(null);
+  const [litellmTest, setLitellmTest] = useState<string | null>(null);
+  const [goKey, setGoKey] = useState("");
   const [mcp, setMcp] = useState<string | null>(null);
   const query = useQuery({
     queryKey: ["prototype-settings"],
@@ -1177,15 +1181,77 @@ function SettingsPage({
           </section>
           <section className="rw-settings-card">
             <div className="rw-card-heading">
-              <h2>Gateway LiteLLM</h2>
+              <h2>OpenCode Go</h2>
+              <p>
+                Assinatura do OpenCode. Os modelos aparecem como <code>opencode-go/…</code>. Sem
+                chave aqui, vale o <code>opencode auth login</code> feito no servidor.
+              </p>
             </div>
             <form
               className="rw-settings-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                void save({
+                void save({ opencodeGoApiKey: goKey }, () => setGoKey(""));
+              }}
+            >
+              <label>
+                Chave OpenCode Go
+                <input
+                  aria-label="Chave OpenCode Go"
+                  type="password"
+                  autoComplete="new-password"
+                  value={goKey}
+                  placeholder={
+                    query.data?.opencodeGo?.tokenSet
+                      ? "Configurada · digite para substituir"
+                      : "Não configurada"
+                  }
+                  onChange={(event) => setGoKey(event.target.value)}
+                />
+              </label>
+              <span className="rw-pr-actions">
+                <button
+                  type="submit"
+                  className="rw-button primary"
+                  disabled={!!action.busy || !goKey || !query.data}
+                >
+                  Salvar chave
+                </button>
+                {query.data?.opencodeGo?.tokenSet && (
+                  <button
+                    type="button"
+                    className="rw-button"
+                    disabled={!!action.busy}
+                    onClick={() => void save({ opencodeGoApiKey: "" })}
+                  >
+                    Remover
+                  </button>
+                )}
+              </span>
+            </form>
+          </section>
+          <section className="rw-settings-card">
+            <div className="rw-card-heading">
+              <h2>LiteLLM (OpenAI-compatible)</h2>
+              <p>
+                Qualquer gateway compatível com OpenAI. Os modelos aparecem como{" "}
+                <code>litellm/…</code> no seletor do OpenCode.
+              </p>
+            </div>
+            <form
+              className="rw-settings-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const data: UpdateSettingsRequest = {
                   litellmBaseUrl: litellmUrl ?? query.data?.litellm.baseUrl,
                   litellmEnabled: litellmEnabled ?? query.data?.litellm.enabled,
+                };
+                if (litellmKey) data.litellmApiKey = litellmKey;
+                if (litellmModels !== null) data.litellmModels = litellmModels;
+                void save(data, () => {
+                  setLitellmKey("");
+                  setLitellmModels(null);
+                  setLitellmTest(null);
                 });
               }}
             >
@@ -1198,6 +1264,30 @@ function SettingsPage({
                   onChange={(event) => setLitellmUrl(event.target.value)}
                 />
               </label>
+              <label>
+                Chave da API
+                <input
+                  type="password"
+                  aria-label="Chave LiteLLM"
+                  autoComplete="new-password"
+                  value={litellmKey}
+                  placeholder={
+                    query.data?.litellm.apiKeySet
+                      ? "Configurada · digite para substituir"
+                      : "sk-… (ou LITELLM_API_KEY no servidor)"
+                  }
+                  onChange={(event) => setLitellmKey(event.target.value)}
+                />
+              </label>
+              <label>
+                Modelos fixos (opcional)
+                <input
+                  aria-label="Modelos LiteLLM"
+                  placeholder="gpt-4o, claude-sonnet… (além de /v1/models)"
+                  value={litellmModels ?? (query.data?.litellm.models ?? []).join(", ")}
+                  onChange={(event) => setLitellmModels(event.target.value)}
+                />
+              </label>
               <label className="rw-setting-toggle">
                 <span>Usar gateway</span>
                 <input
@@ -1206,9 +1296,33 @@ function SettingsPage({
                   onChange={(event) => setLitellmEnabled(event.target.checked)}
                 />
               </label>
-              <button type="submit" className="rw-button" disabled={!!action.busy || !query.data}>
-                Salvar gateway
-              </button>
+              <span className="rw-pr-actions">
+                <button type="submit" className="rw-button" disabled={!!action.busy || !query.data}>
+                  Salvar gateway
+                </button>
+                <button
+                  type="button"
+                  className="rw-button"
+                  disabled={!!action.busy}
+                  onClick={() =>
+                    void action.run(
+                      "litellm-test",
+                      async () => {
+                        const result = await api.settings.litellmHealth();
+                        setLitellmTest(
+                          result.ok
+                            ? `Conectado · ${result.models?.length ?? 0} modelos`
+                            : "Sem resposta do gateway"
+                        );
+                      },
+                      "Teste concluído."
+                    )
+                  }
+                >
+                  Testar conexão
+                </button>
+                {litellmTest && <small role="status">{litellmTest}</small>}
+              </span>
             </form>
           </section>
         </>

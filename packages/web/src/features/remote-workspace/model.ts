@@ -40,6 +40,8 @@ export interface Session {
   messages: Message[];
   changes: Change[];
   reviewAvailable?: boolean;
+  /** Pull request opened from this session, when there is one. */
+  prUrl?: string | null;
 }
 export const STATUS: Record<SessionStatus, string> = {
   working: "Em execução",
@@ -185,6 +187,7 @@ export function sessionFromTask(task: TaskWithRun): Session {
     messages: [],
     changes: [],
     reviewAvailable: !!task.branchName,
+    prUrl: task.prUrl,
   };
 }
 export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] {
