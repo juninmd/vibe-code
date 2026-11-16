@@ -12,6 +12,8 @@ import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
+import { createAutomationRouter } from "./api/automation";
+import { createConnectorsRouter } from "./api/connectors";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
 import { createLabelsRouter } from "./api/labels";
@@ -30,11 +32,13 @@ import { createTemplatesRouter } from "./api/templates";
 import { createTerminalRouter } from "./api/terminal";
 import { createWorkspacesRouter } from "./api/workspaces";
 import { authMiddleware, createAuthRouter, isRequestAuthenticated } from "./auth";
+import { PrAutomation } from "./automation/pr-automation";
 import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
 import { LaneSyncService } from "./lanes/lane-sync";
+import { createTelegramNotifier } from "./notifications/telegram";
 import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
@@ -122,6 +126,21 @@ laneSync.start();
 const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
 
 scheduleRunner.start();
+if (process.env.VIBE_CODE_PR_AUTOMATION !== "false") {
+  const telegram = createTelegramNotifier(db);
+  new PrAutomation({
+    listReviewTasks: () => db.tasks.list().filter((t) => t.status === "review" && t.prUrl),
+    getRepoUrl: (t) => db.repos.getById(t.repoId)?.url ?? t.prUrl,
+    getToken: (url) => providerRegistry.resolve(url)?.token ?? null,
+    isRunning: (id) => orchestrator.getActiveRunEngines().has(id),
+    relaunch: async (task, prompt) => {
+      const updated = db.tasks.update(task.id, { status: "in_progress" });
+      if (updated) hub.broadcastAll({ type: "task_updated", task: updated });
+      await orchestrator.launch(updated ?? task, undefined, undefined, prompt);
+    },
+    notify: (msg) => telegram.send(msg).catch(() => {}),
+  }).start();
+}
 
 // Mark orphaned runs (stuck in 'running' after pod restart) as cancelled
 try {
@@ -267,6 +286,8 @@ api.route("/runtimes", createRuntimesRouter(db, registry, orchestrator, DATA_DIR
 api.route("/templates", createTemplatesRouter(db, skillsLoader));
 api.route("/agent-templates", createAgentTemplatesRouter(agentTemplates));
 api.route("/inbox", createInboxRouter(db, registry, orchestrator));
+api.route("/connectors", createConnectorsRouter());
+api.route("/automation", createAutomationRouter());
 api.route("/labels", createLabelsRouter(db));
 api.route("/prompts", createPromptsRouter(db));
 api.route("/sessions", createSessionsRouter(sessionService, terminalController));
