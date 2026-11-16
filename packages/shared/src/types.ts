@@ -851,6 +851,17 @@ export interface ProviderSettings {
 export interface LiteLLMSettings {
   baseUrl: string;
   enabled: boolean;
+  /** A static gateway key (or LITELLM_API_KEY/LITELLM_MASTER_KEY) is configured. */
+  apiKeySet?: boolean;
+  apiKey?: string;
+  /** Models declared up front (merged with the gateway's /v1/models). */
+  models?: string[];
+}
+
+export interface OpenCodeGoSettings {
+  /** OpenCode Go key saved in vibe-code (or OPENCODE_API_KEY on the server). */
+  tokenSet: boolean;
+  token: string;
 }
 
 export interface ApiKeyEntry {
@@ -869,6 +880,7 @@ export interface SettingsResponse {
   github: ProviderSettings;
   gitlab: ProviderSettings;
   litellm: LiteLLMSettings;
+  opencodeGo?: OpenCodeGoSettings;
   telegram: TelegramSettings;
   apiKeys: {
     gemini: ApiKeyEntry;
@@ -887,6 +899,12 @@ export interface UpdateSettingsRequest {
   gitlabBaseUrl?: string;
   litellmBaseUrl?: string;
   litellmEnabled?: boolean;
+  /** Static LiteLLM key used as the OpenCode provider key (empty string clears it). */
+  litellmApiKey?: string;
+  /** Comma/newline separated LiteLLM model ids to always offer. */
+  litellmModels?: string;
+  /** OpenCode Go subscription key (empty string clears it). */
+  opencodeGoApiKey?: string;
   geminiApiKey?: string;
   anthropicApiKey?: string;
   openaiApiKey?: string;

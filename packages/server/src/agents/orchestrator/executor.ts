@@ -991,6 +991,7 @@ export async function executeAgent(
       resumeSessionId: activeSessionId,
       env: agentEnv,
       mcpServers,
+      skillDirs: skillsLoader?.skillDirs(),
     })) {
       if (abort.signal.aborted) break;
       recordCliLoadedSkills();
@@ -1173,6 +1174,7 @@ export async function executeAgent(
           nativeApiKeys,
           resumeSessionId: activeSessionId,
           mcpServers,
+          skillDirs: skillsLoader?.skillDirs(),
         })) {
           if (abort.signal.aborted) break;
           if (event.type === "session" && event.sessionId) {
