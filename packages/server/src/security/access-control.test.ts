@@ -93,4 +93,18 @@ describe("access-control", () => {
     const redacted = sanitizeRunForExternal(db, run);
     expect(redacted.worktreePath).toBeNull();
   });
+
+  it("redacts the worktree path repeated inside the state snapshot", () => {
+    const run = db.runs.getById(runId);
+    if (!run) throw new Error("missing run fixture");
+    const stateSnapshot = JSON.stringify({ phase: "generating", worktreePath: "/srv/data/ws/1" });
+
+    const redacted = sanitizeRunForExternal(db, { ...run, stateSnapshot });
+    expect(redacted.stateSnapshot).not.toContain("/srv/data/ws/1");
+    expect(JSON.parse(redacted.stateSnapshot ?? "{}")).toEqual({ phase: "generating" });
+    // A snapshot that is not an object is passed through untouched.
+    expect(sanitizeRunForExternal(db, { ...run, stateSnapshot: "not json" }).stateSnapshot).toBe(
+      "not json"
+    );
+  });
 });

@@ -32,7 +32,8 @@ export async function harnessCli(
 }
 
 export async function openCodeV2(): Promise<boolean> {
-  const version = await harnessCli([resolveOpencodeBinary(), "--version"]);
+  // The CLI colors its banner when FORCE_COLOR is set, splitting "v" from "2.".
+  const version = Bun.stripANSI(await harnessCli([resolveOpencodeBinary(), "--version"]));
   return /(?:^|\s)v?2\./.test(version);
 }
 
