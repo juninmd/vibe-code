@@ -192,7 +192,19 @@ export function sanitizeRunForExternal(db: Db, run: AgentRun): AgentRun {
   return {
     ...run,
     worktreePath: null,
+    stateSnapshot: withoutWorktreePath(run.stateSnapshot),
   };
+}
+
+/** The resume snapshot repeats the worktree path; hide it there as well. */
+function withoutWorktreePath(snapshot: string | null | undefined): string | null | undefined {
+  if (!snapshot?.includes("worktreePath")) return snapshot;
+  try {
+    const { worktreePath: _hidden, ...rest } = JSON.parse(snapshot) as Record<string, unknown>;
+    return JSON.stringify(rest);
+  } catch {
+    return snapshot;
+  }
 }
 
 export function sanitizeTaskForExternal<T extends TaskWithRun>(db: Db, task: T): T {

@@ -40,7 +40,7 @@ import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
 import { LaneSyncService } from "./lanes/lane-sync";
 import { createTelegramNotifier } from "./notifications/telegram";
-import { blockUnauthenticatedRemote } from "./security/network-guard";
+import { blockUnauthenticatedRemote, rejectUnauthenticatedSocket } from "./security/network-guard";
 import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
@@ -389,10 +389,13 @@ const server = Bun.serve({
     if (blocked) return blocked;
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
+      const authenticated = isRequestAuthenticated(db, req);
+      const refused = rejectUnauthenticatedSocket(authenticated);
+      if (refused) return refused;
       const workspaceId = url.searchParams.get("workspaceId") || null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const success = (server as any).upgrade(req, {
-        data: { workspaceId, authenticated: isRequestAuthenticated(db, req) },
+        data: { workspaceId, authenticated },
       });
       if (success) return undefined;
     }
