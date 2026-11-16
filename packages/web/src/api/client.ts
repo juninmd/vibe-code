@@ -271,6 +271,12 @@ export const api = {
       }),
     retryPR: (id: string) =>
       request<{ prUrl: string }>(`/tasks/${id}/retry-pr`, { method: "POST" }),
+    /** Commit, push and open (or update) the PR of a conversational session. */
+    pullRequest: (id: string, data: { title?: string; body?: string } = {}) =>
+      request<{ prUrl: string; branch: string; created: boolean }>(`/tasks/${id}/pull-request`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
     clone: (id: string) => request<Task>(`/tasks/${id}/clone`, { method: "POST" }),
     runs: (id: string) => request<AgentRun[]>(`/tasks/${id}/runs`),
     artifacts: (id: string) => request<TaskArtifact[]>(`/tasks/${id}/artifacts`),
@@ -446,7 +452,8 @@ export const api = {
       request<{ ok: boolean }>("/settings", { method: "PUT", body: JSON.stringify(data) }),
     testConnection: (provider: "github" | "gitlab") =>
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
-    litellmHealth: () => request<{ ok: boolean; baseUrl: string }>("/settings/litellm/health"),
+    litellmHealth: () =>
+      request<{ ok: boolean; baseUrl: string; models?: string[] }>("/settings/litellm/health"),
   },
 
   lanes: {

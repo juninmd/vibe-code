@@ -9,6 +9,7 @@ import {
   ChangesView,
   Composer,
   Conversation,
+  PullRequestActions,
   SessionOverview,
   TerminalView,
 } from "./WorkspaceViews";
@@ -508,9 +509,12 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     ))}
                   </div>
                   {selected && (
-                    <span className="rw-session-state">
-                      <span className={`rw-status-dot ${selected.status}`} />
-                      {STATUS[selected.status]}
+                    <span className="rw-session-meta">
+                      <span className="rw-session-state">
+                        <span className={`rw-status-dot ${selected.status}`} />
+                        {STATUS[selected.status]}
+                      </span>
+                      <PullRequestActions workspace={workspace} />
                     </span>
                   )}
                 </div>
