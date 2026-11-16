@@ -115,9 +115,53 @@ describe("GitService extra coverage", () => {
 
     git.providers = registry;
 
-    // When exception thrown, should return ["main"] or repo name if it's the URL
+    // A provider failure must never surface the repository name as a branch.
     await expect(
       git.listRemoteBranches({ url: "github.com/a/b", provider: "github" })
-    ).resolves.toEqual(["b"]);
+    ).resolves.toEqual([]);
+  });
+
+  it("listRemoteBranches falls back to the branches of the local clone", async () => {
+    const { mkdtempSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "vibe-branches-"));
+    const run = (args: string[], cwd = dir) => {
+      const r = Bun.spawnSync(args, { cwd, env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" } });
+      if (r.exitCode !== 0) throw new Error(r.stderr.toString());
+    };
+    try {
+      run(["git", "init", "-q", "-b", "main", "work"]);
+      const work = join(dir, "work");
+      run(
+        [
+          "git",
+          "-c",
+          "user.email=a@b.c",
+          "-c",
+          "user.name=t",
+          "-c",
+          "commit.gpgsign=false",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          "init",
+        ],
+        work
+      );
+      run(["git", "branch", "feature/x"], work);
+      run(["git", "clone", "-q", "--bare", work, join(dir, "repo.git")]);
+
+      const git = new GitService();
+      const branches = await git.listRemoteBranches({
+        url: "https://github.com/a/repo",
+        provider: "github",
+        localPath: join(dir, "repo.git"),
+      });
+      expect(branches.sort()).toEqual(["feature/x", "main"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
