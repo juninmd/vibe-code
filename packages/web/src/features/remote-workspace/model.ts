@@ -24,6 +24,9 @@ export interface Project {
   name: string;
   owner: string;
   branch: string;
+  /** Engine/model new sessions in this project start with. */
+  defaultEngine?: string | null;
+  defaultModel?: string | null;
 }
 export interface Session {
   id: string;
@@ -162,13 +165,32 @@ export function initialSessions(): Session[] {
 }
 
 export function projectFromRepo(repo: Repository): Project {
-  return { id: repo.id, name: repo.name, owner: "servidor", branch: repo.defaultBranch };
+  return {
+    id: repo.id,
+    name: repo.name,
+    owner: "servidor",
+    branch: repo.defaultBranch,
+    defaultEngine: repo.defaultEngine ?? null,
+    defaultModel: repo.defaultModel ?? null,
+  };
+}
+/**
+ * What the session list shows: the first line of the request, like Claude Code,
+ * instead of the generated `<host>-<slug>` name (which stays the branch/name).
+ */
+export function sessionTitle(task: Pick<TaskWithRun, "title" | "description">): string {
+  const line = (task.description ?? "")
+    .split(/\r?\n/)
+    .map((l) => l.replace(/^[#>*\-\s]+/, "").trim())
+    .find(Boolean);
+  if (!line) return task.title;
+  return line.length > 80 ? `${line.slice(0, 77).trimEnd()}…` : line;
 }
 export function sessionFromTask(task: TaskWithRun): Session {
   return {
     id: task.id,
     projectId: task.repoId,
-    title: task.title,
+    title: sessionTitle(task),
     description: task.description,
     status:
       task.status === "in_progress"

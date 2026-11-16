@@ -1,5 +1,6 @@
 import { unlink, writeFile } from "node:fs/promises";
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -72,7 +73,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     if (options.model) args.push("--model", options.model);
     args.push("-p", `@${promptFile}`);
 
-    const env: NodeJS.ProcessEnv = { ...process.env, ...options.env };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv(), ...options.env };
     if (options.litellmKey) {
       env.ANTHROPIC_BASE_URL = options.litellmBaseUrl;
       env.ANTHROPIC_API_KEY = options.litellmKey;

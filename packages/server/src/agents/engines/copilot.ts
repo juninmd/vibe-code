@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { agentProcessEnv } from "../../utils/agent-env";
 import { parseAcpMessage } from "../acp-parser";
 import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "../litellm-client";
@@ -33,7 +34,7 @@ export class CopilotEngine implements AgentEngine {
   }
 
   private buildChildEnv(nativeOpenAiKey?: string): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...agentProcessEnv() };
     // Prefer the DB-stored OpenAI key; GitHub token flows through COPILOT_GITHUB_TOKEN
     if (nativeOpenAiKey) {
       env.OPENAI_API_KEY = nativeOpenAiKey;

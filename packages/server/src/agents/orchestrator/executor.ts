@@ -14,6 +14,7 @@ import type { GitService } from "../../git/git-service";
 import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
 import type { SkillsLoader } from "../../skills/loader";
+import { agentProcessEnv } from "../../utils/agent-env";
 import type { BroadcastHub } from "../../ws/broadcast";
 import type { AgentEngine } from "../engine";
 import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
@@ -328,7 +329,7 @@ export async function autoInstallDependencies(
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        ...process.env,
+        ...agentProcessEnv(),
         NODE_ENV: "development",
       },
     });
@@ -383,7 +384,7 @@ export async function runWorkspaceScripts(
     if (Array.isArray(scripts) && scripts.length > 0) {
       sysLog(`Running ${type} scripts from ${configPath}...`);
       const env = {
-        ...process.env,
+        ...agentProcessEnv(),
         SUPERSET_WORKSPACE_NAME: repoName,
         SUPERSET_ROOT_PATH: wtPath,
         VIBE_CODE_WORKSPACE_NAME: repoName,
