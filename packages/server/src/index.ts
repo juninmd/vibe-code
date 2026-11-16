@@ -32,7 +32,7 @@ import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
 import { createTerminalRouter } from "./api/terminal";
 import { createWorkspacesRouter } from "./api/workspaces";
-import { authMiddleware, createAuthRouter, isRequestAuthenticated } from "./auth";
+import { authMiddleware, createAuthRouter, isAuthEnabled, isRequestAuthenticated } from "./auth";
 import { PrAutomation } from "./automation/pr-automation";
 import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
@@ -40,12 +40,14 @@ import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
 import { LaneSyncService } from "./lanes/lane-sync";
 import { createTelegramNotifier } from "./notifications/telegram";
+import { blockUnauthenticatedRemote } from "./security/network-guard";
 import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
 import { SkillRegistryService } from "./skills/registry";
 import { logValidationReport, validateSkills } from "./skills/validator";
 import { TerminalController } from "./terminal/controller";
 import { cleanupWorkspaces } from "./terminal/workspace-cleanup";
+import { redactSecrets, registerSecretSource } from "./utils/secret-redactor";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -79,6 +81,19 @@ const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 
 const db = createDb(DB_PATH);
 useDbForOpenCodeProviders(db);
+// Credentials saved in Settings are scrubbed from every log line and WS message.
+registerSecretSource(() =>
+  [
+    "github_token",
+    "gitlab_token",
+    "anthropic_api_key",
+    "openai_api_key",
+    "gemini_api_key",
+    "litellm_api_key",
+    "opencode_go_api_key",
+    "telegram_bot_token",
+  ].map((key) => db.settings.get(key))
+);
 const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
@@ -365,6 +380,13 @@ const server = Bun.serve({
   // those connections mid-flight, so the server waits longer before giving up.
   idleTimeout: 60,
   fetch(req, server) {
+    const blocked = blockUnauthenticatedRemote(
+      server.requestIP(req)?.address,
+      isAuthEnabled(),
+      process.env,
+      new URL(req.url).pathname
+    );
+    if (blocked) return blocked;
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
       const workspaceId = url.searchParams.get("workspaceId") || null;
@@ -417,15 +439,17 @@ const server = Bun.serve({
                 if (!replay) return;
                 try {
                   ws.send(
-                    JSON.stringify({
-                      type: "terminal_output",
-                      taskId: msg.taskId,
-                      runId: info.runId,
-                      stream: "stdout",
-                      chunk: replay,
-                      timestamp: new Date().toISOString(),
-                      replay: true,
-                    })
+                    redactSecrets(
+                      JSON.stringify({
+                        type: "terminal_output",
+                        taskId: msg.taskId,
+                        runId: info.runId,
+                        stream: "stdout",
+                        chunk: replay,
+                        timestamp: new Date().toISOString(),
+                        replay: true,
+                      })
+                    )
                   );
                 } catch {
                   // The socket closed while the snapshot was being prepared.
@@ -456,3 +480,8 @@ const server = Bun.serve({
 });
 
 console.log(`vibe-code server running on http://localhost:${server.port}`);
+if (!isAuthEnabled() && process.env.VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE !== "true") {
+  console.warn(
+    "[security] Authentication is off: only localhost can use the app. Set VIBE_CODE_API_KEY or GitHub OAuth to use it from your phone."
+  );
+}

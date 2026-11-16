@@ -93,7 +93,17 @@ export async function publishRemoteSession(
   };
 
   const baseBranch = task.baseBranch || repo.defaultBranch;
-  const title = input.title?.trim() || remoteSessionTitle(task);
+  // Later pushes describe the latest turn, not the prompt that opened the PR.
+  const latestRequest = task.prUrl
+    ? db.runs
+        .listByTask(taskId)
+        .flatMap((r) => db.logs.listByRun(r.id).filter((l) => l.stream === "stdin"))
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0]?.content
+    : undefined;
+  const title =
+    input.title?.trim() ||
+    (latestRequest ? remoteSessionTitle({ title: task.title, description: latestRequest }) : "") ||
+    remoteSessionTitle(task);
   try {
     await git.commitAll(run.worktreePath, title);
     if (!(await git.hasCommitsAhead(run.worktreePath, baseBranch)))

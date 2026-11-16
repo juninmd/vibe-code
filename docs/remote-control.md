@@ -119,6 +119,33 @@ Models come from the gateway's `/v1/models`, plus the optional fixed list
 (`litellm_models` / `LITELLM_MODELS`). The effort selector maps to OpenCode's
 `--variant`. `VIBE_OPENCODE_FREE_ONLY=true` restores the free-models-only list.
 
+### Choosing models
+
+- **Per project:** pick a harness and model on the new-session composer and tap
+  **Definir padrão**. New sessions in that project start with it (stored on the
+  repository as `default_engine` / `default_model`, `PATCH /api/repos/:id`). The
+  default model only applies when the session runs on the default's harness.
+- **Per turn:** inside a conversational session the model picker switches the
+  model for the next message (`POST /api/tasks/:id/messages` with `model`); the
+  CLI session, workspace and branch stay the same.
+
+## Security
+
+- **Phone access needs auth.** With no `VIBE_CODE_API_KEY` and no GitHub OAuth,
+  the server answers only localhost and returns `403 auth_required` to every
+  other client, and says so at startup. Set a key or OAuth before opening it
+  from your phone (`VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE=true` opts out,
+  e.g. behind your own authenticating proxy).
+- **Agents never get server secrets.** Every agent and terminal process starts
+  from a sanitized environment: `VIBE_CODE_API_KEY`, OAuth client secret,
+  `LITELLM_MASTER_KEY`, database URLs, bot tokens and any `*_SECRET`,
+  `*_PASSWORD`, `*_PRIVATE_KEY` variable are removed (`VIBE_CODE_AGENT_ENV_DENY`
+  adds more names). Provider keys the run needs are still injected per run.
+- **Logs are redacted.** Known secret values (server env and keys saved in
+  Settings) and common token shapes (`ghp_`, `github_pat_`, `sk-…`, `AKIA…`,
+  `Bearer …`) become `[REDACTED]` before a log line is stored or sent over the
+  WebSocket, including terminal replays.
+
 ## Skills
 
 Skills follow OpenCode's official `SKILL.md` format and discovery. The inline
@@ -155,6 +182,8 @@ inherited value hid the repository's skills and `AGENTS.md`.
 | `LITELLM_BASE_URL` / `LITELLM_API_KEY` | `http://localhost:4000` / — | LiteLLM gateway for `litellm/*` models |
 | `LITELLM_MODELS` | — | Extra LiteLLM model ids to always offer |
 | `VIBE_OPENCODE_FREE_ONLY` | `false` | Only offer free OpenCode models |
+| `VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE` | `false` | Allow non-localhost clients while auth is off |
+| `VIBE_CODE_AGENT_ENV_DENY` | — | Extra comma-separated env names hidden from agents |
 | `VIBE_OPENCODE_E2E_BIN` | — | Path to `opencode` to run `opencode.e2e.test.ts` |
 
 ## Tests
