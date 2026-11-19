@@ -65,14 +65,23 @@ export function Conversation({
           <span className="rw-welcome-symbol" aria-hidden="true">
             <Icon name="code" size={30} />
           </span>
-          <p className="rw-eyebrow">UM ESPAÇO PARA SUAS IDEIAS</p>
+          <p className="rw-eyebrow">
+            {server && workspace.project ? (
+              <>
+                NOVA SESSÃO EM <strong>{workspace.project.name.toUpperCase()}</strong> ·{" "}
+                {workspace.branch}
+              </>
+            ) : (
+              "UM ESPAÇO PARA SUAS IDEIAS"
+            )}
+          </p>
           <h1>O que vamos construir?</h1>
           <p>
             {server
               ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
               : "Do primeiro prompt à revisão do código.\nTudo na mesma sessão, de onde você estiver."}
           </p>
-          {!server && (
+          {(!server || workspace.project) && (
             <div className="rw-suggestions">
               <button
                 type="button"
@@ -93,6 +102,16 @@ export function Conversation({
                 }
               >
                 <Icon name="plus" /> Começar uma mudança <Icon name="chevron" size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onSuggest(
+                    "Encontre a causa deste bug, escreva um teste que reproduza e corrija: "
+                  )
+                }
+              >
+                <Icon name="activity" /> Corrigir um bug <Icon name="chevron" size={13} />
               </button>
             </div>
           )}

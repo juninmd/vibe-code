@@ -16,6 +16,7 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 | Prompts anteriores com ↑/↓ e rascunho por sessão que sobrevive ao reload | Paseo `composer/recall.ts`, `composer/draft/` | `features/remote-workspace/composerHistory.ts` |
 | Aviso ciente de presença quando a sessão termina, ponto de não visto e contador no título | Paseo `agent-attention-policy.ts` | `features/remote-workspace/attention.ts` |
 | Botão de publicar derivado do estado (turno, diff, PR existente) | T3 Code `GitActionsControl.logic.ts` | `features/remote-workspace/gitActions.ts` |
+| Login GitHub-primeiro + chave de API na mesma linguagem visual; início com projeto e atalhos; tokens no lugar de hex | T3 Code `DraftHeroHeadline`, Paseo `docs/design.md` | `features/auth/LoginScreen.tsx` |
 
 ## Fora do escopo por ora
 

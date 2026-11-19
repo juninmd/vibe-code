@@ -1,4 +1,4 @@
-.rw-root {
+:where(.rw-root, .rw-login) {
   --rw-bg: #151515;
   --rw-sidebar: #111111;
   --rw-panel: #181817;
@@ -11,6 +11,11 @@
   --rw-accent: #dfb187;
   --rw-green: #9ab59c;
   --rw-red: #e1a19a;
+  --rw-strong: #ede9df;
+  --rw-prose: #d2cec5;
+  --rw-violet: #c3b2d3;
+}
+.rw-root {
   display: flex;
   height: 100dvh;
   overflow: hidden;
@@ -74,7 +79,7 @@
 .rw-status-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--rw-muted); }
 .rw-status-dot.waiting { background: var(--rw-green); }
 .rw-status-dot.working { background: var(--rw-accent); box-shadow: 0 0 0 3px #dfb18715; }
-.rw-status-dot.review { background: #c3b2d3; }
+.rw-status-dot.review { background: var(--rw-violet); }
 .rw-status-dot.failed { background: var(--rw-red); }
 .rw-main-shell { display: flex; flex: 1; min-width: 0; flex-direction: column; }
 .rw-topbar { display: flex; align-items: center; gap: 12px; height: 57px; flex-shrink: 0; padding: 0 21px; border-bottom: 1px solid var(--rw-border); }
@@ -109,10 +114,10 @@
 .rw-message-author { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--rw-text); font-size: 10px; font-weight: 550; }
 .rw-message-author > span:last-child { margin-left: 3px; color: var(--rw-muted); font-size: 9px; font-weight: 400; }
 .rw-agent-small { color: var(--rw-accent); font: 11px ui-monospace, monospace; }
-.rw-message-text { overflow-wrap: anywhere; color: #d2cec5; }
+.rw-message-text { overflow-wrap: anywhere; color: var(--rw-prose); }
 .rw-message-text p { margin: 0 0 12px; }
 .rw-message-text p:last-child { margin-bottom: 0; }
-.rw-message-text strong { color: #ede9df; font-weight: 600; }
+.rw-message-text strong { color: var(--rw-strong); font-weight: 600; }
 .rw-message-text ul, .rw-message-text ol { padding-left: 20px; margin: 8px 0 12px; }
 .rw-message-text ul { list-style: disc; }
 .rw-message-text ol { list-style: decimal; }
@@ -505,3 +510,11 @@
 }
 .rw-project-default { display: block; margin-top: 2px; color: var(--rw-muted); font-size: 11px; }
 .rw-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.rw-eyebrow strong { color: var(--rw-accent); font-weight: 600; }
+@media (max-width: 767px) {
+  .rw-welcome { min-height: 0; padding: 36px 20px 20px; }
+  .rw-welcome-symbol { width: 40px; height: 40px; margin-bottom: 10px; }
+  .rw-welcome h1 { font-size: 24px; margin: 8px 0 10px; }
+  .rw-composer-model { flex-wrap: nowrap; justify-content: flex-start; }
+  .rw-default-toggle { white-space: nowrap; }
+}

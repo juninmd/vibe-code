@@ -1,0 +1,28 @@
+.rw-login { display: grid; place-items: center; min-height: 100dvh; padding: 24px 16px; background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--rw-accent) 9%, transparent), transparent 60%), var(--rw-bg); color: var(--rw-text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+.rw-login * { box-sizing: border-box; }
+.rw-login-card { width: 100%; max-width: 380px; padding: 30px 28px 26px; border: 1px solid var(--rw-border); border-radius: 14px; background: var(--rw-panel); box-shadow: 0 30px 80px rgb(0 0 0 / 0.45); }
+.rw-login-brand { display: flex; align-items: center; gap: 8px; margin: 0 0 26px; color: var(--rw-accent); font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+.rw-login-brand span { color: var(--rw-muted); font-weight: 400; }
+.rw-login h1 { margin: 0 0 8px; font-size: 21px; font-weight: 550; letter-spacing: -0.5px; }
+.rw-login-lead { margin: 0 0 24px; color: var(--rw-secondary); font-size: 13px; }
+.rw-login button { font: inherit; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease; }
+.rw-login button:disabled { cursor: not-allowed; opacity: 0.45; }
+.rw-login :is(button, input):focus-visible { outline: 2px solid var(--rw-accent); outline-offset: 2px; }
+.rw-login-github { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; border: 0; border-radius: 9px; background: var(--rw-text); color: var(--rw-bg); font-weight: 600; }
+.rw-login-github:hover:not(:disabled) { background: var(--rw-strong); }
+.rw-login-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 16px; color: var(--rw-muted); font-size: 11px; }
+.rw-login-divider::before, .rw-login-divider::after { content: ""; flex: 1; height: 1px; background: var(--rw-border); }
+.rw-login-key label { display: block; margin-bottom: 7px; color: var(--rw-secondary); font-size: 12px; }
+.rw-login-key > div { display: flex; gap: 8px; }
+.rw-login-key input { flex: 1; min-width: 0; min-height: 42px; padding: 0 12px; border: 1px solid var(--rw-border); border-radius: 9px; background: var(--rw-bg); color: var(--rw-text); font: 16px/1 inherit; }
+.rw-login-key input[aria-invalid="true"] { border-color: var(--rw-red); }
+.rw-login-secondary, .rw-login-primary { min-height: 42px; padding: 0 16px; border-radius: 9px; font-weight: 550; }
+.rw-login-secondary { border: 1px solid var(--rw-border); background: var(--rw-raised); color: var(--rw-text); }
+.rw-login-secondary:hover:not(:disabled) { background: var(--rw-hover); }
+.rw-login-primary { border: 0; background: var(--rw-accent); color: var(--rw-bg); }
+.rw-login-help, .rw-login-error { margin: 9px 0 0; font-size: 11.5px; color: var(--rw-muted); }
+.rw-login-error { margin: 0 0 16px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--rw-red) 35%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--rw-red) 8%, transparent); color: var(--rw-red); }
+.rw-login-key .rw-login-error { margin: 9px 0 0; }
+.rw-login code { font: 11px ui-monospace, monospace; color: var(--rw-secondary); }
+.rw-login-retry { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 6px 2px; border: 0; background: none; color: var(--rw-secondary); }
+@media (max-width: 420px) { .rw-login-card { padding: 26px 20px 22px; } }
