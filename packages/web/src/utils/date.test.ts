@@ -68,3 +68,16 @@ describe("formatDuration extra cases", () => {
     expect(formatDuration(start, null)).toMatch(/\ds/);
   });
 });
+
+describe("invalid input", () => {
+  it("formatDateTime and formatTime return placeholders instead of throwing", () => {
+    expect(formatDateTime("not-a-date")).toBe("-");
+    expect(formatDateTime(new Date(Number.NaN))).toBe("-");
+    expect(formatTime("not-a-date")).toBe("--:--:--");
+  });
+
+  it("formatDuration returns null for an unparsable start and clamps negative spans", () => {
+    expect(formatDuration("not-a-date", "2024-01-01T12:00:00.000Z")).toBeNull();
+    expect(formatDuration("2024-01-01T12:00:05.000Z", "2024-01-01T12:00:00.000Z")).toBe("0s");
+  });
+});
