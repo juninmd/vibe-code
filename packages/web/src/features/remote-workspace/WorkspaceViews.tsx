@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
 import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
+import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
 import { type Change, STATUS } from "./model";
@@ -11,6 +12,21 @@ import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 import { WorkLog } from "./WorkLog";
 
 export type Workspace = ReturnType<typeof useRemoteWorkspace>;
+
+/** Branch diff summary; one query shared by the Changes tab and the publish button. */
+function useSessionDiff(workspace: Workspace) {
+  return useQuery({
+    queryKey: ["unified-prototype", "diff", workspace.selected?.id],
+    queryFn: () => api.tasks.diff(workspace.selected?.id ?? ""),
+    enabled:
+      workspace.server &&
+      workspace.selected?.reviewAvailable !== false &&
+      !!workspace.selected?.branch &&
+      workspace.selected.branch !== "—",
+    retry: false,
+    refetchInterval: workspace.server ? 5_000 : false,
+  });
+}
 
 export function Conversation({
   workspace,
@@ -597,8 +613,14 @@ export function TerminalView({ workspace }: { workspace: Workspace }) {
 /** Claude Code–style "Create PR" / "View PR" for a conversational session. */
 export function PullRequestActions({ workspace }: { workspace: Workspace }) {
   const { selected, server } = workspace;
+  const diff = useSessionDiff(workspace);
   if (!server || !selected?.conversational) return null;
-  const busy = workspace.publishing || selected.status === "working";
+  const action = resolvePublishAction({
+    working: selected.status === "working",
+    publishing: workspace.publishing,
+    prUrl: selected.prUrl,
+    changedFiles: diff.data ? diff.data.files.length : null,
+  });
   return (
     <span className="rw-pr-actions">
       {selected.prUrl && (
@@ -615,28 +637,24 @@ export function PullRequestActions({ workspace }: { workspace: Workspace }) {
       )}
       <button
         type="button"
-        className={`rw-button ${selected.prUrl ? "" : "primary"}`}
-        disabled={busy}
-        aria-label={selected.prUrl ? "Atualizar PR" : "Criar PR"}
-        title={
-          selected.status === "working"
-            ? "Aguarde o turno terminar"
-            : selected.prUrl
-              ? "Commit e push das novas alterações no mesmo PR"
-              : "Commit, push e abertura do pull request"
-        }
+        className={`rw-button ${action.primary ? "primary" : ""}`}
+        disabled={action.disabled}
+        aria-label={action.label === "Publicando…" ? undefined : action.label}
+        title={action.hint}
+        aria-describedby="rw-publish-hint"
         onClick={() => void workspace.createPullRequest()}
       >
-        {workspace.publishing ? (
-          "Publicando…"
-        ) : selected.prUrl ? (
+        {action.label === "Atualizar PR" ? (
           <>
             Atualizar<span className="rw-desktop-label"> PR</span>
           </>
         ) : (
-          "Criar PR"
+          action.label
         )}
       </button>
+      <span id="rw-publish-hint" className="rw-sr-only">
+        {action.hint}
+      </span>
       {workspace.publishError && (
         <span className="rw-pr-error" role="alert">
           {workspace.publishError}
@@ -650,17 +668,7 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
   const [path, setPath] = useState("");
   const [filter, setFilter] = useState("");
   const [copied, setCopied] = useState(false);
-  const diff = useQuery({
-    queryKey: ["unified-prototype", "diff", workspace.selected?.id],
-    queryFn: () => api.tasks.diff(workspace.selected?.id ?? ""),
-    enabled:
-      workspace.server &&
-      workspace.selected?.reviewAvailable !== false &&
-      !!workspace.selected?.branch &&
-      workspace.selected.branch !== "—",
-    retry: false,
-    refetchInterval: workspace.server ? 5_000 : false,
-  });
+  const diff = useSessionDiff(workspace);
   const changes: Change[] = workspace.server
     ? (diff.data?.files ?? []).map((file) => ({ ...file, patch: "" }))
     : (workspace.selected?.changes ?? []);

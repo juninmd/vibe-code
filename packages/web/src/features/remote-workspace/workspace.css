@@ -504,3 +504,4 @@
   .rw-terminal-heading > div { flex-basis: 100%; }
 }
 .rw-project-default { display: block; margin-top: 2px; color: var(--rw-muted); font-size: 11px; }
+.rw-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
