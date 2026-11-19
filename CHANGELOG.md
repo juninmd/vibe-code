@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Rules from T3 Code and Paseo**: `AGENTS.md` §6 adds hazards for agents working on their own host, the every-surface checklist, a design rulebook and test/doc discipline; `docs/t3-paseo-port.md` tracks what was ported, from where and under which license.
 - **Remote workspace completion**: recover the Claude Code Remote inspired layout, discover resumable session engines from the server, preserve the Android setup and 3D Office integration, and expose the previous panel through the navigation. Legacy GitHub skill installation rejects unsafe metadata names before writing files.
 - **Unified remote workspace**: promote the unified UI to the authenticated app entrypoint, with conversational OpenCode turns, real branch/model/effort selection, inline project/GitHub/provider/MCP/harness settings, skills and agent templates. The terminal reuses the chat's exact OpenCode session; changes include committed, dirty and untracked files in preserved idle workspaces. The advanced panel remains available at `/legacy`.
 - **Remote instruction plugins**: discover GitHub catalogs and import complete skill folders pinned to a commit, stage/review/activate/remove them, or import all unique skills with progress, per-item results, preservation of existing imports and interruption between items. Registry mutations are serialized; pinned metadata is cached per credential, and quota errors explain how to retry.
