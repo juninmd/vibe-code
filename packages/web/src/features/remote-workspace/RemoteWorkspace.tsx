@@ -920,7 +920,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           </div>
         </Modal>
       )}
-      <div className="rw-notices" role="status" aria-live="polite">
+      <section className="rw-notices" aria-live="polite" aria-label="Avisos de sessões">
         {attention.notices.map((notice) => (
           <div key={notice.sessionId} className="rw-notice">
             <div>
@@ -944,7 +944,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
             </button>
           </div>
         ))}
-      </div>
+      </section>
       {dialog === "commands" && (
         <Modal
           title="Ir para…"
