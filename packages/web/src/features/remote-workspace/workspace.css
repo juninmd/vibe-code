@@ -284,7 +284,15 @@
 .rw-picker-list small { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--rw-muted); margin-top: 4px; }
 .rw-picker-list button > svg { color: var(--rw-accent); }
 .rw-command-list button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px; border-radius: 5px; text-align: left; color: var(--rw-secondary); font-size: 11px; }
-.rw-command-list button > span:nth-child(2) { flex: 1; }
+.rw-command-list button > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-command-list button.active { background: var(--rw-raised); color: var(--rw-text); }
+.rw-command-list kbd, .rw-shortcut-list kbd { flex: none; padding: 2px 6px; border: 1px solid var(--rw-border); border-radius: 4px; background: var(--rw-panel); color: var(--rw-muted); font: 10px ui-monospace, monospace; }
+.rw-command-section { margin: 10px 0 4px; padding: 0 11px; color: var(--rw-muted); font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; }
+.rw-command-list > div:first-child .rw-command-section { margin-top: 0; }
+.rw-shortcut-list { display: grid; gap: 2px; margin: 14px 0 0; }
+.rw-shortcut-list > div { display: flex; align-items: center; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid var(--rw-border); font-size: 11px; color: var(--rw-secondary); }
+.rw-shortcut-list > div:last-child { border-bottom: 0; }
+.rw-shortcut-list dd { margin: 0; }
 .rw-settings-section { padding: 0 0 18px; margin: 0 0 18px; border-bottom: 1px solid var(--rw-border); }
 .rw-settings-section h3 { margin-bottom: 13px; font-size: 11px; font-weight: 550; }
 .rw-source-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px; margin-top: 8px; border: 1px solid var(--rw-border); border-radius: 7px; text-align: left; }
