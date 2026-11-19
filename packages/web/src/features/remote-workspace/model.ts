@@ -5,6 +5,7 @@ import {
   type TaskWithRun,
 } from "@vibe-code/shared";
 import { buildChatItems } from "../../components/code-mode/chat";
+import { splitWork, type WorkEntry } from "./workLog";
 
 export type SessionStatus = "working" | "waiting" | "review" | "failed";
 export interface Message {
@@ -12,6 +13,8 @@ export interface Message {
   role: "user" | "assistant";
   text: string;
   activity?: string[];
+  /** Tool calls the agent made between prose replies. */
+  work?: WorkEntry[];
 }
 export interface Change {
   path: string;
@@ -224,11 +227,16 @@ export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] 
     logs
   )
     .filter((item) => item.kind !== "system")
-    .map((item) => ({
-      id: item.id,
-      role: item.kind === "prompt" ? "user" : "assistant",
-      text: item.kind === "error" ? `Erro do harness:\n\n${item.text}` : item.text,
-    }));
+    .flatMap((item): Message[] => {
+      if (item.kind === "prompt") return [{ id: item.id, role: "user", text: item.text }];
+      if (item.kind === "error")
+        return [{ id: item.id, role: "assistant", text: `Erro do harness:\n\n${item.text}` }];
+      return splitWork(item.text).map((segment, index) => ({
+        id: `${item.id}-${index}`,
+        role: "assistant",
+        ...(segment.type === "text" ? { text: segment.text } : { text: "", work: segment.entries }),
+      }));
+    });
 }
 export function demoReply(prompt: string): string {
   if (/teste|valid|revis/i.test(prompt))

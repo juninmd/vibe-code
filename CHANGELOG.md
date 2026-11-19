@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Work log in the conversation**: tool calls the OpenCode engine reports (read, edit, search, command) no longer run into the agent's prose. Each run of calls becomes a collapsible card with a per-kind summary, results and failed commands in red; it stays open while the agent works. A "jump to latest" button appears when you scroll up.
 - **Rules from T3 Code and Paseo**: `AGENTS.md` §6 adds hazards for agents working on their own host, the every-surface checklist, a design rulebook and test/doc discipline; `docs/t3-paseo-port.md` tracks what was ported, from where and under which license.
 - **Remote workspace completion**: recover the Claude Code Remote inspired layout, discover resumable session engines from the server, preserve the Android setup and 3D Office integration, and expose the previous panel through the navigation. Legacy GitHub skill installation rejects unsafe metadata names before writing files.
 - **Unified remote workspace**: promote the unified UI to the authenticated app entrypoint, with conversational OpenCode turns, real branch/model/effort selection, inline project/GitHub/provider/MCP/harness settings, skills and agent templates. The terminal reuses the chat's exact OpenCode session; changes include committed, dirty and untracked files in preserved idle workspaces. The advanced panel remains available at `/legacy`.

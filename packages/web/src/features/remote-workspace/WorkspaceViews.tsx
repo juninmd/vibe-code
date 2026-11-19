@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
 import { type Change, STATUS } from "./model";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
+import { WorkLog } from "./WorkLog";
 
 export type Workspace = ReturnType<typeof useRemoteWorkspace>;
 
@@ -19,12 +20,14 @@ export function Conversation({
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  const [behind, setBehind] = useState(false);
   const { selected, messages, server } = workspace;
   const count = messages.length;
   const working = selected?.status === "working";
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different session resets scroll following.
   useEffect(() => {
     atBottom.current = true;
+    setBehind(false);
   }, [selected?.id]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the transcript when a turn or status changes.
   useEffect(() => {
@@ -37,6 +40,7 @@ export function Conversation({
       onScroll={(e) => {
         const el = e.currentTarget;
         atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        setBehind(!atBottom.current);
       }}
     >
       {!selected ? (
@@ -103,13 +107,13 @@ export function Conversation({
               </button>
             </div>
           )}
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <article
               key={message.id}
-              className={`rw-message rw-message-${message.role}`}
+              className={`rw-message rw-message-${message.role}${message.work ? " rw-message-work" : ""}`}
               aria-label={message.role === "user" ? "Mensagem do usuário" : "Resposta do agente"}
             >
-              {message.role === "assistant" && (
+              {message.role === "assistant" && messages[index - 1]?.role !== "assistant" && (
                 <div className="rw-message-author">
                   <span className="rw-agent-small">o_</span>{" "}
                   {selected.engine === "opencode" ? "OpenCode" : selected.engine}
@@ -132,11 +136,27 @@ export function Conversation({
                   </ul>
                 </details>
               )}
-              <div className="rw-message-text">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
-              </div>
+              {message.work ? (
+                <WorkLog entries={message.work} live={working && index === count - 1} />
+              ) : (
+                <div className="rw-message-text">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                </div>
+              )}
             </article>
           ))}
+          {behind && (
+            <button
+              type="button"
+              className="rw-jump-latest"
+              onClick={() => {
+                const el = scroll.current;
+                if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+              }}
+            >
+              <Icon name="arrow" size={13} /> Ir para o fim
+            </button>
+          )}
           {working && (
             <div className="rw-thinking" role="status">
               <span className="rw-status-dot working" />
