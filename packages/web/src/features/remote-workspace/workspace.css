@@ -157,7 +157,7 @@
 .rw-composer-wrap { flex-shrink: 0; width: 100%; max-width: 750px; margin: 0 auto; padding: 12px 30px max(12px, env(safe-area-inset-bottom)); }
 .rw-composer { background: #201f1d; border: 1px solid #464039; border-radius: 10px; padding: 14px 14px 9px; }
 .rw-composer:focus-within { border-color: #8c7158; }
-.rw-composer textarea { width: 100%; min-height: 46px; max-height: 120px; resize: vertical; background: transparent; border: 0; outline: none; color: var(--rw-text); font-family: inherit; font-size: 12px; line-height: 1.65; padding: 0 1px; }
+.rw-composer textarea { width: 100%; min-height: 46px; max-height: 40vh; resize: none; field-sizing: content; background: transparent; border: 0; outline: none; color: var(--rw-text); font-family: inherit; font-size: 12px; line-height: 1.65; padding: 0 1px; }
 .rw-composer textarea::placeholder { color: var(--rw-muted); }
 .rw-composer-tools { display: flex; align-items: center; margin-top: 2px; gap: 7px; }
 .rw-composer-tools .rw-icon-button { width: 26px; height: 26px; }

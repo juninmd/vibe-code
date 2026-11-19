@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { CommandPalette, ShortcutList } from "./CommandPalette";
 import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
+import { draftStore } from "./composerHistory";
 import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
@@ -72,7 +73,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState("");
   const [pickerSearch, setPickerSearch] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>(draftStore.load);
+  useEffect(() => draftStore.save(drafts), [drafts]);
   const [mobileNav, setMobileNav] = useState(false);
   const [inspector, setInspector] = useState(true);
   const [mobileContext, setMobileContext] = useState(false);
@@ -81,7 +83,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const activeEngine = workspace.selected?.engine ?? workspace.engine;
   const draftId = workspace.selected?.id ?? `new-${workspace.project?.id}`;
   const draft = drafts[draftId] ?? "";
-  const setDraft = (text: string) => setDrafts((all) => ({ ...all, [draftId]: text }));
+  // Re-inserting the key keeps the most recently edited drafts when storage is pruned.
+  const setDraft = (text: string) =>
+    setDrafts(({ [draftId]: _previous, ...rest }) => ({ ...rest, [draftId]: text }));
   const active = workspace.sessions.filter((s) => s.status === "working");
   const reviews = workspace.sessions.filter((s) => s.status === "review");
   const selected = workspace.selected;

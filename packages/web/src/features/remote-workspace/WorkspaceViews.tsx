@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
 import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
 import { type Change, STATUS } from "./model";
@@ -222,9 +223,28 @@ export function Composer({
         { name: "claude-code", displayName: "Claude Code" },
       ];
   const selectedEngine = selected?.engine ?? workspace.engine;
+  const [history, setHistory] = useState(promptHistory.load);
+  const recall = useRef({ position: -1, live: "" });
   const send = async () => {
     if (!draft.trim() || working || workspace.sending) return;
-    if (await workspace.send(draft)) setDraft("");
+    if (await workspace.send(draft)) {
+      const next = recordPrompt(history, draft);
+      setHistory(next);
+      promptHistory.save(next);
+      recall.current = { position: -1, live: "" };
+      setDraft("");
+    }
+  };
+  const recallPrompt = (direction: "older" | "newer", field: HTMLTextAreaElement) => {
+    if (!caretAtEdge(field.value, field.selectionStart, field.selectionEnd, direction))
+      return false;
+    const state = recall.current;
+    const live = state.position === -1 ? draft : state.live;
+    const step = stepHistory(history, state.position, direction, live);
+    if (!step) return false;
+    recall.current = { position: step.position, live };
+    setDraft(step.text);
+    return true;
   };
   return (
     <div className="rw-composer-wrap">
@@ -259,11 +279,23 @@ export function Composer({
               rows={2}
               value={draft}
               disabled={working || workspace.sending}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => {
+                recall.current.position = -1;
+                setDraft(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   send();
+                } else if (
+                  (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+                  !e.altKey &&
+                  !e.metaKey &&
+                  !e.ctrlKey &&
+                  !e.shiftKey &&
+                  recallPrompt(e.key === "ArrowUp" ? "older" : "newer", e.currentTarget)
+                ) {
+                  e.preventDefault();
                 }
               }}
             />
@@ -278,7 +310,11 @@ export function Composer({
                 <Icon name="plus" />
               </button>
               <span className="rw-composer-hint">
-                {working ? "O agente está trabalhando" : "Enter para enviar"}
+                {working
+                  ? "O agente está trabalhando"
+                  : history.length
+                    ? "Enter envia · ↑ prompts anteriores"
+                    : "Enter para enviar"}
               </span>
               {working ? (
                 <button
