@@ -168,6 +168,26 @@ export const OPENCODE_RUN_PERMISSION: Record<string, string> = {
   plan_exit: "allow",
 };
 
+/**
+ * Supervised sessions ask before changing or reaching outside the workspace. Order
+ * matters: OpenCode applies the last matching rule, so the catch-all comes first.
+ */
+export const OPENCODE_SUPERVISED_PERMISSION: Record<string, string> = {
+  ...OPENCODE_RUN_PERMISSION,
+  edit: "ask",
+  bash: "ask",
+  webfetch: "ask",
+  external_directory: "ask",
+};
+
+function supervisedRun(options: EngineOptions): boolean {
+  return (
+    options.permissionMode === "supervised" &&
+    !!options.decidePermission &&
+    opencodeTransport() === "serve"
+  );
+}
+
 export function isFreeOpencodeModel(model: string): boolean {
   return model === DEFAULT_OPENCODE_MODEL || model.endsWith("-free");
 }
@@ -459,11 +479,27 @@ export class OpenCodeEngine implements AgentEngine {
     // user's global config and the repository's own opencode.json, so the
     // official skill locations (.opencode/skills, .claude/skills,
     // .agents/skills, ~/.config/opencode/skills) keep working.
+    const supervised = supervisedRun(options);
+    if (options.permissionMode === "supervised" && !supervised) {
+      yield {
+        type: "log",
+        stream: "stderr",
+        content: "[opencode] approvals need the serve transport; this turn runs with full access.",
+      };
+    }
+    const permission = supervised ? OPENCODE_SUPERVISED_PERMISSION : OPENCODE_RUN_PERMISSION;
+    if (supervised) {
+      yield {
+        type: "log",
+        stream: "system",
+        content: "[opencode] supervised: edits, commands and web fetches wait for your approval",
+      };
+    }
     const providerSettings = getOpenCodeProviderSettings();
     const launch = await openCodeProviderLaunch(
       {
         model,
-        permission: OPENCODE_RUN_PERMISSION,
+        permission,
         mcp: options.mcpServers,
         skillDirs: options.skillDirs,
         litellmKey: options.litellmKey,
@@ -494,7 +530,7 @@ export class OpenCodeEngine implements AgentEngine {
       NODE_ENV: "development",
       // Belt-and-suspenders auto-allow (complements opencode.json) — ported
       // from multica's daemon: this works even if opencode.json is missing.
-      OPENCODE_PERMISSION: '{"*":"allow"}',
+      OPENCODE_PERMISSION: JSON.stringify(permission),
       ...nativeEnv,
       ...launch.env,
       ...options.env,
@@ -514,6 +550,7 @@ export class OpenCodeEngine implements AgentEngine {
           resumeSessionId: options.resumeSessionId,
           signal: options.signal,
           parse: (line) => this.parseLine(JSON.stringify(line), accumulators),
+          decide: supervised ? options.decidePermission : undefined,
         }),
         this.heartbeatIntervalMs,
         options.signal

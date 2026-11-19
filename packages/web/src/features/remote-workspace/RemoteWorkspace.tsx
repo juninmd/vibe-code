@@ -128,7 +128,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const attention = useAttention(
     workspace.sessions,
     view === "session" ? (selected?.id ?? null) : null,
-    openSession
+    openSession,
+    workspace.approvals.awaiting
   );
   const commands: Command[] = [
     {

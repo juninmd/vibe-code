@@ -2,6 +2,7 @@ import {
   type AgentLog,
   REMOTE_SESSION_TAG,
   type Repository,
+  SUPERVISED_TAG,
   type TaskWithRun,
 } from "@vibe-code/shared";
 import { buildChatItems } from "../../components/code-mode/chat";
@@ -41,6 +42,9 @@ export interface Session {
   model: string;
   effort?: string;
   conversational?: boolean;
+  /** Edits, commands and web fetches wait for the operator's approval. */
+  supervised?: boolean;
+  tags?: string[];
   branch: string;
   updatedAt: string;
   messages: Message[];
@@ -207,6 +211,8 @@ export function sessionFromTask(task: TaskWithRun): Session {
     model: task.model?.split("#")[0] ?? "Modelo padrão",
     effort: task.model?.split("#")[1],
     conversational: task.tags.includes(REMOTE_SESSION_TAG),
+    supervised: task.tags.includes(SUPERVISED_TAG),
+    tags: task.tags,
     branch: task.branchName ?? task.baseBranch ?? task.repo?.defaultBranch ?? "—",
     updatedAt: task.updatedAt,
     messages: [],

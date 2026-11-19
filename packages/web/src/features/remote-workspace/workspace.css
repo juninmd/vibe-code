@@ -150,6 +150,31 @@
 .rw-jump-latest svg { transform: rotate(180deg); }
 .rw-jump-latest:hover { background: var(--rw-hover); }
 @media (max-width: 640px) { .rw-worklog-result { display: none; } }
+/* Approval cards (supervised sessions) */
+.rw-approvals { display: grid; gap: 10px; margin: 6px 0 14px; }
+.rw-approval { border: 1px solid color-mix(in srgb, var(--rw-accent) 45%, var(--rw-border)); border-radius: 9px; background: color-mix(in srgb, var(--rw-accent) 7%, var(--rw-panel)); padding: 13px 14px; }
+.rw-approval header { display: flex; gap: 10px; align-items: flex-start; }
+.rw-approval-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 6px; background: var(--rw-raised); color: var(--rw-accent); }
+.rw-approval h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--rw-strong); }
+.rw-approval header p { margin: 2px 0 0; font-size: 11px; color: var(--rw-muted); }
+.rw-approval-targets { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.rw-approval-targets code { display: inline-block; max-width: 100%; overflow-wrap: anywhere; padding: 3px 7px; border-radius: 5px; background: var(--rw-raised); color: var(--rw-text); font-size: 11px; }
+.rw-approval-diff { margin-top: 10px; }
+.rw-approval-diff summary { cursor: pointer; color: var(--rw-secondary); font-size: 11px; }
+.rw-approval-diff pre { max-height: 240px; overflow: auto; margin: 8px 0 0; padding: 9px 10px; border-radius: 6px; background: var(--rw-sidebar); font: 11px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.rw-diff-add { color: var(--rw-green); }
+.rw-diff-del { color: var(--rw-red); }
+.rw-diff-meta { color: var(--rw-muted); }
+.rw-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.rw-approval-actions button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 12px; border: 1px solid var(--rw-border); border-radius: 7px; background: var(--rw-raised); color: var(--rw-text); font-size: 12px; }
+.rw-approval-actions button:hover:not(:disabled) { background: var(--rw-hover); }
+.rw-approval-actions button:focus-visible { outline: 2px solid var(--rw-accent); outline-offset: 2px; }
+.rw-approval-actions button:disabled { opacity: .55; cursor: progress; }
+.rw-approval-actions .rw-approval-allow { background: var(--rw-accent); border-color: var(--rw-accent); color: #1b1712; font-weight: 600; }
+.rw-approval-actions .rw-approval-allow:hover:not(:disabled) { background: color-mix(in srgb, var(--rw-accent) 85%, #fff); }
+.rw-approval-actions .rw-approval-reject { color: var(--rw-red); }
+.rw-approval-error { margin: 0; color: var(--rw-red); font-size: 11px; }
+@media (max-width: 640px) { .rw-approval-actions button { flex: 1 1 auto; justify-content: center; } }
 .rw-thinking { display: flex; align-items: center; gap: 9px; margin: 10px 0 25px; color: var(--rw-secondary); font-size: 11px; }
 .rw-welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 50px 25px; text-align: center; }
 .rw-welcome-symbol { display: grid; place-items: center; width: 56px; height: 56px; color: var(--rw-accent); margin-bottom: 20px; }

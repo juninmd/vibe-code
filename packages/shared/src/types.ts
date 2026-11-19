@@ -1,3 +1,4 @@
+import type { ApprovalReply, ToolApproval } from "./approvals";
 import type { LaneLabelMap } from "./lanes";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -704,6 +705,8 @@ export type WsClientMessage =
   | { type: "ping"; version?: WsProtocolVersion };
 
 export type WsServerMessage =
+  | { type: "tool_approval_requested"; approval: ToolApproval }
+  | { type: "tool_approval_resolved"; taskId: string; approvalId: string; reply: ApprovalReply }
   | { type: "task_created"; task: Task }
   | { type: "task_updated"; task: Task }
   | { type: "repo_updated"; repo: Repository }

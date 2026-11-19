@@ -5,6 +5,7 @@
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
+import { ApprovalBroker } from "../agents/approvals";
 import type { Orchestrator } from "../agents/orchestrator";
 import { createDb } from "../db";
 import type { GitService } from "../git/git-service";
@@ -1098,5 +1099,56 @@ describe("project default model and per-turn model switch", () => {
       json({ message: "go", model: "rm -rf /" })
     );
     expect(bad.status).toBe(400);
+  });
+});
+
+describe("tool approvals", () => {
+  function setup() {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Supervised",
+      description: "x",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session", "supervised"],
+    });
+    const approvals = new ApprovalBroker(() => {});
+    const app = buildApp(db, makeOrchestrator({ approvals } as Partial<Orchestrator>));
+    return { db, task, app, approvals };
+  }
+  const answer = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
+
+  it("lists what the agent is waiting on and resumes it with the operator's reply", async () => {
+    const { task, app, approvals } = setup();
+    const pending = approvals.request(task.id, "r1", {
+      id: "per_1",
+      permission: "bash",
+      patterns: ["bun test"],
+    });
+    const listed = await (await app.request(`/api/tasks/${task.id}/approvals`)).json();
+    expect(listed.data).toMatchObject([{ id: "per_1", permission: "bash" }]);
+
+    const res = await answer(app, `/api/tasks/${task.id}/approvals/per_1`, { reply: "once" });
+    expect(res.status).toBe(200);
+    expect(await pending).toBe("once");
+  });
+
+  it("rejects unknown replies, answered requests and other tasks' requests", async () => {
+    const { db, task, app, approvals } = setup();
+    void approvals.request(task.id, "r1", { id: "per_1", permission: "edit", patterns: [] });
+    const path = `/api/tasks/${task.id}/approvals/per_1`;
+    expect((await answer(app, path, { reply: "yes" })).status).toBe(400);
+    const other = db.tasks.create({ title: "o", description: "", repoId: task.repoId });
+    expect(
+      (await answer(app, `/api/tasks/${other.id}/approvals/per_1`, { reply: "once" })).status
+    ).toBe(404);
+    expect((await answer(app, path, { reply: "reject" })).status).toBe(200);
+    expect((await answer(app, path, { reply: "once" })).status).toBe(404);
   });
 });

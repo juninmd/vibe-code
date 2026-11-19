@@ -12,7 +12,7 @@ import {
   type TaskWithRun,
 } from "@vibe-code/shared";
 import { Cron } from "croner";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { z } from "zod";
 import { MemoryService } from "../agents/memory-service";
 import type { Orchestrator } from "../agents/orchestrator";
@@ -113,6 +113,21 @@ const launchTaskSchema = z.object({
   engine: z.string().optional(),
   model: z.string().optional(),
 });
+
+/** Same access gate as the message route; returns the error response, or null when allowed. */
+async function taskAccessDenied(c: Context, db: Db, taskId: string): Promise<Response | null> {
+  const access = await resolveAccessContext(c, db);
+  if (!access.ok || !access.context) {
+    const error = access.error;
+    if (error) return c.json(asForbiddenResponse(error), error.status);
+    return c.json({ error: "unauthorized", message: "Access denied" }, 403);
+  }
+  const decision = enforceTaskAccess(db, access.context, taskId);
+  if (decision) return c.json(asForbiddenResponse(decision), decision.status);
+  if (!db.tasks.getById(taskId))
+    return c.json({ error: "not_found", message: "Session not found" }, 404);
+  return null;
+}
 
 function emptyUsageSummary(): TaskUsageSummary {
   return {
@@ -554,6 +569,34 @@ export function createTasksRouter(
       tags: task.tags,
     });
     return c.json({ data: cloned }, 201);
+  });
+
+  // Supervised sessions: tool calls waiting for the operator.
+  router.get("/:id/approvals", async (c) => {
+    const denied = await taskAccessDenied(c, db, c.req.param("id"));
+    if (denied) return denied;
+    return c.json({ data: orchestrator.approvals.listByTask(c.req.param("id")) });
+  });
+
+  router.post("/:id/approvals/:approvalId", async (c) => {
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    const parsed = z
+      .object({ reply: z.enum(["once", "always", "reject"]) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json(
+        { error: "invalid_input", message: "reply must be once, always or reject" },
+        400
+      );
+    if (!orchestrator.approvals.resolve(id, c.req.param("approvalId"), parsed.data.reply)) {
+      return c.json(
+        { error: "not_found", message: "This request was already answered or the turn ended." },
+        404
+      );
+    }
+    return c.json({ data: { ok: true } });
   });
 
   // A remote turn is an explicit user action; it never relies on a closed CLI stdin.

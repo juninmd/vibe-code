@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attentionChannel, attentionMessage, finishedSessions } from "./attention";
+import { attentionChannel, attentionMessage, finishedSessions, newlyAwaiting } from "./attention";
 
 describe("finishedSessions", () => {
   it("reports only sessions that left working since the last snapshot", () => {
@@ -53,5 +53,18 @@ describe("attentionMessage", () => {
   it("says what the user has to do next", () => {
     expect(attentionMessage("failed")).toBe("precisa de atenção");
     expect(attentionMessage("review")).toContain("revisão");
+  });
+});
+
+describe("newlyAwaiting", () => {
+  it("alerts once when a session starts waiting for approval, not while it keeps waiting", () => {
+    expect(newlyAwaiting(new Set(), new Set(["a"]))).toEqual([
+      { sessionId: "a", status: "approval" },
+    ]);
+    expect(newlyAwaiting(new Set(["a"]), new Set(["a", "b"]))).toEqual([
+      { sessionId: "b", status: "approval" },
+    ]);
+    expect(newlyAwaiting(new Set(["a"]), new Set())).toEqual([]);
+    expect(attentionMessage("approval")).toContain("aprovação");
   });
 });

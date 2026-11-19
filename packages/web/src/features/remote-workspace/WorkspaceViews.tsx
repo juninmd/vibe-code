@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { AccessModeSelect, ApprovalList } from "./ApprovalCard";
 import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
 import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
@@ -181,6 +182,12 @@ export function Conversation({
               )}
             </article>
           ))}
+          <ApprovalList
+            approvals={workspace.approvals.of(selected.id)}
+            answering={workspace.approvals.answering}
+            error={workspace.approvals.error}
+            onAnswer={(approval, reply) => void workspace.approvals.answer(approval, reply)}
+          />
           {behind && (
             <button
               type="button"
@@ -196,9 +203,11 @@ export function Conversation({
           {working && (
             <div className="rw-thinking" role="status">
               <span className="rw-status-dot working" />
-              {server
-                ? "Sessão em execução no servidor"
-                : "Preparando uma resposta de demonstração…"}
+              {workspace.approvals.awaiting.has(selected.id)
+                ? "Aguardando sua aprovação"
+                : server
+                  ? "Sessão em execução no servidor"
+                  : "Preparando uma resposta de demonstração…"}
             </div>
           )}
         </div>
@@ -476,6 +485,15 @@ export function Composer({
                   <option value="demo/modelo-exemplo">demo/modelo-exemplo</option>
                 )}
               </select>
+              {selectedEngine === "opencode" && (!selected || selected.conversational) && (
+                <AccessModeSelect
+                  supervised={selected ? !!selected.supervised : workspace.supervised}
+                  disabled={!server && !!selected}
+                  onChange={(on) =>
+                    selected ? void workspace.setSessionSupervised(on) : workspace.setSupervised(on)
+                  }
+                />
+              )}
               <select
                 aria-label="Effort do modelo"
                 value={selected?.effort ?? workspace.effort}

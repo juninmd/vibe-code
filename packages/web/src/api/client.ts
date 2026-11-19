@@ -2,6 +2,7 @@ import type {
   AgentLog,
   AgentRun,
   AgentTemplate,
+  ApprovalReply,
   AuthStatus,
   CreatePromptTemplateRequest,
   CreateRepoRequest,
@@ -38,6 +39,7 @@ import type {
   TerminalStartRequest,
   TerminalState,
   TestConnectionResult,
+  ToolApproval,
   UpdateLaneSettingsRequest,
   UpdateRepoDefaultsRequest,
   UpdateSettingsRequest,
@@ -285,6 +287,13 @@ export const api = {
         body: JSON.stringify(model ? { message, model } : { message }),
       }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
+    /** Tool calls of a supervised session waiting for the operator. */
+    approvals: (id: string) => request<ToolApproval[]>(`/tasks/${id}/approvals`),
+    answerApproval: (id: string, approvalId: string, reply: ApprovalReply) =>
+      request<{ ok: boolean }>(`/tasks/${id}/approvals/${encodeURIComponent(approvalId)}`, {
+        method: "POST",
+        body: JSON.stringify({ reply }),
+      }),
     unblock: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/unblock`, { method: "POST" }),
     retry: (id: string, data?: LaunchTaskRequest) =>
       request<AgentRun>(`/tasks/${id}/retry`, {

@@ -8,7 +8,7 @@ import type {
   Task,
   TaskArtifactKind,
 } from "@vibe-code/shared";
-import { REMOTE_SESSION_TAG } from "@vibe-code/shared";
+import { permissionModeOf, REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import { createTelegramNotifier } from "../../notifications/telegram";
@@ -489,6 +489,8 @@ export async function executeAgent(
   }, TIMEOUT_MS);
 
   const monitorId = setInterval(() => {
+    // Waiting on the operator is not a stall.
+    if (orchestrator?.approvals.hasPending(run.id)) lastActivity = Date.now();
     const inactiveSecs = Math.round((Date.now() - lastActivity) / 1000);
     if (Date.now() - lastActivity > INACTIVITY_MS) {
       timedOut = true;
@@ -993,6 +995,10 @@ export async function executeAgent(
       env: agentEnv,
       mcpServers,
       skillDirs: skillsLoader?.skillDirs(),
+      permissionMode: permissionModeOf(task.tags),
+      decidePermission: orchestrator
+        ? (ask) => orchestrator.approvals.request(task.id, run.id, ask)
+        : undefined,
     })) {
       if (abort.signal.aborted) break;
       recordCliLoadedSkills();
