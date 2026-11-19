@@ -6,6 +6,8 @@ export function formatDateTime(date: string | Date | null): string {
   if (!date) return "-";
 
   const d = typeof date === "string" ? new Date(date) : date;
+  // Intl.DateTimeFormat.format throws RangeError on an invalid Date, which would blank the React tree.
+  if (Number.isNaN(d.getTime())) return "-";
 
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
@@ -26,7 +28,9 @@ export function formatDateTime(date: string | Date | null): string {
 export function formatDuration(startedAt: string | null, finishedAt: string | null): string | null {
   if (!startedAt) return null;
   const ms = new Date(finishedAt ?? Date.now()).getTime() - new Date(startedAt).getTime();
-  const s = Math.floor(ms / 1000);
+  if (Number.isNaN(ms)) return null;
+  // Clock skew between server and browser can make a running task end before it started.
+  const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ${s % 60}s`;
@@ -36,6 +40,7 @@ export function formatTime(date: string | Date | number | null): string {
   if (!date) return "--:--:--";
 
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "--:--:--";
 
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
