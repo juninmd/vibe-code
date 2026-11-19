@@ -7,8 +7,10 @@ OpenCode selected by default. Tasks tagged `remote-session` preserve their
 worktree and resume the CLI session for each `POST /api/tasks/:id/messages`.
 Keep them out of autonomous sweep/retry/cleanup and do not equate a finished
 turn with validated code. See [docs/remote-control.md](docs/remote-control.md).
-Models and branches must come from the existing API. OpenCode runs with process
-`cwd`, without `--dir` (unsupported by v2), and resumes with `--session`.
+Models and branches must come from the existing API. OpenCode turns run over
+`opencode serve` + `@opencode-ai/sdk` (one loopback server per turn, random
+password, process `cwd` = worktree); `VIBE_OPENCODE_TRANSPORT=cli` falls back to
+`opencode run` (no `--dir`, resumes with `--session`).
 
 ## Commands
 
@@ -99,6 +101,7 @@ POST /api/tasks/{id}/launch
 | `PORT` | `3000` |
 | `VIBE_CODE_DATA_DIR` | `~/.vibe-code` |
 | `VIBE_CODE_MAX_AGENTS` | `4` |
+| `VIBE_OPENCODE_TRANSPORT` | `serve` (`cli` = legacy `opencode run`, the rollback switch) |
 | `VIBE_OPENCODE_SESSIONS_DIR` | `$XDG_DATA_HOME/opencode`, `~/.local/share/opencode` |
 | `VIBE_CLAUDE_SESSIONS_DIR` | `~/.claude/projects` |
 | `VIBE_ANTIGRAVITY_SESSIONS_DIR` | `~/.antigravity/sessions`, `~/.antigravity/cli/sessions`, `~/.config/antigravity/sessions` |

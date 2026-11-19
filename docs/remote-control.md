@@ -97,7 +97,16 @@ well. HTTPS is required for PWA installation outside localhost. This change
 provides the browser workspace; it does not provision hosting or pair additional
 execution hosts. The displayed environment is the current vibe-code server.
 
-OpenCode `run` uses its native executable on Windows, the worktree as process
+OpenCode turns run over `opencode serve` (default): the engine starts one server
+per turn on `127.0.0.1` with a free port and a random `OPENCODE_SERVER_PASSWORD`,
+drives it with `@opencode-ai/sdk` (create or resume the session, `prompt_async`,
+stream `/event` until the session is idle, abort on Stop) and stops it after the
+turn. Bus events are mapped to the same JSON lines `opencode run` prints, so logs,
+the work log and costs read the same. A retry that needs the operator (for example
+an exhausted free tier) ends the turn with that message instead of retrying forever.
+Set `VIBE_OPENCODE_TRANSPORT=cli` to roll back to `opencode run`.
+
+OpenCode `run` (the `cli` transport) uses its native executable on Windows, the worktree as process
 `cwd`, JSON output, and `--session` on continuation. No `--dir` flag is sent
 (OpenCode 2.0.30 rejects it). Both `sessionID` and `sessionId` event fields are
 accepted without discarding the accompanying text.

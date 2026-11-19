@@ -12,12 +12,13 @@ import {
   openCodeProviderLaunch,
 } from "../opencode-providers";
 import { type BlockedArgs, filterCustomArgs } from "./blocked-args";
-import { getHeartbeatIntervalMs } from "./heartbeat";
+import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
+import { runServeTurn, type ServeTurnInput } from "./opencode-serve/run";
 
 // Maps raw tool names to readable labels and extracts the most useful arg
 function humanizeToolCall(tool: string, input: Record<string, unknown>): string {
   const t = tool.toLowerCase();
-  const path = str(input.path ?? input.file_path ?? input.file ?? input.filename);
+  const path = str(input.filePath ?? input.path ?? input.file_path ?? input.file ?? input.filename);
   const cmd = str(input.command ?? input.cmd);
   const query = str(input.query ?? input.pattern ?? input.glob ?? input.search);
   const url = str(input.url);
@@ -288,6 +289,23 @@ export interface OpenCodeAccumulators {
   total_cost: number;
 }
 
+function emptyAccumulators(): OpenCodeAccumulators {
+  return {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    cached: 0,
+    input_cost: 0,
+    output_cost: 0,
+    total_cost: 0,
+  };
+}
+
+/** `serve` (default) drives `opencode serve` through the SDK; `cli` keeps `opencode run`. */
+export function opencodeTransport(env: Record<string, string | undefined> = process.env) {
+  return env.VIBE_OPENCODE_TRANSPORT === "cli" ? "cli" : "serve";
+}
+
 export class OpenCodeEngine implements AgentEngine {
   name = "opencode";
   binaryName = "opencode";
@@ -471,6 +489,38 @@ export class OpenCodeEngine implements AgentEngine {
       nativeEnv.GOOGLE_GENERATIVE_AI_API_KEY = options.nativeApiKeys.gemini;
     }
 
+    const processEnv = {
+      ...agentProcessEnv(),
+      NODE_ENV: "development",
+      // Belt-and-suspenders auto-allow (complements opencode.json) — ported
+      // from multica's daemon: this works even if opencode.json is missing.
+      OPENCODE_PERMISSION: '{"*":"allow"}',
+      ...nativeEnv,
+      ...launch.env,
+      ...options.env,
+      // OpenCode resolves the project from $PWD, not from the process cwd.
+      ...processDirEnv(workdir),
+    };
+
+    if (opencodeTransport() === "serve") {
+      const accumulators = emptyAccumulators();
+      yield* withHeartbeat(
+        this.runServe({
+          prompt,
+          workdir,
+          binary: resolveOpencodeBinary(),
+          env: processEnv,
+          model,
+          resumeSessionId: options.resumeSessionId,
+          signal: options.signal,
+          parse: (line) => this.parseLine(JSON.stringify(line), accumulators),
+        }),
+        this.heartbeatIntervalMs,
+        options.signal
+      );
+      return;
+    }
+
     let proc: Subprocess | null = null;
     let stdoutTask: Promise<void> | null = null;
     let stderrTask: Promise<void> | null = null;
@@ -487,18 +537,7 @@ export class OpenCodeEngine implements AgentEngine {
         stdout: "pipe",
         stderr: "pipe",
         stdin: "pipe",
-        env: {
-          ...agentProcessEnv(),
-          NODE_ENV: "development",
-          // Belt-and-suspenders auto-allow (complements opencode.json) — ported
-          // from multica's daemon: this works even if opencode.json is missing.
-          OPENCODE_PERMISSION: '{"*":"allow"}',
-          ...nativeEnv,
-          ...launch.env,
-          ...options.env,
-          // OpenCode resolves the project from $PWD, not from the process cwd.
-          ...processDirEnv(workdir),
-        },
+        env: processEnv,
       });
 
       // Send prompt via stdin, then close it to signal end of input
@@ -570,15 +609,7 @@ export class OpenCodeEngine implements AgentEngine {
       };
 
       // Define accumulators inside the generator scope
-      const accumulators: OpenCodeAccumulators = {
-        input_tokens: 0,
-        output_tokens: 0,
-        total_tokens: 0,
-        cached: 0,
-        input_cost: 0,
-        output_cost: 0,
-        total_cost: 0,
-      };
+      const accumulators = emptyAccumulators();
 
       // ─── Task 1: stream stdout ─────────────────────────────────────────────
       // OpenCode writes JSON lines to stdout. We parse each line in real-time.
@@ -748,6 +779,11 @@ export class OpenCodeEngine implements AgentEngine {
       }
       yield { type: "complete", exitCode: exitCode ?? 0 };
     }
+  }
+
+  /** Test seam: replace the `opencode serve` turn. */
+  protected runServe(input: ServeTurnInput): AsyncGenerator<AgentEvent> {
+    return runServeTurn(input);
   }
 
   abort(runId: string): void {

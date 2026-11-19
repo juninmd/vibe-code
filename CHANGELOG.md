@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Changed
+- **OpenCode over `opencode serve`**: turns now drive a per-turn `opencode serve` (loopback, random password) through `@opencode-ai/sdk` instead of parsing `opencode run`. Same logs, work log, costs and session resume; Stop aborts the OpenCode session; a retry that needs the operator (exhausted free tier) fails the turn with its message instead of hanging. Tool labels now show OpenCode's `filePath`. Roll back with `VIBE_OPENCODE_TRANSPORT=cli`. This is the base for approvals, rewind and mid-thread switches.
 - **Refreshed screens**: the login now matches the workspace (GitHub first, API key as the alternative, inline error with the field marked invalid) and lives in `features/auth/`. A new session names its project and branch and offers three starting prompts on the server too. On phones the hero is shorter and the engine/model/effort row scrolls from the start instead of clipping. Prose, emphasis and review colors are tokens shared by login and workspace.
 - **Publish button follows the session state**: "Criar PR" is disabled with a reason when the branch has no changes or the agent is mid-turn, shows how many files will go out, and becomes a secondary "Atualizar PR" once the PR exists. The Changes tab and the button share one diff query.
 
