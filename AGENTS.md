@@ -55,6 +55,34 @@ Estado: o OpenCode free **não fecha fluxo completo (PR aberto)** no deploy atua
 3. **`MAX_AGENTS=1` não é respeitado**: observados 4 runs `in_progress` simultâneos. Enforcement de concorrência (`orchestrator.ts::launch` / `activeCount`) está furado — runs órfãos/zumbis não decrementam o contador.
 4. **Modelo default inválido**: [Resolvido] Trocado para o free funcional `github-models/openai/gpt-4o-mini`.
 
+## 6. Regras adotadas de T3 Code e Paseo
+Origem e inventário em [docs/t3-paseo-port.md](docs/t3-paseo-port.md).
+
+### 6.1 Riscos ao trabalhar no app que hospeda o agente
+- Mate só o PID que você iniciou. Nunca `pkill -f`, nunca por nome.
+- Nunca use o banco ou o `VIBE_CODE_DATA_DIR` real: rode com um data dir temporário.
+- Nunca reinicie o servidor que executa a sua sessão. Timeout não é motivo para reiniciar.
+
+### 6.2 Toda superfície
+- Uma ação disponível na conversa também existe na paleta de comandos e, se frequente, num atalho.
+- Toda entrada tem a saída inversa (abrir/fechar, arquivar/restaurar).
+- Teste desktop (1440px) e celular (390px); prints de antes/depois em mudanças de UI.
+- Capacidade só aparece na UI se o engine de fato a executa; recusas falham fechadas no servidor.
+
+### 6.3 Design
+- Cores só por token (`--rw-*`); nada de hex solto nos componentes.
+- Hierarquia por peso e cor, não por tamanho. No máximo um botão de destaque por tela.
+- Destrutivo é botão com contorno até a confirmação. Desabilitado é só opacidade.
+- Mudança de estado não desloca o layout. Spinner vem antes do texto, nunca depois.
+- Estado vazio: frase curta e no máximo uma ação. Erro: uma frase direta abaixo do campo.
+- Toda ação falível tem estado pendente, sucesso e falha visíveis.
+
+### 6.4 Testes e documentação
+- Teste o que pode quebrar (tradução de protocolo, permissões, migrações, corridas), na camada
+  mais baixa que falha. Bug corrigido começa com teste falhando.
+- Sem `sleep` nem polling em teste; espere o evento. Rode só o arquivo afetado; a suíte inteira fica no CI.
+- Docs guardam decisões e armadilhas, não resumos de PR nem catálogo de arquivos. Um fato vive num doc só.
+
 <!-- base-actions-main-policy -->
 ## GitHub Actions — padrão obrigatório (@main)
 
