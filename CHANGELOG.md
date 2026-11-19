@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Composer recall and drafts**: ↑/↓ on the first/last line walks through your last 50 sent prompts and back to the unsent draft; each session's draft survives a reload (30 most recent kept in this browser only). The field grows with its content up to 40% of the screen.
 - **Command palette and shortcuts**: ⌘K/Ctrl+K opens one registry of actions, pages and sessions with accent-insensitive search and ↑ ↓ Enter. Global shortcuts: new session (⌘⇧O), tabs (⌥1–3), context panel (⌘.), and `?` lists them. Plain-key shortcuts never fire while typing.
 - **Work log in the conversation**: tool calls the OpenCode engine reports (read, edit, search, command) no longer run into the agent's prose. Each run of calls becomes a collapsible card with a per-kind summary, results and failed commands in red; it stays open while the agent works. A "jump to latest" button appears when you scroll up.
 - **Rules from T3 Code and Paseo**: `AGENTS.md` §6 adds hazards for agents working on their own host, the every-surface checklist, a design rulebook and test/doc discipline; `docs/t3-paseo-port.md` tracks what was ported, from where and under which license.
