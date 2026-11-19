@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Know when a session finishes**: when a session stops working you get nothing if you are looking at it, an in-app notice with "Abrir" if the app is in front, or a browser notification if it is in the background (opt in from the palette). Unseen sessions get a dot in the sidebar and a count in the tab title. Reopening the app never notifies about old runs.
 - **Composer recall and drafts**: ↑/↓ on the first/last line walks through your last 50 sent prompts and back to the unsent draft; each session's draft survives a reload (30 most recent kept in this browser only). The field grows with its content up to 40% of the screen.
 - **Command palette and shortcuts**: ⌘K/Ctrl+K opens one registry of actions, pages and sessions with accent-insensitive search and ↑ ↓ Enter. Global shortcuts: new session (⌘⇧O), tabs (⌥1–3), context panel (⌘.), and `?` lists them. Plain-key shortcuts never fire while typing.
 - **Work log in the conversation**: tool calls the OpenCode engine reports (read, edit, search, command) no longer run into the agent's prose. Each run of calls becomes a collapsible card with a per-kind summary, results and failed commands in red; it stays open while the agent works. A "jump to latest" button appears when you scroll up.
