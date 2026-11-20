@@ -1,10 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-
-// Read from disk: vitest stubs CSS imports, so `?raw` comes back empty.
-const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "workspace.css"), "utf8");
+import css from "./workspace.css?raw";
 
 describe("workspace.css readability guards", () => {
   it("never sets text below 10px, which is unreadable on phones and at 200% zoom", () => {
