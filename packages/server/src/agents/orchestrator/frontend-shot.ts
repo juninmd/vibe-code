@@ -1,7 +1,6 @@
 import { existsSync, promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
-import { chromium } from "playwright";
 import type { Db } from "../../db";
 import { agentProcessEnv } from "../../utils/agent-env";
 import { killProcessTree } from "../../utils/process-tree";
@@ -129,6 +128,9 @@ export async function captureFrontendScreenshotIfNeeded(
 
   let browser: any = null;
   try {
+    // Loaded on demand: importing Playwright touches process.stdout/stderr, which made Bun's
+    // test runner fail with EEXIST (epoll_ctl) in every file that imports the executor.
+    const { chromium } = await import("playwright");
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
