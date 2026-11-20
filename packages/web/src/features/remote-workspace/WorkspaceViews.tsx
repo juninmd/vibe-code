@@ -20,7 +20,8 @@ function useSessionDiff(workspace: Workspace) {
     queryFn: () => api.tasks.diff(workspace.selected?.id ?? ""),
     enabled:
       workspace.server &&
-      workspace.selected?.reviewAvailable !== false &&
+      !!workspace.selected?.conversational &&
+      workspace.selected.reviewAvailable !== false &&
       !!workspace.selected?.branch &&
       workspace.selected.branch !== "—",
     retry: false,
