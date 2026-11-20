@@ -64,8 +64,8 @@ test.describe("Unified remote prototype", () => {
     await page.goto("/prototype?demo=1");
     await expect(page.getByRole("heading", { name: "Unificar a experiência remota" })).toBeVisible();
     await page.keyboard.press("Control+k");
-    await page.getByRole("textbox", { name: "Buscar comandos e sessões" }).fill("autenticação");
-    await page.getByRole("dialog").getByRole("button", { name: "Revisar o fluxo de autenticação" }).click();
+    await page.getByRole("combobox", { name: "Buscar comandos e sessões" }).fill("autenticação");
+    await page.getByRole("dialog").getByRole("option", { name: "Revisar o fluxo de autenticação" }).click();
     await expect(page.getByRole("heading", { name: "Revisar o fluxo de autenticação" })).toBeVisible();
     await page.getByRole("button", { name: "Configurações", exact: true }).click();
     await page.getByRole("checkbox", { name: /Interface compacta/ }).check();

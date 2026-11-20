@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { api, getApiKey, setApiKey } from "./api/client";
+import { api, setApiKey } from "./api/client";
 import { AppMenu } from "./components/AppMenu";
 import { Board } from "./components/Board";
 import { CodeMode, type NewRemoteSession } from "./components/code-mode/CodeMode";
@@ -102,6 +102,7 @@ const SkillsBrowser = lazy(() =>
 );
 
 import { WorkspaceSelector } from "./components/WorkspaceSelector";
+import { LoginScreen } from "./features/auth/LoginScreen";
 
 const StatsDialog = lazy(() =>
   import("./components/StatsDialog").then((m) => ({ default: m.StatsDialog }))
@@ -129,137 +130,6 @@ function appendLogsLimited(existing: AgentLog[], incoming: AgentLog[]): AgentLog
   const merged = [...existing, ...unique];
   if (merged.length <= MAX_LIVE_LOGS_PER_TASK) return merged;
   return merged.slice(merged.length - MAX_LIVE_LOGS_PER_TASK);
-}
-
-const LOGIN_ERRORS: Record<string, string> = {
-  invalid_state: "O login com GitHub expirou ou foi interrompido. Tente de novo.",
-  not_allowed: "Esta conta do GitHub não tem permissão neste servidor (GITHUB_ALLOWED_USERS).",
-  github_failed: "O GitHub recusou o login. Confira o OAuth app e tente de novo.",
-};
-
-/** Error code the OAuth callback left in the URL; removed so a reload does not repeat it. */
-function takeLoginError(): string | null {
-  const url = new URL(window.location.href);
-  const code = url.searchParams.get("auth_error");
-  if (!code) return null;
-  url.searchParams.delete("auth_error");
-  window.history.replaceState(null, "", url);
-  return LOGIN_ERRORS[code] ?? LOGIN_ERRORS.github_failed;
-}
-
-function LoginScreen({
-  status,
-  loading,
-  error,
-  onRetry,
-}: {
-  status: AuthStatus | null;
-  loading: boolean;
-  error: string | null;
-  onRetry: () => void;
-}) {
-  const [accessKey, setAccessKey] = useState("");
-  const [oauthError] = useState(takeLoginError);
-  const github = status?.methods?.github ?? status?.enabled !== false;
-  const keyLogin = status?.methods?.apiKey ?? status?.enabled !== false;
-  // A stored key that the server still rejects is a wrong (or rotated) key.
-  const keyRejected = !loading && !!status && !status.authenticated && !!getApiKey();
-
-  return (
-    <div className="min-h-screen bg-app text-primary flex items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-lg border border-default bg-surface p-6 shadow-xl">
-        <div className="flex items-center gap-2.5">
-          <img src="/icons/icon-192.png" alt="" width={32} height={32} className="rounded-lg" />
-          <h1 className="text-lg font-semibold">vibe remote</h1>
-        </div>
-        <p className="mt-2 text-sm text-secondary">
-          Converse com seus agentes de código de qualquer lugar. Entre para acessar o servidor.
-        </p>
-        {error && <p className="mt-3 text-xs text-danger">{error}</p>}
-        {oauthError && (
-          <p role="alert" className="mt-3 text-xs text-danger">
-            {oauthError}
-          </p>
-        )}
-
-        {keyLogin && (
-          <form
-            className="mt-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const value = accessKey.trim();
-              if (!value) return;
-              setApiKey(value);
-              setAccessKey("");
-              onRetry();
-            }}
-          >
-            <label
-              htmlFor="access-key"
-              className="text-[11px] font-medium uppercase tracking-wider text-muted"
-            >
-              Chave de acesso
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                id="access-key"
-                type="password"
-                value={accessKey}
-                onChange={(e) => setAccessKey(e.target.value)}
-                placeholder="Cole a chave de acesso"
-                autoComplete="current-password"
-                aria-invalid={keyRejected}
-                className="min-w-0 flex-1 rounded-md border border-strong bg-surface px-3 py-2.5 text-base outline-none focus:ring-2 focus:ring-violet-500"
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={loading || accessKey.trim().length === 0}
-              >
-                Entrar
-              </Button>
-            </div>
-            {keyRejected ? (
-              <p role="alert" className="mt-2 text-xs text-danger">
-                Chave inválida. Confira o valor de <code>VIBE_CODE_API_KEY</code> no servidor.
-              </p>
-            ) : (
-              <p className="mt-2 text-[11px] text-muted">
-                O valor de <code>VIBE_CODE_API_KEY</code> configurado no servidor. Fica salvo só
-                neste aparelho.
-              </p>
-            )}
-          </form>
-        )}
-
-        {github && (
-          <div className={keyLogin ? "mt-5 border-t border-subtle pt-4" : "mt-5"}>
-            <Button
-              type="button"
-              variant={keyLogin ? "outline" : "primary"}
-              className="w-full"
-              disabled={loading}
-              onClick={() => {
-                window.location.href = api.auth.loginUrl();
-              }}
-            >
-              {loading ? "Verificando…" : "Entrar com GitHub"}
-            </Button>
-          </div>
-        )}
-
-        {error && (
-          <Button type="button" variant="ghost" className="mt-3 w-full" onClick={onRetry}>
-            Tentar de novo
-          </Button>
-        )}
-
-        {status?.enabled === false && (
-          <p className="mt-3 text-xs text-warning">Autenticação não configurada no servidor.</p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export default function App() {

@@ -1,4 +1,5 @@
-import type { SkillPayload } from "@vibe-code/shared";
+import type { ApprovalReply, PermissionMode, SkillPayload } from "@vibe-code/shared";
+import type { ApprovalAsk } from "./approvals";
 
 export interface AgentEvent {
   type: "log" | "status" | "error" | "complete" | "cost" | "session" | "tool_use" | "tool_result";
@@ -64,6 +65,10 @@ export interface EngineOptions {
   mcpServers?: Record<string, any>;
   /** Directories holding official SKILL.md skills the harness should discover natively. */
   skillDirs?: string[];
+  /** `supervised` asks the operator before edits, commands and web fetches (OpenCode serve). */
+  permissionMode?: PermissionMode;
+  /** Resolves a supervised tool call; engines without approvals ignore it. */
+  decidePermission?: (ask: ApprovalAsk) => Promise<ApprovalReply>;
 }
 
 export interface AgentEngine {

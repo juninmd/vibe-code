@@ -2,9 +2,11 @@ import {
   type AgentLog,
   REMOTE_SESSION_TAG,
   type Repository,
+  SUPERVISED_TAG,
   type TaskWithRun,
 } from "@vibe-code/shared";
 import { buildChatItems } from "../../components/code-mode/chat";
+import { splitWork, type WorkEntry } from "./workLog";
 
 export type SessionStatus = "working" | "waiting" | "review" | "failed";
 export interface Message {
@@ -12,6 +14,14 @@ export interface Message {
   role: "user" | "assistant";
   text: string;
   activity?: string[];
+  /** Tool calls the agent made between prose replies. */
+  work?: WorkEntry[];
+  /** Engine that wrote this reply, when the session changed engine mid-conversation. */
+  engine?: string;
+  /** Turn a user message started (server sessions), so the conversation can rewind to it. */
+  runId?: string;
+  /** Marks the point where another engine took over the conversation. */
+  handoff?: { from: string; to: string };
 }
 export interface Change {
   path: string;
@@ -38,6 +48,9 @@ export interface Session {
   model: string;
   effort?: string;
   conversational?: boolean;
+  /** Edits, commands and web fetches wait for the operator's approval. */
+  supervised?: boolean;
+  tags?: string[];
   branch: string;
   updatedAt: string;
   messages: Message[];
@@ -204,6 +217,8 @@ export function sessionFromTask(task: TaskWithRun): Session {
     model: task.model?.split("#")[0] ?? "Modelo padrão",
     effort: task.model?.split("#")[1],
     conversational: task.tags.includes(REMOTE_SESSION_TAG),
+    supervised: task.tags.includes(SUPERVISED_TAG),
+    tags: task.tags,
     branch: task.branchName ?? task.baseBranch ?? task.repo?.defaultBranch ?? "—",
     updatedAt: task.updatedAt,
     messages: [],
@@ -212,8 +227,10 @@ export function sessionFromTask(task: TaskWithRun): Session {
     prUrl: task.prUrl,
   };
 }
+const HANDOFF = /\[handoff\] (\S+) → (\S+):/;
+
 export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] {
-  return buildChatItems(
+  const items = buildChatItems(
     {
       id: session.id,
       description: session.description,
@@ -222,13 +239,39 @@ export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] 
       createdAt: session.updatedAt,
     },
     logs
-  )
-    .filter((item) => item.kind !== "system")
-    .map((item) => ({
-      id: item.id,
-      role: item.kind === "prompt" ? "user" : "assistant",
-      text: item.kind === "error" ? `Erro do harness:\n\n${item.text}` : item.text,
+  );
+  // Replies before the first handoff belong to the engine it handed off from.
+  const first = items
+    .map((item) => item.kind === "system" && HANDOFF.exec(item.text))
+    .find(Boolean);
+  let engine = first ? first[1] : session.engine;
+  return items.flatMap((item): Message[] => {
+    if (item.kind === "system") {
+      const handoff = HANDOFF.exec(item.text);
+      if (!handoff) return [];
+      engine = handoff[2];
+      return [
+        { id: item.id, role: "assistant", text: "", handoff: { from: handoff[1], to: engine } },
+      ];
+    }
+    if (item.kind === "prompt")
+      return [
+        {
+          id: item.id,
+          role: "user",
+          text: item.text,
+          ...(item.runId ? { runId: item.runId } : {}),
+        },
+      ];
+    if (item.kind === "error")
+      return [{ id: item.id, role: "assistant", engine, text: `Erro do harness:\n\n${item.text}` }];
+    return splitWork(item.text).map((segment, index) => ({
+      id: `${item.id}-${index}`,
+      role: "assistant",
+      engine,
+      ...(segment.type === "text" ? { text: segment.text } : { text: "", work: segment.entries }),
     }));
+  });
 }
 export function demoReply(prompt: string): string {
   if (/teste|valid|revis/i.test(prompt))

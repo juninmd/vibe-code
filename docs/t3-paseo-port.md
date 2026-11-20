@@ -11,11 +11,18 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 | --- | --- | --- |
 | Regras de agente: riscos, toda superfície, testes, docs | T3 Code `AGENTS.md`, Paseo `AGENTS.md` | `AGENTS.md` §6 |
 | Regras de design: tokens, um CTA de destaque, estados | Paseo `docs/design.md` | `AGENTS.md` §6.3 |
+| Work log: chamadas de ferramenta agrupadas fora do texto, "ir para o fim" | T3 Code `WorkLog`, `useTimelineFollow` | `features/remote-workspace/workLog.ts` |
+| Paleta de comandos com registro, ↑↓/Enter e atalhos globais (`?` lista) | T3 Code `keybindings.ts`, Paseo Command Center | `features/remote-workspace/commands.ts` |
+| Prompts anteriores com ↑/↓ e rascunho por sessão que sobrevive ao reload | Paseo `composer/recall.ts`, `composer/draft/` | `features/remote-workspace/composerHistory.ts` |
+| Aviso ciente de presença quando a sessão termina, ponto de não visto e contador no título | Paseo `agent-attention-policy.ts` | `features/remote-workspace/attention.ts` |
+| Botão de publicar derivado do estado (turno, diff, PR existente) | T3 Code `GitActionsControl.logic.ts` | `features/remote-workspace/gitActions.ts` |
+| Login GitHub-primeiro + chave de API na mesma linguagem visual; início com projeto e atalhos; tokens no lugar de hex | T3 Code `DraftHeroHeadline`, Paseo `docs/design.md` | `features/auth/LoginScreen.tsx` |
 
 ## Fora do escopo por ora
 
-- Modos de permissão e cards de aprovação: exigem o Agent SDK do Claude ou `opencode serve`
-  com SDK. Hoje o OpenCode roda com `opencode run`, sem canal de aprovação.
-- Troca de provider no meio da conversa com handoff de contexto (T3 Code orchestration-v2).
-- Checkpoints por turno e rewind; agentes como servidor MCP (Paseo); voz; apps nativos.
+- ~~Modos de permissão e cards de aprovação~~: feito sobre `opencode serve` (modo "Pedir aprovação")
+- ~~Troca de provider no meio da conversa com handoff de contexto~~: feito (seletor de engine numa sessão aberta; a nova engine recebe a conversa até aqui).
+- ~~Checkpoints por turno e rewind~~: feito ("Voltar até aqui" nas mensagens).
+- ~~Tema claro~~: feito (segue o sistema; alternância na barra superior e no ⌘K).
+- Agentes como servidor MCP (Paseo); voz; apps nativos.
 - Login por pareamento (T3 Code): o vibe-code mantém GitHub OAuth ou chave de API.

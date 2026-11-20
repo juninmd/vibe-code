@@ -1,3 +1,4 @@
+import type { ApprovalReply, ToolApproval } from "./approvals";
 import type { LaneLabelMap } from "./lanes";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -192,6 +193,10 @@ export interface AgentRun {
   exitCode: number | null;
   errorMessage: string | null;
   sessionId?: string | null;
+  /** Commit holding the worktree as it was before this turn (conversational sessions). */
+  checkpoint?: string | null;
+  /** Set when the operator rewound the conversation to before this turn. */
+  rewoundAt?: string | null;
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
   stateSnapshot?: string | null;
@@ -704,6 +709,8 @@ export type WsClientMessage =
   | { type: "ping"; version?: WsProtocolVersion };
 
 export type WsServerMessage =
+  | { type: "tool_approval_requested"; approval: ToolApproval }
+  | { type: "tool_approval_resolved"; taskId: string; approvalId: string; reply: ApprovalReply }
   | { type: "task_created"; task: Task }
   | { type: "task_updated"; task: Task }
   | { type: "repo_updated"; repo: Repository }

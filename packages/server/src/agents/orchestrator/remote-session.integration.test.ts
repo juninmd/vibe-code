@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createDb } from "../../db";
 import type { GitService } from "../../git/git-service";
 import { BroadcastHub } from "../../ws/broadcast";
-import type { AgentEngine, EngineOptions } from "../engine";
+import type { AgentEngine, AgentEvent, EngineOptions } from "../engine";
 import { executeAgent } from "./executor";
 
 const roots: string[] = [];
@@ -111,6 +111,91 @@ it("continues a remote conversation in the same workspace without committing, pu
     expect(existsSync(join(workspace, "work.txt"))).toBe(true);
     expect(db.runs.getById(second.id)?.status).toBe("completed");
     expect(finished).toHaveBeenCalledTimes(2);
+  } finally {
+    db.raw.close();
+  }
+}, 15_000);
+
+it("hands the conversation to another engine as a fresh session that carries the transcript", async () => {
+  const root = await mkdtemp(join(tmpdir(), "vibe-remote-handoff-"));
+  roots.push(root);
+  const workspace = join(root, "workspace");
+  await mkdir(workspace);
+  const db = createDb(":memory:");
+  db.settings.set("litellm_enabled", "false");
+  const owner = db.workspaces.create({ name: "Remote", slug: "remote" });
+  const repo = db.repos.create({
+    url: "https://github.com/test/remote.git",
+    workspaceId: owner.id,
+  });
+  db.repos.updateStatus(repo.id, "ready", root);
+  const task = db.tasks.create({
+    title: "Handoff",
+    description: "Create a file",
+    repoId: repo.id,
+    engine: "opencode",
+    tags: ["remote-session"],
+  });
+  const calls: { engine: string; prompt: string; options: EngineOptions }[] = [];
+  const fakeEngine = (name: string, reply: string): AgentEngine => ({
+    name,
+    displayName: name,
+    isAvailable: async () => true,
+    listModels: async () => [],
+    abort: () => {},
+    sendInput: () => false,
+    async *execute(prompt, _cwd, options): AsyncGenerator<AgentEvent> {
+      calls.push({ engine: name, prompt, options });
+      yield { type: "session", sessionId: `ses_${name}` };
+      yield { type: "log", stream: "stdout", content: reply };
+      yield { type: "complete", exitCode: 0 };
+    },
+  });
+  const git = {
+    createWorktree: mock(async () => workspace),
+    fetchRepo: mock(async () => {}),
+    branchExists: mock(async () => true),
+    syncWithBase: mock(async () => ({ ok: true })),
+    removeWorktree: mock(async () => {}),
+  };
+  const turn = async (engine: AgentEngine, input?: string) => {
+    const current = db.tasks.getById(task.id);
+    if (!current) throw new Error("Task disappeared");
+    const run = db.runs.create(task.id, engine.name);
+    if (input) db.logs.create(run.id, "stdin", input);
+    await executeAgent(
+      current,
+      run,
+      engine,
+      db.repos.getById(repo.id),
+      new AbortController(),
+      db,
+      git as unknown as GitService,
+      new BroadcastHub(db),
+      (content) => {
+        db.logs.create(run.id, "system", content);
+      },
+      () => {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      input
+    );
+    return run;
+  };
+  try {
+    await turn(fakeEngine("opencode", "Created email.ts"));
+    const handed = await turn(fakeEngine("claude-code", "Tests added"), "Now add tests");
+    const [, second] = calls;
+    expect(second?.engine).toBe("claude-code");
+    // A Claude Code session cannot resume an OpenCode one.
+    expect(second?.options.resumeSessionId).toBeUndefined();
+    expect(second?.prompt).toContain("opencode");
+    expect(second?.prompt).toContain("Usuário: Create a file\n\nAgente: Created email.ts");
+    expect(second?.prompt).toContain("Now add tests");
+    expect(db.runs.getById(handed.id)?.sessionId).toBe("ses_claude-code");
+    expect(git.createWorktree).toHaveBeenCalledTimes(1);
   } finally {
     db.raw.close();
   }

@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { MANUAL_TASK_TAG, REMOTE_SESSION_TAG } from "@vibe-code/shared";
+import { MANUAL_TASK_TAG, REMOTE_SESSION_TAG, SUPERVISED_TAG } from "@vibe-code/shared";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
+import { withSupervised } from "./approvals";
 import {
   DEMO_PROJECTS,
   demoReply,
@@ -11,8 +12,18 @@ import {
   type Session,
   sessionFromTask,
 } from "./model";
+import { useApprovals } from "./useApprovals";
 
 const STORAGE = "vibe-unified-prototype-v1";
+const SUPERVISED_KEY = "rw-supervised";
+function readSupervised(): boolean {
+  try {
+    return localStorage.getItem(SUPERVISED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function preferences(): { engine: string; model: string; effort: string } {
   try {
     return {
@@ -62,6 +73,10 @@ export function useRemoteWorkspace() {
   const [branch, setBranch] = useState("main");
   /** Model chosen for the next turn of the open session (empty = keep the session's). */
   const [nextModel, setNextModel] = useState("");
+  /** Engine that takes over the open session on the next turn (empty = keep the session's). */
+  const [nextEngine, setNextEngine] = useState("");
+  /** New sessions ask before edits and commands (OpenCode only). */
+  const [supervised, setSupervisedState] = useState(() => readSupervised());
   const [savingDefault, setSavingDefault] = useState(false);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const server = source === "server";
@@ -81,6 +96,7 @@ export function useRemoteWorkspace() {
     ? (data.data?.tasks ?? []).filter((t) => t.status !== "archived").map(sessionFromTask)
     : demoSessions;
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
+  const approvals = useApprovals(sessions, server);
   const project = projects.find((p) => p.id === (selected?.projectId ?? projectId)) ?? projects[0];
   const engines = useQuery({
     queryKey: ["prototype-engines"],
@@ -98,7 +114,8 @@ export function useRemoteWorkspace() {
     queryKey: ["unified-prototype", "logs", selectedId],
     queryFn: async () => {
       if (!selectedId) return [];
-      const runs = await api.tasks.runs(selectedId);
+      // Rewound turns were undone: they leave the conversation.
+      const runs = (await api.tasks.runs(selectedId)).filter((run) => !run.rewoundAt);
       const logs = await Promise.all(
         runs
           .slice(0, 5)
@@ -132,6 +149,7 @@ export function useRemoteWorkspace() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a model switch belongs to one session.
   useEffect(() => {
     setNextModel("");
+    setNextEngine("");
   }, [selectedId]);
   useEffect(() => {
     try {
@@ -189,8 +207,12 @@ export function useRemoteWorkspace() {
       setSendError(null);
       try {
         if (selected) {
-          await api.tasks.message(selected.id, prompt, nextModel || undefined);
+          await api.tasks.message(selected.id, prompt, {
+            model: nextModel || undefined,
+            engine: nextEngine || undefined,
+          });
           setNextModel("");
+          setNextEngine("");
           await Promise.all([data.refetch(), history.refetch()]);
           return true;
         }
@@ -208,7 +230,11 @@ export function useRemoteWorkspace() {
               }
             : {}),
           baseBranch: branch || project.branch,
-          tags: [MANUAL_TASK_TAG, ...(conversational ? [REMOTE_SESSION_TAG] : [])],
+          tags: [
+            MANUAL_TASK_TAG,
+            ...(conversational ? [REMOTE_SESSION_TAG] : []),
+            ...(conversational && supervised && engine === "opencode" ? [SUPERVISED_TAG] : []),
+          ],
         });
         // Keep the created session selected even if launching fails, so retry cannot duplicate it.
         setSelectedId(task.id);
@@ -337,9 +363,46 @@ export function useRemoteWorkspace() {
       setPublishing(false);
     }
   };
+  const setSupervised = (on: boolean) => {
+    setSupervisedState(on);
+    try {
+      localStorage.setItem(SUPERVISED_KEY, on ? "1" : "0");
+    } catch {
+      // A preference, not data.
+    }
+  };
+  /** Applies to the open session's next turn, like switching mode in Claude Code. */
+  const setSessionSupervised = async (on: boolean) => {
+    if (!selected || !server) return;
+    setSendError(null);
+    try {
+      await api.tasks.update(selected.id, { tags: withSupervised(selected.tags ?? [], on) });
+      await data.refetch();
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
+    }
+  };
+  /** Undo `runId` and later turns; resolves with the undone message, or null on failure. */
+  const rewind = async (runId: string) => {
+    if (!selected || !server) return null;
+    setSendError(null);
+    try {
+      const { message } = await api.tasks.rewind(selected.id, runId);
+      await Promise.all([data.refetch(), history.refetch()]);
+      return message;
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  };
   return {
     source,
     server,
+    rewind,
+    supervised,
+    setSupervised,
+    setSessionSupervised,
+    approvals,
     projects,
     sessions,
     selected,
@@ -372,6 +435,8 @@ export function useRemoteWorkspace() {
     createPullRequest,
     nextModel,
     setNextModel,
+    nextEngine,
+    setNextEngine,
     saveProjectDefault,
     savingDefault,
     publishing,

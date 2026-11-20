@@ -1,9 +1,14 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useTheme } from "../../theme/ThemeProvider";
+import { CommandPalette, ShortcutList } from "./CommandPalette";
+import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
+import { draftStore } from "./composerHistory";
 import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
 import { STATUS } from "./model";
+import { useAttention } from "./useAttention";
 import { useRemoteWorkspace } from "./useRemoteWorkspace";
 import {
   ChangesView,
@@ -16,7 +21,7 @@ import {
 import "./workspace.css";
 
 type Tab = "conversation" | "terminal" | "changes";
-type Dialog = "projects" | "commands" | null;
+type Dialog = "projects" | "commands" | "shortcuts" | null;
 
 function Modal({
   title,
@@ -33,6 +38,7 @@ function Modal({
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
+    element?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     return () => element?.close();
   }, []);
   return (
@@ -69,7 +75,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState("");
   const [pickerSearch, setPickerSearch] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>(draftStore.load);
+  useEffect(() => draftStore.save(drafts), [drafts]);
   const [mobileNav, setMobileNav] = useState(false);
   const [inspector, setInspector] = useState(true);
   const [mobileContext, setMobileContext] = useState(false);
@@ -78,7 +85,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const activeEngine = workspace.selected?.engine ?? workspace.engine;
   const draftId = workspace.selected?.id ?? `new-${workspace.project?.id}`;
   const draft = drafts[draftId] ?? "";
-  const setDraft = (text: string) => setDrafts((all) => ({ ...all, [draftId]: text }));
+  // Re-inserting the key keeps the most recently edited drafts when storage is pruned.
+  const setDraft = (text: string) =>
+    setDrafts(({ [draftId]: _previous, ...rest }) => ({ ...rest, [draftId]: text }));
   const active = workspace.sessions.filter((s) => s.status === "working");
   const reviews = workspace.sessions.filter((s) => s.status === "review");
   const selected = workspace.selected;
@@ -117,16 +126,146 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
     setMobileContext(false);
     setDialog(null);
   };
+  const attention = useAttention(
+    workspace.sessions,
+    view === "session" ? (selected?.id ?? null) : null,
+    openSession,
+    workspace.approvals.awaiting
+  );
+  const { themeName, setTheme } = useTheme();
+  const light = themeName === "light";
+  const toggleTheme = () => setTheme(light ? "dark" : "light");
+  const commands: Command[] = [
+    {
+      id: "new",
+      section: "Ações",
+      title: "Nova sessão",
+      shortcut: SHORTCUTS.newSession,
+      run: () => newSession(),
+    },
+    ...workspace.projects.map((project) => ({
+      id: `new-${project.id}`,
+      section: "Ações" as const,
+      title: `Nova sessão em ${project.name}`,
+      keywords: project.owner,
+      run: () => newSession(project.id),
+    })),
+    ...(selected
+      ? (
+          [
+            ["conversation", "Ir para a conversa", SHORTCUTS.conversation],
+            ["terminal", "Abrir o terminal", SHORTCUTS.terminal],
+            ["changes", "Revisar alterações", SHORTCUTS.changes],
+          ] as const
+        ).map(([target, title, shortcut]) => ({
+          id: `tab-${target}`,
+          section: "Navegação" as const,
+          title,
+          shortcut,
+          run: () => {
+            selectTab(target);
+            setDialog(null);
+          },
+        }))
+      : []),
+    {
+      id: "theme",
+      section: "Ações",
+      title: light ? "Usar tema escuro" : "Usar tema claro",
+      keywords: "tema aparência claro escuro light dark",
+      run: () => {
+        toggleTheme();
+        setDialog(null);
+      },
+    },
+    {
+      id: "context",
+      section: "Navegação",
+      title: "Alternar painel de contexto",
+      shortcut: SHORTCUTS.context,
+      run: () => {
+        setInspector((open) => !open);
+        setDialog(null);
+      },
+    },
+    {
+      id: "overview",
+      section: "Navegação",
+      title: "Todas as sessões",
+      run: () => {
+        setView("overview");
+        setDialog(null);
+      },
+    },
+    ...(
+      [
+        ["skills", "Skills"],
+        ["plugins", "Plugins remotos"],
+        ["agents", "Agentes"],
+        ["settings", "Configurações"],
+      ] as const
+    ).map(([page, title]) => ({
+      id: `page-${page}`,
+      section: "Navegação" as const,
+      title,
+      run: () => openManagement(page),
+    })),
+    ...(attention.permission === "default"
+      ? [
+          {
+            id: "notifications",
+            section: "Ações" as const,
+            title: "Avisar quando uma sessão terminar",
+            keywords: "notificações",
+            run: () => {
+              void attention.enableSystem();
+              setDialog(null);
+            },
+          },
+        ]
+      : []),
+    {
+      id: "shortcuts",
+      section: "Navegação",
+      title: "Atalhos de teclado",
+      shortcut: SHORTCUTS.help,
+      run: () => setDialog("shortcuts"),
+    },
+    ...(onLogout
+      ? [{ id: "logout", section: "Ações" as const, title: "Sair", run: onLogout }]
+      : []),
+    ...workspace.sessions.map((session) => ({
+      id: `session-${session.id}`,
+      section: "Sessões" as const,
+      title: session.title,
+      keywords: `${workspace.projects.find((p) => p.id === session.projectId)?.name ?? ""} ${STATUS[session.status]}`,
+      run: () => openSession(session.id),
+    })),
+  ];
+  const keymap = useRef(commands);
+  keymap.current = commands;
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (matchShortcut(event, SHORTCUTS.palette)) {
         event.preventDefault();
-        setPickerSearch("");
-        setDialog("commands");
+        setDialog((open) => (open === "commands" ? null : "commands"));
+        return;
       }
       if (event.key === "Escape") {
         setMobileNav(false);
         setMobileContext(false);
+        return;
+      }
+      const typing = isTypingTarget(event.target);
+      const hit = keymap.current.find(
+        (command) =>
+          command.shortcut &&
+          !(typing && !command.shortcut.includes("mod")) &&
+          matchShortcut(event, command.shortcut)
+      );
+      if (hit) {
+        event.preventDefault();
+        hit.run();
       }
     };
     window.addEventListener("keydown", listener);
@@ -275,6 +414,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     >
                       <span className={`rw-status-dot ${session.status}`} />
                       <span title={session.title}>{session.title}</span>
+                      {attention.unseen.has(session.id) && (
+                        <span className="rw-unseen" role="img" aria-label="Novidade não vista" />
+                      )}
                       {session.status === "review" && <Icon name="code" size={12} />}
                     </button>
                   ))}
@@ -393,6 +535,15 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
               : workspace.server
                 ? "Servidor conectado"
                 : "Demonstração"}
+          </button>
+          <button
+            type="button"
+            className="rw-icon-button"
+            aria-label={light ? "Usar tema escuro" : "Usar tema claro"}
+            title={light ? "Tema escuro" : "Tema claro"}
+            onClick={toggleTheme}
+          >
+            <Icon name={light ? "moon" : "sun"} />
           </button>
           <button
             type="button"
@@ -793,52 +944,57 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           </div>
         </Modal>
       )}
+      <section className="rw-notices" aria-live="polite" aria-label="Avisos de sessões">
+        {attention.notices.map((notice) => (
+          <div key={notice.sessionId} className="rw-notice">
+            <div>
+              <strong>{notice.title}</strong>
+              <span>{notice.text}</span>
+            </div>
+            <button
+              type="button"
+              className="rw-button"
+              onClick={() => openSession(notice.sessionId)}
+            >
+              Abrir
+            </button>
+            <button
+              type="button"
+              className="rw-icon-button"
+              aria-label="Dispensar aviso"
+              onClick={() => attention.dismiss(notice.sessionId)}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        ))}
+      </section>
       {dialog === "commands" && (
         <Modal
           title="Ir para…"
-          description="Encontre uma sessão ou navegue pelo workspace."
+          description="Comandos, páginas e sessões. Use ↑ ↓ e Enter."
           onClose={() => setDialog(null)}
         >
-          <label className="rw-search rw-dialog-search">
-            <Icon name="search" />
-            <input
-              aria-label="Buscar comandos e sessões"
-              placeholder="Buscar sessões…"
-              value={pickerSearch}
-              onChange={(e) => setPickerSearch(e.target.value)}
-            />
-          </label>
-          <div className="rw-command-list">
-            {!pickerSearch && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("overview");
-                    setDialog(null);
-                  }}
-                >
-                  <Icon name="grid" />
-                  Todas as sessões
-                </button>
-                {!workspace.server && (
-                  <button type="button" onClick={() => newSession()}>
-                    <Icon name="plus" />
-                    Nova sessão
-                  </button>
-                )}
-              </>
-            )}
-            {workspace.sessions
-              .filter((session) => session.title.toLowerCase().includes(pickerSearch.toLowerCase()))
-              .map((session) => (
-                <button type="button" key={session.id} onClick={() => openSession(session.id)}>
-                  <span className={`rw-status-dot ${session.status}`} />
-                  <span>{session.title}</span>
-                  <Icon name="chevron" size={12} />
-                </button>
-              ))}
-          </div>
+          <CommandPalette commands={commands} />
+        </Modal>
+      )}
+      {dialog === "shortcuts" && (
+        <Modal
+          title="Atalhos de teclado"
+          description="Funcionam em qualquer tela do workspace."
+          onClose={() => setDialog(null)}
+        >
+          <ShortcutList
+            items={[
+              ["Paleta de comandos", SHORTCUTS.palette],
+              ["Nova sessão", SHORTCUTS.newSession],
+              ["Conversa", SHORTCUTS.conversation],
+              ["Terminal", SHORTCUTS.terminal],
+              ["Alterações", SHORTCUTS.changes],
+              ["Painel de contexto", SHORTCUTS.context],
+              ["Esta lista", SHORTCUTS.help],
+            ]}
+          />
         </Modal>
       )}
     </div>

@@ -57,13 +57,18 @@ async function collectAll(engine: OpenCodeEngine, workdir: string): Promise<Agen
 // ─── Temp workdir ─────────────────────────────────────────────────────────────
 
 let workdir: string;
+// These suites exercise the `opencode run` transport; serve has its own tests.
+const previousTransport = process.env.VIBE_OPENCODE_TRANSPORT;
 
 beforeEach(async () => {
+  process.env.VIBE_OPENCODE_TRANSPORT = "cli";
   workdir = join(tmpdir(), `opencode-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(workdir, { recursive: true });
 });
 
 afterEach(async () => {
+  if (previousTransport === undefined) delete process.env.VIBE_OPENCODE_TRANSPORT;
+  else process.env.VIBE_OPENCODE_TRANSPORT = previousTransport;
   await rm(workdir, { recursive: true, force: true });
 });
 
