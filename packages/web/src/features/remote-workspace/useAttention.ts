@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { attentionChannel, attentionMessage, finishedSessions } from "./attention";
+import { attentionChannel, attentionMessage, finishedSessions, keepKnown } from "./attention";
 import type { Session, SessionStatus } from "./model";
 
 export interface AttentionNotice {
@@ -61,6 +61,15 @@ export function useAttention(
         // Some mobile browsers only notify from a service worker; the unseen dot still shows.
       }
     }
+  }, [sessions]);
+
+  // Archived or deleted sessions must not keep the dot, the notice or the title counter.
+  useEffect(() => {
+    setUnseen((all) => keepKnown(all, sessions));
+    setNotices((all) => {
+      const kept = keepKnown(new Set(all.map((n) => n.sessionId)), sessions);
+      return kept.size === all.length ? all : all.filter((n) => kept.has(n.sessionId));
+    });
   }, [sessions]);
 
   useEffect(() => {

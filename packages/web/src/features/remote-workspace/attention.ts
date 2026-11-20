@@ -41,3 +41,13 @@ export function attentionMessage(status: AttentionEvent["status"]): string {
   if (status === "review") return "terminou e está pronta para revisão";
   return "terminou e aguarda sua mensagem";
 }
+
+/** Drops ids of sessions that left the list (archived or deleted); same set when nothing left. */
+export function keepKnown(
+  ids: ReadonlySet<string>,
+  sessions: { id: string }[]
+): ReadonlySet<string> {
+  const known = new Set(sessions.map((s) => s.id));
+  const kept = [...ids].filter((id) => known.has(id));
+  return kept.length === ids.size ? ids : new Set(kept);
+}
