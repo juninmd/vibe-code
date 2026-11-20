@@ -7,29 +7,23 @@ export const MANAGED_SELECTOR =
   "app.kubernetes.io/managed-by=vibe-code,app.kubernetes.io/component=agent-runner";
 const OPENCODE_DATA = "/home/vibe/.local/share/opencode";
 
-// Host-specific or meaningless inside the runner pod. GitHub tokens stay on the server,
-// which commits, pushes and opens the PR from the shared worktree.
-const DROPPED = new Set([
-  "PATH",
-  "HOME",
-  "HOSTNAME",
-  "USER",
-  "SHELL",
-  "PORT",
-  "GITHUB_TOKEN",
-  "GH_TOKEN",
-  "GIT_ASKPASS",
-]);
-// GIT_CONFIG_* can carry an http.extraHeader with the user's GitHub token.
-const DROPPED_PREFIX = /^(KUBERNETES_|VIBE_K8S_|VIBE_AGENT_RUNNER|XDG_|GIT_CONFIG_)/;
+// Host-specific or meaningless inside the runner pod. GIT_ASKPASS points at a server path.
+const DROPPED = new Set(["PATH", "HOME", "HOSTNAME", "USER", "SHELL", "PORT", "GIT_ASKPASS"]);
+const DROPPED_PREFIX = /^(KUBERNETES_|VIBE_K8S_|VIBE_AGENT_RUNNER|XDG_)/;
+// The signed-in user's GitHub token: GH_TOKEN for `gh`, GIT_CONFIG_* for git's auth header.
+const GITHUB_CREDENTIAL = /^(GH_TOKEN|GITHUB_TOKEN|GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+))$/;
 const SERVICE_LINK = /_SERVICE_(HOST|PORT)(_|$)|_PORT_\d+_(TCP|UDP|SCTP)/;
 const SECRET_KEY = /^[-._a-zA-Z0-9]+$/;
 
 /** Environment the runner pod receives; everything else is the image's own. */
-export function podEnv(env: Record<string, string | undefined>): Record<string, string> {
+export function podEnv(
+  env: Record<string, string | undefined>,
+  options: { forwardGitHubToken: boolean }
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined || DROPPED.has(name) || DROPPED_PREFIX.test(name)) continue;
+    if (!options.forwardGitHubToken && GITHUB_CREDENTIAL.test(name)) continue;
     if (SERVICE_LINK.test(name) || (name.endsWith("_PORT") && value.startsWith("tcp://"))) continue;
     if (!SECRET_KEY.test(name)) continue;
     out[name] = value;

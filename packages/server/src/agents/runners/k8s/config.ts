@@ -19,6 +19,7 @@ export interface K8sRunnerConfig {
   skillsClaimName?: string;
   skillsDir: string;
   idleMs: number;
+  forwardGitHubToken: boolean;
   maxLifetimeSeconds: number;
   startTimeoutMs: number;
   cpuRequest: string;
@@ -62,6 +63,7 @@ export function defaultRunnerSettings(env: Env = process.env): AgentRunnerSettin
     idleMinutes: positive(env.VIBE_K8S_IDLE_MINUTES, 15),
     maxLifetimeHours: positive(env.VIBE_K8S_MAX_LIFETIME_HOURS, 6),
     startTimeoutSeconds: positive(env.VIBE_K8S_START_TIMEOUT_SECONDS, 180),
+    forwardGitHubToken: env.VIBE_K8S_FORWARD_GITHUB_TOKEN !== "false",
     cpuRequest: env.VIBE_K8S_CPU_REQUEST || "250m",
     cpuLimit: env.VIBE_K8S_CPU_LIMIT || "2",
     memoryRequest: env.VIBE_K8S_MEMORY_REQUEST || "512Mi",
@@ -119,6 +121,7 @@ export function toK8sConfig(
     skillsClaimName: settings.skillsPvc.trim() || undefined,
     skillsDir: env.VIBE_K8S_SKILLS_DIR || "/home/vibe/.agents",
     idleMs: Math.round(settings.idleMinutes * 60_000),
+    forwardGitHubToken: settings.forwardGitHubToken,
     maxLifetimeSeconds: Math.round(settings.maxLifetimeHours * 3600),
     startTimeoutMs: Math.round(settings.startTimeoutSeconds * 1000),
     cpuRequest: settings.cpuRequest,

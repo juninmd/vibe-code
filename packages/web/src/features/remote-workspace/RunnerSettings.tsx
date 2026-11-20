@@ -113,7 +113,7 @@ export function RunnerSettings() {
               <strong>Um pod por tarefa</strong>
               <small>
                 Cria um pod com o worktree da tarefa, reaproveita entre turnos e apaga após o tempo
-                sem atividade. O token do GitHub não entra no pod.
+                sem atividade.
               </small>
             </span>
           </label>
@@ -148,6 +148,20 @@ export function RunnerSettings() {
                 </label>
               ))}
             </div>
+            <label className="rw-runner-mode">
+              <input
+                type="checkbox"
+                checked={draft.forwardGitHubToken}
+                onChange={(event) => set("forwardGitHubToken", event.target.checked)}
+              />
+              <span>
+                <strong>Agente abre PRs de dentro do pod</strong>
+                <small>
+                  O pod recebe o token do GitHub de quem fez login (gh e git push). Desligado, o
+                  token fica só no servidor e o PR sai pelo botão "Criar PR".
+                </small>
+              </span>
+            </label>
             <div className="rw-field-grid">
               {RESOURCE_FIELDS.map(([key, label]) => (
                 <label key={key}>

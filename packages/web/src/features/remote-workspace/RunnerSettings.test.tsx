@@ -23,6 +23,7 @@ const settings = {
   cpuLimit: "2",
   memoryRequest: "512Mi",
   memoryLimit: "4Gi",
+  forwardGitHubToken: true,
 };
 
 function renderIt() {
@@ -53,9 +54,12 @@ describe("RunnerSettings", () => {
     const idle = screen.getByLabelText(/Apagar o pod após/);
     await userEvent.clear(idle);
     await userEvent.type(idle, "30");
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /Agente abre PRs de dentro do pod/ })
+    );
     await userEvent.click(screen.getByRole("button", { name: "Salvar execução" }));
     expect(api.settings.runner.update).toHaveBeenCalledWith(
-      expect.objectContaining({ runner: "k8s", idleMinutes: 30 })
+      expect.objectContaining({ runner: "k8s", idleMinutes: 30, forwardGitHubToken: false })
     );
     expect(await screen.findByRole("status")).toHaveTextContent("pod próprio");
   });

@@ -32,6 +32,7 @@ const updateSchema = z
       .max(24 * 60),
     maxLifetimeHours: z.number().min(0.25).max(72),
     startTimeoutSeconds: z.number().int().min(10).max(1800),
+    forwardGitHubToken: z.boolean(),
     cpuRequest: quantity,
     cpuLimit: quantity,
     memoryRequest: quantity,

@@ -21,6 +21,10 @@ describe("runner settings", () => {
     });
     expect(seeded.image).toBe("img");
     expect(seeded.idleMinutes).toBe(15);
+    expect(seeded.forwardGitHubToken).toBe(true);
+    expect(
+      defaultRunnerSettings({ VIBE_K8S_FORWARD_GITHUB_TOKEN: "false" }).forwardGitHubToken
+    ).toBe(false);
   });
 
   it("lets what the operator saved win over the env defaults", () => {

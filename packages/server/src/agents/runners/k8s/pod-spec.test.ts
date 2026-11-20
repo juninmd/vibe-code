@@ -18,6 +18,7 @@ const config = {
   cpuLimit: "2",
   memoryRequest: "1Gi",
   memoryLimit: "2Gi",
+  forwardGitHubToken: false,
 } satisfies K8sRunnerConfig;
 const input = {
   name: "vibe-agent-x",
@@ -28,28 +29,46 @@ const input = {
 };
 
 describe("podEnv", () => {
-  it("keeps provider keys but drops GitHub tokens and host-specific variables", () => {
-    const env = podEnv({
-      OPENCODE_API_KEY: "k",
-      OPENCODE_CONFIG_CONTENT: "{}",
-      PWD: "/data/workspaces/app/run-1",
-      GITHUB_TOKEN: "ghp",
-      GH_TOKEN: "ghp",
-      GIT_ASKPASS: "/tmp/askpass",
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-      GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic Z2hw",
-      PATH: "/usr/bin",
-      HOME: "/home/vibe",
-      KUBERNETES_SERVICE_HOST: "10.0.0.1",
-      HARNESS_REMOTE_SERVICE_PORT: "80",
-      HARNESS_REMOTE_PORT: "tcp://10.0.0.2:80",
-      HARNESS_REMOTE_PORT_80_TCP_ADDR: "10.0.0.2",
-      VIBE_K8S_PVC: "data",
-      XDG_DATA_HOME: "/x",
-      "BAD NAME": "x",
-    });
-    expect(Object.keys(env).sort()).toEqual(["OPENCODE_API_KEY", "OPENCODE_CONFIG_CONTENT", "PWD"]);
+  const raw = {
+    OPENCODE_API_KEY: "k",
+    OPENCODE_CONFIG_CONTENT: "{}",
+    PWD: "/data/workspaces/app/run-1",
+    GITHUB_TOKEN: "ghp",
+    GH_TOKEN: "ghp",
+    GIT_ASKPASS: "/tmp/askpass",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: "AUTHORIZATION: basic Z2hw",
+    PATH: "/usr/bin",
+    HOME: "/home/vibe",
+    KUBERNETES_SERVICE_HOST: "10.0.0.1",
+    HARNESS_REMOTE_SERVICE_PORT: "80",
+    HARNESS_REMOTE_PORT: "tcp://10.0.0.2:80",
+    HARNESS_REMOTE_PORT_80_TCP_ADDR: "10.0.0.2",
+    VIBE_K8S_PVC: "data",
+    XDG_DATA_HOME: "/x",
+    "BAD NAME": "x",
+  };
+
+  it("gives the agent the user's GitHub token so `gh` and `git push` work in the pod", () => {
+    expect(Object.keys(podEnv(raw, { forwardGitHubToken: true })).sort()).toEqual([
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "GIT_CONFIG_COUNT",
+      "GIT_CONFIG_KEY_0",
+      "GIT_CONFIG_VALUE_0",
+      "OPENCODE_API_KEY",
+      "OPENCODE_CONFIG_CONTENT",
+      "PWD",
+    ]);
+  });
+
+  it("keeps every GitHub credential on the server when forwarding is off", () => {
+    expect(Object.keys(podEnv(raw, { forwardGitHubToken: false })).sort()).toEqual([
+      "OPENCODE_API_KEY",
+      "OPENCODE_CONFIG_CONTENT",
+      "PWD",
+    ]);
   });
 });
 

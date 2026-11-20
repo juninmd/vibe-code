@@ -98,7 +98,8 @@ export class PodPool {
 
   /** Same contract as `startOpencodeServe`: `close()` ends the turn, not the pod. */
   readonly start = async (options: StartServeOptions): Promise<ServeHandle> => {
-    const entry = await this.acquire(options.cwd, podEnv(options.env));
+    const { forwardGitHubToken } = this.deps.config();
+    const entry = await this.acquire(options.cwd, podEnv(options.env, { forwardGitHubToken }));
     entry.busy++;
     let closed = false;
     return {
