@@ -193,6 +193,10 @@ export interface AgentRun {
   exitCode: number | null;
   errorMessage: string | null;
   sessionId?: string | null;
+  /** Commit holding the worktree as it was before this turn (conversational sessions). */
+  checkpoint?: string | null;
+  /** Set when the operator rewound the conversation to before this turn. */
+  rewoundAt?: string | null;
   litellmTokenId?: string | null;
   matchedSkills?: string | null;
   stateSnapshot?: string | null;

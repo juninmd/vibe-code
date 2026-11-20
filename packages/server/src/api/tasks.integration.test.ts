@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { ApprovalBroker } from "../agents/approvals";
 import type { Orchestrator } from "../agents/orchestrator";
@@ -831,6 +832,100 @@ describe("remote session messages", () => {
     expect(inputs).toEqual(["Add tests"]);
     const run = (await response.json()).data;
     expect(db.logs.listByRun(run.id)[0]).toMatchObject({ stream: "stdin", content: "Add tests" });
+  });
+  it("hands the conversation to another engine and drops the previous engine's model", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Continue in Claude"]);
+    expect(db.tasks.getById(task.id)).toMatchObject({ engine: "claude-code", model: null });
+  });
+  it("hands off even when the broken previous turn never reported a session", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "branch_name", "vibe/remote");
+    const failed = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(failed.id, "failed", { worktree_path: tmpdir() });
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Try with Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Try with Claude"]);
+  });
+  it("keeps the engine and model when the switched turn cannot start", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async () => {
+          throw Object.assign(new Error("full"), { capacityExceeded: true });
+        },
+      })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(429);
+    expect(db.tasks.getById(task.id)).toMatchObject({
+      engine: "opencode",
+      model: "opencode/big-pickle",
+    });
+  });
+  it("refuses to hand off to an engine that cannot resume", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    const app = buildApp(
+      db,
+      makeOrchestrator({ supportsSessionResume: (engine: string) => engine === "opencode" })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Switch", engine: "unknown-engine" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(409);
+    expect(db.tasks.getById(task.id)?.engine).toBe("opencode");
+  });
+  it("rewinds only an idle session, to a turn that has a checkpoint", async () => {
+    const { db, task, app } = setup();
+    const rewind = (body: unknown) =>
+      app.request(`/api/tasks/${task.id}/rewind`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+    db.runs.create(task.id, "opencode");
+    const second = db.runs.create(task.id, "opencode");
+    expect((await rewind({})).status).toBe(400);
+    expect((await rewind({ runId: "missing" })).status).toBe(404);
+    const noCheckpoint = await rewind({ runId: second.id });
+    expect(noCheckpoint.status).toBe(409);
+    expect((await noCheckpoint.json()).error).toBe("no_checkpoint");
+    db.tasks.update(task.id, { status: "in_progress" });
+    expect((await rewind({ runId: second.id })).status).toBe(409);
+    expect(db.runs.getById(second.id)?.rewoundAt).toBeNull();
   });
   it("rejects empty input, concurrent turns and autonomous tasks", async () => {
     const { db, task, app, inputs } = setup();

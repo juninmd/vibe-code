@@ -281,10 +281,21 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data ?? {}),
       }),
-    message: (id: string, message: string, model?: string) =>
+    /** `engine` hands the conversation to another harness; `model` switches the next turn's model. */
+    message: (id: string, message: string, next: { model?: string; engine?: string } = {}) =>
       request<AgentRun>(`/tasks/${id}/messages`, {
         method: "POST",
-        body: JSON.stringify(model ? { message, model } : { message }),
+        body: JSON.stringify({
+          message,
+          ...(next.model ? { model: next.model } : {}),
+          ...(next.engine ? { engine: next.engine } : {}),
+        }),
+      }),
+    /** Undo a turn and the ones after it; returns the undone turn's message to edit and resend. */
+    rewind: (id: string, runId: string) =>
+      request<{ rewound: string[]; message: string }>(`/tasks/${id}/rewind`, {
+        method: "POST",
+        body: JSON.stringify({ runId }),
       }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
     /** Tool calls of a supervised session waiting for the operator. */

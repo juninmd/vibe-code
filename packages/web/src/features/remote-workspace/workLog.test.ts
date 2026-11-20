@@ -119,6 +119,52 @@ describe("messagesFromLogs", () => {
   });
 });
 
+describe("engine handoff", () => {
+  it("credits each reply to the engine that wrote it and marks the takeover", async () => {
+    const { messagesFromLogs } = await import("./model");
+    const log = (stream: "stdout" | "stdin" | "system", content: string, i: number) => ({
+      id: i,
+      runId: `r${i}`,
+      stream,
+      content,
+      timestamp: new Date(1_000 + i).toISOString(),
+    });
+    const messages = messagesFromLogs(
+      {
+        id: "s",
+        projectId: "p",
+        title: "t",
+        description: "Crie X",
+        status: "waiting",
+        engine: "grok",
+        model: "m",
+        branch: "b",
+        updatedAt: new Date(0).toISOString(),
+        messages: [],
+        changes: [],
+      },
+      [
+        log("stdout", "Criei X.", 1),
+        log("stdin", "Agora teste", 2),
+        log("system", "[handoff] opencode → grok: new session with the conversation so far", 3),
+        log("stdout", "Teste criado.", 4),
+      ]
+    );
+    expect(messages.map((m) => [m.role, m.text, m.engine, m.handoff?.to])).toEqual([
+      ["user", "Crie X", undefined, undefined],
+      ["assistant", "Criei X.", "opencode", undefined],
+      ["user", "Agora teste", undefined, undefined],
+      ["assistant", "", undefined, "grok"],
+      ["assistant", "Teste criado.", "grok", undefined],
+    ]);
+    // A follow-up knows its turn, so the conversation can rewind to it.
+    expect(messages.filter((m) => m.role === "user").map((m) => m.runId)).toEqual([
+      undefined,
+      "r2",
+    ]);
+  });
+});
+
 describe("refused calls", () => {
   it("stay in the work log, marked as failed", () => {
     const work = splitWork("  Writing src/email.ts\n    Recusado por você").find(

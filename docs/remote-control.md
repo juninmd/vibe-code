@@ -115,6 +115,27 @@ with `POST /api/tasks/:id/approvals/:approvalId` (`once`, `always`, `reject`).
 A stopped turn rejects what it was waiting on. The `cli` transport cannot ask and
 says so in the log.
 
+**Engine handoff.** `POST /api/tasks/:id/messages` accepts `engine` (any
+available engine with `supportsResume`). The task's engine changes, its model is
+cleared unless `model` is also sent, and the turn starts a fresh CLI session of
+the new engine in the same worktree: no engine can resume another's session. The
+prompt carries the opening request plus the user and agent prose of the last 20
+turns (tool lines dropped, trimmed from the start to 12 000 characters), and the
+run logs `[handoff] <from> → <to>`, which the conversation shows as a divider.
+Later turns resume the new engine's own session.
+
+**Checkpoints and rewind.** Before each conversational turn the executor stores
+the worktree (tracked and untracked files, not ignored ones) as a commit whose
+parent is `HEAD`, built with a scratch `GIT_INDEX_FILE` and kept alive by
+`refs/vibe/checkpoints/<sha>`; the sha lands in `agent_runs.checkpoint`.
+`POST /api/tasks/:id/rewind {runId}` (idle sessions only, not the first turn)
+restores that tree, deletes files added since, resets the index to `HEAD`, and
+sets `rewound_at` on that run and the later ones. It refuses with
+`checkpoint_conflict` when `HEAD` moved, so commits are never lost. Rewound
+runs leave the history and the handoff transcript; the next turn starts a fresh
+CLI session (`[rewind]` in the log) because the agent's own session still
+remembers the undone turns.
+
 OpenCode `run` (the `cli` transport) uses its native executable on Windows, the worktree as process
 `cwd`, JSON output, and `--session` on continuation. No `--dir` flag is sent
 (OpenCode 2.0.30 rejects it). Both `sessionID` and `sessionId` event fields are

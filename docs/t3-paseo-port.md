@@ -21,6 +21,8 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 ## Fora do escopo por ora
 
 - ~~Modos de permissão e cards de aprovação~~: feito sobre `opencode serve` (modo "Pedir aprovação")
-- Troca de provider no meio da conversa com handoff de contexto (T3 Code orchestration-v2).
-- Checkpoints por turno e rewind; agentes como servidor MCP (Paseo); voz; apps nativos.
+- ~~Troca de provider no meio da conversa com handoff de contexto~~: feito (seletor de engine numa sessão aberta; a nova engine recebe a conversa até aqui).
+- ~~Checkpoints por turno e rewind~~: feito ("Voltar até aqui" nas mensagens).
+- ~~Tema claro~~: feito (segue o sistema; alternância na barra superior e no ⌘K).
+- Agentes como servidor MCP (Paseo); voz; apps nativos.
 - Login por pareamento (T3 Code): o vibe-code mantém GitHub OAuth ou chave de API.

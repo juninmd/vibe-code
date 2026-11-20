@@ -127,6 +127,8 @@ interface RunRow {
   state_snapshot: string | null;
   cost_stats: string | null;
   token_usage: string | null;
+  checkpoint: string | null;
+  rewound_at: string | null;
   created_at: string;
 }
 
@@ -231,6 +233,8 @@ function mapRun(row: RunRow): AgentRun {
     stateSnapshot: row.state_snapshot,
     costStats: row.cost_stats ? JSON.parse(row.cost_stats) : null,
     tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : null,
+    checkpoint: row.checkpoint ?? null,
+    rewoundAt: row.rewound_at ?? null,
     createdAt: row.created_at,
   };
 }
@@ -777,6 +781,18 @@ export function createRunQueries(db: Database) {
     },
     updateLitellmTokenId: (id: string, tokenId: string | null): void => {
       db.prepare("UPDATE agent_runs SET litellm_token_id = ? WHERE id = ?").run(tokenId, id);
+    },
+    setCheckpoint: (id: string, checkpoint: string): void => {
+      db.prepare("UPDATE agent_runs SET checkpoint = ? WHERE id = ?").run(checkpoint, id);
+    },
+    /** Hide these turns from the conversation; their worktree changes were undone. */
+    markRewound: (ids: string[]): void => {
+      const mark = db.prepare(
+        "UPDATE agent_runs SET rewound_at = datetime('now') WHERE id = ? AND rewound_at IS NULL"
+      );
+      db.transaction(() => {
+        for (const id of ids) mark.run(id);
+      })();
     },
     updateSessionId: (id: string, sessionId: string | null): void => {
       db.prepare("UPDATE agent_runs SET session_id = ? WHERE id = ?").run(sessionId, id);

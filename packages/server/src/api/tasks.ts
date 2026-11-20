@@ -22,6 +22,7 @@ import {
   buildPrompt,
 } from "../agents/orchestrator/prompt";
 import { RemotePullRequestError } from "../agents/orchestrator/remote-pr";
+import { rewindSession } from "../agents/orchestrator/rewind";
 import {
   buildTaskExecutionPlan,
   materializeTaskExecutionPlan,
@@ -572,6 +573,36 @@ export function createTasksRouter(
   });
 
   // Supervised sessions: tool calls waiting for the operator.
+  /** Undo a turn and everything after it: files back to its checkpoint, turns hidden. */
+  router.post("/:id/rewind", async (c) => {
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    const task = db.tasks.getById(id);
+    if (
+      !task?.tags.includes(REMOTE_SESSION_TAG) ||
+      !["backlog", "failed", "blocked"].includes(task.status)
+    )
+      return c.json(
+        {
+          error: "invalid_state",
+          message: "Wait for the current turn to finish or stop it first.",
+        },
+        409
+      );
+    const parsed = z
+      .object({ runId: z.string().trim().min(1).max(64) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: "invalid_input", message: "runId is required." }, 400);
+    const outcome = await rewindSession(db, id, parsed.data.runId);
+    if (!outcome.ok)
+      return c.json({ error: outcome.error, message: outcome.message }, outcome.status);
+    const current = db.tasks.getById(id);
+    if (current) orchestrator.hub.broadcastAll({ type: "task_updated", task: current });
+    return c.json({ data: { rewound: outcome.rewound, message: outcome.message } });
+  });
+
   router.get("/:id/approvals", async (c) => {
     const denied = await taskAccessDenied(c, db, c.req.param("id"));
     if (denied) return denied;
@@ -634,6 +665,13 @@ export function createTasksRouter(
           .max(200)
           .regex(/^[\w.@:-]+\/[\w./@:+-]+(#[\w-]+)?$/)
           .optional(),
+        // Hand the conversation to another engine; it starts a new CLI session with the transcript.
+        engine: z
+          .string()
+          .trim()
+          .max(60)
+          .regex(/^[a-z0-9-]+$/)
+          .optional(),
       })
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -641,20 +679,28 @@ export function createTasksRouter(
         { error: "invalid_input", message: "A message of 1–100000 characters is required." },
         400
       );
-    if (!task.engine || !orchestrator.supportsSessionResume(task.engine)) {
+    const nextEngine = parsed.data.engine ?? task.engine;
+    if (!nextEngine || !orchestrator.supportsSessionResume(nextEngine)) {
       return c.json(
         {
           error: "session_unavailable",
-          message: `${task.engine ?? "This session"} cannot continue a conversation. Start a new session with an engine that supports resuming.`,
+          message: `${nextEngine ?? "This session"} cannot continue a conversation. Start a new session with an engine that supports resuming.`,
         },
         409
       );
     }
+    const switchingEngine = nextEngine !== task.engine;
+    let persisted = false;
     try {
       const previous = db.runs.listByTask(id).find((r) => !!r.worktreePath);
       if (previous) {
         // Never silently switch branches or lose the CLI conversation on a follow-up.
-        if (!previous.sessionId || !previous.worktreePath || !task.branchName) {
+        // A handoff starts a fresh CLI session, so it needs no session to resume.
+        if (
+          (!previous.sessionId && !switchingEngine) ||
+          !previous.worktreePath ||
+          !task.branchName
+        ) {
           return c.json(
             {
               error: "session_unavailable",
@@ -666,8 +712,12 @@ export function createTasksRouter(
         await accessWorkspace(previous.worktreePath);
       }
       let current = task;
-      if (parsed.data.model && parsed.data.model !== task.model) {
-        current = db.tasks.updateField(id, "model", parsed.data.model) ?? task;
+      if (switchingEngine || (parsed.data.model && parsed.data.model !== task.model)) {
+        // A model belongs to its engine: switching engine without one falls back to its default.
+        if (switchingEngine) current = db.tasks.updateField(id, "engine", nextEngine) ?? current;
+        const model = parsed.data.model ?? (switchingEngine ? null : current.model);
+        current = db.tasks.updateField(id, "model", model ?? null) ?? current;
+        persisted = true;
         orchestrator.hub.broadcastAll({ type: "task_updated", task: current });
       }
       const run = await orchestrator.launch(current, undefined, undefined, parsed.data.message);
@@ -682,6 +732,11 @@ export function createTasksRouter(
       });
       return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
+      // No turn ran: keep the engine and model the user had.
+      if (persisted) {
+        db.tasks.updateField(id, "engine", task.engine);
+        db.tasks.updateField(id, "model", task.model ?? null);
+      }
       const capacity = (err as Error & { capacityExceeded?: boolean }).capacityExceeded;
       return c.json(
         {
