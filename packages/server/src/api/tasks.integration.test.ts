@@ -832,6 +832,39 @@ describe("remote session messages", () => {
     const run = (await response.json()).data;
     expect(db.logs.listByRun(run.id)[0]).toMatchObject({ stream: "stdin", content: "Add tests" });
   });
+  it("hands the conversation to another engine and drops the previous engine's model", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Continue in Claude"]);
+    expect(db.tasks.getById(task.id)).toMatchObject({ engine: "claude-code", model: null });
+  });
+  it("refuses to hand off to an engine that cannot resume", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    const app = buildApp(
+      db,
+      makeOrchestrator({ supportsSessionResume: (engine: string) => engine === "opencode" })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Switch", engine: "unknown-engine" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(409);
+    expect(db.tasks.getById(task.id)?.engine).toBe("opencode");
+  });
   it("rejects empty input, concurrent turns and autonomous tasks", async () => {
     const { db, task, app, inputs } = setup();
     const send = (message: string) =>

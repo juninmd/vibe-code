@@ -23,6 +23,7 @@ import { runBaselineCheck } from "./baseline-check";
 import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
 import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
+import { handoffPreamble, handoffTranscript } from "./handoff";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
 import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
@@ -438,6 +439,17 @@ export function escalateModel(currentModel?: string): string | undefined {
   return currentModel;
 }
 
+/** The opening request plus the logs of the session's earlier turns (last 20 runs), oldest first. */
+function conversationLogs(db: Db, task: Task, currentRunId: string) {
+  const earlier = db.runs
+    .listByTask(task.id)
+    .filter((r) => r.id !== currentRunId)
+    .slice(0, 20)
+    .reverse()
+    .flatMap((r) => db.logs.listByRun(r.id));
+  return [{ stream: "stdin", content: task.description }, ...earlier];
+}
+
 export async function executeAgent(
   task: Task,
   run: AgentRun,
@@ -527,6 +539,7 @@ export async function executeAgent(
     }
   > = {};
   let resumeSessionId: string | undefined;
+  let handoffFrom: string | undefined;
   let activeSessionId: string | undefined;
   let validationRecordCount = 0;
   let latestVerification: WorktreeVerificationResult | null = null;
@@ -660,7 +673,15 @@ export async function executeAgent(
                 )
             : null;
 
-        resumeSessionId = previousRun?.sessionId ?? undefined;
+        // Another engine cannot resume this CLI session: start fresh with the transcript.
+        if (isRemoteSession && previousRun && previousRun.engine !== engine.name) {
+          handoffFrom = previousRun.engine;
+          sysLog(
+            `[handoff] ${previousRun.engine} → ${engine.name}: new session with the conversation so far`
+          );
+        } else {
+          resumeSessionId = previousRun?.sessionId ?? undefined;
+        }
         activeSessionId = resumeSessionId;
         if (activeSessionId) db.runs.updateSessionId(run.id, activeSessionId);
 
@@ -973,6 +994,9 @@ export async function executeAgent(
       "Work in the current isolated repository. Follow its AGENTS.md and validation instructions.",
       "Respond to the user's message and report changes and validation honestly.",
       "Preserve work for subsequent messages. Do not commit, push, open a PR or deploy unless the user asks.",
+      ...(handoffFrom
+        ? [handoffPreamble(handoffFrom, handoffTranscript(conversationLogs(db, task, run.id)))]
+        : []),
       remoteInput ?? task.description,
     ].join("\n\n");
     const effectivePrompt = isRemoteSession

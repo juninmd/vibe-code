@@ -634,6 +634,13 @@ export function createTasksRouter(
           .max(200)
           .regex(/^[\w.@:-]+\/[\w./@:+-]+(#[\w-]+)?$/)
           .optional(),
+        // Hand the conversation to another engine; it starts a new CLI session with the transcript.
+        engine: z
+          .string()
+          .trim()
+          .max(60)
+          .regex(/^[a-z0-9-]+$/)
+          .optional(),
       })
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -641,11 +648,12 @@ export function createTasksRouter(
         { error: "invalid_input", message: "A message of 1–100000 characters is required." },
         400
       );
-    if (!task.engine || !orchestrator.supportsSessionResume(task.engine)) {
+    const nextEngine = parsed.data.engine ?? task.engine;
+    if (!nextEngine || !orchestrator.supportsSessionResume(nextEngine)) {
       return c.json(
         {
           error: "session_unavailable",
-          message: `${task.engine ?? "This session"} cannot continue a conversation. Start a new session with an engine that supports resuming.`,
+          message: `${nextEngine ?? "This session"} cannot continue a conversation. Start a new session with an engine that supports resuming.`,
         },
         409
       );
@@ -666,8 +674,12 @@ export function createTasksRouter(
         await accessWorkspace(previous.worktreePath);
       }
       let current = task;
-      if (parsed.data.model && parsed.data.model !== task.model) {
-        current = db.tasks.updateField(id, "model", parsed.data.model) ?? task;
+      const switchingEngine = nextEngine !== task.engine;
+      if (switchingEngine || (parsed.data.model && parsed.data.model !== task.model)) {
+        // A model belongs to its engine: switching engine without one falls back to its default.
+        if (switchingEngine) current = db.tasks.updateField(id, "engine", nextEngine) ?? current;
+        const model = parsed.data.model ?? (switchingEngine ? null : current.model);
+        current = db.tasks.updateField(id, "model", model ?? null) ?? current;
         orchestrator.hub.broadcastAll({ type: "task_updated", task: current });
       }
       const run = await orchestrator.launch(current, undefined, undefined, parsed.data.message);

@@ -73,6 +73,8 @@ export function useRemoteWorkspace() {
   const [branch, setBranch] = useState("main");
   /** Model chosen for the next turn of the open session (empty = keep the session's). */
   const [nextModel, setNextModel] = useState("");
+  /** Engine that takes over the open session on the next turn (empty = keep the session's). */
+  const [nextEngine, setNextEngine] = useState("");
   /** New sessions ask before edits and commands (OpenCode only). */
   const [supervised, setSupervisedState] = useState(() => readSupervised());
   const [savingDefault, setSavingDefault] = useState(false);
@@ -146,6 +148,7 @@ export function useRemoteWorkspace() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a model switch belongs to one session.
   useEffect(() => {
     setNextModel("");
+    setNextEngine("");
   }, [selectedId]);
   useEffect(() => {
     try {
@@ -203,8 +206,12 @@ export function useRemoteWorkspace() {
       setSendError(null);
       try {
         if (selected) {
-          await api.tasks.message(selected.id, prompt, nextModel || undefined);
+          await api.tasks.message(selected.id, prompt, {
+            model: nextModel || undefined,
+            engine: nextEngine || undefined,
+          });
           setNextModel("");
+          setNextEngine("");
           await Promise.all([data.refetch(), history.refetch()]);
           return true;
         }
@@ -413,6 +420,8 @@ export function useRemoteWorkspace() {
     createPullRequest,
     nextModel,
     setNextModel,
+    nextEngine,
+    setNextEngine,
     saveProjectDefault,
     savingDefault,
     publishing,

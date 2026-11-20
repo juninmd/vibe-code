@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- **Switch engine mid-conversation**: in an open session, pick another resumable engine next to the model and the next turn hands the conversation over. The new engine starts its own session in the same workspace with the opening request and the prose of the last 20 turns, a divider marks the takeover, and each reply names the engine that wrote it. `POST /api/tasks/:id/messages` accepts `engine`; switching clears the previous engine's model. The model picker no longer queries a catalog for engines that have none.
 - **Approval mode for OpenCode sessions**: pick "Pedir aprovação" next to the model (new session or the next turn of an open one) and edits, commands, web fetches and paths outside the workspace pause on a card with the target and the proposed diff: Permitir, Sempre nesta sessão or Recusar. A refusal shows in the work log as yours, not as an error. Sessions you are not looking at notify you like a finished turn, and waiting for you never trips the inactivity watchdog. Built on `opencode serve` permission requests (`GET/POST /api/tasks/:id/approvals`), stored as the `supervised` task tag.
 
 ### Fixed

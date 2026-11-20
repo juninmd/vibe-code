@@ -44,9 +44,15 @@ describe("OpenCode supervised sessions", () => {
     expect(Object.keys(permission)[0]).toBe("*");
     expect(permission).toMatchObject({ edit: "ask", bash: "ask", webfetch: "ask" });
     expect(JSON.parse(String(input.env.OPENCODE_PERMISSION))).toEqual(permission);
-    expect(await input.decide?.({ id: "p", permission: "edit", patterns: [], metadata: {} })).toBe(
-      "reject"
-    );
+    expect(
+      await input.decide?.({
+        id: "p",
+        sessionID: "s",
+        permission: "edit",
+        patterns: [],
+        metadata: {},
+      })
+    ).toBe("reject");
   });
 
   it("keeps full access, without a decision hook, for unsupervised sessions", async () => {

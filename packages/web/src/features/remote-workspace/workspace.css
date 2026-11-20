@@ -543,3 +543,4 @@
   .rw-composer-model { flex-wrap: nowrap; justify-content: flex-start; }
   .rw-default-toggle { white-space: nowrap; }
 }
+.rw-handoff { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 0 18px; padding: 6px 0; border-top: 1px dashed var(--rw-border); border-bottom: 1px dashed var(--rw-border); color: var(--rw-muted); font-size: 11px; text-align: center; }
