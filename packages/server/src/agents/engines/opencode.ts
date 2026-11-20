@@ -13,6 +13,7 @@ import {
 } from "../opencode-providers";
 import { type BlockedArgs, filterCustomArgs } from "./blocked-args";
 import { getHeartbeatIntervalMs, withHeartbeat } from "./heartbeat";
+import type { ServeStarter } from "./opencode-serve/process";
 import { runServeTurn, type ServeTurnInput } from "./opencode-serve/run";
 
 // Maps raw tool names to readable labels and extracts the most useful arg
@@ -339,7 +340,11 @@ export class OpenCodeEngine implements AgentEngine {
   /** Heartbeat interval (ms). Overridable in tests via constructor arg or VIBE_CODE_HEARTBEAT_MS. */
   protected heartbeatIntervalMs: number;
 
-  constructor(heartbeatIntervalMs?: number) {
+  constructor(
+    heartbeatIntervalMs?: number,
+    /** Where `opencode serve` runs; defaults to a loopback process (the AgentRunner picks local or a pod per turn). */
+    private readonly serveStart?: ServeStarter
+  ) {
     this.heartbeatIntervalMs = heartbeatIntervalMs ?? getHeartbeatIntervalMs();
   }
 
@@ -554,6 +559,7 @@ export class OpenCodeEngine implements AgentEngine {
           signal: options.signal,
           parse: (line) => this.parseLine(JSON.stringify(line), accumulators),
           decide: supervised ? options.decidePermission : undefined,
+          start: this.serveStart,
         }),
         this.heartbeatIntervalMs,
         options.signal

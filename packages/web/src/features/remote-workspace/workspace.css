@@ -483,7 +483,7 @@
 .rw-management-nav button { white-space: nowrap; color: var(--rw-muted); padding: 0 0 12px; border-bottom: 2px solid transparent; }
 .rw-management-nav button.selected { color: var(--rw-text); border-bottom-color: var(--rw-accent); }
 .rw-management-content { padding-bottom: 25px; }
-.rw-management input:not([type=checkbox]), .rw-management select, .rw-management textarea, .rw-terminal-selectors select { width: 100%; min-width: 0; background: var(--rw-bg); color: var(--rw-text); border: 1px solid var(--rw-border); border-radius: 5px; padding: 9px 10px; font: inherit; }
+.rw-management input:not([type=checkbox]):not([type=radio]), .rw-management select, .rw-management textarea, .rw-terminal-selectors select { width: 100%; min-width: 0; background: var(--rw-bg); color: var(--rw-text); border: 1px solid var(--rw-border); border-radius: 5px; padding: 9px 10px; font: inherit; }
 .rw-management .rw-search input { border: none; padding: 0; }
 .rw-management input::placeholder { color: var(--rw-muted); }
 .rw-page-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px; }
@@ -519,6 +519,16 @@
 .rw-source-form label small { display: inline; color: var(--rw-muted); }
 .rw-settings-form { display: grid; gap: 18px; max-width: 720px; }
 .rw-settings-form > button { justify-self: start; }
+.rw-runner-modes { display: grid; gap: 10px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.rw-runner-modes legend { color: var(--rw-secondary); font-size: 12px; margin-bottom: 8px; }
+.rw-runner-mode { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--rw-border); border-radius: 6px; padding: 12px 14px; cursor: pointer; }
+.rw-runner-mode:has(input:checked) { border-color: var(--rw-accent); }
+.rw-runner-mode:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.rw-runner-mode input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; margin: 2px 0 0; padding: 0; accent-color: var(--rw-accent); }
+.rw-runner-mode strong { display: block; font-size: 12px; }
+.rw-runner-mode small { display: block; color: var(--rw-muted); font-size: 11px; margin-top: 3px; }
+.rw-field-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.rw-field-grid label { display: grid; gap: 7px; min-width: 0; color: var(--rw-secondary); font-size: 12px; }
 .rw-form-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
 .rw-plugin-row { display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--rw-border); padding: 14px 0; min-width: 0; }
 .rw-plugin-row:last-child { border-bottom: 0; }
