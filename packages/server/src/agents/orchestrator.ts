@@ -4,6 +4,7 @@ import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
+import { ApprovalBroker, approvalLogLine } from "./approvals";
 import { executeAgent } from "./orchestrator/executor";
 import { retryPR } from "./orchestrator/pr-retry";
 import { publishRemoteSession, type RemotePullRequestInput } from "./orchestrator/remote-pr";
@@ -57,6 +58,22 @@ export class Orchestrator {
   private retryingTasks = new Set<string>();
   private maxConcurrent: number;
   skillsLoader?: SkillsLoader;
+  /** Tool calls of supervised sessions waiting for the operator. */
+  readonly approvals = new ApprovalBroker((notice) => {
+    const { approval } = notice;
+    this.sysLog(approval.runId, approval.taskId, approvalLogLine(notice));
+    this.hub.broadcastToTask(
+      approval.taskId,
+      notice.kind === "requested"
+        ? { type: "tool_approval_requested", approval }
+        : {
+            type: "tool_approval_resolved",
+            taskId: approval.taskId,
+            approvalId: approval.id,
+            reply: notice.reply,
+          }
+    );
+  });
 
   constructor(
     private db: Db,
@@ -323,6 +340,7 @@ export class Orchestrator {
         this.hub,
         (c) => this.sysLog(run.id, task.id, c),
         () => {
+          this.approvals.cancelRun(run.id);
           const active = this.activeRuns.get(task.id);
           if (active?.runId === run.id) this.activeRuns.delete(task.id);
           this.checkLoopAndRelaunch(task.id, engineOverride, modelOverride);

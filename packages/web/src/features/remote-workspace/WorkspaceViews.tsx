@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { AccessModeSelect, ApprovalList } from "./ApprovalCard";
 import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
 import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
@@ -14,6 +15,44 @@ import { WorkLog } from "./WorkLog";
 export type Workspace = ReturnType<typeof useRemoteWorkspace>;
 
 /** Branch diff summary; one query shared by the Changes tab and the publish button. */
+const HARNESS_CATALOG = new Set(["opencode", "claude-code"]);
+
+/** Two-step: undoing turns restores files, so the first click only asks. */
+function RewindButton({ onRewind }: { onRewind: () => Promise<void> }) {
+  const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
+  if (state === "idle")
+    return (
+      <button
+        type="button"
+        className="rw-rewind"
+        title="Desfazer este turno e os seguintes, voltando os arquivos a como estavam antes dele"
+        onClick={() => setState("confirm")}
+      >
+        <Icon name="undo" size={11} /> Voltar até aqui
+      </button>
+    );
+  return (
+    <fieldset className="rw-rewind-confirm" aria-label="Confirmar volta">
+      <span>Desfaz este turno e os seguintes, inclusive os arquivos.</span>
+      <button
+        type="button"
+        className="is-danger"
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          await onRewind();
+          setState("idle");
+        }}
+      >
+        {state === "busy" ? "Voltando…" : "Voltar"}
+      </button>
+      <button type="button" disabled={state === "busy"} onClick={() => setState("idle")}>
+        Cancelar
+      </button>
+    </fieldset>
+  );
+}
+
 function useSessionDiff(workspace: Workspace) {
   return useQuery({
     queryKey: ["unified-prototype", "diff", workspace.selected?.id],
@@ -40,6 +79,9 @@ export function Conversation({
   const atBottom = useRef(true);
   const [behind, setBehind] = useState(false);
   const { selected, messages, server } = workspace;
+  const engineLabel = (name: string) =>
+    workspace.engines.data?.find((engine) => engine.name === name)?.displayName ??
+    (name === "opencode" ? "OpenCode" : name);
   const count = messages.length;
   const working = selected?.status === "working";
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different session resets scroll following.
@@ -144,44 +186,66 @@ export function Conversation({
               </button>
             </div>
           )}
-          {messages.map((message, index) => (
-            <article
-              key={message.id}
-              className={`rw-message rw-message-${message.role}${message.work ? " rw-message-work" : ""}`}
-              aria-label={message.role === "user" ? "Mensagem do usuário" : "Resposta do agente"}
-            >
-              {message.role === "assistant" && messages[index - 1]?.role !== "assistant" && (
-                <div className="rw-message-author">
-                  <span className="rw-agent-small">o_</span>{" "}
-                  {selected.engine === "opencode" ? "OpenCode" : selected.engine}
-                  <span>{server ? "Histórico" : "Demonstração"}</span>
-                </div>
-              )}
-              {message.activity && (
-                <details className="rw-activity-fold">
-                  <summary>
-                    <Icon name="check" size={13} /> Exploração da proposta{" "}
-                    <span>{message.activity.length} etapas</span>
-                  </summary>
-                  <ul>
-                    {message.activity.map((text) => (
-                      <li key={text}>
-                        <Icon name="check" size={12} />
-                        {text}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              {message.work ? (
-                <WorkLog entries={message.work} live={working && index === count - 1} />
-              ) : (
-                <div className="rw-message-text">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
-                </div>
-              )}
-            </article>
-          ))}
+          {messages.map((message, index) =>
+            message.handoff ? (
+              <p key={message.id} className="rw-handoff" role="note">
+                <Icon name="branch" size={12} /> {engineLabel(message.handoff.to)} assumiu a
+                conversa de {engineLabel(message.handoff.from)}, com o histórico até aqui
+              </p>
+            ) : (
+              <article
+                key={message.id}
+                className={`rw-message rw-message-${message.role}${message.work ? " rw-message-work" : ""}`}
+                aria-label={message.role === "user" ? "Mensagem do usuário" : "Resposta do agente"}
+              >
+                {message.role === "assistant" &&
+                  (messages[index - 1]?.role !== "assistant" || messages[index - 1]?.handoff) && (
+                    <div className="rw-message-author">
+                      <span className="rw-agent-small">o_</span>{" "}
+                      {engineLabel(message.engine ?? selected.engine)}
+                      <span>{server ? "Histórico" : "Demonstração"}</span>
+                    </div>
+                  )}
+                {message.activity && (
+                  <details className="rw-activity-fold">
+                    <summary>
+                      <Icon name="check" size={13} /> Exploração da proposta{" "}
+                      <span>{message.activity.length} etapas</span>
+                    </summary>
+                    <ul>
+                      {message.activity.map((text) => (
+                        <li key={text}>
+                          <Icon name="check" size={12} />
+                          {text}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {message.work ? (
+                  <WorkLog entries={message.work} live={working && index === count - 1} />
+                ) : (
+                  <div className="rw-message-text">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                  </div>
+                )}
+                {message.runId && server && selected.conversational && !working && (
+                  <RewindButton
+                    onRewind={async () => {
+                      const text = await workspace.rewind(message.runId ?? "");
+                      if (text !== null) onSuggest(text);
+                    }}
+                  />
+                )}
+              </article>
+            )
+          )}
+          <ApprovalList
+            approvals={workspace.approvals.of(selected.id)}
+            answering={workspace.approvals.answering}
+            error={workspace.approvals.error}
+            onAnswer={(approval, reply) => void workspace.approvals.answer(approval, reply)}
+          />
           {behind && (
             <button
               type="button"
@@ -197,9 +261,11 @@ export function Conversation({
           {working && (
             <div className="rw-thinking" role="status">
               <span className="rw-status-dot working" />
-              {server
-                ? "Sessão em execução no servidor"
-                : "Preparando uma resposta de demonstração…"}
+              {workspace.approvals.awaiting.has(selected.id)
+                ? "Aguardando sua aprovação"
+                : server
+                  ? "Sessão em execução no servidor"
+                  : "Preparando uma resposta de demonstração…"}
             </div>
           )}
         </div>
@@ -227,11 +293,12 @@ export function Composer({
   const working = selected?.status === "working";
   // A conversational session can switch model for its next turn, like Claude Code.
   const canSwitchModel = !!selected?.conversational && server;
-  const modelEngine = selected ? selected.engine : workspace.engine;
+  const modelEngine = selected ? workspace.nextEngine || selected.engine : workspace.engine;
   const models = useQuery({
     queryKey: ["prototype-harness-models", modelEngine],
     queryFn: () => api.engines.harnessModels(modelEngine),
-    enabled: server && (!selected || canSwitchModel),
+    // Only these harnesses publish a model catalog; others run with their default model.
+    enabled: server && HARNESS_CATALOG.has(modelEngine) && (!selected || canSwitchModel),
     staleTime: 60_000,
     retry: false,
   });
@@ -258,7 +325,9 @@ export function Composer({
         { name: "opencode", displayName: "OpenCode" },
         { name: "claude-code", displayName: "Claude Code" },
       ];
-  const selectedEngine = selected?.engine ?? workspace.engine;
+  const selectedEngine = selected ? workspace.nextEngine || selected.engine : workspace.engine;
+  const engineName = (name: string) =>
+    workspace.engines.data?.find((engine) => engine.name === name)?.displayName ?? name;
   const [history, setHistory] = useState(promptHistory.load);
   const recall = useRef({ position: -1, live: "" });
   const send = async () => {
@@ -413,20 +482,31 @@ export function Composer({
               <select
                 aria-label="Engine da sessão"
                 value={selectedEngine}
-                disabled={!!selected}
+                title={selected ? "Engine do próximo turno" : "Engine da nova sessão"}
+                disabled={!!selected && !canSwitchModel}
                 onChange={(e) => {
+                  if (selected) {
+                    // Handoff: the next turn opens a new session of this engine with the transcript.
+                    workspace.setNextEngine(
+                      e.target.value === selected.engine ? "" : e.target.value
+                    );
+                    workspace.setNextModel("");
+                    return;
+                  }
                   workspace.setEngine(e.target.value);
                   workspace.setModel("");
                   workspace.setEffort("");
                 }}
               >
                 {!engineOptions.some((engine) => engine.name === selectedEngine) && (
-                  <option value={selectedEngine}>
-                    {workspace.engines.data?.find((engine) => engine.name === selectedEngine)
-                      ?.displayName ?? selectedEngine}
-                  </option>
+                  <option value={selectedEngine}>{engineName(selectedEngine)}</option>
                 )}
-                {engineOptions.map((engine) => (
+                {(selected
+                  ? engineOptions.filter(
+                      (engine) => !server || ("supportsResume" in engine && engine.supportsResume)
+                    )
+                  : engineOptions
+                ).map((engine) => (
                   <option value={engine.name} key={engine.name}>
                     {engine.displayName}
                   </option>
@@ -448,7 +528,9 @@ export function Composer({
               >
                 <option value="">
                   {selected
-                    ? selected.model
+                    ? workspace.nextEngine
+                      ? "Modelo padrão"
+                      : selected.model
                     : projectDefault && !workspace.model
                       ? `Padrão do projeto (${projectDefault})`
                       : "Modelo padrão"}
@@ -467,7 +549,9 @@ export function Composer({
                   )}
                 {server ? (
                   models.data
-                    ?.filter((model) => !selected || model.id !== selected.model)
+                    ?.filter(
+                      (model) => !selected || workspace.nextEngine || model.id !== selected.model
+                    )
                     .map((model) => (
                       <option key={model.id} value={model.id}>
                         {model.id}
@@ -477,6 +561,15 @@ export function Composer({
                   <option value="demo/modelo-exemplo">demo/modelo-exemplo</option>
                 )}
               </select>
+              {selectedEngine === "opencode" && (!selected || selected.conversational) && (
+                <AccessModeSelect
+                  supervised={selected ? !!selected.supervised : workspace.supervised}
+                  disabled={!server && !!selected}
+                  onChange={(on) =>
+                    selected ? void workspace.setSessionSupervised(on) : workspace.setSupervised(on)
+                  }
+                />
+              )}
               <select
                 aria-label="Effort do modelo"
                 value={selected?.effort ?? workspace.effort}
@@ -515,9 +608,11 @@ export function Composer({
         {server
           ? selected
             ? selected.conversational
-              ? workspace.nextModel
-                ? `Próximo turno com ${workspace.nextModel}, na mesma conversa e workspace.`
-                : "Sua mensagem continua a mesma conversa e o mesmo workspace."
+              ? workspace.nextEngine
+                ? `${engineName(workspace.nextEngine)} assume no próximo turno, com a conversa até aqui e o mesmo workspace.`
+                : workspace.nextModel
+                  ? `Próximo turno com ${workspace.nextModel}, na mesma conversa e workspace.`
+                  : "Sua mensagem continua a mesma conversa e o mesmo workspace."
               : "O terminal mantém o contexto e a conversa do harness."
             : (workspace.engines.data?.find((engine) => engine.name === workspace.engine)
                   ?.supportsResume ?? workspace.engine === "opencode")

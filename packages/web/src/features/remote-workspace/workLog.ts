@@ -26,7 +26,7 @@ const CALL =
   /^(Reading|Writing|Editing|Deleting|Moving|Listing|Searching|Fetching|Running:|Git:)\s*(.*)$/;
 const GENERIC_CALL = /^([A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+){0,3}): (\S.*)$/;
 const RESULT =
-  /^(File saved|Command output: |Command completed|Command exited with code|Read \d+ non-empty lines?|Found \d+ match|Fetched \d+ non-empty lines?)/;
+  /^(File saved|Command output: |Command completed|Command exited with code|Read \d+ non-empty lines?|Found \d+ match|Fetched \d+ non-empty lines?|Recusado por você)/;
 const THOUGHT = "💭 ";
 
 function indentOf(line: string): number {
@@ -82,7 +82,7 @@ export function splitWork(text: string): Segment[] {
       const last = work[work.length - 1];
       if (last) {
         last.result = trimmed;
-        last.failed = /exited with code [1-9]/.test(trimmed);
+        last.failed = /exited with code [1-9]|^Recusado/.test(trimmed);
       }
       continue;
     }
