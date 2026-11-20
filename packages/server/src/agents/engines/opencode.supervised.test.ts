@@ -70,3 +70,29 @@ describe("OpenCode supervised sessions", () => {
     );
   });
 });
+
+describe("refused tool calls", () => {
+  it("land in the work log as the operator's decision, not as a harness error", () => {
+    const events = new OpenCodeEngine(60_000).parseLine(
+      JSON.stringify({
+        type: "tool_use",
+        part: {
+          type: "tool",
+          tool: "write",
+          state: {
+            status: "error",
+            input: { filePath: "src/email.ts" },
+            error: "The user rejected permission to use this specific tool call.",
+          },
+        },
+      })
+    );
+    expect(events.filter((e) => e.type === "log").map((e) => [e.stream, e.content])).toEqual([
+      ["stdout", "  Writing src/email.ts"],
+      ["stdout", "    Recusado por você"],
+    ]);
+    expect(events.some((e) => e.type === "tool_result" && e.toolResult?.status === "error")).toBe(
+      true
+    );
+  });
+});

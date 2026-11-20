@@ -160,6 +160,9 @@ export const DEFAULT_OPENCODE_MODEL = "auto-free";
 
 export const OPENCODE_FALLBACK_MODELS = [DEFAULT_OPENCODE_MODEL];
 
+/** OpenCode's tool error when the operator refused the call. */
+const REJECTED_BY_OPERATOR = /user rejected permission/i;
+
 /** Permissions for non-interactive runs (the agent never waits on a prompt). */
 export const OPENCODE_RUN_PERMISSION: Record<string, string> = {
   "*": "allow",
@@ -1169,11 +1172,21 @@ export class OpenCodeEngine implements AgentEngine {
               type: "tool_result",
               toolResult: { toolId: callId, output: msg, status: "error" },
             });
-            results.push({
-              type: "log",
-              stream: "stderr",
-              content: `  Error in ${toolName}: ${msg}`,
-            });
+            if (REJECTED_BY_OPERATOR.test(msg)) {
+              // A refusal is the operator's decision, not a harness error: keep it in the work log.
+              results.push({
+                type: "log",
+                stream: "stdout",
+                content: humanizeToolCall(toolName, input as Record<string, unknown>),
+              });
+              results.push({ type: "log", stream: "stdout", content: "    Recusado por você" });
+            } else {
+              results.push({
+                type: "log",
+                stream: "stderr",
+                content: `  Error in ${toolName}: ${msg}`,
+              });
+            }
           }
           continue;
         }

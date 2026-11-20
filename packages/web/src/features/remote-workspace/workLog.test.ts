@@ -118,3 +118,14 @@ describe("messagesFromLogs", () => {
     ]);
   });
 });
+
+describe("refused calls", () => {
+  it("stay in the work log, marked as failed", () => {
+    const work = splitWork("  Writing src/email.ts\n    Recusado por você").find(
+      (s) => s.type === "work"
+    );
+    expect(work).toMatchObject({
+      entries: [{ detail: "src/email.ts", result: "Recusado por você", failed: true }],
+    });
+  });
+});

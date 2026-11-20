@@ -14,8 +14,13 @@ interface FakeOptions {
 }
 
 function fakeClient(options: FakeOptions) {
-  const calls: Record<string, unknown[]> = { prompt: [], reply: [], reject: [], abort: [] };
-  let release: () => void = () => {};
+  const calls: Record<string, unknown[]> = {
+    prompt: [],
+    reply: [],
+    reject: [],
+    abort: [],
+    subscribeSignal: [],
+  };
   const client = {
     session: {
       get: async () =>
@@ -27,24 +32,22 @@ function fakeClient(options: FakeOptions) {
       },
       abort: async (body: unknown) => {
         calls.abort.push(body);
-        release();
         return { data: true };
       },
     },
     permission: { reply: async (body: unknown) => calls.reply.push(body) },
     question: { reject: async (body: unknown) => calls.reject.push(body) },
     event: {
-      subscribe: async (_params: unknown, opts: { signal: AbortSignal }) => ({
-        stream: (async function* () {
-          for (const event of options.events ?? []) yield event;
-          if (options.hang) {
-            await new Promise<void>((resolve) => {
-              release = resolve;
-              opts.signal.addEventListener("abort", () => resolve());
-            });
-          }
-        })(),
-      }),
+      subscribe: async (_params: unknown, opts: { signal?: AbortSignal }) => {
+        calls.subscribeSignal = [opts.signal];
+        return {
+          stream: (async function* () {
+            for (const event of options.events ?? []) yield event;
+            // Like a live SSE stream: never ends on its own.
+            if (options.hang) await new Promise<void>(() => {});
+          })(),
+        };
+      },
     },
   };
   return { client: client as unknown as OpencodeClient, calls };
@@ -171,6 +174,8 @@ describe("runServeTurn", () => {
     controller.abort();
     const events = await done;
     expect(fake.calls.abort).toEqual([{ sessionID: SID }]);
+    // Passing the signal to the SDK leaks an unhandled AbortError that kills the server.
+    expect(fake.calls.subscribeSignal).toEqual([undefined]);
     expect(events.at(-1)).toEqual({ type: "complete", exitCode: 130 });
   });
 

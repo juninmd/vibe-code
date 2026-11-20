@@ -44,6 +44,23 @@ describe("ApprovalBroker", () => {
     expect(broker.listByTask("t2")).toHaveLength(1);
   });
 
+  it("shows the repo path instead of the server's worktree path", () => {
+    const notices: ApprovalNotice[] = [];
+    const broker = new ApprovalBroker((n) => notices.push(n));
+    void broker.request(
+      "t1",
+      "r1",
+      ask("per_1", {
+        patterns: ["src/a.ts"],
+        metadata: {
+          filepath: "/srv/ws/x/src/a.ts",
+          diff: "--- /srv/ws/x/src/a.ts\n+++ /srv/ws/x/src/a.ts",
+        },
+      })
+    );
+    expect(notices[0].approval.diff).toBe("--- src/a.ts\n+++ src/a.ts");
+  });
+
   it("bounds what reaches the browser", () => {
     const notices: ApprovalNotice[] = [];
     const broker = new ApprovalBroker((n) => notices.push(n));

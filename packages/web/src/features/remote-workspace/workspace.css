@@ -151,8 +151,8 @@
 .rw-jump-latest:hover { background: var(--rw-hover); }
 @media (max-width: 640px) { .rw-worklog-result { display: none; } }
 /* Approval cards (supervised sessions) */
-.rw-approvals { display: grid; gap: 10px; margin: 6px 0 14px; }
-.rw-approval { border: 1px solid color-mix(in srgb, var(--rw-accent) 45%, var(--rw-border)); border-radius: 9px; background: color-mix(in srgb, var(--rw-accent) 7%, var(--rw-panel)); padding: 13px 14px; }
+.rw-approvals { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; margin: 6px 0 14px; }
+.rw-approval { min-width: 0; overflow: hidden; border: 1px solid color-mix(in srgb, var(--rw-accent) 45%, var(--rw-border)); border-radius: 9px; background: color-mix(in srgb, var(--rw-accent) 7%, var(--rw-panel)); padding: 13px 14px; }
 .rw-approval header { display: flex; gap: 10px; align-items: flex-start; }
 .rw-approval-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 6px; background: var(--rw-raised); color: var(--rw-accent); }
 .rw-approval h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--rw-strong); }
