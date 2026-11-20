@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "./ThemeProvider";
 
@@ -32,6 +32,26 @@ describe("ThemeProvider", () => {
     localStorage.setItem("vibe-code-theme", "dark");
     render(<ThemeProvider>x</ThemeProvider>);
     expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("follows the system live when it changes, until the user picks a theme", () => {
+    const listeners: (() => void)[] = [];
+    const query = {
+      matches: false,
+      media: "(prefers-color-scheme: light)",
+      addEventListener: (_: string, fn: () => void) => listeners.push(fn),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("matchMedia", () => query);
+    const { unmount } = render(<ThemeProvider>x</ThemeProvider>);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    query.matches = true;
+    act(() => {
+      for (const fn of listeners) fn();
+    });
+    expect(document.documentElement.dataset.theme).toBe("light");
+    unmount();
+    expect(query.removeEventListener).toHaveBeenCalled();
   });
 
   it("stays dark when the system is dark", () => {
