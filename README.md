@@ -32,11 +32,12 @@ sessions, conversational turns, harness terminal and changes share one shell.
 Skills, GitHub plugins (including bulk skill imports), agents and settings open
 inline. Models and effort come from the installed harness. Authentication remains
 required on protected deployments. `/prototype` is an alias; `?demo=1` enables
-explicit sample sessions. The previous control panel remains at `/legacy`.
+explicit sample sessions. The old control panel (`/legacy`) was removed; its
+Board, Terminals and 3D Office live in the workspace sidebar.
 See [the remote workspace guide](docs/unified-remote-prototype.md).
 
 * Task detail terminal panel lives in [WORKFLOW.md](WORKFLOW.md) and is used for task management
-* The advanced panel at `/legacy` retains **Code**, **Board**, **Terminals** and **3D Office**, switchable in its header.
+* The workspace sidebar has **Quadro** (board), **Terminais** (live harnesses and CLI sessions found on disk) and **Escritório 3D**.
 * Code mode doc: [docs/remote-control.md](docs/remote-control.md)
 * **Remote coding workspace**: session history on the left, conversation in the center and environment/activity on the right, with searchable repositories and dynamic branch/engine/model controls. OpenCode is the default engine; follow-up messages resume the same conversation and preserve the worktree. See [remote setup and behavior](docs/remote-control.md#running-remotely).
 - Cluster-safe defaults: VIBE_CODE_MAX_AGENTS=1, VIBE_CODE_INACTIVITY_MS=1200000, 3Gi memory.

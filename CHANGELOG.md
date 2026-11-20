@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+- **Legacy panel (`/legacy`)**: the old control plane and everything only it used (96 web modules, their unit tests, the board/code-mode/first-run e2e specs, `@dnd-kit/*`, `@tanstack/react-virtual`, `ansi-to-html`, `diff2html` and the web-level `zustand`). `/legacy` now opens the workspace. The terminal and lanes e2e specs drive the workspace instead.
+
 ### Added
 - **Full toolbox in the default image** (server and runner pods): git, curl, wget, jq, make, ripgrep, gh, Node 22 with npm/pnpm/yarn, bun, python3/pip, uv, Docker CLI with buildx/compose (client only), gcloud/bq/gsutil, Go, Rust/cargo, Java (headless JDK), Ruby, and the reviewer's scanners (gitleaks, trivy, semgrep, trufflehog). Go, uv and semgrep are pinned via build args; trufflehog comes from its pinned image (3.100.0) and gitleaks from its latest release. The tool layers add about 5 GB to the image.
 - **Agents open PRs from their runner pod**: the image now ships the GitHub CLI, and with "Agente abre PRs de dentro do pod" (Settings → Execução, on by default) the pod gets the signed-in user's GitHub token (`GH_TOKEN` + git auth header, in the pod's Secret), so the agent can `git push` and `gh pr create` as that user. Off keeps every GitHub credential on the server.

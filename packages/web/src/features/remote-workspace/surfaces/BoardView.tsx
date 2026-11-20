@@ -96,7 +96,9 @@ export function BoardView({
               {lanes[status].map((task) => (
                 <article
                   key={task.id}
-                  className={`rw-board-card ${busy === task.id ? "is-busy" : ""}`}
+                  className={`rw-board-card ${busy === task.id ? "is-busy" : ""} ${
+                    task.tags?.includes("conflict-resolution") ? "is-conflict" : ""
+                  }`}
                   draggable={!busy}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "move";
@@ -115,6 +117,9 @@ export function BoardView({
                     </small>
                   </button>
                   <footer>
+                    {task.tags?.includes("conflict-resolution") && (
+                      <span className="rw-conflict-badge">Merge conflict</span>
+                    )}
                     {task.prUrl && (
                       <a href={task.prUrl} target="_blank" rel="noreferrer">
                         <Icon name="branch" size={12} />

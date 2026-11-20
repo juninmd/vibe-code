@@ -184,10 +184,11 @@ test("lanes follow issue labels in both directions", async ({ page, request }) =
   await expect.poll(async () => (await tasksByIssue(request)).get(1)?.status).toBe("blocked");
 
   // ── The board shows it ────────────────────────────────────────────────────
-  await page.goto("/legacy");
-  await expect(page.getByRole("button", { name: /labels synced/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Slow search" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "#3" })).toBeVisible();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Quadro", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: /^Bloqueadas/ }).getByText("Login redirect loops", { exact: true })
+  ).toBeVisible();
 
   // ── Delete a card: it stays gone and its issue leaves the lanes ───────────
   const gone = await request.delete(api(`/api/tasks/${dark?.id}`));

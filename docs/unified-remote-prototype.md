@@ -4,7 +4,8 @@ A interface inspirada no Claude Code Remote em `/` reúne projetos, sessões, co
 terminal e alterações.
 Skills, plugins, agentes e configurações abrem na própria navegação, sem kanban ou
 questionário. `/prototype` permanece como alias. A autenticação GitHub ou por chave
-de acesso existente protege as duas entradas. `/legacy` preserva o painel avançado.
+de acesso existente protege as duas entradas. O painel `/legacy` foi removido: Quadro,
+Terminais e Escritório 3D ficam na navegação lateral.
 
 ## Executar com dados isolados
 
@@ -94,8 +95,8 @@ JavaScript arbitrárias do OpenCode.
 
 As extensões são aditivas. `VIBE_CODE_SKILLS_PATH` configura a mesma pasta para
 loader e registro; `VIBE_CODE_HOST` configura o endereço de escuta. Defaults mantidos.
-Não há nova migração de banco. Para voltar à interface anterior, abra `/legacy`;
-para reverter a promoção, retorne o entrypoint autenticado para `AuthenticatedApp`.
+Não há nova migração de banco. Para recuperar o painel antigo, reverta o PR que
+removeu o `/legacy` (o código continua no histórico do git).
 Dados, APIs e repositórios existentes são preservados.
 
 ## Validação e limites

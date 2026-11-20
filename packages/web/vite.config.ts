@@ -63,9 +63,6 @@ export default defineConfig(({ mode }) => {
               if (id.includes("react") || id.includes("react-dom")) {
                 return "vendor-react";
               }
-              if (id.includes("@dnd-kit")) {
-                return "vendor-dnd";
-              }
               return "vendor";
             }
           },
