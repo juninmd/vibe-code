@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { attentionChannel, attentionMessage, finishedSessions, newlyAwaiting } from "./attention";
+import {
+  attentionChannel,
+  attentionMessage,
+  finishedSessions,
+  keepKnown,
+  newlyAwaiting,
+} from "./attention";
 
 describe("finishedSessions", () => {
   it("reports only sessions that left working since the last snapshot", () => {
@@ -66,5 +72,17 @@ describe("newlyAwaiting", () => {
     ]);
     expect(newlyAwaiting(new Set(["a"]), new Set())).toEqual([]);
     expect(attentionMessage("approval")).toContain("aprovação");
+  });
+});
+
+describe("keepKnown", () => {
+  it("forgets archived sessions so the title counter does not stay stuck", () => {
+    const kept = keepKnown(new Set(["a", "gone"]), [{ id: "a" }, { id: "b" }]);
+    expect([...kept]).toEqual(["a"]);
+  });
+
+  it("returns the same set when nothing left, so React skips the re-render", () => {
+    const ids = new Set(["a"]);
+    expect(keepKnown(ids, [{ id: "a" }])).toBe(ids);
   });
 });
