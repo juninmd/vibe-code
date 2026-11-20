@@ -97,7 +97,46 @@ well. HTTPS is required for PWA installation outside localhost. This change
 provides the browser workspace; it does not provision hosting or pair additional
 execution hosts. The displayed environment is the current vibe-code server.
 
-OpenCode `run` uses its native executable on Windows, the worktree as process
+OpenCode turns run over `opencode serve` (default): the engine starts one server
+per turn on `127.0.0.1` with a free port and a random `OPENCODE_SERVER_PASSWORD`,
+drives it with `@opencode-ai/sdk` (create or resume the session, `prompt_async`,
+stream `/event` until the session is idle, abort on Stop) and stops it after the
+turn. Bus events are mapped to the same JSON lines `opencode run` prints, so logs,
+the work log and costs read the same. A retry that needs the operator (for example
+an exhausted free tier) ends the turn with that message instead of retrying forever.
+Set `VIBE_OPENCODE_TRANSPORT=cli` to roll back to `opencode run`.
+
+**Approval mode.** A session tagged `supervised` (the "Pedir aprovação" option
+next to the model) runs with OpenCode permissions `edit`, `bash`, `webfetch` and
+`external_directory` set to `ask`. Each request is held by the orchestrator's
+`ApprovalBroker`, logged as `[approval] …`, broadcast as
+`tool_approval_requested`, listed by `GET /api/tasks/:id/approvals` and answered
+with `POST /api/tasks/:id/approvals/:approvalId` (`once`, `always`, `reject`).
+A stopped turn rejects what it was waiting on. The `cli` transport cannot ask and
+says so in the log.
+
+**Engine handoff.** `POST /api/tasks/:id/messages` accepts `engine` (any
+available engine with `supportsResume`). The task's engine changes, its model is
+cleared unless `model` is also sent, and the turn starts a fresh CLI session of
+the new engine in the same worktree: no engine can resume another's session. The
+prompt carries the opening request plus the user and agent prose of the last 20
+turns (tool lines dropped, trimmed from the start to 12 000 characters), and the
+run logs `[handoff] <from> → <to>`, which the conversation shows as a divider.
+Later turns resume the new engine's own session.
+
+**Checkpoints and rewind.** Before each conversational turn the executor stores
+the worktree (tracked and untracked files, not ignored ones) as a commit whose
+parent is `HEAD`, built with a scratch `GIT_INDEX_FILE` and kept alive by
+`refs/vibe/checkpoints/<sha>`; the sha lands in `agent_runs.checkpoint`.
+`POST /api/tasks/:id/rewind {runId}` (idle sessions only, not the first turn)
+restores that tree, deletes files added since, resets the index to `HEAD`, and
+sets `rewound_at` on that run and the later ones. It refuses with
+`checkpoint_conflict` when `HEAD` moved, so commits are never lost. Rewound
+runs leave the history and the handoff transcript; the next turn starts a fresh
+CLI session (`[rewind]` in the log) because the agent's own session still
+remembers the undone turns.
+
+OpenCode `run` (the `cli` transport) uses its native executable on Windows, the worktree as process
 `cwd`, JSON output, and `--session` on continuation. No `--dir` flag is sent
 (OpenCode 2.0.30 rejects it). Both `sessionID` and `sessionId` event fields are
 accepted without discarding the accompanying text.

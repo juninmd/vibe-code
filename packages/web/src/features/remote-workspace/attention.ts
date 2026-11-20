@@ -3,7 +3,8 @@ import type { SessionStatus } from "./model";
 
 export interface AttentionEvent {
   sessionId: string;
-  status: Exclude<SessionStatus, "working">;
+  /** "approval": a supervised session paused for the operator. */
+  status: Exclude<SessionStatus, "working"> | "approval";
 }
 export type AttentionChannel = "none" | "in-app" | "system";
 
@@ -36,7 +37,18 @@ export function attentionChannel(input: {
   return "system";
 }
 
+/** Sessions that started waiting for an approval since the last snapshot. */
+export function newlyAwaiting(
+  previous: ReadonlySet<string>,
+  current: ReadonlySet<string>
+): AttentionEvent[] {
+  return [...current]
+    .filter((id) => !previous.has(id))
+    .map((sessionId) => ({ sessionId, status: "approval" }));
+}
+
 export function attentionMessage(status: AttentionEvent["status"]): string {
+  if (status === "approval") return "precisa da sua aprovação para continuar";
   if (status === "failed") return "precisa de atenção";
   if (status === "review") return "terminou e está pronta para revisão";
   return "terminou e aguarda sua mensagem";
