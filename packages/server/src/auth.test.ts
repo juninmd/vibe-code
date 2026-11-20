@@ -304,6 +304,17 @@ describe("createAuthRouter", () => {
     expect(res.status).toBe(503);
   });
 
+  it("GET /github/start returns 503 when only the API key is configured", async () => {
+    // Prod regression: API-key-only servers redirected to GitHub with an empty client_id (GitHub 403).
+    delete process.env.GITHUB_OAUTH_CLIENT_ID;
+    delete process.env.GITHUB_OAUTH_CLIENT_SECRET;
+    process.env.VIBE_CODE_API_KEY = "key";
+    const router = createAuthRouter({} as any);
+    const res = await router.request(new Request("http://localhost/github/start"));
+    delete process.env.VIBE_CODE_API_KEY;
+    expect(res.status).toBe(503);
+  });
+
   it("GET /github/start redirects when auth is configured", async () => {
     process.env.GITHUB_OAUTH_CLIENT_ID = "client_id";
     process.env.GITHUB_OAUTH_CLIENT_SECRET = "client_secret";
