@@ -29,7 +29,11 @@ export function handoffTranscript(logs: HandoffLog[], limit = DEFAULT_LIMIT): st
   const kept: string[] = [];
   let size = 0;
   for (let i = blocks.length - 1; i >= 0; i--) {
-    if (size + blocks[i].length > limit) break;
+    if (size + blocks[i].length > limit) {
+      // A single turn over the limit still hands over its most recent part.
+      if (!kept.length) kept.unshift(`…${blocks[i].slice(-limit)}`);
+      break;
+    }
     kept.unshift(blocks[i]);
     size += blocks[i].length + 2;
   }

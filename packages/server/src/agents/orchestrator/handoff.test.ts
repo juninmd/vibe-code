@@ -27,6 +27,12 @@ describe("handoffTranscript", () => {
     expect(text).not.toContain("turno 0");
   });
 
+  it("still hands over the end of a single turn longer than the limit", () => {
+    const text = handoffTranscript([{ stream: "stdin", content: `${"a".repeat(300)}FIM` }], 100);
+    expect(text).toContain("FIM");
+    expect(text.length).toBeLessThan(150);
+  });
+
   it("handles an empty history", () => {
     expect(handoffTranscript([])).toBe("");
     expect(handoffPreamble("opencode", "")).toContain("(no messages yet)");

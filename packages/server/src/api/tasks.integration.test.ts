@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { ApprovalBroker } from "../agents/approvals";
 import type { Orchestrator } from "../agents/orchestrator";
@@ -843,6 +844,48 @@ describe("remote session messages", () => {
     expect(response.status).toBe(202);
     expect(inputs).toEqual(["Continue in Claude"]);
     expect(db.tasks.getById(task.id)).toMatchObject({ engine: "claude-code", model: null });
+  });
+  it("hands off even when the broken previous turn never reported a session", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "branch_name", "vibe/remote");
+    const failed = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(failed.id, "failed", { worktree_path: tmpdir() });
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Try with Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Try with Claude"]);
+  });
+  it("keeps the engine and model when the switched turn cannot start", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async () => {
+          throw Object.assign(new Error("full"), { capacityExceeded: true });
+        },
+      })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(429);
+    expect(db.tasks.getById(task.id)).toMatchObject({
+      engine: "opencode",
+      model: "opencode/big-pickle",
+    });
   });
   it("refuses to hand off to an engine that cannot resume", async () => {
     const db = makeDb();
