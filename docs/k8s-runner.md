@@ -47,6 +47,16 @@ next turn → fresh pod resumes the same OpenCode session from the volume
 - A changed provider setting (new key, other provider) replaces an idle pod.
 - Approvals, engine handoff and rewind work as in `local`.
 
+## Tools in the runner image
+
+The default image (`Dockerfile`) is both the server and the runner image. It ships
+git, curl, wget, jq, make, ripgrep, gh, Node 22 (npm, pnpm, yarn), bun,
+python3/pip, uv, Docker CLI (+ buildx, compose; no daemon in the pod, set
+`DOCKER_HOST` to use one), gcloud/bq/gsutil, Go, Rust/cargo, Java, Ruby, and the
+scanners gitleaks, trivy, semgrep and trufflehog. `GO_VERSION`, `UV_VERSION` and
+`SEMGREP_VERSION` are build args. `go install` and `cargo install` work as the
+runtime user.
+
 ## Configuration
 
 Edited in Settings → Execução (`GET/PUT /api/settings/runner`, stored in the

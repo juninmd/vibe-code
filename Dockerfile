@@ -18,19 +18,22 @@ FROM oven/bun:${BUN_VERSION}-debian AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
 # OS deps: git (worktrees), curl/ca (CLI installers + healthcheck), openssh (git@), tini (PID 1),
-# build-essential + pkg-config (C compiler/linker `cc`/`ld` for native builds, e.g. Rust/cgo agents)
+# build-essential + pkg-config (C compiler/linker `cc`/`ld` for native builds, e.g. Rust/cgo agents),
+# plus the everyday CLIs agents reach for: wget, jq, make, ripgrep, python3/pip, java, ruby.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      git ca-certificates curl openssh-client tini \
-      build-essential pkg-config \
+      git ca-certificates curl wget gnupg openssh-client tini unzip xz-utils \
+      build-essential pkg-config make jq ripgrep \
+      python3 python3-pip python3-venv \
+      default-jdk-headless ruby-full \
  && rm -rf /var/lib/apt/lists/*
 
 # Node + pnpm (claude-code is intentionally NOT installed in the container —
 # the cluster deployment runs OpenCode free models only).
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/* \
- && npm i -g pnpm \
+ && npm i -g pnpm yarn \
  && npm cache clean --force
 
 # GitHub CLI (official apt repo): agents in runner pods open PRs with `gh pr create`
@@ -43,6 +46,52 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
  && apt-get update \
  && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
+
+# Docker CLI + buildx/compose (official apt repo). Client only: a runner pod has no daemon;
+# point DOCKER_HOST at one if the cluster offers it.
+RUN install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+ && chmod a+r /etc/apt/keyrings/docker.asc \
+ && . /etc/os-release \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian ${VERSION_CODENAME} stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+ && rm -rf /var/lib/apt/lists/*
+
+# Google Cloud CLI (gcloud, bq, gsutil) and Trivy, from their official apt repos.
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+      > /etc/apt/sources.list.d/google-cloud-sdk.list \
+ && curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key \
+      | gpg --dearmor -o /etc/apt/keyrings/trivy.gpg \
+ && echo "deb [signed-by=/etc/apt/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+      > /etc/apt/sources.list.d/trivy.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends google-cloud-cli trivy \
+ && rm -rf /var/lib/apt/lists/*
+
+# Go (official tarball; Debian's golang lags) and Rust (rustup, minimal profile).
+ARG GO_VERSION=1.27.4
+ENV GOROOT=/usr/local/go GOPATH=/usr/local/gopath \
+    RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/go/bin:/usr/local/gopath/bin:/usr/local/cargo/bin:$PATH
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" \
+      | tar -C /usr/local -xz \
+ && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+
+# uv (pinned installer) and the reviewer's scanners: semgrep (via uv), gitleaks, trufflehog
+# (its go.mod has replace directives, so it comes from the official pinned image).
+COPY --from=ghcr.io/trufflesecurity/trufflehog:3.100.0 /usr/bin/trufflehog /usr/local/bin/trufflehog
+ARG UV_VERSION=0.13.9
+ARG SEMGREP_VERSION=1.186.0
+RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
+      | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh \
+ && UV_PYTHON_PREFERENCE=only-system UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
+      uv tool install "semgrep==${SEMGREP_VERSION}" \
+ && GOBIN=/usr/local/bin go install github.com/zricethezav/gitleaks/v8@latest \
+ && go clean -cache -modcache
 
 # OpenCode CLI (binary installer)
 RUN curl -fsSL https://opencode.ai/install | bash \
@@ -72,7 +121,11 @@ RUN mkdir -p /home/vibe/.config/opencode \
 
 # Mount points expected by the operator
 # .local/{share,state}: runner pods mount OpenCode sessions below them; must stay user-owned.
-RUN mkdir -p /data /home/vibe/.agents /home/vibe/.local/share /home/vibe/.local/state \
+# Non-recursive chown: lets `go install`/`cargo install` write without copying the toolchains.
+RUN mkdir -p /usr/local/gopath/bin /usr/local/cargo/registry /usr/local/cargo/git \
+ && chown vibe:vibe /usr/local/gopath /usr/local/gopath/bin \
+      /usr/local/cargo /usr/local/cargo/bin /usr/local/cargo/registry /usr/local/cargo/git \
+ && mkdir -p /data /home/vibe/.agents /home/vibe/.local/share /home/vibe/.local/state \
  && chown -R vibe:vibe /data /home/vibe
 
 ENV HOME=/home/vibe \
