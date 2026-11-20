@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useTheme } from "../../theme/ThemeProvider";
 import { CommandPalette, ShortcutList } from "./CommandPalette";
 import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
 import { draftStore } from "./composerHistory";
@@ -128,8 +129,12 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   const attention = useAttention(
     workspace.sessions,
     view === "session" ? (selected?.id ?? null) : null,
-    openSession
+    openSession,
+    workspace.approvals.awaiting
   );
+  const { themeName, setTheme } = useTheme();
+  const light = themeName === "light";
+  const toggleTheme = () => setTheme(light ? "dark" : "light");
   const commands: Command[] = [
     {
       id: "new",
@@ -163,6 +168,16 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           },
         }))
       : []),
+    {
+      id: "theme",
+      section: "Ações",
+      title: light ? "Usar tema escuro" : "Usar tema claro",
+      keywords: "tema aparência claro escuro light dark",
+      run: () => {
+        toggleTheme();
+        setDialog(null);
+      },
+    },
     {
       id: "context",
       section: "Navegação",
@@ -520,6 +535,15 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
               : workspace.server
                 ? "Servidor conectado"
                 : "Demonstração"}
+          </button>
+          <button
+            type="button"
+            className="rw-icon-button"
+            aria-label={light ? "Usar tema escuro" : "Usar tema claro"}
+            title={light ? "Tema escuro" : "Tema claro"}
+            onClick={toggleTheme}
+          >
+            <Icon name={light ? "moon" : "sun"} />
           </button>
           <button
             type="button"

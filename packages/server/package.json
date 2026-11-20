@@ -9,6 +9,7 @@
     "test": "bun test src --isolate --timeout 15000"
   },
   "dependencies": {
+    "@opencode-ai/sdk": "1.19.6",
     "@vibe-code/shared": "workspace:*",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",

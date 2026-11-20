@@ -15,6 +15,7 @@ import { join } from "node:path";
 import type { AgentEvent } from "../engine";
 import { readOpenCodeProviderSettings, setOpenCodeProviderSource } from "../opencode-providers";
 import { OpenCodeEngine } from "./opencode";
+import type { ServeTurnInput } from "./opencode-serve/run";
 
 const BIN = process.env.VIBE_OPENCODE_E2E_BIN;
 
@@ -79,16 +80,22 @@ describe.skipIf(!BIN)("OpenCode e2e with a LiteLLM gateway", () => {
   });
 
   afterAll(async () => {
+    delete process.env.VIBE_OPENCODE_TRANSPORT;
     server?.stop(true);
     if (root) await rm(root, { recursive: true, force: true });
   });
 
-  it("runs a LiteLLM model and exposes project and catalog skills", async () => {
+  it.each(["cli", "serve"])("runs a LiteLLM model and exposes skills (%s)", async (transport) => {
+    process.env.VIBE_OPENCODE_TRANSPORT = transport;
+    requests.length = 0;
     class E2EEngine extends OpenCodeEngine {
       protected override buildCommandArgs(model: string, workdir: string, resume?: string) {
         const args = super.buildCommandArgs(model, workdir, resume);
         args[0] = BIN as string;
         return args;
+      }
+      protected override runServe(input: ServeTurnInput) {
+        return super.runServe({ ...input, binary: BIN as string });
       }
     }
     const events: AgentEvent[] = [];

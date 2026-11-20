@@ -1,7 +1,7 @@
 import type { AgentLog, TaskWithRun } from "@vibe-code/shared";
 
 export type ChatItem =
-  | { kind: "prompt"; id: string; text: string; timestamp: string }
+  | { kind: "prompt"; id: string; text: string; timestamp: string; runId?: string }
   | { kind: "assistant"; id: string; text: string; timestamp: string }
   | { kind: "error"; id: string; text: string; timestamp: string }
   | { kind: "system"; id: string; text: string; timestamp: string };
@@ -90,7 +90,13 @@ export function buildChatItems(
         break;
       }
       case "stdin": {
-        push({ kind: "prompt", id: `user-${counter++}`, text: content, timestamp: log.timestamp });
+        push({
+          kind: "prompt",
+          id: `user-${counter++}`,
+          text: content,
+          timestamp: log.timestamp,
+          runId: log.runId,
+        });
         break;
       }
       default: {
