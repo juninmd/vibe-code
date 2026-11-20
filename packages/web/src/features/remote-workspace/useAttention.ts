@@ -4,6 +4,7 @@ import {
   attentionChannel,
   attentionMessage,
   finishedSessions,
+  keepKnown,
   newlyAwaiting,
 } from "./attention";
 import type { Session, SessionStatus } from "./model";
@@ -83,6 +84,15 @@ export function useAttention(
     alert.current(newlyAwaiting(previousAwaiting.current, awaiting));
     previousAwaiting.current = new Set(awaiting);
   }, [awaitingKey]);
+
+  // Archived or deleted sessions must not keep the dot, the notice or the title counter.
+  useEffect(() => {
+    setUnseen((all) => keepKnown(all, sessions));
+    setNotices((all) => {
+      const kept = keepKnown(new Set(all.map((n) => n.sessionId)), sessions);
+      return kept.size === all.length ? all : all.filter((n) => kept.has(n.sessionId));
+    });
+  }, [sessions]);
 
   useEffect(() => {
     if (!viewingSessionId) return;
