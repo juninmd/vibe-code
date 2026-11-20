@@ -11,6 +11,7 @@ import { STATUS } from "./model";
 import { isSurface, SURFACES, type SurfacePage, SurfaceViews } from "./surfaces/SurfaceViews";
 import { useAttention } from "./useAttention";
 import { useRemoteWorkspace } from "./useRemoteWorkspace";
+import { useViewHeading } from "./useViewHeading";
 import {
   ChangesView,
   Composer,
@@ -260,6 +261,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
       run: () => openSession(session.id),
     })),
   ];
+  const mainRef = useRef<HTMLElement>(null);
+  useViewHeading(mainRef, view);
   const keymap = useRef(commands);
   keymap.current = commands;
   useEffect(() => {
@@ -606,7 +609,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           </button>
         </header>
         <div className="rw-work-area">
-          <main className="rw-main" aria-label="Área de desenvolvimento">
+          <main ref={mainRef} className="rw-main" aria-label="Área de desenvolvimento">
             {workspace.server && workspace.data.isError && (
               <div className="rw-alert" role="alert">
                 Não foi possível consultar o servidor. Verifique a conexão e a autenticação.{" "}

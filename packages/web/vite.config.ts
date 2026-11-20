@@ -76,6 +76,8 @@ export default defineConfig(({ mode }) => {
       pool: "forks",
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
+      // Process workspace.css so its readability guard test can read it via `?raw`.
+      css: { include: [/workspace\.css/] },
       globals: true,
       exclude: ["node_modules/**", "dist/**"],
       coverage: {
