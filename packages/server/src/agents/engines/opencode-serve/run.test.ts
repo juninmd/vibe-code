@@ -11,6 +11,8 @@ interface FakeOptions {
   events?: Array<Record<string, unknown>>;
   missingSession?: boolean;
   hang?: boolean;
+  /** The SSE connection drops mid-turn. */
+  dropStream?: boolean;
 }
 
 function fakeClient(options: FakeOptions) {
@@ -44,6 +46,7 @@ function fakeClient(options: FakeOptions) {
           stream: (async function* () {
             for (const event of options.events ?? []) yield event;
             // Like a live SSE stream: never ends on its own.
+            if (options.dropStream) throw new Error("socket closed");
             if (options.hang) await new Promise<void>(() => {});
           })(),
         };
@@ -169,14 +172,28 @@ describe("runServeTurn", () => {
   it("aborts the OpenCode session when the run is stopped", async () => {
     const fake = fakeClient({ hang: true });
     const controller = new AbortController();
-    const done = collect(runServeTurn(input(fake, { signal: controller.signal }).value));
+    const turn = input(fake, { signal: controller.signal });
+    const done = collect(runServeTurn(turn.value));
     await Bun.sleep(10);
     controller.abort();
     const events = await done;
     expect(fake.calls.abort).toEqual([{ sessionID: SID }]);
     // Passing the signal to the SDK leaks an unhandled AbortError that kills the server.
     expect(fake.calls.subscribeSignal).toEqual([undefined]);
+    // 130 means "stopped by the operator": no error is reported and the server is shut down.
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    expect(turn.isClosed()).toBe(true);
     expect(events.at(-1)).toEqual({ type: "complete", exitCode: 130 });
+  });
+
+  it("fails the turn, not as a stop, when the event stream drops", async () => {
+    const fake = fakeClient({ dropStream: true });
+    const turn = input(fake);
+    const events = await collect(runServeTurn(turn.value));
+    expect(events.some((e) => e.type === "error" && e.content === "socket closed")).toBe(true);
+    expect(fake.calls.abort).toEqual([]);
+    expect(turn.isClosed()).toBe(true);
+    expect(events.at(-1)).toEqual({ type: "complete", exitCode: 1 });
   });
 
   it("reports a server that cannot start", async () => {
