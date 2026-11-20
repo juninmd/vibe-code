@@ -16,6 +16,11 @@ export interface AgentRunnerSettings {
   /** Hard cap on a pod's life (activeDeadlineSeconds), in hours. */
   maxLifetimeHours: number;
   startTimeoutSeconds: number;
+  /**
+   * Give the agent in the pod the signed-in user's GitHub token (GH_TOKEN and a git auth
+   * header), so it can push and run `gh pr create` itself.
+   */
+  forwardGitHubToken: boolean;
   cpuRequest: string;
   cpuLimit: string;
   memoryRequest: string;

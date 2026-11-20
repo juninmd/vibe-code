@@ -26,8 +26,9 @@ describe("runner settings API", () => {
   it("defaults to local and persists a change for the next GET", async () => {
     const { hono, put } = app();
     expect((await (await hono.request("/r")).json()).data.settings.runner).toBe("local");
-    expect((await put({ idleMinutes: 30 })).status).toBe(200);
-    expect((await (await hono.request("/r")).json()).data.settings.idleMinutes).toBe(30);
+    expect((await put({ idleMinutes: 30, forwardGitHubToken: false })).status).toBe(200);
+    const saved = (await (await hono.request("/r")).json()).data.settings;
+    expect(saved).toMatchObject({ idleMinutes: 30, forwardGitHubToken: false });
   });
 
   it("refuses k8s outside a cluster or without image/PVC, and keeps the old value", async () => {
@@ -52,5 +53,6 @@ describe("runner settings API", () => {
     expect((await put({ memoryLimit: "4 gigs" })).status).toBe(400);
     expect((await put({ idleMinutes: 0 })).status).toBe(400);
     expect((await put({ nodeName: "x" })).status).toBe(400);
+    expect((await put({ forwardGitHubToken: "yes" })).status).toBe(400);
   });
 });

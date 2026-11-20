@@ -16,6 +16,7 @@ const config: K8sRunnerConfig = {
   cpuLimit: "2",
   memoryRequest: "512Mi",
   memoryLimit: "4Gi",
+  forwardGitHubToken: true,
 };
 const WORKDIR = "/data/workspaces/app/run-1";
 
@@ -54,6 +55,15 @@ describe("PodPool", () => {
     expect(secret.manifest.stringData.OPENCODE_API_KEY).toBe("k");
     expect(secret.owner?.kind).toBe("Pod");
     expect(dirs[0]).toStartWith("/data/runner/opencode/");
+  });
+
+  it("puts the user's GitHub token in the pod's Secret, never in the pod spec", async () => {
+    const { kube, start } = setup();
+    await start({ OPENCODE_API_KEY: "k", GH_TOKEN: "gho_user" });
+    const [secret] = [...kube.secrets.values()];
+    expect(secret.manifest.stringData.GH_TOKEN).toBe("gho_user");
+    const [pod] = [...kube.pods.values()];
+    expect(JSON.stringify(pod.manifest)).not.toContain("gho_user");
   });
 
   it("reuses the same pod for the next turn instead of starting another", async () => {
