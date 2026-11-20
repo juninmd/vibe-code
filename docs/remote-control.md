@@ -1,8 +1,8 @@
 # Harness Remote — code mode and the PWA
 
 > A entrada principal agora é o workspace unificado em `/`, com recursos e
-> configurações inline. `/prototype` é um alias e `/legacy` mantém as superfícies
-> avançadas descritas abaixo. Consulte [o guia atual](unified-remote-prototype.md)
+> configurações inline. `/prototype` é um alias. O painel `/legacy` foi removido;
+> as seções abaixo sobre o modo Code antigo são histórico. Consulte [o guia atual](unified-remote-prototype.md)
 > para conversa, plugins, effort e terminal na experiência unificada.
 
 Harness Remote is the remote-control surface for the harness: an installable

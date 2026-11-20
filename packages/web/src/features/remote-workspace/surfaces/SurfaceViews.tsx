@@ -9,7 +9,7 @@ const OfficeView = lazy(() => import("./OfficeView").then((m) => ({ default: m.O
 
 export type SurfacePage = "board" | "terminals" | "office";
 
-/** Operator surfaces ported from the legacy panel (board, terminals, 3D office). */
+/** Operator surfaces: board, terminals and the 3D office. */
 export const SURFACES: { page: SurfacePage; label: string; icon: "board" | "terminal" | "cube" }[] =
   [
     { page: "board", label: "Quadro", icon: "board" },

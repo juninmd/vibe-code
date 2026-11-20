@@ -1,4 +1,4 @@
-/* Surfaces ported from the legacy panel, on the workspace tokens (light theme follows). */
+/* Operator surfaces on the workspace tokens (light theme follows). */
 .rw-group-by, .rw-office-chip { display: inline-flex; align-items: center; gap: 7px; color: var(--rw-muted); font-size: 10px; }
 .rw-group-by select, .rw-board-card select, .rw-office-chip select { background: var(--rw-field); color: var(--rw-text); border: 1px solid var(--rw-border); border-radius: 5px; padding: 4px 6px; font-size: 10px; }
 .rw-group-heading { display: flex; align-items: center; gap: 8px; margin: 0; padding: 18px 4px 8px; color: var(--rw-muted); font-size: 10px; font-weight: 500; letter-spacing: .6px; text-transform: uppercase; border-bottom: 1px solid var(--rw-border); }

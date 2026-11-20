@@ -498,10 +498,6 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
             <Icon name="settings" />
             Configurações
           </button>
-          <a className="rw-nav-item" href="/legacy">
-            <Icon name="external" />
-            Painel avançado
-          </a>
           {onLogout && (
             <button type="button" className="rw-nav-item" onClick={onLogout}>
               <Icon name="external" />

@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Removed
+- **Legacy panel (`/legacy`)**: the old control plane and everything only it used (96 web modules, their unit tests, the board/code-mode/first-run e2e specs, `@dnd-kit/*`, `@tanstack/react-virtual`, `ansi-to-html`, `diff2html` and the web-level `zustand`). `/legacy` now opens the workspace. The terminal and lanes e2e specs drive the workspace instead.
+
 ### Added
 - **Board, terminals and 3D office in the workspace**: the sidebar gains Quadro (lanes by status; drag a card or use "Mover para", and moving to Em execução launches the agent), Terminais (live harnesses with a screen preview, plus CLI sessions found on disk that open as a resuming terminal) and Escritório 3D (lazy-loaded). "Todas as sessões" groups by project, status or engine.
 - **One Kubernetes pod per task**, chosen in Settings → Execução (no restart): OpenCode turns run in a short-lived `opencode serve` pod that mounts only the task's worktree, reuses it across turns and is deleted after the configured minutes (15 by default) without a turn; the next turn resumes the same session in a fresh pod. Commit, push and the PR stay on the server, so the GitHub token never reaches the pod. "Dentro do servidor" (default) keeps agents inside the server pod. Image, PVCs, pull secret, idle time, lifetime and CPU/memory are edited there too (`GET/PUT /api/settings/runner`); `VIBE_K8S_*` env vars only seed the defaults. The k3s manifest adds the ServiceAccount, a namespace-scoped Role and a NetworkPolicy. See `docs/k8s-runner.md`.

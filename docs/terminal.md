@@ -1,8 +1,9 @@
 # Task terminal
 
-Each kanban card can run an interactive agent harness (Claude Code, OpenCode) or a plain
-shell inside a real terminal that lives in the task panel. Server: `packages/server/src/terminal/`.
-Web: `TaskPanel`, `TaskTerminal`, `SkillPicker`.
+Each session can run an interactive agent harness (Claude Code, OpenCode) or a plain
+shell inside a real terminal (the session's Terminal tab; the Terminais surface lists them all).
+Server: `packages/server/src/terminal/`. Web: `features/remote-workspace/HarnessTerminal.tsx`,
+`surfaces/TerminalsView.tsx`, `components/TaskTerminal.tsx`.
 
 ## Flow
 

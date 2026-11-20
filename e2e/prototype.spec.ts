@@ -112,13 +112,12 @@ test.describe("Unified remote prototype", () => {
     expect(mutations).toEqual([]);
   });
 
-  test("opens the real workspace at root and preserves the advanced surface at /legacy", async ({ page }) => {
+  test("opens the workspace at root and on the retired /legacy path", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".rw-root")).toBeVisible();
     await expect(page.getByRole("button", { name: "Servidor conectado", exact: true })).toBeVisible();
     await page.goto("/legacy");
-    await expect(page.getByRole("tab", { name: "Code", exact: true })).toBeVisible();
-    await expect(page.locator(".rw-root")).toHaveCount(0);
+    await expect(page.locator(".rw-root")).toBeVisible();
   });
 
   test("configures GitHub inline without persisting credentials in the browser", async ({ page }) => {

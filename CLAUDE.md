@@ -69,11 +69,11 @@ Repository contract entrypoints:
 
 ### Web internals (`packages/web/src/`)
 
-- **`features/remote-workspace/`** — default authenticated workspace at `/` (alias `/prototype`): inline skills/plugins/settings, real conversational tasks and current harness terminals, without board/questionnaire. `/legacy` retains the advanced control plane. Preview with `./scripts/preview-unified.ps1`; see `docs/unified-remote-prototype.md`.
+- **`features/remote-workspace/`** — default authenticated workspace at `/` (alias `/prototype`): inline skills/plugins/settings, real conversational tasks, harness terminals, and the Quadro/Terminais/Escritório 3D surfaces (`surfaces/`). The old `/legacy` panel was removed. Preview with `./scripts/preview-unified.ps1`; see `docs/unified-remote-prototype.md`.
 
 - **`api/client.ts`** — typed fetch wrapper over the REST API
-- **`hooks/`** — `useTasks`, `useRepos`, `useEngines`, `useSessions`, `useWebSocket` (with reconnect logic)
-- **`components/`** — `TaskPanel` (terminal-first task view with `TaskTerminal` xterm + `SkillPicker`), `SessionBoard` (CLI sessions as kanban cards, shortcut `S`), `Board` (one operational view of the pipeline), `TaskDetail` (task cockpit with live logs and stdin input), `Sidebar` (repo selector and control surfaces)
+- **`hooks/`** — `useSessions`, `useTerminals`, `useExternalTerminal`, `useTerminalSocket`, `useWebSocket` (with reconnect logic)
+- **`components/`** — shared pieces still used by the workspace: `TaskTerminal` (xterm), `office3d/` (three.js scene), `ErrorBoundary`
 
 ### Session board data flow
 
@@ -82,7 +82,7 @@ GET /api/sessions
   → SessionService scans each CLI's own storage dir (never spawns anything)
   → readers parse transcripts and drop everything a card does not show
   → status derived per session: explicit CLI state, else activity window
-  → SessionBoard groups the cards into active / idle / done / failed
+  → the Terminais and Escritório 3D surfaces show the open (active / idle) cards
 ```
 
 ### Data flow
