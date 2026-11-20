@@ -72,10 +72,9 @@ export async function* runServeTurn(input: ServeTurnInput): AsyncGenerator<Agent
     yield { type: "session", sessionId: sessionID };
     yield { type: "log", stream: "system", content: `[opencode] serve session ${sessionID}` };
 
-    const subscription = await client.event.subscribe(undefined, {
-      signal: events.signal,
-      sseMaxRetryAttempts: 3,
-    });
+    // No `signal`: the SDK cancels its reader without awaiting it on abort, and the
+    // rejected promise is unhandled, which takes the whole server down.
+    const subscription = await client.event.subscribe(undefined, { sseMaxRetryAttempts: 1 });
     const sent = await client.session.promptAsync({
       sessionID,
       ...promptModel(input.model),
@@ -84,7 +83,7 @@ export async function* runServeTurn(input: ServeTurnInput): AsyncGenerator<Agent
     if (sent.error) throw new Error(`OpenCode rejected the prompt: ${JSON.stringify(sent.error)}`);
 
     const mapper = new ServeEventMapper(sessionID);
-    stream: for await (const raw of subscription.stream) {
+    stream: for await (const raw of untilAborted(subscription.stream, events.signal)) {
       for (const mapped of mapper.map(raw as ServeEvent)) {
         const outcome = yield* handle(mapped, input, client, decide);
         if (outcome === "idle") break stream;
@@ -108,6 +107,28 @@ export async function* runServeTurn(input: ServeTurnInput): AsyncGenerator<Agent
     server?.close();
   }
   yield { type: "complete", exitCode };
+}
+
+/** Stops iterating on abort without touching the SDK's own abort path. */
+export async function* untilAborted<T>(
+  stream: AsyncGenerator<T>,
+  signal: AbortSignal
+): AsyncGenerator<T> {
+  const aborted = new Promise<"aborted">((resolve) => {
+    if (signal.aborted) resolve("aborted");
+    signal.addEventListener("abort", () => resolve("aborted"), { once: true });
+  });
+  try {
+    for (;;) {
+      const next = stream.next();
+      next.catch(() => {});
+      const result = await Promise.race([next, aborted]);
+      if (result === "aborted" || result.done) return;
+      yield result.value;
+    }
+  } finally {
+    stream.return(undefined).catch(() => {});
+  }
 }
 
 async function* handle(
