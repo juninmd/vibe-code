@@ -11,6 +11,7 @@ import { AgentTemplateRegistry } from "./agents/agent-templates";
 import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
+import { agentRunner, createK8sPodPool } from "./agents/runners/k8s";
 import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createAutomationRouter } from "./api/automation";
@@ -98,7 +99,9 @@ const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
 const hub = new BroadcastHub(db);
-const registry = new EngineRegistry();
+// VIBE_AGENT_RUNNER=k8s: OpenCode turns run in one pod per task, deleted after inactivity.
+const podPool = agentRunner() === "k8s" ? createK8sPodPool(DATA_DIR) : undefined;
+const registry = new EngineRegistry({ opencodeServeStart: podPool?.start });
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
 const orchestrator = new Orchestrator(
@@ -185,6 +188,14 @@ try {
   );
 } catch (err) {
   console.warn("[startup] Failed to cleanup stale workspaces:", err);
+}
+
+if (podPool) {
+  podPool
+    .cleanupOrphans()
+    .then((n) => console.log(`[startup] k8s runner: deleted ${n} leftover runner pods`))
+    .catch((err) => console.warn("[startup] k8s runner orphan cleanup failed:", err));
+  podPool.startReaper();
 }
 
 orchestrator.recoverInProgressTasks().catch((err) => {

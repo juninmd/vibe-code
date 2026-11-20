@@ -14,6 +14,7 @@ import { KimiEngine } from "./engines/kimi";
 import { KiroCliEngine } from "./engines/kiro-cli";
 import { OpenClawEngine } from "./engines/openclaw";
 import { OpenCodeEngine } from "./engines/opencode";
+import type { ServeStarter } from "./engines/opencode-serve/process";
 import { PiEngine } from "./engines/pi";
 
 export class EngineRegistry {
@@ -21,13 +22,13 @@ export class EngineRegistry {
   private versionCache: Map<string, string | null> = new Map();
   private versionFetchInFlight: Map<string, Promise<string | null>> = new Map();
 
-  constructor(options: { seedDefaults?: boolean } = {}) {
+  constructor(options: { seedDefaults?: boolean; opencodeServeStart?: ServeStarter } = {}) {
     // Tests create isolated registries and register their own mocks; production
     // keeps the default set of engines.
     if (options.seedDefaults === false) return;
     this.register(new ClaudeCodeEngine());
     this.register(new AiderEngine());
-    this.register(new OpenCodeEngine());
+    this.register(new OpenCodeEngine(undefined, options.opencodeServeStart));
     this.register(new GeminiEngine());
     this.register(new CopilotEngine());
     this.register(new CodexEngine());

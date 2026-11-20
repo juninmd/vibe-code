@@ -34,6 +34,63 @@ spec:
     requests:
       storage: 1Gi
 ---
+# Agent runner (VIBE_AGENT_RUNNER=k8s): the server creates one pod per task
+# and deletes it after VIBE_K8S_IDLE_MS of inactivity. Least privilege: pods
+# and their per-pod env Secret in this namespace only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: harness-remote-agent-runner
+  namespace: harness-remote
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: harness-remote-agent-runner
+  namespace: harness-remote
+subjects:
+  - kind: ServiceAccount
+    name: harness-remote
+    namespace: harness-remote
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: harness-remote-agent-runner
+---
+# Only the server may reach a runner's `opencode serve` (it is password
+# protected too). Egress stays open: the agent calls its model provider.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-runner-ingress
+  namespace: harness-remote
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agent-runner
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: harness-remote
+      ports:
+        - protocol: TCP
+          port: 4096
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,6 +113,7 @@ spec:
       labels:
         app: harness-remote
     spec:
+      serviceAccountName: harness-remote
       securityContext:
         runAsUser: 10001
         runAsGroup: 10001
@@ -122,6 +180,25 @@ spec:
               value: https://vibe.antonio-code.duckdns.org
             - name: VIBE_CODE_SESSION_NAME_PREFIX
               value: harness
+            # local = agents run inside this pod; k8s = one pod per task,
+            # deleted after VIBE_K8S_IDLE_MS without a turn (docs/k8s-runner.md).
+            - name: VIBE_AGENT_RUNNER
+              value: local
+            - name: VIBE_K8S_RUNNER_IMAGE
+              value: ghcr.io/juninmd/vibe-code:latest
+            - name: VIBE_K8S_IMAGE_PULL_SECRET
+              value: ghcr-pull-secret
+            - name: VIBE_K8S_PVC
+              value: harness-remote-data
+            - name: VIBE_K8S_SKILLS_PVC
+              value: harness-remote-skills
+            - name: VIBE_K8S_IDLE_MS
+              value: "900000"
+            # ReadWriteOnce PVCs: runner pods must land on the server's node.
+            - name: VIBE_K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           envFrom:
             - secretRef:
                 name: harness-remote-secret
