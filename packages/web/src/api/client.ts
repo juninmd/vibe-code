@@ -1,6 +1,8 @@
 import type {
   AgentLog,
   AgentRun,
+  AgentRunnerSettings,
+  AgentRunnerStatus,
   AgentTemplate,
   ApprovalReply,
   AuthStatus,
@@ -496,6 +498,14 @@ export const api = {
       request<TestConnectionResult>(`/settings/test/${provider}`, { method: "POST" }),
     litellmHealth: () =>
       request<{ ok: boolean; baseUrl: string; models?: string[] }>("/settings/litellm/health"),
+    runner: {
+      get: () => request<AgentRunnerStatus>("/settings/runner"),
+      update: (data: Partial<AgentRunnerSettings>) =>
+        request<AgentRunnerStatus>("/settings/runner", {
+          method: "PUT",
+          body: JSON.stringify(data),
+        }),
+    },
   },
 
   lanes: {

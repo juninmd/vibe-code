@@ -11,6 +11,8 @@ import { AgentTemplateRegistry } from "./agents/agent-templates";
 import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
+import { AgentRunner } from "./agents/runners/k8s";
+import { readRunnerSettings } from "./agents/runners/k8s/config";
 import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createAutomationRouter } from "./api/automation";
@@ -22,6 +24,7 @@ import { createLanesRouter } from "./api/lanes";
 import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createReviewsRouter } from "./api/reviews";
+import { createRunnerSettingsRouter } from "./api/runner-settings";
 import { createRunsRouter } from "./api/runs";
 import { createRuntimesRouter } from "./api/runtimes";
 import { createSessionsRouter } from "./api/sessions";
@@ -98,7 +101,12 @@ const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
 git.providers = providerRegistry;
 const hub = new BroadcastHub(db);
-const registry = new EngineRegistry();
+// Settings → Execução: OpenCode turns run here or in one pod per task, deleted after inactivity.
+const agentRunner = new AgentRunner({
+  settings: () => readRunnerSettings(db.settings),
+  dataDir: DATA_DIR,
+});
+const registry = new EngineRegistry({ opencodeServeStart: agentRunner.start });
 // Restore max_agents from DB (overrides env var if previously set via UI)
 const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
 const orchestrator = new Orchestrator(
@@ -186,6 +194,8 @@ try {
 } catch (err) {
   console.warn("[startup] Failed to cleanup stale workspaces:", err);
 }
+
+agentRunner.startBackground();
 
 orchestrator.recoverInProgressTasks().catch((err) => {
   console.warn("[startup] recoverInProgressTasks failed:", err);
@@ -296,6 +306,10 @@ api.route("/lanes", createLanesRouter(laneSync));
 api.route("/runs", createRunsRouter(db));
 api.route("/engines", createEnginesRouter(registry, orchestrator));
 api.route("/workspaces", createWorkspacesRouter(db));
+api.route(
+  "/settings/runner",
+  createRunnerSettingsRouter(db.settings, () => agentRunner.clusterStatus())
+);
 api.route("/settings", createSettingsRouter(db, providerRegistry, skillsLoader, orchestrator));
 api.route("/skills", createSkillsRouter(skillsLoader, skillRegistry, db));
 api.route("/terminal", createTerminalRouter(db, terminalController));

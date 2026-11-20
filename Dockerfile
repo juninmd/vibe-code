@@ -60,7 +60,8 @@ RUN mkdir -p /home/vibe/.config/opencode \
       > /home/vibe/.config/opencode/opencode.json
 
 # Mount points expected by the operator
-RUN mkdir -p /data /home/vibe/.agents \
+# .local/{share,state}: runner pods mount OpenCode sessions below them; must stay user-owned.
+RUN mkdir -p /data /home/vibe/.agents /home/vibe/.local/share /home/vibe/.local/state \
  && chown -R vibe:vibe /data /home/vibe
 
 ENV HOME=/home/vibe \

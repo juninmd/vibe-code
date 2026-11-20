@@ -56,6 +56,7 @@ Repository contract entrypoints:
 - **`agents/engine.ts`** — `AgentEngine` interface all engines implement (returns `AsyncGenerator<AgentEvent>`)
 - **`agents/registry.ts`** — discovers and registers available engines at startup
 - **`agents/orchestrator.ts`** — manages concurrent runs (default max 4), git worktree creation, task lifecycle, and broadcasts WS events
+- **`agents/runners/k8s/`** — `PodPool` (pod per task, idle reaper), minimal in-cluster API client, pod/Secret manifests
 - **`agents/engines/`** — one file per engine; each spawns the CLI tool via `Bun.spawn` and streams output
 - **`terminal/`** — interactive task terminals: `session-service.ts` (Bun PTY + headless screen snapshot), `harness.ts` (Claude Code / OpenCode launch + skill injection), `controller.ts` (worktree, run/task lifecycle); routes in `api/terminal.ts` (see `docs/terminal.md`)
   - `skill-plan.ts` picks skills from the task text (auto/manual plan with reasons); `harness.ts` turns the plan into a Claude Code plugin (`--plugin-dir`) or OpenCode project skills
@@ -102,6 +103,7 @@ POST /api/tasks/{id}/launch
 | `VIBE_CODE_DATA_DIR` | `~/.vibe-code` |
 | `VIBE_CODE_MAX_AGENTS` | `4` |
 | `VIBE_OPENCODE_TRANSPORT` | `serve` (`cli` = legacy `opencode run`, the rollback switch) |
+| `VIBE_AGENT_RUNNER` | `local` — default only; Settings → Execução decides (`k8s` = one pod per task, see `docs/k8s-runner.md`) |
 | `VIBE_OPENCODE_SESSIONS_DIR` | `$XDG_DATA_HOME/opencode`, `~/.local/share/opencode` |
 | `VIBE_CLAUDE_SESSIONS_DIR` | `~/.claude/projects` |
 | `VIBE_ANTIGRAVITY_SESSIONS_DIR` | `~/.antigravity/sessions`, `~/.antigravity/cli/sessions`, `~/.config/antigravity/sessions` |

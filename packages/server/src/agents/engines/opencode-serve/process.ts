@@ -18,6 +18,9 @@ export interface StartServeOptions {
   spawn?: (args: string[], cwd: string, env: Record<string, string | undefined>) => Subprocess;
 }
 
+/** Starts the server a turn talks to: a local process, or a runner pod. */
+export type ServeStarter = (options: StartServeOptions) => Promise<ServeHandle>;
+
 const LISTENING = /listening on (https?:\/\/\S+)/;
 
 /** Asks the OS for a free port; `opencode serve --port 0` falls back to 4096 instead. */

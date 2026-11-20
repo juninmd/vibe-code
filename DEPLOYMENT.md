@@ -33,7 +33,7 @@ kubectl -n harness-remote rollout restart deployment/harness-remote
 Key points:
 
 - **One replica, `Recreate` strategy** — SQLite lives on the `harness-remote-data`
-  PVC and must never be shared by two pods.
+  PVC and must never be shared by two servers (runner pods mount only task paths).
 - **`VIBE_CODE_API_KEY`** protects the public ingress. Operators paste the key on
   the login screen; the SPA sends it as `Authorization: Bearer` and the socket as
   `?api_key=`. Without it (and without GitHub OAuth) the API is public.
@@ -41,6 +41,9 @@ Key points:
   reached`) and the CLI then retries silently. Add `LITELLM_BASE_URL` +
   `LITELLM_API_KEY` (in-cluster gateway: `http://litellm.ai.svc.cluster.local:4000`)
   or `OPENCODE_API_KEY` to `harness-remote-secret` and restart the deployment.
+- **Agent runner**: Settings → Execução picks "Dentro do servidor" (default) or
+  "Um pod por tarefa", deleted after the configured minutes without a turn. It
+  applies on the next turn, no restart. See `docs/k8s-runner.md`.
 - **Skills** are refreshed into `harness-remote-skills` by the `skills-bootstrap`
   init container from `SKILLS_REPO_URL`.
 - **Environment**: `VIBE_CODE_MAX_AGENTS=1` (memory-bound), `VIBE_CODE_INACTIVITY_MS=1200000`

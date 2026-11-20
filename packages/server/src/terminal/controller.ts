@@ -18,6 +18,7 @@ import { openCodeProviderLaunch } from "../agents/opencode-providers";
 import type { EngineRegistry } from "../agents/registry";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
+import { agentGitHubEnv, resolveGitHubToken } from "../git/github-credentials";
 import type { SkillsLoader } from "../skills/loader";
 import type { BroadcastHub } from "../ws/broadcast";
 import {
@@ -488,6 +489,7 @@ export class TerminalController {
       VIBE_CODE_RUN_ID: runId,
       VIBE_CODE_REPO_ID: task.repoId,
       VIBE_CODE_PARENT_TASK_ID: task.id,
+      ...agentGitHubEnv(resolveGitHubToken(this.deps.db)),
     };
   }
 

@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
+import { RunnerSettings } from "./RunnerSettings";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
 type Workspace = ReturnType<typeof useRemoteWorkspace>;
@@ -894,6 +895,7 @@ function SettingsPage({
           ["projects", "Projetos"],
           ["github", "Acesso ao GitHub"],
           ["harness", "Harnesses e modelos"],
+          ["runner", "Execução"],
           ["providers", "Provedores"],
           ["mcp", "MCP"],
         ].map(([id, label]) => (
@@ -1168,6 +1170,7 @@ function SettingsPage({
           </section>
         </>
       )}
+      {section === "runner" && <RunnerSettings />}
       {section === "providers" && (
         <>
           <section className="rw-settings-card">

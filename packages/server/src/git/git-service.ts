@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { gitHubGitConfigEnv } from "./github-credentials";
 import type { ProviderRegistry } from "./providers/registry";
 
 export class GitService {
@@ -52,6 +53,12 @@ export class GitService {
       [`GIT_CONFIG_KEY_${existing}`]: "safe.directory",
       [`GIT_CONFIG_VALUE_${existing}`]: "*",
     };
+  }
+
+  /** gitEnv plus the signed-in user's GitHub token, so clone/fetch/push reach private repos. */
+  private authedGitEnv(): Record<string, string | undefined> {
+    const env = GitService.gitEnv();
+    return { ...env, ...gitHubGitConfigEnv(this._providers?.getToken("github"), env) };
   }
 
   set providers(registry: ProviderRegistry) {
@@ -640,7 +647,7 @@ export class GitService {
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const proc = Bun.spawn(cmd, {
       cwd: options?.cwd,
-      env: GitService.gitEnv(),
+      env: this.authedGitEnv(),
       stdout: "pipe",
       stderr: "pipe",
     });

@@ -102,3 +102,20 @@ describe("refused tool calls", () => {
     );
   });
 });
+
+describe("OpenCode serve placement", () => {
+  it("hands the turn the configured starter, e.g. the k8s pod pool", async () => {
+    const start = async () => {
+      throw new Error("unused");
+    };
+    const engine = new CapturingEngine(60_000, start);
+    await run(engine, false);
+    expect(engine.inputs[0].start).toBe(start);
+  });
+
+  it("keeps the local loopback server when no starter is configured", async () => {
+    const engine = new CapturingEngine(60_000);
+    await run(engine, false);
+    expect(engine.inputs[0].start).toBeUndefined();
+  });
+});
