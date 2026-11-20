@@ -20,8 +20,7 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 
 ## Fora do escopo por ora
 
-- Modos de permissão e cards de aprovação: exigem o Agent SDK do Claude ou `opencode serve`
-  com SDK. Hoje o OpenCode roda com `opencode run`, sem canal de aprovação.
+- ~~Modos de permissão e cards de aprovação~~: feito sobre `opencode serve` (modo "Pedir aprovação")
 - Troca de provider no meio da conversa com handoff de contexto (T3 Code orchestration-v2).
 - Checkpoints por turno e rewind; agentes como servidor MCP (Paseo); voz; apps nativos.
 - Login por pareamento (T3 Code): o vibe-code mantém GitHub OAuth ou chave de API.

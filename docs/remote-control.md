@@ -106,6 +106,15 @@ the work log and costs read the same. A retry that needs the operator (for examp
 an exhausted free tier) ends the turn with that message instead of retrying forever.
 Set `VIBE_OPENCODE_TRANSPORT=cli` to roll back to `opencode run`.
 
+**Approval mode.** A session tagged `supervised` (the "Pedir aprovação" option
+next to the model) runs with OpenCode permissions `edit`, `bash`, `webfetch` and
+`external_directory` set to `ask`. Each request is held by the orchestrator's
+`ApprovalBroker`, logged as `[approval] …`, broadcast as
+`tool_approval_requested`, listed by `GET /api/tasks/:id/approvals` and answered
+with `POST /api/tasks/:id/approvals/:approvalId` (`once`, `always`, `reject`).
+A stopped turn rejects what it was waiting on. The `cli` transport cannot ask and
+says so in the log.
+
 OpenCode `run` (the `cli` transport) uses its native executable on Windows, the worktree as process
 `cwd`, JSON output, and `--session` on continuation. No `--dir` flag is sent
 (OpenCode 2.0.30 rejects it). Both `sessionID` and `sessionId` event fields are
