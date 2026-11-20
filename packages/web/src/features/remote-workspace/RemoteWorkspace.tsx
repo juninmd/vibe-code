@@ -7,6 +7,7 @@ import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
 import { STATUS } from "./model";
+import { useAttention } from "./useAttention";
 import { useRemoteWorkspace } from "./useRemoteWorkspace";
 import {
   ChangesView,
@@ -124,6 +125,11 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
     setMobileContext(false);
     setDialog(null);
   };
+  const attention = useAttention(
+    workspace.sessions,
+    view === "session" ? (selected?.id ?? null) : null,
+    openSession
+  );
   const commands: Command[] = [
     {
       id: "new",
@@ -189,6 +195,20 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
       title,
       run: () => openManagement(page),
     })),
+    ...(attention.permission === "default"
+      ? [
+          {
+            id: "notifications",
+            section: "Ações" as const,
+            title: "Avisar quando uma sessão terminar",
+            keywords: "notificações",
+            run: () => {
+              void attention.enableSystem();
+              setDialog(null);
+            },
+          },
+        ]
+      : []),
     {
       id: "shortcuts",
       section: "Navegação",
@@ -379,6 +399,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     >
                       <span className={`rw-status-dot ${session.status}`} />
                       <span title={session.title}>{session.title}</span>
+                      {attention.unseen.has(session.id) && (
+                        <span className="rw-unseen" role="img" aria-label="Novidade não vista" />
+                      )}
                       {session.status === "review" && <Icon name="code" size={12} />}
                     </button>
                   ))}
@@ -897,6 +920,31 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           </div>
         </Modal>
       )}
+      <section className="rw-notices" aria-live="polite" aria-label="Avisos de sessões">
+        {attention.notices.map((notice) => (
+          <div key={notice.sessionId} className="rw-notice">
+            <div>
+              <strong>{notice.title}</strong>
+              <span>{notice.text}</span>
+            </div>
+            <button
+              type="button"
+              className="rw-button"
+              onClick={() => openSession(notice.sessionId)}
+            >
+              Abrir
+            </button>
+            <button
+              type="button"
+              className="rw-icon-button"
+              aria-label="Dispensar aviso"
+              onClick={() => attention.dismiss(notice.sessionId)}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        ))}
+      </section>
       {dialog === "commands" && (
         <Modal
           title="Ir para…"

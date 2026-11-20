@@ -14,6 +14,8 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 | Work log: chamadas de ferramenta agrupadas fora do texto, "ir para o fim" | T3 Code `WorkLog`, `useTimelineFollow` | `features/remote-workspace/workLog.ts` |
 | Paleta de comandos com registro, ↑↓/Enter e atalhos globais (`?` lista) | T3 Code `keybindings.ts`, Paseo Command Center | `features/remote-workspace/commands.ts` |
 | Prompts anteriores com ↑/↓ e rascunho por sessão que sobrevive ao reload | Paseo `composer/recall.ts`, `composer/draft/` | `features/remote-workspace/composerHistory.ts` |
+| Aviso ciente de presença quando a sessão termina, ponto de não visto e contador no título | Paseo `agent-attention-policy.ts` | `features/remote-workspace/attention.ts` |
+| Botão de publicar derivado do estado (turno, diff, PR existente) | T3 Code `GitActionsControl.logic.ts` | `features/remote-workspace/gitActions.ts` |
 
 ## Fora do escopo por ora
 

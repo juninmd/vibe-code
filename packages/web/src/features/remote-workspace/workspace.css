@@ -293,6 +293,13 @@
 .rw-shortcut-list > div { display: flex; align-items: center; justify-content: space-between; padding: 9px 4px; border-bottom: 1px solid var(--rw-border); font-size: 11px; color: var(--rw-secondary); }
 .rw-shortcut-list > div:last-child { border-bottom: 0; }
 .rw-shortcut-list dd { margin: 0; }
+.rw-unseen { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--rw-accent); }
+.rw-notices { position: fixed; right: 16px; bottom: 16px; z-index: 30; display: grid; gap: 8px; width: min(360px, calc(100vw - 32px)); pointer-events: none; }
+.rw-notice { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--rw-border); border-radius: 9px; background: var(--rw-raised); box-shadow: 0 10px 30px rgb(0 0 0 / 0.4); pointer-events: auto; }
+.rw-notice > div { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.rw-notice strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 550; }
+.rw-notice span { color: var(--rw-secondary); font-size: 10px; }
+@media (max-width: 640px) { .rw-notices { right: 16px; left: 16px; bottom: 12px; width: auto; } }
 .rw-settings-section { padding: 0 0 18px; margin: 0 0 18px; border-bottom: 1px solid var(--rw-border); }
 .rw-settings-section h3 { margin-bottom: 13px; font-size: 11px; font-weight: 550; }
 .rw-source-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px; margin-top: 8px; border: 1px solid var(--rw-border); border-radius: 7px; text-align: left; }
@@ -497,3 +504,4 @@
   .rw-terminal-heading > div { flex-basis: 100%; }
 }
 .rw-project-default { display: block; margin-top: 2px; color: var(--rw-muted); font-size: 11px; }
+.rw-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
