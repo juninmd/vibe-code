@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { HARNESS_ENGINES, type HarnessEngine, type WsServerMessage } from "@vibe-code/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { HARNESS_ENGINES, type HarnessEngine } from "@vibe-code/shared";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { TaskTerminal, type TaskTerminalHandle } from "../../components/TaskTerminal";
-import { publishTerminalEvent } from "../../hooks/terminalBus";
-import { useWebSocket } from "../../hooks/useWebSocket";
+import { useTerminalSocket } from "../../hooks/useTerminalSocket";
 import { ErrorNotice } from "./ManagementViews";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
@@ -54,33 +53,7 @@ export function HarnessTerminal({
   });
   const selectedModel = models.data?.find((entry) => entry.id === model);
   const selectedEffort = selectedModel?.efforts.includes(effort) ? effort : "";
-  const onMessage = useCallback((message: WsServerMessage) => {
-    if (message.type === "terminal_opened")
-      publishTerminalEvent(message.taskId, {
-        kind: "opened",
-        runId: message.runId,
-        cols: message.cols,
-        rows: message.rows,
-      });
-    if (message.type === "terminal_output")
-      publishTerminalEvent(message.taskId, {
-        kind: "output",
-        chunk: message.chunk,
-        replay: message.replay === true,
-      });
-    if (message.type === "terminal_closed")
-      publishTerminalEvent(message.taskId, {
-        kind: "closed",
-        exitCode: message.exitCode,
-        reason: message.reason ?? "exit",
-      });
-  }, []);
-  const socket = useWebSocket(onMessage);
-  useEffect(() => {
-    if (!taskId) return;
-    socket.subscribe(taskId);
-    return () => socket.unsubscribe(taskId);
-  }, [taskId, socket.subscribe, socket.unsubscribe]);
+  const socket = useTerminalSocket(taskId);
   const live = state.data?.live ?? false;
   const anotherRun = !live && session?.status === "working";
   const start = async () => {

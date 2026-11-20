@@ -8,6 +8,7 @@ import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
 import { STATUS } from "./model";
+import { isSurface, SURFACES, type SurfacePage, SurfaceViews } from "./surfaces/SurfaceViews";
 import { useAttention } from "./useAttention";
 import { useRemoteWorkspace } from "./useRemoteWorkspace";
 import {
@@ -70,7 +71,9 @@ function Modal({
 
 export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void }) {
   const workspace = useRemoteWorkspace();
-  const [view, setView] = useState<"session" | "overview" | "activity" | ManagementPage>("session");
+  const [view, setView] = useState<
+    "session" | "overview" | "activity" | ManagementPage | SurfacePage
+  >("session");
   const [tab, setTab] = useState<Tab>("conversation");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState("");
@@ -120,6 +123,15 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
     setMobileContext(false);
   };
   const management = ["skills", "plugins", "agents", "settings"].includes(view);
+  const surface = isSurface(view);
+  // Management pages and surfaces use the full width: no session context beside them.
+  const fullWidth = management || surface;
+  const openSurface = (page: SurfacePage) => {
+    setView(page);
+    setMobileNav(false);
+    setMobileContext(false);
+    setDialog(null);
+  };
   const openManagement = (page: ManagementPage) => {
     setView(page);
     setMobileNav(false);
@@ -197,6 +209,12 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
         setDialog(null);
       },
     },
+    ...SURFACES.map(({ page, label }) => ({
+      id: `surface-${page}`,
+      section: "Navegação" as const,
+      title: label,
+      run: () => openSurface(page),
+    })),
     ...(
       [
         ["skills", "Skills"],
@@ -349,6 +367,17 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
             <span className="rw-nav-count">{active.length + reviews.length}</span>
           )}
         </button>
+        {SURFACES.map(({ page, label, icon }) => (
+          <button
+            type="button"
+            key={page}
+            className={`rw-nav-item ${view === page ? "selected" : ""}`}
+            onClick={() => openSurface(page)}
+          >
+            <Icon name={icon} />
+            {label}
+          </button>
+        ))}
         <label className="rw-search rw-sidebar-search">
           <Icon name="search" size={14} />
           <input
@@ -517,11 +546,13 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     agents: "Agentes",
                     settings: "Configurações",
                   }[view as ManagementPage]
-                : view === "overview"
-                  ? "Todas as sessões"
-                  : view === "activity"
-                    ? "Atividade"
-                    : (selected?.title ?? "Nova sessão")}
+                : surface
+                  ? SURFACES.find((s) => s.page === view)?.label
+                  : view === "overview"
+                    ? "Todas as sessões"
+                    : view === "activity"
+                      ? "Atividade"
+                      : (selected?.title ?? "Nova sessão")}
             </span>
           </div>
           <button
@@ -600,6 +631,16 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                   workspace.changeSource(source);
                   setView(source === "server" ? "overview" : "session");
                   setTab("conversation");
+                }}
+              />
+            ) : surface ? (
+              <SurfaceViews
+                page={view}
+                workspace={workspace}
+                onOpen={openSession}
+                onOpenTerminal={(id) => {
+                  openSession(id);
+                  setTab("terminal");
                 }}
               />
             ) : view === "session" ? (
@@ -731,7 +772,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
               />
             )}
           </main>
-          {!management && mobileContext && inspector && (
+          {!fullWidth && mobileContext && inspector && (
             <button
               type="button"
               className="rw-context-backdrop"
@@ -739,7 +780,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
               onClick={() => setMobileContext(false)}
             />
           )}
-          {!management && inspector && (
+          {!fullWidth && inspector && (
             <aside
               className={`rw-inspector ${mobileContext ? "is-open" : ""}`}
               aria-label="Contexto da sessão"
