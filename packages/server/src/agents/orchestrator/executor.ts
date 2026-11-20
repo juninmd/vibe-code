@@ -11,6 +11,7 @@ import type {
 import { permissionModeOf, REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import { agentGitHubEnv, resolveGitHubToken } from "../../git/github-credentials";
 import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
 import type { SkillsLoader } from "../../skills/loader";
@@ -987,6 +988,7 @@ export async function executeAgent(
       VIBE_CODE_REPO_ID: task.repoId,
       VIBE_CODE_PARENT_TASK_ID: task.id,
       PATH: `${scriptsDir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH}`,
+      ...agentGitHubEnv(resolveGitHubToken(db)),
     };
     if (task.maxCost !== undefined && task.maxCost !== null) {
       agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
