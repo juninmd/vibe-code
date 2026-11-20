@@ -1,26 +1,11 @@
-import type { SessionCard } from "@vibe-code/shared";
 import { SESSION_SOURCE_LABELS } from "@vibe-code/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useSessions } from "../../hooks/useSessions";
 import { DEMO_SESSIONS } from "./demo";
-import { ENVIRONMENTS, type EnvironmentId, isEnvironment } from "./environments";
-import { createOfficeScene, type OfficeScene, SOURCE_SKIN } from "./scene";
-import { AVATAR_SKINS, type AvatarSkinId, isAvatarSkin } from "./skins";
-
-const readPref = (key: string): string | null => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-const writePref = (key: string, value: string) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // storage unavailable (private mode): the choice just isn't remembered
-  }
-};
+import { ENVIRONMENTS, isEnvironment } from "./environments";
+import { SOURCE_SKIN } from "./scene";
+import { AVATAR_SKINS, isAvatarSkin } from "./skins";
+import { useOfficeScene } from "./useOfficeScene";
 
 const useDemo = () =>
   typeof window !== "undefined" && new URLSearchParams(window.location.search).has("office-demo");
@@ -29,64 +14,13 @@ const useDemo = () =>
 export function Office3DMode() {
   const { board } = useSessions(true, 10_000);
   const demo = useMemo(useDemo, []);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sceneRef = useRef<OfficeScene | null>(null);
-  const [selected, setSelected] = useState<SessionCard | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [environment, setEnvironment] = useState<EnvironmentId>(() => {
-    const v = readPref("office3d.environment");
-    return isEnvironment(v) ? v : "office";
-  });
-  const [skin, setSkin] = useState<AvatarSkinId | "auto">(() => {
-    const v = readPref("office3d.skin");
-    return isAvatarSkin(v) ? v : "auto";
-  });
-  const initial = useRef({ environment, skin });
-
   const open = useMemo(() => {
     const cards = demo ? DEMO_SESSIONS : board.cards;
     return cards.filter((c) => c.status === "active" || c.status === "idle").slice(0, 12);
   }, [board.cards, demo]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    let office: OfficeScene;
-    try {
-      office = createOfficeScene(canvas, {
-        reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-        onSelect: setSelected,
-        environment: initial.current.environment,
-        skin: initial.current.skin,
-      });
-    } catch {
-      setFailed(true);
-      return;
-    }
-    sceneRef.current = office;
-    const observer = new ResizeObserver(() => office.resize());
-    if (canvas.parentElement) observer.observe(canvas.parentElement);
-    office.resize();
-    return () => {
-      observer.disconnect();
-      office.dispose();
-      sceneRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    sceneRef.current?.setSessions(open);
-  }, [open]);
-
-  useEffect(() => {
-    sceneRef.current?.setEnvironment(environment);
-    writePref("office3d.environment", environment);
-  }, [environment]);
-
-  useEffect(() => {
-    sceneRef.current?.setSkin(skin);
-    writePref("office3d.skin", skin);
-  }, [skin]);
+  const { canvasRef, selected, failed, environment, setEnvironment, skin, setSkin } =
+    useOfficeScene(open);
 
   const active = open.filter((c) => c.status === "active").length;
   return (

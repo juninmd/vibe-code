@@ -1,0 +1,59 @@
+/* Surfaces ported from the legacy panel, on the workspace tokens (light theme follows). */
+.rw-group-by, .rw-office-chip { display: inline-flex; align-items: center; gap: 7px; color: var(--rw-muted); font-size: 10px; }
+.rw-group-by select, .rw-board-card select, .rw-office-chip select { background: var(--rw-field); color: var(--rw-text); border: 1px solid var(--rw-border); border-radius: 5px; padding: 4px 6px; font-size: 10px; }
+.rw-group-heading { display: flex; align-items: center; gap: 8px; margin: 0; padding: 18px 4px 8px; color: var(--rw-muted); font-size: 10px; font-weight: 500; letter-spacing: .6px; text-transform: uppercase; border-bottom: 1px solid var(--rw-border); }
+.rw-surface-section { margin: 26px 0 12px; color: var(--rw-muted); font-size: 10px; font-weight: 500; letter-spacing: 1.2px; text-transform: uppercase; }
+.rw-lane-empty { color: var(--rw-faint); font-size: 11px; line-height: 1.7; margin: 6px 0; }
+
+/* Board */
+.rw-board-view { display: flex; flex-direction: column; min-height: 0; }
+.rw-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 12px; flex: 1; min-height: 0; scroll-snap-type: x proximity; }
+.rw-lane { display: flex; flex-direction: column; min-height: 220px; background: var(--rw-panel); border: 1px solid var(--rw-border); border-radius: 8px; scroll-snap-align: start; transition: border-color .15s; }
+.rw-lane.is-over { border-color: var(--rw-accent-line); background: var(--rw-accent-soft); }
+.rw-lane > header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px; border-bottom: 1px solid var(--rw-border); }
+.rw-lane > header h2 { margin: 0; flex: 1; font-size: 11px; font-weight: 500; color: var(--rw-secondary); }
+.rw-lane-cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow-y: auto; }
+.rw-board-card { background: var(--rw-raised); border: 1px solid var(--rw-border); border-radius: 6px; cursor: grab; }
+.rw-board-card:hover { border-color: var(--rw-border-strong); }
+.rw-board-card.is-busy { opacity: .55; cursor: progress; }
+.rw-board-card > button { display: block; width: 100%; padding: 10px 11px 6px; text-align: left; }
+.rw-board-card strong { display: block; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--rw-text); overflow-wrap: anywhere; }
+.rw-board-card small { display: block; margin-top: 5px; color: var(--rw-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-board-card footer { display: flex; align-items: center; gap: 8px; padding: 4px 11px 10px; }
+.rw-board-card footer a { display: inline-flex; align-items: center; gap: 4px; color: var(--rw-accent); font-size: 10px; }
+.rw-board-card footer select { margin-left: auto; max-width: 130px; }
+
+/* Terminals */
+.rw-terminal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.rw-terminal-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; text-align: left; background: var(--rw-panel); border: 1px solid var(--rw-border); border-radius: 8px; }
+.rw-terminal-card:hover { border-color: var(--rw-border-strong); }
+.rw-terminal-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rw-terminal-card-head strong { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-terminal-card-head small, .rw-terminal-card-cwd { color: var(--rw-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-terminal-card pre { margin: 0; min-height: 96px; padding: 9px 10px; background: var(--rw-code-bg); color: var(--rw-code-text); border-radius: 5px; font-size: 10px; line-height: 1.5; overflow: hidden; white-space: pre; }
+.rw-resume-command { display: block; max-width: 100%; margin: 4px 0 14px; padding: 8px 10px; background: var(--rw-code-bg); color: var(--rw-code-text); border: 1px solid var(--rw-border); border-radius: 5px; font-size: 11px; overflow-x: auto; white-space: nowrap; }
+
+/* 3D office: the scene keeps its own palette; only the chrome follows the theme. */
+.rw-office { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0b1020; }
+.rw-office canvas { display: block; width: 100%; height: 100%; }
+.rw-office-bar { position: absolute; inset: 14px 14px auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; pointer-events: none; }
+.rw-office-spacer { flex: 1; }
+.rw-office-chip { pointer-events: auto; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--rw-border); background: color-mix(in srgb, var(--rw-dialog-bg) 85%, transparent); color: var(--rw-secondary); backdrop-filter: blur(6px); }
+.rw-office-chip strong { color: var(--rw-text); font-weight: 500; }
+.rw-office-chip select { padding: 2px 4px; }
+.rw-office-empty { position: absolute; inset: auto 16px 40px; margin: 0; text-align: center; color: #c9cbd6; font-size: 12px; pointer-events: none; }
+.rw-office-card { position: absolute; right: 14px; bottom: 14px; width: min(280px, calc(100% - 28px)); display: flex; flex-direction: column; gap: 5px; padding: 12px; border-radius: 8px; border: 1px solid var(--rw-border); background: color-mix(in srgb, var(--rw-dialog-bg) 92%, transparent); color: var(--rw-text); font-size: 11px; backdrop-filter: blur(6px); }
+.rw-office-card span { display: flex; align-items: center; gap: 6px; color: var(--rw-secondary); }
+.rw-office-card i { width: 8px; height: 8px; border-radius: 50%; }
+.rw-office-card strong { font-size: 13px; font-weight: 500; }
+.rw-office-card small { color: var(--rw-muted); }
+
+@media (max-width: 760px) {
+  .rw-view-heading:has(.rw-group-by) { flex-wrap: wrap; }
+  .rw-board { grid-auto-columns: 82%; }
+  .rw-board-card select, .rw-group-by select, .rw-office-chip select { min-height: 32px; font-size: 12px; }
+  .rw-office-spacer { display: none; }
+  .rw-office-chip { font-size: 11px; }
+  .rw-external-actions { flex-wrap: wrap; }
+  .rw-external-actions > span { flex-basis: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
