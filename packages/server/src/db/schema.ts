@@ -259,6 +259,16 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE agent_runs ADD COLUMN token_usage TEXT");
   }
 
+  // Turn checkpoints for conversational sessions: worktree snapshot taken before the turn,
+  // and when the operator rewound past it. Rollback: both columns are nullable and unused
+  // by older builds; leaving them in place is safe, or drop them on SQLite >= 3.35.
+  if (!runColNames.includes("checkpoint")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN checkpoint TEXT");
+  }
+  if (!runColNames.includes("rewound_at")) {
+    db.exec("ALTER TABLE agent_runs ADD COLUMN rewound_at TEXT");
+  }
+
   // Labels system (Multica-inspired): colored labels per repo + task_labels join
   db.exec(`
     CREATE TABLE IF NOT EXISTS labels (

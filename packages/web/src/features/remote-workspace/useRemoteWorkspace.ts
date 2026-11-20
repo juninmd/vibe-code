@@ -114,7 +114,8 @@ export function useRemoteWorkspace() {
     queryKey: ["unified-prototype", "logs", selectedId],
     queryFn: async () => {
       if (!selectedId) return [];
-      const runs = await api.tasks.runs(selectedId);
+      // Rewound turns were undone: they leave the conversation.
+      const runs = (await api.tasks.runs(selectedId)).filter((run) => !run.rewoundAt);
       const logs = await Promise.all(
         runs
           .slice(0, 5)
@@ -381,9 +382,23 @@ export function useRemoteWorkspace() {
       setSendError(error instanceof Error ? error.message : String(error));
     }
   };
+  /** Undo `runId` and later turns; resolves with the undone message, or null on failure. */
+  const rewind = async (runId: string) => {
+    if (!selected || !server) return null;
+    setSendError(null);
+    try {
+      const { message } = await api.tasks.rewind(selected.id, runId);
+      await Promise.all([data.refetch(), history.refetch()]);
+      return message;
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  };
   return {
     source,
     server,
+    rewind,
     supervised,
     setSupervised,
     setSessionSupervised,

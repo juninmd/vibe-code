@@ -20,6 +20,7 @@ import type { AgentEngine } from "../engine";
 import { deleteVirtualKey, generateVirtualKey, getLiteLLMBaseUrl } from "../litellm-client";
 import { MemoryService } from "../memory-service";
 import { runBaselineCheck } from "./baseline-check";
+import { captureCheckpoint } from "./checkpoints";
 import { runPostRunEvaluator } from "./evaluator";
 import { handleAgentEvent } from "./event-handler";
 import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
@@ -439,11 +440,11 @@ export function escalateModel(currentModel?: string): string | undefined {
   return currentModel;
 }
 
-/** The opening request plus the logs of the session's earlier turns (last 20 runs), oldest first. */
+/** The opening request plus the logs of the session's earlier turns (last 20 kept runs), oldest first. */
 function conversationLogs(db: Db, task: Task, currentRunId: string) {
   const earlier = db.runs
     .listByTask(task.id)
-    .filter((r) => r.id !== currentRunId)
+    .filter((r) => r.id !== currentRunId && !r.rewoundAt)
     .slice(0, 20)
     .reverse()
     .flatMap((r) => db.logs.listByRun(r.id));
@@ -540,6 +541,7 @@ export async function executeAgent(
   > = {};
   let resumeSessionId: string | undefined;
   let handoffFrom: string | undefined;
+  let restartAfterRewind = false;
   let activeSessionId: string | undefined;
   let validationRecordCount = 0;
   let latestVerification: WorktreeVerificationResult | null = null;
@@ -673,12 +675,16 @@ export async function executeAgent(
                 )
             : null;
 
-        // Another engine cannot resume this CLI session: start fresh with the transcript.
+        // Another engine cannot resume this CLI session, and a rewound one remembers the
+        // discarded turns: both start fresh with the transcript.
         if (isRemoteSession && previousRun && previousRun.engine !== engine.name) {
           handoffFrom = previousRun.engine;
           sysLog(
             `[handoff] ${previousRun.engine} → ${engine.name}: new session with the conversation so far`
           );
+        } else if (isRemoteSession && previousRun?.rewoundAt) {
+          restartAfterRewind = true;
+          sysLog("[rewind] new session from the rewound point of the conversation");
         } else {
           resumeSessionId = previousRun?.sessionId ?? undefined;
         }
@@ -986,6 +992,15 @@ export async function executeAgent(
       agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
     }
 
+    if (isRemoteSession) {
+      try {
+        db.runs.setCheckpoint(run.id, await captureCheckpoint(wtPath));
+      } catch (error) {
+        sysLog(
+          `[checkpoint] not recorded, this turn cannot be rewound: ${(error as Error).message}`
+        );
+      }
+    }
     setRunPhase("generating");
     // When resuming a session, the CLI already has the full context stored.
     // Sending the full prompt again would confuse it — just say "continue".
@@ -994,8 +1009,8 @@ export async function executeAgent(
       "Work in the current isolated repository. Follow its AGENTS.md and validation instructions.",
       "Respond to the user's message and report changes and validation honestly.",
       "Preserve work for subsequent messages. Do not commit, push, open a PR or deploy unless the user asks.",
-      ...(handoffFrom
-        ? [handoffPreamble(handoffFrom, handoffTranscript(conversationLogs(db, task, run.id)))]
+      ...(handoffFrom || restartAfterRewind
+        ? [handoffPreamble(handoffTranscript(conversationLogs(db, task, run.id)), handoffFrom)]
         : []),
       remoteInput ?? task.description,
     ].join("\n\n");

@@ -1,6 +1,6 @@
 .rw-login { display: grid; place-items: center; min-height: 100dvh; padding: 24px 16px; background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--rw-accent) 9%, transparent), transparent 60%), var(--rw-bg); color: var(--rw-text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 .rw-login * { box-sizing: border-box; }
-.rw-login-card { width: 100%; max-width: 380px; padding: 30px 28px 26px; border: 1px solid var(--rw-border); border-radius: 14px; background: var(--rw-panel); box-shadow: 0 30px 80px rgb(0 0 0 / 0.45); }
+.rw-login-card { width: 100%; max-width: 380px; padding: 30px 28px 26px; border: 1px solid var(--rw-border); border-radius: 14px; background: var(--rw-panel); box-shadow: 0 30px 80px var(--rw-shadow); }
 .rw-login-brand { display: flex; align-items: center; gap: 8px; margin: 0 0 26px; color: var(--rw-accent); font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
 .rw-login-brand span { color: var(--rw-muted); font-weight: 400; }
 .rw-login h1 { margin: 0 0 8px; font-size: 21px; font-weight: 550; letter-spacing: -0.5px; }

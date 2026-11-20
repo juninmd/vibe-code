@@ -291,6 +291,12 @@ export const api = {
           ...(next.engine ? { engine: next.engine } : {}),
         }),
       }),
+    /** Undo a turn and the ones after it; returns the undone turn's message to edit and resend. */
+    rewind: (id: string, runId: string) =>
+      request<{ rewound: string[]; message: string }>(`/tasks/${id}/rewind`, {
+        method: "POST",
+        body: JSON.stringify({ runId }),
+      }),
     cancel: (id: string) => request<{ ok: boolean }>(`/tasks/${id}/cancel`, { method: "POST" }),
     /** Tool calls of a supervised session waiting for the operator. */
     approvals: (id: string) => request<ToolApproval[]>(`/tasks/${id}/approvals`),

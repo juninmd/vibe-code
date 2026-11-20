@@ -157,6 +157,11 @@ describe("engine handoff", () => {
       ["assistant", "", undefined, "grok"],
       ["assistant", "Teste criado.", "grok", undefined],
     ]);
+    // A follow-up knows its turn, so the conversation can rewind to it.
+    expect(messages.filter((m) => m.role === "user").map((m) => m.runId)).toEqual([
+      undefined,
+      "r2",
+    ]);
   });
 });
 

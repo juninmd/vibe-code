@@ -18,6 +18,8 @@ export interface Message {
   work?: WorkEntry[];
   /** Engine that wrote this reply, when the session changed engine mid-conversation. */
   engine?: string;
+  /** Turn a user message started (server sessions), so the conversation can rewind to it. */
+  runId?: string;
   /** Marks the point where another engine took over the conversation. */
   handoff?: { from: string; to: string };
 }
@@ -252,7 +254,15 @@ export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] 
         { id: item.id, role: "assistant", text: "", handoff: { from: handoff[1], to: engine } },
       ];
     }
-    if (item.kind === "prompt") return [{ id: item.id, role: "user", text: item.text }];
+    if (item.kind === "prompt")
+      return [
+        {
+          id: item.id,
+          role: "user",
+          text: item.text,
+          ...(item.runId ? { runId: item.runId } : {}),
+        },
+      ];
     if (item.kind === "error")
       return [{ id: item.id, role: "assistant", engine, text: `Erro do harness:\n\n${item.text}` }];
     return splitWork(item.text).map((segment, index) => ({
