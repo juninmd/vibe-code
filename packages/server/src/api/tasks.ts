@@ -689,11 +689,18 @@ export function createTasksRouter(
         409
       );
     }
+    const switchingEngine = nextEngine !== task.engine;
+    let persisted = false;
     try {
       const previous = db.runs.listByTask(id).find((r) => !!r.worktreePath);
       if (previous) {
         // Never silently switch branches or lose the CLI conversation on a follow-up.
-        if (!previous.sessionId || !previous.worktreePath || !task.branchName) {
+        // A handoff starts a fresh CLI session, so it needs no session to resume.
+        if (
+          (!previous.sessionId && !switchingEngine) ||
+          !previous.worktreePath ||
+          !task.branchName
+        ) {
           return c.json(
             {
               error: "session_unavailable",
@@ -705,12 +712,12 @@ export function createTasksRouter(
         await accessWorkspace(previous.worktreePath);
       }
       let current = task;
-      const switchingEngine = nextEngine !== task.engine;
       if (switchingEngine || (parsed.data.model && parsed.data.model !== task.model)) {
         // A model belongs to its engine: switching engine without one falls back to its default.
         if (switchingEngine) current = db.tasks.updateField(id, "engine", nextEngine) ?? current;
         const model = parsed.data.model ?? (switchingEngine ? null : current.model);
         current = db.tasks.updateField(id, "model", model ?? null) ?? current;
+        persisted = true;
         orchestrator.hub.broadcastAll({ type: "task_updated", task: current });
       }
       const run = await orchestrator.launch(current, undefined, undefined, parsed.data.message);
@@ -725,6 +732,11 @@ export function createTasksRouter(
       });
       return c.json({ data: sanitizeRunForExternal(db, run) }, 202);
     } catch (err) {
+      // No turn ran: keep the engine and model the user had.
+      if (persisted) {
+        db.tasks.updateField(id, "engine", task.engine);
+        db.tasks.updateField(id, "model", task.model ?? null);
+      }
       const capacity = (err as Error & { capacityExceeded?: boolean }).capacityExceeded;
       return c.json(
         {
