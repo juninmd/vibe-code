@@ -208,37 +208,22 @@ describe("E2E Homologation — full task lifecycle", () => {
     console.log(`[STEP 5] Prompt safety verified: --force-with-lease ✓, no bare --force ✓`);
   });
 
-  it("STEP 6: TaskCard conflict-resolution styling contract is correct (static check)", async () => {
+  it("STEP 6: board conflict-resolution marker contract is correct (static check)", async () => {
     const src = await Bun.file(
-      new URL("../../../web/src/components/TaskCard.tsx", import.meta.url).pathname.replace(
-        /^\/([A-Za-z]:)/,
-        "$1"
-      )
+      new URL(
+        "../../../web/src/features/remote-workspace/surfaces/BoardView.tsx",
+        import.meta.url
+      ).pathname.replace(/^\/([A-Za-z]:)/, "$1")
     ).text();
 
     // Must check for the tag
     expect(src).toContain("conflict-resolution");
-    // Conflict cards keep their rose accent (border) so they stand out on the board
-    expect(src).toContain("rose-500");
+    // Conflict cards get their own accent so they stand out on the board
+    expect(src).toContain("is-conflict");
     // Must say what is wrong, in words
     expect(src).toContain("Merge conflict");
 
-    console.log(`[STEP 6] TaskCard UI contract verified ✓`);
-  });
-
-  it("STEP 7: TaskDetail conflict aura contract is correct (static check)", async () => {
-    const src = await Bun.file(
-      new URL("../../../web/src/components/TaskDetail.tsx", import.meta.url).pathname.replace(
-        /^\/([A-Za-z]:)/,
-        "$1"
-      )
-    ).text();
-
-    expect(src).toContain("conflict");
-    expect(src).toContain("rose");
-    expect(src).toContain("Merge Conflict");
-
-    console.log(`[STEP 7] TaskDetail UI contract verified ✓`);
+    console.log(`[STEP 6] Board UI contract verified ✓`);
   });
 });
 

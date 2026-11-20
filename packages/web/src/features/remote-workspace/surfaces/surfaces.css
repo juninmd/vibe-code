@@ -15,6 +15,8 @@
 .rw-lane-cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow-y: auto; }
 .rw-board-card { background: var(--rw-raised); border: 1px solid var(--rw-border); border-radius: 6px; cursor: grab; }
 .rw-board-card:hover { border-color: var(--rw-border-strong); }
+.rw-board-card.is-conflict { border-color: var(--rw-red); }
+.rw-conflict-badge { padding: 2px 6px; border-radius: 4px; border: 1px solid var(--rw-red); color: var(--rw-red); font-size: 10px; }
 .rw-board-card.is-busy { opacity: .55; cursor: progress; }
 .rw-board-card > button { display: block; width: 100%; padding: 10px 11px 6px; text-align: left; }
 .rw-board-card strong { display: block; font-size: 12px; font-weight: 500; line-height: 1.45; color: var(--rw-text); overflow-wrap: anywhere; }
