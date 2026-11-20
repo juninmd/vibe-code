@@ -24,6 +24,13 @@ describe("slugifySessionText", () => {
     expect(slugifySessionText("Fix: a/b+c (urgent!!)")).toBe("fix-a-b-c-urgent");
   });
 
+  test("keeps accented letters as their base letter instead of splitting the word", () => {
+    expect(slugifySessionText("Corrigir a validação do formulário")).toBe(
+      "corrigir-a-validacao-do-formulario"
+    );
+    expect(slugifySessionText("Ação: café com pão")).toBe("acao-cafe-com-pao");
+  });
+
   test("returns empty for blank input", () => {
     expect(slugifySessionText("   \n\n")).toBe("");
     expect(slugifySessionText("```")).toBe("");

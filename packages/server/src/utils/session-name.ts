@@ -36,6 +36,9 @@ export function slugifySessionText(text: string): string {
 
   const slug = stripped
     .toLowerCase()
+    // "validação" -> "validacao": without this every accent split a word in two.
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
     .replace(SLUG_ALLOWED, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");

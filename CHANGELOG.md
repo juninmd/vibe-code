@@ -13,6 +13,7 @@
 
 ### Fixed
 - Signing in with GitHub now lets the agent push and open PRs as you: the OAuth token reaches server-side `git clone/fetch/push` (private repos included) and the agent's terminal/engine as `GH_TOKEN`/`GITHUB_TOKEN` plus a git `extraheader` for github.com, kept out of remote URLs and argv. Before, only the API PR call used it and `git push` had no credentials.
+- Session names derived from a Portuguese prompt keep accented words whole ("corrigir-a-validacao-do-formulario" instead of "corrigir-a-valida-o-do-formul").
 - Stopping an OpenCode turn over `opencode serve` no longer crashes the server (an SDK abort left an unhandled `AbortError`).
 
 ### Changed
