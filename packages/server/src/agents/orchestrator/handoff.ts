@@ -37,9 +37,12 @@ export function handoffTranscript(logs: HandoffLog[], limit = DEFAULT_LIMIT): st
   return kept.join("\n\n");
 }
 
-export function handoffPreamble(fromEngine: string, transcript: string): string {
+/** Without `fromEngine`, the operator rewound the conversation and this session restarts from there. */
+export function handoffPreamble(transcript: string, fromEngine?: string): string {
   return [
-    `This conversation started with another coding agent (${fromEngine}). You are taking over in the same workspace; its edits are already on disk.`,
+    fromEngine
+      ? `This conversation started with another coding agent (${fromEngine}). You are taking over in the same workspace; its edits are already on disk.`
+      : "The user rewound this conversation to an earlier point: later turns were discarded and the workspace files were restored to how they were then.",
     "Conversation so far (oldest first):",
     transcript || "(no messages yet)",
     "Continue from here with the user's new message below.",

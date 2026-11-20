@@ -29,6 +29,7 @@ describe("handoffTranscript", () => {
 
   it("handles an empty history", () => {
     expect(handoffTranscript([])).toBe("");
-    expect(handoffPreamble("opencode", "")).toContain("(no messages yet)");
+    expect(handoffPreamble("", "opencode")).toContain("(no messages yet)");
+    expect(handoffPreamble("Usuário: oi")).toContain("rewound");
   });
 });

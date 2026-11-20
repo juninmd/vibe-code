@@ -22,6 +22,7 @@ import {
   buildPrompt,
 } from "../agents/orchestrator/prompt";
 import { RemotePullRequestError } from "../agents/orchestrator/remote-pr";
+import { rewindSession } from "../agents/orchestrator/rewind";
 import {
   buildTaskExecutionPlan,
   materializeTaskExecutionPlan,
@@ -572,6 +573,36 @@ export function createTasksRouter(
   });
 
   // Supervised sessions: tool calls waiting for the operator.
+  /** Undo a turn and everything after it: files back to its checkpoint, turns hidden. */
+  router.post("/:id/rewind", async (c) => {
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    const task = db.tasks.getById(id);
+    if (
+      !task?.tags.includes(REMOTE_SESSION_TAG) ||
+      !["backlog", "failed", "blocked"].includes(task.status)
+    )
+      return c.json(
+        {
+          error: "invalid_state",
+          message: "Wait for the current turn to finish or stop it first.",
+        },
+        409
+      );
+    const parsed = z
+      .object({ runId: z.string().trim().min(1).max(64) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: "invalid_input", message: "runId is required." }, 400);
+    const outcome = await rewindSession(db, id, parsed.data.runId);
+    if (!outcome.ok)
+      return c.json({ error: outcome.error, message: outcome.message }, outcome.status);
+    const current = db.tasks.getById(id);
+    if (current) orchestrator.hub.broadcastAll({ type: "task_updated", task: current });
+    return c.json({ data: { rewound: outcome.rewound, message: outcome.message } });
+  });
+
   router.get("/:id/approvals", async (c) => {
     const denied = await taskAccessDenied(c, db, c.req.param("id"));
     if (denied) return denied;

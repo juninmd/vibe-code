@@ -17,6 +17,42 @@ export type Workspace = ReturnType<typeof useRemoteWorkspace>;
 /** Branch diff summary; one query shared by the Changes tab and the publish button. */
 const HARNESS_CATALOG = new Set(["opencode", "claude-code"]);
 
+/** Two-step: undoing turns restores files, so the first click only asks. */
+function RewindButton({ onRewind }: { onRewind: () => Promise<void> }) {
+  const [state, setState] = useState<"idle" | "confirm" | "busy">("idle");
+  if (state === "idle")
+    return (
+      <button
+        type="button"
+        className="rw-rewind"
+        title="Desfazer este turno e os seguintes, voltando os arquivos a como estavam antes dele"
+        onClick={() => setState("confirm")}
+      >
+        <Icon name="undo" size={11} /> Voltar até aqui
+      </button>
+    );
+  return (
+    <fieldset className="rw-rewind-confirm" aria-label="Confirmar volta">
+      <span>Desfaz este turno e os seguintes, inclusive os arquivos.</span>
+      <button
+        type="button"
+        className="is-danger"
+        disabled={state === "busy"}
+        onClick={async () => {
+          setState("busy");
+          await onRewind();
+          setState("idle");
+        }}
+      >
+        {state === "busy" ? "Voltando…" : "Voltar"}
+      </button>
+      <button type="button" disabled={state === "busy"} onClick={() => setState("idle")}>
+        Cancelar
+      </button>
+    </fieldset>
+  );
+}
+
 function useSessionDiff(workspace: Workspace) {
   return useQuery({
     queryKey: ["unified-prototype", "diff", workspace.selected?.id],
@@ -191,6 +227,14 @@ export function Conversation({
                   <div className="rw-message-text">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
                   </div>
+                )}
+                {message.runId && server && selected.conversational && !working && (
+                  <RewindButton
+                    onRewind={async () => {
+                      const text = await workspace.rewind(message.runId ?? "");
+                      if (text !== null) onSuggest(text);
+                    }}
+                  />
                 )}
               </article>
             )

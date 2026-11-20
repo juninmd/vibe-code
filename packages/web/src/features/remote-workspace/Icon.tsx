@@ -25,6 +25,7 @@ const paths = {
   stop: "M6 6h12v12H6Z",
   play: "m8 4 12 8-12 8Z",
   back: "m14 5-7 7 7 7",
+  undo: "M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3",
 } as const;
 export function Icon({ name, size = 17 }: { name: keyof typeof paths; size?: number }) {
   return (

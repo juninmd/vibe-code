@@ -865,6 +865,25 @@ describe("remote session messages", () => {
     expect(response.status).toBe(409);
     expect(db.tasks.getById(task.id)?.engine).toBe("opencode");
   });
+  it("rewinds only an idle session, to a turn that has a checkpoint", async () => {
+    const { db, task, app } = setup();
+    const rewind = (body: unknown) =>
+      app.request(`/api/tasks/${task.id}/rewind`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+    db.runs.create(task.id, "opencode");
+    const second = db.runs.create(task.id, "opencode");
+    expect((await rewind({})).status).toBe(400);
+    expect((await rewind({ runId: "missing" })).status).toBe(404);
+    const noCheckpoint = await rewind({ runId: second.id });
+    expect(noCheckpoint.status).toBe(409);
+    expect((await noCheckpoint.json()).error).toBe("no_checkpoint");
+    db.tasks.update(task.id, { status: "in_progress" });
+    expect((await rewind({ runId: second.id })).status).toBe(409);
+    expect(db.runs.getById(second.id)?.rewoundAt).toBeNull();
+  });
   it("rejects empty input, concurrent turns and autonomous tasks", async () => {
     const { db, task, app, inputs } = setup();
     const send = (message: string) =>
