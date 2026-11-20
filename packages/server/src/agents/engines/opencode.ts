@@ -342,7 +342,7 @@ export class OpenCodeEngine implements AgentEngine {
 
   constructor(
     heartbeatIntervalMs?: number,
-    /** Where `opencode serve` runs; defaults to a loopback process (VIBE_AGENT_RUNNER=k8s passes a pod pool). */
+    /** Where `opencode serve` runs; defaults to a loopback process (the AgentRunner picks local or a pod per turn). */
     private readonly serveStart?: ServeStarter
   ) {
     this.heartbeatIntervalMs = heartbeatIntervalMs ?? getHeartbeatIntervalMs();

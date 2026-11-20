@@ -1,11 +1,9 @@
 import { readFileSync } from "node:fs";
+import type { AgentRunnerMode, AgentRunnerSettings } from "@vibe-code/shared";
 
-/** Where agent turns execute: in this server's own process tree, or one pod per task. */
-export type AgentRunner = "local" | "k8s";
+export type { AgentRunnerMode };
 
-export function agentRunner(env: Record<string, string | undefined> = process.env): AgentRunner {
-  return env.VIBE_AGENT_RUNNER === "k8s" ? "k8s" : "local";
-}
+export const RUNNER_SETTINGS_KEY = "agent_runner";
 
 export interface K8sRunnerConfig {
   namespace: string;
@@ -29,14 +27,19 @@ export interface K8sRunnerConfig {
   memoryLimit: string;
 }
 
-const SA_NAMESPACE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
-
-function positive(value: string | undefined, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : fallback;
+type Env = Record<string, string | undefined>;
+interface SettingsStore {
+  get(key: string): string | null;
 }
 
-function inClusterNamespace(): string | undefined {
+const SA_NAMESPACE = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
+
+function positive(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+export function inClusterNamespace(): string | undefined {
   try {
     return readFileSync(SA_NAMESPACE, "utf8").trim() || undefined;
   } catch {
@@ -44,35 +47,83 @@ function inClusterNamespace(): string | undefined {
   }
 }
 
-/** Reads the k8s runner settings; throws with every missing variable named at once. */
-export function k8sRunnerConfig(
-  env: Record<string, string | undefined> = process.env,
-  readNamespace: () => string | undefined = inClusterNamespace
-): K8sRunnerConfig {
-  const namespace = env.VIBE_K8S_NAMESPACE || readNamespace();
-  const missing = [
-    !namespace && "VIBE_K8S_NAMESPACE",
-    !env.VIBE_K8S_RUNNER_IMAGE && "VIBE_K8S_RUNNER_IMAGE",
-    !env.VIBE_K8S_PVC && "VIBE_K8S_PVC",
-  ].filter(Boolean);
-  if (missing.length > 0) {
-    throw new Error(`VIBE_AGENT_RUNNER=k8s needs ${missing.join(", ")}`);
-  }
+export function isInCluster(env: Env = process.env): boolean {
+  return !!env.KUBERNETES_SERVICE_HOST;
+}
+
+/** Defaults before an operator saves anything; the deployment can pre-fill them via env. */
+export function defaultRunnerSettings(env: Env = process.env): AgentRunnerSettings {
   return {
-    namespace: namespace as string,
-    image: env.VIBE_K8S_RUNNER_IMAGE as string,
-    claimName: env.VIBE_K8S_PVC as string,
-    dataDir: env.VIBE_CODE_DATA_DIR || "/data",
-    nodeName: env.VIBE_K8S_NODE_NAME || undefined,
-    imagePullSecret: env.VIBE_K8S_IMAGE_PULL_SECRET || undefined,
-    skillsClaimName: env.VIBE_K8S_SKILLS_PVC || undefined,
-    skillsDir: env.VIBE_K8S_SKILLS_DIR || "/home/vibe/.agents",
-    idleMs: positive(env.VIBE_K8S_IDLE_MS, 15 * 60_000),
-    maxLifetimeSeconds: positive(env.VIBE_K8S_MAX_LIFETIME_S, 6 * 3600),
-    startTimeoutMs: positive(env.VIBE_K8S_START_TIMEOUT_MS, 180_000),
+    runner: env.VIBE_AGENT_RUNNER === "k8s" ? "k8s" : "local",
+    image: env.VIBE_K8S_RUNNER_IMAGE ?? "",
+    pvc: env.VIBE_K8S_PVC ?? "",
+    skillsPvc: env.VIBE_K8S_SKILLS_PVC ?? "",
+    imagePullSecret: env.VIBE_K8S_IMAGE_PULL_SECRET ?? "",
+    idleMinutes: positive(env.VIBE_K8S_IDLE_MINUTES, 15),
+    maxLifetimeHours: positive(env.VIBE_K8S_MAX_LIFETIME_HOURS, 6),
+    startTimeoutSeconds: positive(env.VIBE_K8S_START_TIMEOUT_SECONDS, 180),
     cpuRequest: env.VIBE_K8S_CPU_REQUEST || "250m",
     cpuLimit: env.VIBE_K8S_CPU_LIMIT || "2",
     memoryRequest: env.VIBE_K8S_MEMORY_REQUEST || "512Mi",
     memoryLimit: env.VIBE_K8S_MEMORY_LIMIT || "4Gi",
+  };
+}
+
+/** Saved settings over the defaults; a corrupt row falls back to the defaults. */
+export function readRunnerSettings(
+  store: SettingsStore,
+  env: Env = process.env
+): AgentRunnerSettings {
+  const defaults = defaultRunnerSettings(env);
+  const raw = store.get(RUNNER_SETTINGS_KEY);
+  if (!raw) return defaults;
+  try {
+    return { ...defaults, ...(JSON.parse(raw) as Partial<AgentRunnerSettings>) };
+  } catch {
+    return defaults;
+  }
+}
+
+/** What stops `k8s` from working with these settings, in words for the operator. */
+export function k8sProblems(
+  settings: AgentRunnerSettings,
+  env: Env = process.env,
+  readNamespace: () => string | undefined = inClusterNamespace
+): string[] {
+  const problems: string[] = [];
+  if (!isInCluster(env))
+    problems.push("o servidor não está rodando dentro de um cluster Kubernetes");
+  if (!(env.VIBE_K8S_NAMESPACE || readNamespace()))
+    problems.push("namespace do pod não encontrado");
+  if (!settings.image.trim()) problems.push("informe a imagem do runner");
+  if (!settings.pvc.trim()) problems.push("informe o PVC de dados");
+  return problems;
+}
+
+export function toK8sConfig(
+  settings: AgentRunnerSettings,
+  dataDir: string,
+  env: Env = process.env,
+  readNamespace: () => string | undefined = inClusterNamespace
+): K8sRunnerConfig {
+  const problems = k8sProblems(settings, env, readNamespace);
+  if (problems.length > 0)
+    throw new Error(`Runner Kubernetes indisponível: ${problems.join("; ")}`);
+  return {
+    namespace: (env.VIBE_K8S_NAMESPACE || readNamespace()) as string,
+    image: settings.image.trim(),
+    claimName: settings.pvc.trim(),
+    dataDir,
+    nodeName: env.VIBE_K8S_NODE_NAME || undefined,
+    imagePullSecret: settings.imagePullSecret.trim() || undefined,
+    skillsClaimName: settings.skillsPvc.trim() || undefined,
+    skillsDir: env.VIBE_K8S_SKILLS_DIR || "/home/vibe/.agents",
+    idleMs: Math.round(settings.idleMinutes * 60_000),
+    maxLifetimeSeconds: Math.round(settings.maxLifetimeHours * 3600),
+    startTimeoutMs: Math.round(settings.startTimeoutSeconds * 1000),
+    cpuRequest: settings.cpuRequest,
+    cpuLimit: settings.cpuLimit,
+    memoryRequest: settings.memoryRequest,
+    memoryLimit: settings.memoryLimit,
   };
 }

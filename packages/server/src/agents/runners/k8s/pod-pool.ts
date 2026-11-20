@@ -31,7 +31,11 @@ interface Entry {
 
 export interface PodPoolDeps {
   api: KubeApi;
-  config: K8sRunnerConfig;
+  namespace: string;
+  /** Read per pod start, so Settings changes apply to the next pod without a restart. */
+  config: () => K8sRunnerConfig;
+  /** Read on every sweep, so a new idle time applies to running pods too. */
+  idleMs: () => number;
   /** Absolute path of the bare repository behind a worktree. */
   gitCommonDir?: (workdir: string) => Promise<string>;
   ensureDir?: (path: string) => Promise<void>;
@@ -129,7 +133,7 @@ export class PodPool {
       // Hold the entry so the reaper cannot delete the pod while we check it.
       current.busy++;
       const pod = await this.deps.api
-        .getPod(this.deps.config.namespace, current.name)
+        .getPod(this.deps.namespace, current.name)
         .finally(() => current.busy--);
       const healthy = pod && pod.status?.phase === "Running" && isReady(pod);
       // A changed key or model provider needs a new Secret, so a new pod (unless mid-turn).
@@ -142,7 +146,8 @@ export class PodPool {
   }
 
   private async create(workdir: string, env: Record<string, string>, envHash: string) {
-    const { api, config } = this.deps;
+    const { api } = this.deps;
+    const config = this.deps.config();
     const name = `vibe-agent-${workspaceKey(workdir)}-${randomBytes(3).toString("hex")}`;
     const gitCommonDir = await (this.deps.gitCommonDir ?? bareRepoOf)(workdir);
     // The server creates it so it is owned by the runtime user, not by kubelet's root.
@@ -164,7 +169,7 @@ export class PodPool {
           uid: created.metadata.uid,
         });
       }
-      const ip = await this.waitReady(name);
+      const ip = await this.waitReady(name, config);
       this.log(`pod ${name} ready for ${workdir}`);
       let finish: (code: number) => void = () => {};
       const exited = new Promise<number>((resolve) => {
@@ -190,8 +195,8 @@ export class PodPool {
     }
   }
 
-  private async waitReady(name: string): Promise<string> {
-    const { api, config } = this.deps;
+  private async waitReady(name: string, config: K8sRunnerConfig): Promise<string> {
+    const { api } = this.deps;
     const deadline = this.now() + config.startTimeoutMs;
     for (;;) {
       const pod = await api.getPod(config.namespace, name);
@@ -216,14 +221,14 @@ export class PodPool {
     this.entries.delete(workdir);
     entry.finish(0);
     this.log(`deleting pod ${entry.name} (${why})`);
-    const { api, config } = this.deps;
-    await api.deletePod(config.namespace, entry.name);
-    await api.deleteSecret(config.namespace, `${entry.name}-env`).catch(() => {});
+    const { api, namespace } = this.deps;
+    await api.deletePod(namespace, entry.name);
+    await api.deleteSecret(namespace, `${entry.name}-env`).catch(() => {});
   }
 
   /** Deletes pods that have been idle for `idleMs`. Returns how many were deleted. */
   async reap(): Promise<number> {
-    const cutoff = this.now() - this.deps.config.idleMs;
+    const cutoff = this.now() - this.deps.idleMs();
     let removed = 0;
     for (const [workdir, entry] of [...this.entries]) {
       if (entry.busy > 0 || entry.lastActive > cutoff) continue;
@@ -242,15 +247,15 @@ export class PodPool {
    * earlier delete failed. Pods still starting are tracked.
    */
   async cleanupOrphans(): Promise<number> {
-    const { api, config } = this.deps;
+    const { api, namespace } = this.deps;
     const known = new Set([...this.entries.values()].map((e) => e.name));
     for (const name of this.starting) known.add(name);
-    const pods = await api.listPods(config.namespace, MANAGED_SELECTOR);
+    const pods = await api.listPods(namespace, MANAGED_SELECTOR);
     let removed = 0;
     for (const pod of pods) {
       if (known.has(pod.metadata.name)) continue;
-      await api.deletePod(config.namespace, pod.metadata.name);
-      await api.deleteSecret(config.namespace, `${pod.metadata.name}-env`).catch(() => {});
+      await api.deletePod(namespace, pod.metadata.name);
+      await api.deleteSecret(namespace, `${pod.metadata.name}-env`).catch(() => {});
       removed++;
     }
     return removed;

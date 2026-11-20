@@ -41,9 +41,9 @@ Key points:
   reached`) and the CLI then retries silently. Add `LITELLM_BASE_URL` +
   `LITELLM_API_KEY` (in-cluster gateway: `http://litellm.ai.svc.cluster.local:4000`)
   or `OPENCODE_API_KEY` to `harness-remote-secret` and restart the deployment.
-- **Agent runner**: `VIBE_AGENT_RUNNER=local` (default) runs agents in this pod;
-  `k8s` starts one pod per task and deletes it after `VIBE_K8S_IDLE_MS` without a
-  turn. Flip the value in the Deployment and restart. See `docs/k8s-runner.md`.
+- **Agent runner**: Settings → Execução picks "Dentro do servidor" (default) or
+  "Um pod por tarefa", deleted after the configured minutes without a turn. It
+  applies on the next turn, no restart. See `docs/k8s-runner.md`.
 - **Skills** are refreshed into `harness-remote-skills` by the `skills-bootstrap`
   init container from `SKILLS_REPO_URL`.
 - **Environment**: `VIBE_CODE_MAX_AGENTS=1` (memory-bound), `VIBE_CODE_INACTIVITY_MS=1200000`

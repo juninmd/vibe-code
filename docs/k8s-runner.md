@@ -1,14 +1,16 @@
 # Agent runner: local or one pod per task
 
-`VIBE_AGENT_RUNNER` decides where OpenCode turns execute.
+**Settings → Execução** decides where OpenCode turns execute. A change applies to
+the next turn of every session; no restart.
 
-| Value | Where the agent runs |
+| Mode | Where the agent runs |
 | --- | --- |
-| `local` (default) | A loopback `opencode serve` child process inside the server pod, as before. |
-| `k8s` | One `opencode serve` pod per task, created on the task's first turn and deleted after `VIBE_K8S_IDLE_MS` without a turn. |
+| Dentro do servidor (default) | A loopback `opencode serve` child process inside the server pod, as before. |
+| Um pod por tarefa | One `opencode serve` pod per task, created on the task's first turn and deleted after the configured minutes without a turn. |
 
-Rollback: set `VIBE_AGENT_RUNNER=local` and restart the deployment. Runner pods
-left behind are deleted on the next start with `k8s`, or by hand:
+The pod option is disabled when the server is not inside a cluster, and saving it
+is refused until the image and data PVC are set. Rollback: pick "Dentro do
+servidor". Pods already running are still reaped after the switch; by hand:
 `kubectl -n harness-remote delete pod -l app.kubernetes.io/component=agent-runner`.
 
 ## How the k8s runner works
@@ -18,7 +20,7 @@ turn starts
   → PodPool: reuse the task's pod if Running+Ready, else create Secret + Pod
   → wait until Ready (fails fast on ImagePullBackOff / config errors)
   → SDK client talks to http://<podIP>:4096 with the pod's random password
-turn ends → pod idles; reaper (every 30 s) deletes it after VIBE_K8S_IDLE_MS
+turn ends → pod idles; reaper (every 30 s) deletes it after the idle minutes
 next turn → fresh pod resumes the same OpenCode session from the volume
 ```
 
@@ -31,7 +33,8 @@ next turn → fresh pod resumes the same OpenCode session from the volume
   LiteLLM settings) and the serve password go into a per-pod Secret owned by the
   pod (garbage-collected with it), never into the pod spec. Server-only keys are
   already stripped by `agentProcessEnv`; the runner also drops `GITHUB_TOKEN`,
-  `GH_TOKEN`, `KUBERNETES_*` and service-link variables.
+  `GH_TOKEN`, `GIT_ASKPASS`, `GIT_CONFIG_*` (git auth headers), `KUBERNETES_*` and
+  service-link variables.
 - **Isolation**: no ServiceAccount token, non-root (uid 10001), no privilege
   escalation, all capabilities dropped, `activeDeadlineSeconds` as a hard cap.
   The NetworkPolicy lets only the server reach port 4096.
@@ -40,20 +43,26 @@ next turn → fresh pod resumes the same OpenCode session from the volume
 
 ## Configuration
 
-| Variable | Default | |
+Edited in Settings → Execução (`GET/PUT /api/settings/runner`, stored in the
+`agent_runner` setting). Env vars only seed the defaults before anything is saved.
+
+| Field | Default env | Default |
 | --- | --- | --- |
-| `VIBE_AGENT_RUNNER` | `local` | `k8s` turns the runner on |
-| `VIBE_K8S_RUNNER_IMAGE` | — (required) | Image with `opencode` and `git`; the vibe-code image works |
-| `VIBE_K8S_PVC` | — (required) | PVC holding `VIBE_CODE_DATA_DIR` |
-| `VIBE_K8S_NAMESPACE` | the server pod's namespace | Must be the PVC's namespace |
-| `VIBE_K8S_NODE_NAME` | — | Pins runner pods to the server's node; required for `ReadWriteOnce` PVCs |
-| `VIBE_K8S_IMAGE_PULL_SECRET` | — | Pull secret for a private image |
-| `VIBE_K8S_SKILLS_PVC` / `VIBE_K8S_SKILLS_DIR` | — / `/home/vibe/.agents` | Skills mounted read-only |
-| `VIBE_K8S_IDLE_MS` | `900000` (15 min) | Inactivity before the pod is deleted |
-| `VIBE_K8S_MAX_LIFETIME_S` | `21600` (6 h) | `activeDeadlineSeconds` |
-| `VIBE_K8S_START_TIMEOUT_MS` | `180000` | Image pull + start budget |
-| `VIBE_K8S_CPU_REQUEST` / `_LIMIT` | `250m` / `2` | |
-| `VIBE_K8S_MEMORY_REQUEST` / `_LIMIT` | `512Mi` / `4Gi` | |
+| Mode | `VIBE_AGENT_RUNNER` | `local` |
+| Runner image (needs `opencode` + `git`) | `VIBE_K8S_RUNNER_IMAGE` | — (required for pods) |
+| Data PVC (holds `VIBE_CODE_DATA_DIR`) | `VIBE_K8S_PVC` | — (required for pods) |
+| Skills PVC (mounted read-only) | `VIBE_K8S_SKILLS_PVC` | — |
+| Pull secret | `VIBE_K8S_IMAGE_PULL_SECRET` | — |
+| Idle minutes before deletion | `VIBE_K8S_IDLE_MINUTES` | `15` |
+| Max pod lifetime, hours (`activeDeadlineSeconds`) | `VIBE_K8S_MAX_LIFETIME_HOURS` | `6` |
+| Start timeout, seconds | `VIBE_K8S_START_TIMEOUT_SECONDS` | `180` |
+| CPU request / limit | `VIBE_K8S_CPU_REQUEST` / `_LIMIT` | `250m` / `2` |
+| Memory request / limit | `VIBE_K8S_MEMORY_REQUEST` / `_LIMIT` | `512Mi` / `4Gi` |
+
+Deployment facts stay in env, not Settings: `VIBE_K8S_NAMESPACE` (default: the
+server pod's namespace, which must be the PVC's), `VIBE_K8S_NODE_NAME` (pins pods
+to the server's node; required for `ReadWriteOnce` PVCs, set from the downward
+API in the manifest) and `VIBE_K8S_SKILLS_DIR` (`/home/vibe/.agents`).
 
 The server needs the `harness-remote` ServiceAccount and the
 `harness-remote-agent-runner` Role from `infrastructure/k8s/harness-remote.yaml`

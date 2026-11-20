@@ -43,7 +43,7 @@ export class InClusterKubeApi implements KubeApi {
   static fromEnvironment(env: Record<string, string | undefined> = process.env): InClusterKubeApi {
     const host = env.KUBERNETES_SERVICE_HOST;
     const port = env.KUBERNETES_SERVICE_PORT || "443";
-    if (!host) throw new Error("VIBE_AGENT_RUNNER=k8s must run inside a Kubernetes pod");
+    if (!host) throw new Error("the Kubernetes runner needs the server to run inside a pod");
     const bracketed = host.includes(":") ? `[${host}]` : host;
     // The projected token rotates; read it per request.
     return new InClusterKubeApi(

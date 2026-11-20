@@ -18,8 +18,10 @@ const DROPPED = new Set([
   "PORT",
   "GITHUB_TOKEN",
   "GH_TOKEN",
+  "GIT_ASKPASS",
 ]);
-const DROPPED_PREFIX = /^(KUBERNETES_|VIBE_K8S_|VIBE_AGENT_RUNNER|XDG_)/;
+// GIT_CONFIG_* can carry an http.extraHeader with the user's GitHub token.
+const DROPPED_PREFIX = /^(KUBERNETES_|VIBE_K8S_|VIBE_AGENT_RUNNER|XDG_|GIT_CONFIG_)/;
 const SERVICE_LINK = /_SERVICE_(HOST|PORT)(_|$)|_PORT_\d+_(TCP|UDP|SCTP)/;
 const SECRET_KEY = /^[-._a-zA-Z0-9]+$/;
 

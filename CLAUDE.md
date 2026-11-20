@@ -103,7 +103,7 @@ POST /api/tasks/{id}/launch
 | `VIBE_CODE_DATA_DIR` | `~/.vibe-code` |
 | `VIBE_CODE_MAX_AGENTS` | `4` |
 | `VIBE_OPENCODE_TRANSPORT` | `serve` (`cli` = legacy `opencode run`, the rollback switch) |
-| `VIBE_AGENT_RUNNER` | `local` (`k8s` = one `opencode serve` pod per task, see `docs/k8s-runner.md`) |
+| `VIBE_AGENT_RUNNER` | `local` — default only; Settings → Execução decides (`k8s` = one pod per task, see `docs/k8s-runner.md`) |
 | `VIBE_OPENCODE_SESSIONS_DIR` | `$XDG_DATA_HOME/opencode`, `~/.local/share/opencode` |
 | `VIBE_CLAUDE_SESSIONS_DIR` | `~/.claude/projects` |
 | `VIBE_ANTIGRAVITY_SESSIONS_DIR` | `~/.antigravity/sessions`, `~/.antigravity/cli/sessions`, `~/.config/antigravity/sessions` |

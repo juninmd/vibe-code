@@ -25,7 +25,9 @@ function setup() {
   const dirs: string[] = [];
   const pool = new PodPool({
     api: kube,
-    config,
+    namespace: config.namespace,
+    config: () => config,
+    idleMs: () => config.idleMs,
     gitCommonDir: async () => "/data/repos/app.git",
     ensureDir: async (p) => {
       dirs.push(p);
