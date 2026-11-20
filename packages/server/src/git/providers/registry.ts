@@ -1,5 +1,6 @@
 import type { GitProvider } from "@vibe-code/shared";
 import type { Db } from "../../db";
+import { resolveGitHubToken } from "../github-credentials";
 import { GitHubProvider } from "./github";
 import { GitLabProvider } from "./gitlab";
 import type { GitProviderAdapter } from "./types";
@@ -25,7 +26,7 @@ export class ProviderRegistry {
   /** Get the token for a given provider from settings/env */
   getToken(provider: GitProvider): string | undefined {
     if (provider === "github") {
-      return this.db.settings.get("github_token") || process.env.GITHUB_TOKEN || undefined;
+      return resolveGitHubToken(this.db);
     }
     if (provider === "gitlab") {
       return this.db.settings.get("gitlab_token") || process.env.GITLAB_TOKEN || undefined;

@@ -8,6 +8,7 @@
 - **Approval mode for OpenCode sessions**: pick "Pedir aprovação" next to the model (new session or the next turn of an open one) and edits, commands, web fetches and paths outside the workspace pause on a card with the target and the proposed diff: Permitir, Sempre nesta sessão or Recusar. A refusal shows in the work log as yours, not as an error. Sessions you are not looking at notify you like a finished turn, and waiting for you never trips the inactivity watchdog. Built on `opencode serve` permission requests (`GET/POST /api/tasks/:id/approvals`), stored as the `supervised` task tag.
 
 ### Fixed
+- Signing in with GitHub now lets the agent push and open PRs as you: the OAuth token reaches server-side `git clone/fetch/push` (private repos included) and the agent's terminal/engine as `GH_TOKEN`/`GITHUB_TOKEN` plus a git `extraheader` for github.com, kept out of remote URLs and argv. Before, only the API PR call used it and `git push` had no credentials.
 - Stopping an OpenCode turn over `opencode serve` no longer crashes the server (an SDK abort left an unhandled `AbortError`).
 
 ### Changed
