@@ -9,6 +9,7 @@ import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
 import { type Change, STATUS } from "./model";
+import { GROUP_LABELS, type GroupBy, groupSessions } from "./surfaces/grouping";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 import { WorkLog } from "./WorkLog";
 
@@ -931,6 +932,7 @@ export function SessionOverview({
   query: string;
   onOpen: (id: string) => void;
 }) {
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
   const sessions = workspace.sessions.filter(
     (s) =>
       `${s.title} ${workspace.projects.find((p) => p.id === s.projectId)?.name}`
@@ -950,6 +952,16 @@ export function SessionOverview({
               : "Encontre uma conversa e continue de onde parou."}
           </p>
         </div>
+        <label className="rw-group-by">
+          Agrupar por
+          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}>
+            {(Object.keys(GROUP_LABELS) as GroupBy[]).map((key) => (
+              <option key={key} value={key}>
+                {GROUP_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </label>
         <span className="rw-count">{sessions.length}</span>
       </div>
       <div className="rw-session-table">
@@ -969,23 +981,33 @@ export function SessionOverview({
             </p>
           </div>
         ) : (
-          sessions.map((session) => (
-            <button type="button" key={session.id} onClick={() => onOpen(session.id)}>
-              <span>
-                <strong>{session.title}</strong>
-                <small>
-                  {session.engine} <span>·</span> {session.branch}
-                </small>
-              </span>
-              <span className="rw-table-project">
-                {workspace.projects.find((p) => p.id === session.projectId)?.name}
-              </span>
-              <span className="rw-state">
-                <i className={`rw-status-dot ${session.status}`} />
-                {STATUS[session.status]}
-              </span>
-            </button>
-          ))
+          groupSessions(sessions, groupBy, workspace.projects).flatMap((group) => [
+            ...(group.label
+              ? [
+                  <h2 key={`group-${group.key}`} className="rw-group-heading">
+                    {group.label}
+                    <span className="rw-count">{group.sessions.length}</span>
+                  </h2>,
+                ]
+              : []),
+            ...group.sessions.map((session) => (
+              <button type="button" key={session.id} onClick={() => onOpen(session.id)}>
+                <span>
+                  <strong>{session.title}</strong>
+                  <small>
+                    {session.engine} <span>·</span> {session.branch}
+                  </small>
+                </span>
+                <span className="rw-table-project">
+                  {workspace.projects.find((p) => p.id === session.projectId)?.name}
+                </span>
+                <span className="rw-state">
+                  <i className={`rw-status-dot ${session.status}`} />
+                  {STATUS[session.status]}
+                </span>
+              </button>
+            )),
+          ])
         )}
       </div>
     </div>

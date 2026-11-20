@@ -1,17 +1,11 @@
-import type {
-  ExternalTerminal,
-  SessionCard,
-  SessionSource,
-  WsClientMessage,
-} from "@vibe-code/shared";
+import type { SessionCard, SessionSource, WsClientMessage } from "@vibe-code/shared";
 import {
   SESSION_SOURCE_LABELS,
   SESSION_STATUS_META,
   sessionResumeCommand,
 } from "@vibe-code/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../api/client";
-import { subscribeTerminal } from "../../hooks/terminalBus";
+import { useExternalTerminal } from "../../hooks/useExternalTerminal";
 import { formatRelativeTime } from "../../utils/relative-time";
 import { TaskTerminal, type TaskTerminalHandle } from "../TaskTerminal";
 import { Button } from "../ui/button";
@@ -133,70 +127,15 @@ export function ExternalSessionDock({
   onNotify: (message: string, kind: NotifyKind) => void;
 }) {
   const terminalRef = useRef<TaskTerminalHandle>(null);
-  const [terminal, setTerminal] = useState<ExternalTerminal | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [hasOutput, setHasOutput] = useState(false);
-
-  const open = useCallback(() => {
-    setBusy(true);
-    setError(null);
-    const size = terminalRef.current?.size();
-    api.sessions.terminal
-      .start(card.source, card.sessionId, size ?? {})
-      .then((next) => setTerminal({ ...next, source: card.source, sessionId: card.sessionId }))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-        onNotify(message, "error");
-      })
-      .finally(() => setBusy(false));
-  }, [card.source, card.sessionId, onNotify]);
-
-  // Opening a session should land you in its terminal, not on a form: reattach when the
-  // app already owns one, otherwise open a terminal that resumes the session. The effect is
-  // keyed on the session identity only — `open` changes whenever the parent re-renders (its
-  // `onNotify` is an inline arrow), and re-running it would remount the terminal on every
-  // poll and silently respawn a CLI the operator had just stopped.
-  const openRef = useRef(open);
-  openRef.current = open;
-
-  useEffect(() => {
-    let cancelled = false;
-    setTerminal(null);
-    setHasOutput(false);
-    setError(null);
-    api.sessions.terminal
-      .state(card.source, card.sessionId)
-      .then((live) => {
-        if (cancelled) return;
-        if (live) setTerminal(live);
-        else openRef.current();
-      })
-      .catch(() => {
-        if (!cancelled) openRef.current();
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [card.source, card.sessionId]);
-
-  useEffect(
-    () =>
-      subscribeTerminal(terminal?.id ?? "", (event) => {
-        if (event.kind === "closed") setTerminal(null);
-      }),
-    [terminal?.id]
+  const { terminal, busy, error, open, stop } = useExternalTerminal(
+    card,
+    () => terminalRef.current?.size(),
+    (message) => onNotify(message, "error")
   );
-
-  const stop = useCallback(() => {
-    setBusy(true);
-    api.sessions.terminal
-      .stop(card.source, card.sessionId)
-      .then(() => setTerminal(null))
-      .catch(() => {})
-      .finally(() => setBusy(false));
-  }, [card.source, card.sessionId]);
+  // A different session starts with an empty screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on session change only
+  useEffect(() => setHasOutput(false), [card.source, card.sessionId]);
 
   const copyResume = useCallback(() => {
     const command = sessionResumeCommand(card);
