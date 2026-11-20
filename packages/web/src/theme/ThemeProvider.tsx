@@ -13,6 +13,26 @@ const ThemeContext = createContext<ThemeContextValue>({
   setTheme: () => {},
 });
 
+const STORAGE_KEY = "vibe-code-theme";
+const LIGHT_QUERY = "(prefers-color-scheme: light)";
+
+function savedTheme(): string | null {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved && themes[saved] ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function systemTheme(): string {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(LIGHT_QUERY).matches
+    ? "light"
+    : "dark";
+}
+
 export function useTheme() {
   return useContext(ThemeContext);
 }
@@ -25,10 +45,21 @@ interface ThemeProviderProps {
 export function ThemeProvider({ children, initialTheme }: ThemeProviderProps) {
   const [themeName, setThemeName] = useState(() => {
     if (initialTheme && themes[initialTheme]) return initialTheme;
-    const saved = localStorage.getItem("vibe-code-theme");
-    if (saved && themes[saved]) return saved;
-    return "dark";
+    const saved = savedTheme();
+    if (saved) return saved;
+    return systemTheme();
   });
+
+  // Until the user picks one, follow the system's light/dark setting.
+  useEffect(() => {
+    if (initialTheme || savedTheme() || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(LIGHT_QUERY);
+    const follow = () => {
+      if (!savedTheme()) setThemeName(query.matches ? "light" : "dark");
+    };
+    query.addEventListener("change", follow);
+    return () => query.removeEventListener("change", follow);
+  }, [initialTheme]);
 
   const theme = themes[themeName] ?? themes.dark;
 
@@ -39,7 +70,11 @@ export function ThemeProvider({ children, initialTheme }: ThemeProviderProps) {
   const setTheme = useCallback((name: string) => {
     if (!themes[name]) return;
     setThemeName(name);
-    localStorage.setItem("vibe-code-theme", name);
+    try {
+      localStorage.setItem(STORAGE_KEY, name);
+    } catch {
+      /* The choice still applies to this visit. */
+    }
   }, []);
 
   return (
