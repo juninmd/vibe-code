@@ -30,11 +30,12 @@ interface SessionRow {
   expires_at: string;
 }
 
+function isGitHubOAuthConfigured(): boolean {
+  return Boolean(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET);
+}
+
 export function isAuthEnabled(): boolean {
-  return Boolean(
-    (process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET) ||
-      process.env.VIBE_CODE_API_KEY
-  );
+  return isGitHubOAuthConfigured() || Boolean(process.env.VIBE_CODE_API_KEY);
 }
 
 export function checkApiKey(c: Context): boolean {
@@ -205,7 +206,7 @@ export function authStatus(db: Db, c: Context): AuthStatus {
     user: apiKeyAuth ? { githubId: "api-key", username: "api-key", displayName: "API Key" } : user,
     loginUrl: "/api/auth/github/start",
     methods: {
-      github: Boolean(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET),
+      github: isGitHubOAuthConfigured(),
       apiKey: Boolean(process.env.VIBE_CODE_API_KEY),
     },
   };
@@ -252,7 +253,7 @@ export function createAuthRouter(db: Db) {
   app.get("/me", (c: Context) => c.json({ data: authStatus(db, c) }));
 
   app.get("/github/start", (c: Context) => {
-    if (!isAuthEnabled()) {
+    if (!isGitHubOAuthConfigured()) {
       return c.json(
         {
           error: "auth_not_configured",
