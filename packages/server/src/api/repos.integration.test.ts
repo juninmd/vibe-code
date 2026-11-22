@@ -3,9 +3,13 @@
  * Uses a real SQLite :memory: database and a stubbed GitService/BroadcastHub.
  */
 import { describe, expect, it, spyOn } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { createDb } from "../db";
-import type { GitService } from "../git/git-service";
+import { GitService } from "../git/git-service";
 import type { BroadcastHub } from "../ws/broadcast";
 import { createReposRouter } from "./repos";
 
@@ -665,6 +669,31 @@ describe("GET /api/repos/:id/manifests", () => {
     const app = buildApp(db);
     const res = await app.request(`/api/repos/${repo.id}/manifests`);
     expect(res.status).toBe(500); // Because it attempts to load from non-existent git dir probably
+  });
+
+  it("reads manifests from the repo's bare clone (<name>.git)", async () => {
+    const reposDir = mkdtempSync(join(tmpdir(), "vibe-manifests-"));
+    const work = join(reposDir, "work");
+    const git = (...args: string[]) => execFileSync("git", args, { stdio: "ignore" });
+    git("init", "-q", "-b", "main", work);
+    writeFileSync(join(work, "AGENTS.md"), "# rules\n");
+    git("-C", work, "add", "AGENTS.md");
+    git("-C", work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+    git("clone", "-q", "--bare", work, join(reposDir, "repo.git"));
+
+    const real = Object.create(GitService.prototype, {
+      reposDir: { value: reposDir },
+    }) as GitService;
+    const db = makeDb();
+    const repo = db.repos.create({ url: "https://github.com/org/repo.git" });
+    const app = buildApp(
+      db,
+      makeGit({ reposDir, getBarePath: real.getBarePath.bind(real) } as Partial<GitService>)
+    );
+    const res = await app.request(`/api/repos/${repo.id}/manifests`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    expect(Object.keys(body.data)).toContain("AGENTS.md");
   });
 });
 
