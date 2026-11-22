@@ -125,10 +125,10 @@ export class RepoSkillsLoader {
   }
 
   private async execGit(gitDir: string, args: string[]): Promise<string> {
-    const { exec } = await import("node:child_process");
+    const { execFile } = await import("node:child_process");
     return new Promise((resolve, reject) => {
-      const cmd = ["git", `--git-dir=${gitDir}`, ...args].join(" ");
-      exec(cmd, (err: Error | null, stdout: string, _stderr: string) => {
+      // Argument array, no shell: a path with spaces or shell metacharacters stays one argument.
+      execFile("git", [`--git-dir=${gitDir}`, ...args], (err, stdout) => {
         if (err) reject(err);
         else resolve(stdout);
       });
