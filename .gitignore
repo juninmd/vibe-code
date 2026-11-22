@@ -25,3 +25,5 @@ docs/previews/avatar-skins/bundle.js
 # Scratch files that were once committed by accident
 old_*.txt
 temp_*.txt
+.vibe-code/
+test-output.txt
