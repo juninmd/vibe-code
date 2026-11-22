@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as child_process from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import * as actualFs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { RepoSkillsLoader } from "./repo-loader";
 
 const originalReaddir = actualFs.readdir;
@@ -202,7 +206,12 @@ describe("RepoSkillsLoader", () => {
   describe("loadManifestsFromGit", () => {
     it("should load available manifest files using git cat-file", async () => {
       const loader = new RepoSkillsLoader("/workdir");
-      const execSpy = spyOn(child_process, "exec").mockImplementation(((cmd: string, cb: any) => {
+      const execSpy = spyOn(child_process, "execFile").mockImplementation(((
+        _file: string,
+        args: string[],
+        cb: any
+      ) => {
+        const cmd = args.join(" ");
         if (cmd.includes("AGENTS.md")) {
           cb(null, "git agents content", "");
         } else if (cmd.includes("CLAUDE.md")) {
@@ -220,6 +229,22 @@ describe("RepoSkillsLoader", () => {
       expect(manifests["GEMINI.md"]).toBeUndefined(); // Missing file should be skipped
 
       execSpy.mockRestore();
+    });
+
+    it("passes the git dir as one argument (spaces and shell characters are not interpreted)", async () => {
+      const root = mkdtempSync(join(tmpdir(), "vibe repo;echo pwned;"));
+      const work = join(root, "work");
+      const run = (...a: string[]) => execFileSync("git", a, { stdio: "ignore" });
+      run("init", "-q", "-b", "main", work);
+      writeFileSync(join(work, "AGENTS.md"), "real agents");
+      run("-C", work, "add", "AGENTS.md");
+      run("-C", work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init");
+      const bare = join(root, "my repo.git");
+      run("clone", "-q", "--bare", work, bare);
+
+      const manifests = await new RepoSkillsLoader(root).loadManifestsFromGit(bare);
+      expect(manifests["AGENTS.md"]).toBe("real agents");
+      expect(existsSync(join(process.cwd(), "pwned"))).toBe(false);
     });
   });
 
