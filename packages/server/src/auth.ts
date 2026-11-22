@@ -231,8 +231,11 @@ export function authMiddleware(db: Db): MiddlewareHandler {
     const row = getSession(db, getCookie(c, SESSION_COOKIE));
     if (!row) return c.json({ error: "unauthorized", message: "GitHub login required" }, 401);
 
-    db.settings.set("github_token", row.access_token);
-    db.settings.set("github_username", row.username);
+    // Reads are ~150x cheaper than a SQLite write; only write when the active user changed.
+    if (db.settings.get("github_token") !== row.access_token)
+      db.settings.set("github_token", row.access_token);
+    if (db.settings.get("github_username") !== row.username)
+      db.settings.set("github_username", row.username);
     await next();
   };
 }

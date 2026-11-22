@@ -92,6 +92,30 @@ describe("auth utilities", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("authMiddleware does not rewrite settings when the session user is already active", async () => {
+    process.env.GITHUB_OAUTH_CLIENT_ID = "client_id";
+    process.env.GITHUB_OAUTH_CLIENT_SECRET = "client_secret";
+    const stored: Record<string, string> = { github_token: "token123", github_username: "user1" };
+    const db = {
+      raw: {
+        query: mock().mockReturnValue({
+          get: mock().mockReturnValue({
+            id: "1",
+            github_id: "gh1",
+            username: "user1",
+            access_token: "token123",
+          }),
+        }),
+      },
+      settings: { get: mock((k: string) => stored[k]), set: mock() },
+    };
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid-token");
+    const next = mock();
+    await authMiddleware(db as any)(createMockContext(), next);
+    expect(next).toHaveBeenCalled();
+    expect(db.settings.set).not.toHaveBeenCalled();
+  });
+
   it("authMiddleware calls next if user exists", async () => {
     process.env.GITHUB_OAUTH_CLIENT_ID = "client_id";
     process.env.GITHUB_OAUTH_CLIENT_SECRET = "client_secret";
@@ -107,6 +131,7 @@ describe("auth utilities", () => {
         }),
       },
       settings: {
+        get: mock().mockReturnValue(undefined),
         set: mock(),
       },
     };
