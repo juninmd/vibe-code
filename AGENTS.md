@@ -1,87 +1,91 @@
-# AGENTS
+# AGENTS.md
 
-Índice e regras operacionais para o **vibe-code** — um **Painel de Controle de Produção Autônoma de Código** (Autonomous Code Production Control Plane) que orquestra agentes de IA em workspaces/worktrees isolados com validação determinística.
+vibe-code: autonomous code production control plane. It runs coding agents in isolated git worktrees and validates their output deterministically. `CLAUDE.md` holds the detailed architecture and env var table; this file holds the operating rules.
 
-## 1. Mapa de Conhecimento (Leia nesta ordem)
-- [WORKFLOW.md](file:///d:/Solutions/pessoal/vibe/vibe-code/WORKFLOW.md) — Contrato de ciclo de vida (Intake -> Run -> Validação -> Review).
-- [docs/repo-contract.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/repo-contract.md) — Boundaries e Quality Gates.
-- [docs/glossary.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/glossary.md) — Vocabulário padronizado do control plane.
-- [docs/remote-control.md](file:///d:/Solutions/pessoal/vibe/vibe-code/docs/remote-control.md) — Harness Remote: modo code (default), nomes de sessão automáticos e PWA.
-- [README.md](file:///d:/Solutions/pessoal/vibe/vibe-code/README.md) & [CLAUDE.md](file:///d:/Solutions/pessoal/vibe/vibe-code/CLAUDE.md) — Setup local, surfaces e comandos técnicos.
+## Stack
 
-## 2. Regras Operacionais Críticas
-- **Changelog**: Registrar alterações para push ou release em [CHANGELOG.md](file:///d:/Solutions/pessoal/vibe/vibe-code/CHANGELOG.md).
-- **Qualidade**: Linter (Biome) e testes devem passar com sucesso antes de finalizar.
-- **Resolução de Conflitos**: Usar a mesma sessão do agente (`session_id`) para resolver conflitos de merge na task.
-- **Segurança e Isolamento**: Repositórios pertencem a workspaces. Valide acessos usando `repositories.workspace_id`.
-- **Agent Templates**: Localizados em `packages/server/src/agents/templates/*.json` (validados no boot via `agent-templates.ts`).
+- Bun, Hono, SQLite (`packages/server`); React 19, Vite, Tailwind 4 (`packages/web`); shared types (`packages/shared`).
+- Biome for lint and format; husky + commitlint (Conventional Commits, `commit-msg` hook).
+- Engines: one file per CLI in `packages/server/src/agents/engines/` (OpenCode is the default). LiteLLM route is optional.
 
-## 3. Diretivas Técnicas e Limitações
-- **Processos**: Encerrar árvores de processos filhos usando `process-tree.ts` (`killProcessTree`). Nunca mate `node.exe` globalmente.
-- **OpenCode**: Invocar o executável nativo em `node_modules/opencode-windows-*/bin/opencode.exe` para evitar truncamento de prompts multiline.
-- **Gemini CLI**: Injetar `GEMINI_CLI_TRUST_WORKSPACE=true` em worktrees temporárias para evitar erros de workspace não confiável (Exit 55).
-- **Watchdog de Inatividade**: Logs de sistema (ex: `"Still running..."`) não resetam `VIBE_CODE_INACTIVITY_MS`.
-- **Banco de Dados (SQLite)**: `PRAGMA foreign_keys = ON` ativa validação rígida de chaves estrangeiras. Crie workspaces antes de associar repositories.
-- **Testes**: Excluir testes do Bun (`packages/web/src/utils/*.test.ts`) no `vite.config.ts` (Vitest) e executá-los via `bun test`.
-- **Proibição de Modelos Hardcoded (Trava)**: Nenhum engine de agente pode ter listas estáticas/hardcoded de modelos (ex: `COPILOT_MODELS = [...]`, `staticModels = [...]`). Esta restrição é validada deterministicamente pelo teste unitário em [hardcoded-models.test.ts](file:///d:/Solutions/pessoal/vibe/vibe-code/packages/server/src/agents/engines/hardcoded-models.test.ts). Modelos devem ser carregados dinamicamente via consultas à CLI do respectivo agente, LiteLLM, ou variáveis de ambiente de customização/override (`VIBE_<ENGINE>_MODELS`).
+## Commands
 
-## 3.1 Aprendizados Windows (validado 2026-07-15)
-- **Paths em drives diferentes**: `path.relative(cwd, dir)` entre drives (`D:` vs `C:`) retorna caminho **absoluto** (sem `..`). Qualquer guard "está dentro do repo?" precisa também checar `isAbsolute(rel)` — bug real corrigido no guard de `VIBE_CODE_DATA_DIR` em `packages/server/src/index.ts`.
-- **Argv não preserva newlines**: `Bun.spawn(["bun", "--eval", "<script multi-linha>"])` faz o filho imprimir o help. Em testes, escrever o script em arquivo temporário e rodar `bun <arquivo>` (ver `FakeOpenCodeEngine` em `opencode.test.ts`). Mesmo motivo pelo qual prompts vão via stdin para o OpenCode.
-- **Commit no worktree**: após desestagiar `.vibe-code/`, validar o **index** (`git diff --cached --name-only`), não o working tree; hooks do repo alvo (husky/commitlint) podem rejeitar o commit do orquestrador — fallback `--no-verify` em `git-service.ts::commitAll`.
-- **Locale**: nunca usar `toLocaleString()` sem locale fixo em output comparado por testes (máquinas pt-BR formatam `1.234`). Usar `toLocaleString("en-US")`.
-- **Repo bare deletado com DB `ready`**: `orchestrator.launch` re-clona automaticamente (self-heal) — não assumir que `status=ready` implica bare presente no disco.
+```bash
+bun install
+bun run dev          # server + web
+bun run typecheck    # all packages
+bun run test         # per package
+bun run test:e2e     # Playwright (boots an isolated server on :3123 and Vite on :5199)
+bun run lint         # biome check packages/
+```
 
-## 3.2 Suíte E2E (Playwright)
-- `bun run test:e2e` na raiz. O `playwright.config.ts` sobe server real isolado (porta 3123, data dir em `%TEMP%`, auth desabilitada com env vazias) + Vite (5199) e cria um repo git fixture. Specs em `e2e/` (API smoke + fluxo do board/modal).
+Bun tests under `packages/web/src/utils/*.test.ts` are excluded from Vitest in `packages/web/vite.config.ts`; run them with `bun test`.
 
-## 4. Operação em Produção (k8s) — Engines, Modelos & Memória
-Aprendizados de homologar o OpenCode rodando dentro do container deployado (`ghcr.io/juninmd/vibe-code`, Debian/Bun). Validado 2026-06-04.
+## Map (read in this order)
 
-- **Toolchain nativo é obrigatório na imagem**: o `Dockerfile` runtime instala `build-essential pkg-config`. Sem isso, agentes que compilam deps nativas (Rust/cgo) falham com `cc not found`, ficam 300s sem output e o run trava (`AGENT FAILED: stalled`).
-- **Modelos OpenCode Zen free (`opencode/*-free`, `opencode/big-pickle`) TRAVAM no container**: `auth.json` vazio e o request ao gateway nunca retorna (egress p/ `opencode.ai` está OK — HTTP 200; logo, não é rede). Hipótese forte: o provider `opencode` (Zen) exige login de conta (`opencode auth login`). **Não usar como modelo default** — leva ao loop de retry abaixo.
-- **Caminho FREE funcional = GitHub Models** (`github-models/openai/gpt-4o-mini` etc.): usa o `GITHUB_TOKEN` que o OpenCode auto-detecta (`opencode auth list` → "GitHub Models"). Endpoint `models.github.ai/inference` aceita PAT clássico (scope mínimo) — confirmado retornando completion. Sujeito a rate-limit do free tier.
-- **GitHub Copilot (`github-copilot/*`) NÃO funciona com PAT clássico**: retorna `Personal Access Tokens are not supported for this endpoint` (exige token OAuth do Copilot).
-- **`DEFAULT_OPENCODE_MODEL`** (`agents/engines/opencode.ts`): Configurado para `github-models/openai/gpt-4o-mini` — modelo free funcional (usa o `GITHUB_TOKEN` do deploy).
-- **Rota LiteLLM** (`litellm-client.ts` + `providers` no `opencode.ts`): só ativa quando `LITELLM_MASTER_KEY` (a chave REAL, não placeholder) **e** `LITELLM_BASE_URL` estão no env. `getLiteLLMBaseUrl()` faz fallback p/ `localhost:4000` se ausente. Comprovadamente funcional via provider OpenAI-compatible, mas pode estar desabilitada por preferência do operador.
-- **Memória**: runs do OpenCode são pesados; rodar OpenCode somando ao server sob limite de 2Gi causa `OOMKilled` e reinício do pod. Manter `VIBE_CODE_MAX_AGENTS=1` e/ou subir o limite de memória; nunca disparar OpenCode extra dentro do pod de produção via `kubectl exec`.
-- **Loop de retry monopoliza o slot**: run que trava (stall 300s) → `AGENT FAILED` → auto-retry **sem teto**, prendendo o único slot (`MAX_AGENTS=1`) e matando de fome todas as outras tasks. Parar uma task em loop: `POST /api/tasks/{id}/cancel` e então `PATCH {status:"archived"}` (status `cancelled`/`canceled` → 400; `cancel` sozinho só mata o run atual e o orchestrator repesca a task do backlog). Tasks com tag `auto-improve` são auto-relançadas pelo orchestrator.
+1. [WORKFLOW.md](WORKFLOW.md): lifecycle contract (intake, run, validation, review).
+2. [docs/repo-contract.md](docs/repo-contract.md): boundaries and quality gates.
+3. [docs/glossary.md](docs/glossary.md): shared vocabulary.
+4. [docs/remote-control.md](docs/remote-control.md): remote harness (code mode, session names, PWA).
+5. [README.md](README.md) and [CLAUDE.md](CLAUDE.md): setup, surfaces, commands.
 
-## 5. Blockers de Homologação do Fluxo Free E2E (abertos em 2026-06-04)
-Estado: o OpenCode free **não fecha fluxo completo (PR aberto)** no deploy atual. PRs JÁ foram abertos com sucesso antes (github-assistance #125–132, 19–20/mai) → é **regressão**, não greenfield. Causas identificadas, em ordem de prioridade:
+## Conventions
 
-1. **Watchdog de inatividade mata runs que não streamam eventos** (provável causa raiz): runs do OpenCode (tanto Zen `*-free` quanto `github-models/*`) ficam 300s sem emitir evento de agent parseável → `stalled` → `AGENT FAILED` → retry. O `"Still running..."` (heartbeat) NÃO conta como atividade. A API do GitHub Models responde isolada (curl direto OK), mas o run via OpenCode `--format json` não produz evento dentro de `VIBE_CODE_INACTIVITY_MS=300000`. Investigar parsing de eventos in `engines/opencode.ts::parseLine` vs formato real de saída do OpenCode 1.15.x, e/ou aumentar/segmentar o watchdog na fase `generating`.
-2. **Gate de verificação falha em repos não-JS**: `Verification failed: unable to discover validation commands from WORKFLOW.md or package.json`. Repos Python/uv (ex: github-assistance) não têm `package.json` → o quality-gate aborta **antes do PR**. Precisa detectar `pyproject.toml`/`uv`/`Makefile` ou permitir validação opt-out por repo.
-3. **`MAX_AGENTS=1` não é respeitado**: observados 4 runs `in_progress` simultâneos. Enforcement de concorrência (`orchestrator.ts::launch` / `activeCount`) está furado — runs órfãos/zumbis não decrementam o contador.
-4. **Modelo default inválido**: [Resolvido] Trocado para o free funcional `github-models/openai/gpt-4o-mini`.
+- **Changelog**: every change for push or release goes in [CHANGELOG.md](CHANGELOG.md).
+- **Quality**: Biome and tests must pass before you finish.
+- **Validation**: new endpoints use Zod; never interpolate strings into SQL.
+- **Conflicts**: resolve merge conflicts in the same agent session (`session_id`).
+- **Isolation**: repos belong to workspaces. Check access through `repositories.workspace_id`.
+- **Templates**: agent templates in `packages/server/src/agents/templates/*.json`, validated at boot by `agent-templates.ts`.
+- **Docs**: record decisions and pitfalls. Do not write PR summaries or file catalogs in docs, and keep each fact in one doc only.
+- **Tests**: test what can break (protocol translation, permissions, migrations, races) at the lowest layer that fails. A bug fix starts with a failing test. No `sleep` or polling in tests; wait for the event. Run only the affected file; the full suite runs in CI.
 
-## 6. Regras adotadas de T3 Code e Paseo
-Origem e inventário em [docs/t3-paseo-port.md](docs/t3-paseo-port.md).
+## Gotchas
 
-### 6.1 Riscos ao trabalhar no app que hospeda o agente
-- Mate só o PID que você iniciou. Nunca `pkill -f`, nunca por nome.
-- Nunca use o banco ou o `VIBE_CODE_DATA_DIR` real: rode com um data dir temporário.
-- Nunca reinicie o servidor que executa a sua sessão. Timeout não é motivo para reiniciar.
+- **Processes**: stop child trees with `killProcessTree` (`packages/server/src/utils/process-tree.ts`). Never kill `node.exe` globally, never `pkill -f`, and kill only the PID you started.
+- **Sandbox safety**: never use the real DB or `VIBE_CODE_DATA_DIR`; use a temporary data dir. Never restart the server that runs your own session; a timeout is not a reason.
+- **OpenCode**: run the native binary at `node_modules/opencode-windows-*/bin/opencode.exe` to avoid prompt truncation in multiline input. Prompts go through stdin.
+- **Gemini CLI**: set `GEMINI_CLI_TRUST_WORKSPACE=true` in temporary worktrees, or it exits 55.
+- **Inactivity watchdog**: system logs such as "Still running..." do not reset `VIBE_CODE_INACTIVITY_MS`.
+- **SQLite**: `PRAGMA foreign_keys = ON` enforces foreign keys. Create the workspace before its repositories.
+- **Model lists**: no engine may hardcode model lists (`COPILOT_MODELS = [...]`, `staticModels = [...]`). `hardcoded-models.test.ts` enforces it. Load models from the agent CLI, LiteLLM, or `VIBE_<ENGINE>_MODELS`.
+- **Parity**: a capability appears in the UI only if the engine really runs it; the server refuses it otherwise.
 
-### 6.2 Toda superfície
-- Uma ação disponível na conversa também existe na paleta de comandos e, se frequente, num atalho.
-- Toda entrada tem a saída inversa (abrir/fechar, arquivar/restaurar).
-- Teste desktop (1440px) e celular (390px); prints de antes/depois em mudanças de UI.
-- Capacidade só aparece na UI se o engine de fato a executa; recusas falham fechadas no servidor.
+### Windows
 
-### 6.3 Design
-- Cores só por token (`--rw-*`); nada de hex solto nos componentes.
-- Hierarquia por peso e cor, não por tamanho. No máximo um botão de destaque por tela.
-- Destrutivo é botão com contorno até a confirmação. Desabilitado é só opacidade.
-- Mudança de estado não desloca o layout. Spinner vem antes do texto, nunca depois.
-- Estado vazio: frase curta e no máximo uma ação. Erro: uma frase direta abaixo do campo.
-- Toda ação falível tem estado pendente, sucesso e falha visíveis.
+- `path.relative` across drives (`D:` vs `C:`) returns an absolute path. Any "inside the repo?" guard must also check `isAbsolute(rel)`.
+- `Bun.spawn(["bun", "--eval", "<multiline>"])` drops newlines. Write the script to a temp file and run `bun <file>`.
+- After unstaging `.vibe-code/`, validate the index (`git diff --cached --name-only`), not the working tree. Commit hooks in target repos may reject the orchestrator's commit; `git-service.ts::commitAll` falls back to `--no-verify`.
+- Use `toLocaleString("en-US")` in output that tests compare. pt-BR machines format `1.234`.
+- `status=ready` does not mean the bare repo is on disk: `orchestrator.launch` re-clones it (self-heal).
 
-### 6.4 Testes e documentação
-- Teste o que pode quebrar (tradução de protocolo, permissões, migrações, corridas), na camada
-  mais baixa que falha. Bug corrigido começa com teste falhando.
-- Sem `sleep` nem polling em teste; espere o evento. Rode só o arquivo afetado; a suíte inteira fica no CI.
-- Docs guardam decisões e armadilhas, não resumos de PR nem catálogo de arquivos. Um fato vive num doc só.
+### Production (k8s, validated 2026-06-04)
+
+- The runtime image needs `build-essential pkg-config`. Without them, native deps fail with `cc not found`, the run stalls 300 s, and it logs `AGENT FAILED: stalled`.
+- OpenCode Zen free models (`opencode/*-free`, `opencode/big-pickle`) hang in the container: `auth.json` is empty and the gateway never answers. Do not use them as default.
+- Working free path: GitHub Models (`github-models/openai/gpt-4o-mini`), using the deploy `GITHUB_TOKEN`. Rate-limited.
+- GitHub Copilot (`github-copilot/*`) rejects classic PATs. It needs an OAuth token.
+- LiteLLM route is active only when `LITELLM_MASTER_KEY` (real key, not placeholder) and `LITELLM_BASE_URL` are set.
+- OpenCode runs are heavy. OpenCode plus the server under a 2Gi limit causes `OOMKilled`. Keep `VIBE_CODE_MAX_AGENTS=1` or raise the memory limit. Never start OpenCode inside the production pod with `kubectl exec`.
+- A stalled run retries with no cap and holds the only slot. Stop it with `POST /api/tasks/{id}/cancel`, then `PATCH {status:"archived"}`. (`cancelled`/`canceled` return 400.) Tasks tagged `auto-improve` are relaunched automatically.
+
+### Known open issues (as of 2026-06-04; not re-verified)
+
+1. The watchdog kills OpenCode runs that stream no parseable events for 300 s. Suspect `engines/opencode.ts::parseLine` against the real OpenCode 1.15.x output.
+2. The quality gate fails on non-JS repos: `unable to discover validation commands`. Python/uv and Makefile repos need detection or an opt-out.
+3. `MAX_AGENTS=1` is not enforced: four `in_progress` runs were seen. Check `orchestrator.ts::launch` and `activeCount`; orphaned runs do not decrement the counter.
+
+## Remote and surfaces (T3 Code and Paseo rules, see [docs/t3-paseo-port.md](docs/t3-paseo-port.md))
+
+- Every action in the conversation also exists in the command palette, and in a shortcut if it is frequent.
+- Every entry has an inverse (open/close, archive/restore).
+- Test desktop (1440px) and phone (390px). Attach before/after screenshots for UI changes.
+- Colors come only from `--rw-*` tokens. No loose hex in components.
+- Hierarchy by weight and color, not size. At most one primary button per screen.
+- Destructive actions are outlined until confirmed. Disabled is opacity only.
+- A state change does not shift layout. Spinners go before the text.
+- Empty state: one short sentence and at most one action. Error: one direct sentence below the field.
+- Every fallible action shows pending, success, and failure states.
 
 <!-- base-actions-main-policy -->
 ## GitHub Actions — padrão obrigatório (@main)
