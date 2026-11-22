@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Db } from "../db";
@@ -386,7 +385,7 @@ export function createReposRouter(db: Db, git: GitService, hub: BroadcastHub) {
     const repo = db.repos.getById(c.req.param("id"));
     if (!repo) return c.json({ error: "not_found", message: "Repository not found" }, 404);
     try {
-      const barePath = join(git.reposDir, repo.name);
+      const barePath = git.getBarePath(repo.name, repo.url);
       const loader = new RepoSkillsLoader(repo.localPath ?? barePath);
       const manifests = await loader.loadManifestsFromGit(barePath);
 
