@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import {
   basicAuth,
   type ServeHandle,
@@ -10,9 +9,9 @@ import type { KubeApi, KubePod } from "./api";
 import type { K8sRunnerConfig } from "./config";
 import {
   MANAGED_SELECTOR,
-  opencodeDataSubPath,
   podEnv,
   podManifest,
+  runnerDataDir,
   SERVE_PORT,
   secretManifest,
   workspaceKey,
@@ -23,6 +22,7 @@ interface Entry {
   url: string;
   authorization: string;
   envHash: string;
+  owner: string;
   busy: number;
   lastActive: number;
   exited: Promise<number>;
@@ -38,6 +38,8 @@ export interface PodPoolDeps {
   idleMs: () => number;
   /** Absolute path of the bare repository behind a worktree. */
   gitCommonDir?: (workdir: string) => Promise<string>;
+  /** User (workspace) a task belongs to, for the per-user pod cap and label. */
+  ownerOf?: (workdir: string) => string;
   ensureDir?: (path: string) => Promise<void>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -68,6 +70,12 @@ function isReady(pod: KubePod): boolean {
   return !!pod.status?.conditions?.some((c) => c.type === "Ready" && c.status === "True");
 }
 
+/** Why the scheduler has not placed the pod yet (e.g. "0/1 nodes are available: Insufficient cpu"). */
+function unscheduledReason(pod: KubePod): string | undefined {
+  const scheduled = pod.status?.conditions?.find((c) => c.type === "PodScheduled");
+  return scheduled?.status === "False" ? scheduled.message || scheduled.reason : undefined;
+}
+
 function hashEnv(env: Record<string, string>): string {
   const sorted = Object.keys(env)
     .sort()
@@ -86,6 +94,8 @@ export class PodPool {
   private readonly pending = new Map<string, Promise<Entry>>();
   /** Pods created but not yet Ready; never orphans. */
   private readonly starting = new Set<string>();
+  /** Pods being created per owner, counted against the per-user cap before they exist. */
+  private readonly reserved = new Map<string, number>();
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly log: (message: string) => void;
@@ -141,22 +151,79 @@ export class PodPool {
       if (healthy && (current.envHash === envHash || current.busy > 0)) return current;
       await this.remove(workdir, current, healthy ? "settings changed" : "pod gone");
     }
-    const entry = await this.create(workdir, env, envHash);
-    this.entries.set(workdir, entry);
-    return entry;
+    const owner = this.deps.ownerOf?.(workdir) ?? "default";
+    // Reserve first so concurrent starts of one user see each other.
+    this.reserved.set(owner, (this.reserved.get(owner) ?? 0) + 1);
+    try {
+      await this.makeRoom(owner, this.deps.config().maxPodsPerUser);
+      const entry = await this.createWithinQuota(workdir, env, envHash, owner);
+      this.entries.set(workdir, entry);
+      return entry;
+    } finally {
+      const left = (this.reserved.get(owner) ?? 1) - 1;
+      if (left > 0) this.reserved.set(owner, left);
+      else this.reserved.delete(owner);
+    }
   }
 
-  private async create(workdir: string, env: Record<string, string>, envHash: string) {
+  /** Frees the owner's oldest idle pods until the new one fits under the cap. */
+  private async makeRoom(owner: string, cap: number) {
+    for (;;) {
+      const mine = [...this.entries.values()].filter((e) => e.owner === owner).length;
+      if (mine + (this.reserved.get(owner) ?? 0) <= cap) return;
+      // Picked fresh each round: a pod may have started a turn while we deleted another.
+      if (!(await this.removeOldestIdle((e) => e.owner === owner, "user pod limit"))) {
+        throw new Error(
+          `Limite de ${cap} pod(s) de agente por usuário atingido: espere um turno terminar ou aumente o limite em Configurações → Execução`
+        );
+      }
+    }
+  }
+
+  /** Deletes the least recently used idle pod matching `which`; false when there is none. */
+  private async removeOldestIdle(which: (e: Entry) => boolean, why: string): Promise<boolean> {
+    let oldest: [string, Entry] | undefined;
+    for (const pair of this.entries) {
+      if (pair[1].busy > 0 || !which(pair[1])) continue;
+      if (!oldest || pair[1].lastActive < oldest[1].lastActive) oldest = pair;
+    }
+    if (!oldest) return false;
+    await this.remove(oldest[0], oldest[1], why);
+    return true;
+  }
+
+  /** The namespace quota is shared by every user: over it, any user's idle pod makes room once. */
+  private async createWithinQuota(
+    workdir: string,
+    env: Record<string, string>,
+    envHash: string,
+    owner: string
+  ): Promise<Entry> {
+    try {
+      return await this.create(workdir, env, envHash, owner);
+    } catch (error) {
+      if (!/exceeded quota/i.test((error as Error).message)) throw error;
+      if (!(await this.removeOldestIdle(() => true, "namespace quota"))) throw error;
+      return this.create(workdir, env, envHash, owner);
+    }
+  }
+
+  private async create(
+    workdir: string,
+    env: Record<string, string>,
+    envHash: string,
+    owner: string
+  ) {
     const { api } = this.deps;
     const config = this.deps.config();
     const name = `vibe-agent-${workspaceKey(workdir)}-${randomBytes(3).toString("hex")}`;
     const gitCommonDir = await (this.deps.gitCommonDir ?? bareRepoOf)(workdir);
     // The server creates it so it is owned by the runtime user, not by kubelet's root.
     await (this.deps.ensureDir ?? ((p) => mkdir(p, { recursive: true }).then(() => {})))(
-      join(config.dataDir, opencodeDataSubPath(workdir))
+      runnerDataDir(config.dataDir, workdir)
     );
     const password = randomBytes(24).toString("base64url");
-    const input = { name, workdir, gitCommonDir, env, password };
+    const input = { name, workdir, gitCommonDir, env, password, owner };
     this.starting.add(name);
     await api.createSecret(config.namespace, secretManifest(config, input));
     try {
@@ -182,6 +249,7 @@ export class PodPool {
         url: `http://${host}:${SERVE_PORT}`,
         authorization: basicAuth(password),
         envHash,
+        owner,
         busy: 0,
         lastActive: this.now(),
         exited,
@@ -212,7 +280,10 @@ export class PodPool {
       }
       if (phase === "Running" && isReady(pod) && pod.status?.podIP) return pod.status.podIP;
       if (this.now() >= deadline) {
-        throw new Error(`runner pod ${name} not ready within ${config.startTimeoutMs}ms`);
+        const pending = unscheduledReason(pod);
+        throw new Error(
+          `runner pod ${name} not ready within ${config.startTimeoutMs}ms${pending ? ` (not scheduled: ${pending})` : ""}`
+        );
       }
       await this.sleep(1000);
     }

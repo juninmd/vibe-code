@@ -23,7 +23,7 @@ export interface KubePod {
   status?: {
     phase?: string;
     podIP?: string;
-    conditions?: { type: string; status: string }[];
+    conditions?: { type: string; status: string; reason?: string; message?: string }[];
     containerStatuses?: { state?: { waiting?: { reason?: string; message?: string } } }[];
   };
 }

@@ -10,6 +10,8 @@ export interface AgentRunnerDeps {
   /** Current Settings (saved over env defaults); read on every turn. */
   settings: () => AgentRunnerSettings;
   dataDir: string;
+  /** User (workspace) behind a task worktree; all tasks share one owner when absent. */
+  ownerOf?: (workdir: string) => string;
   env?: Env;
   /** Test seams. */
   api?: KubeApi;
@@ -39,6 +41,7 @@ export class AgentRunner {
       this.pool = new PodPool({
         ...deps.pool,
         api,
+        ownerOf: deps.ownerOf,
         namespace: this.namespace,
         config: () => toK8sConfig(deps.settings(), deps.dataDir, this.env, this.readNamespace),
         idleMs: () => deps.settings().idleMinutes * 60_000,

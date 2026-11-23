@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import type { K8sRunnerConfig } from "./config";
 
 export const SERVE_PORT = 4096;
@@ -48,6 +48,16 @@ export function opencodeDataSubPath(workdir: string): string {
   return `runner/opencode/${workspaceKey(workdir)}`;
 }
 
+/** Where a task's pod keeps its OpenCode sessions; removed together with the worktree. */
+export function runnerDataDir(dataDir: string, workdir: string): string {
+  return join(dataDir, opencodeDataSubPath(workdir));
+}
+
+/** Label-safe id of the user (workspace) that owns a task; never the raw name. */
+export function ownerKey(owner: string): string {
+  return createHash("sha256").update(owner).digest("hex").slice(0, 12);
+}
+
 export interface PodInput {
   name: string;
   workdir: string;
@@ -55,6 +65,8 @@ export interface PodInput {
   gitCommonDir: string;
   env: Record<string, string>;
   password: string;
+  /** User (workspace) the task belongs to. */
+  owner: string;
 }
 
 interface VolumeMount {
@@ -64,11 +76,30 @@ interface VolumeMount {
   readOnly?: boolean;
 }
 
-function labels(workdir: string) {
+function labels(input: PodInput) {
   return {
     "app.kubernetes.io/managed-by": "vibe-code",
     "app.kubernetes.io/component": "agent-runner",
-    "vibe-code/workspace": workspaceKey(workdir),
+    "vibe-code/workspace": workspaceKey(input.workdir),
+    "vibe-code/owner": ownerKey(input.owner),
+  };
+}
+
+// RWO data PVC: land on the server's node, but through the scheduler so a full node
+// leaves the pod Pending (and fails the start in words) instead of OutOfcpu.
+function sameNode(nodeName: string) {
+  return {
+    nodeAffinity: {
+      requiredDuringSchedulingIgnoredDuringExecution: {
+        nodeSelectorTerms: [
+          {
+            matchExpressions: [
+              { key: "kubernetes.io/hostname", operator: "In", values: [nodeName] },
+            ],
+          },
+        ],
+      },
+    },
   };
 }
 
@@ -80,7 +111,7 @@ export function secretManifest(config: K8sRunnerConfig, input: PodInput) {
     metadata: {
       name: `${input.name}-env`,
       namespace: config.namespace,
-      labels: labels(input.workdir),
+      labels: labels(input),
     },
     stringData: { ...input.env, OPENCODE_SERVER_PASSWORD: input.password } as Record<
       string,
@@ -110,13 +141,13 @@ export function podManifest(config: K8sRunnerConfig, input: PodInput) {
   return {
     apiVersion: "v1",
     kind: "Pod",
-    metadata: { name: input.name, namespace: config.namespace, labels: labels(input.workdir) },
+    metadata: { name: input.name, namespace: config.namespace, labels: labels(input) },
     spec: {
       restartPolicy: "Never",
       automountServiceAccountToken: false,
       enableServiceLinks: false,
       activeDeadlineSeconds: config.maxLifetimeSeconds,
-      ...(config.nodeName ? { nodeName: config.nodeName } : {}),
+      ...(config.nodeName ? { affinity: sameNode(config.nodeName) } : {}),
       ...(config.imagePullSecret ? { imagePullSecrets: [{ name: config.imagePullSecret }] } : {}),
       securityContext: {
         runAsUser: 10001,
@@ -128,14 +159,22 @@ export function podManifest(config: K8sRunnerConfig, input: PodInput) {
         {
           name: "opencode",
           image: config.image,
+          // Same node and tag as the server: reuse its cached (multi-GB) image instead of
+          // re-pulling `:latest` on every pod.
+          imagePullPolicy: "IfNotPresent",
           command: ["opencode", "serve", "--hostname", "0.0.0.0", "--port", String(SERVE_PORT)],
           workingDir: input.workdir,
           envFrom: [{ secretRef: { name: `${input.name}-env` } }],
           ports: [{ name: "serve", containerPort: SERVE_PORT }],
           readinessProbe: { tcpSocket: { port: SERVE_PORT }, periodSeconds: 2 },
           resources: {
+            // No ephemeral-storage request: it defaults to the limit, which stays valid at any size.
             requests: { cpu: config.cpuRequest, memory: config.memoryRequest },
-            limits: { cpu: config.cpuLimit, memory: config.memoryLimit },
+            limits: {
+              cpu: config.cpuLimit,
+              memory: config.memoryLimit,
+              "ephemeral-storage": config.ephemeralStorageLimit,
+            },
           },
           securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } },
           volumeMounts: [

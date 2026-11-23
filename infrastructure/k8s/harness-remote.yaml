@@ -11,6 +11,53 @@ metadata:
   name: harness-remote
   labels:
     app.kubernetes.io/part-of: ai-stack
+    # Every pod here, server and agent runners, must meet the "restricted" profile:
+    # no root, no privilege escalation, no host paths, no added capabilities.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+---
+# Ceiling for the whole namespace (server + agent runner pods), shared by all
+# users: memory fits the server plus three runners at the default 2 CPU / 4Gi /
+# 10Gi. Over it, the server frees any user's oldest idle runner pod first.
+# Raise it together with "Pods por usuário" in Settings → Execução.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+spec:
+  hard:
+    pods: "6"
+    secrets: "40"
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "10"
+    limits.memory: 16Gi
+    limits.ephemeral-storage: 60Gi
+---
+# Defaults for containers that declare no resources (the quota requires limits),
+# and a per-container ceiling Settings → Execução cannot exceed.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: harness-remote
+  namespace: harness-remote
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "1"
+        memory: 1Gi
+        ephemeral-storage: 2Gi
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+      max:
+        cpu: "4"
+        memory: 8Gi
+        ephemeral-storage: 20Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -91,6 +138,58 @@ spec:
         - protocol: TCP
           port: 4096
 ---
+# Runner pods reach DNS and the public internet (model providers, GitHub,
+# package registries) only: no Kubernetes API, no other pod or Service (other
+# users' runners included), no node, no home LAN, no cloud metadata.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-runner-egress
+  namespace: harness-remote
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: agent-runner
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7
+              - fe80::/10
+    # If the agent's model provider is an in-cluster LiteLLM, allow just it:
+    # - to:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: <litellm-namespace>
+    #       podSelector:
+    #         matchLabels:
+    #           app: litellm
+    #   ports:
+    #     - protocol: TCP
+    #       port: 4000
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -118,6 +217,9 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       imagePullSecrets:
         - name: ghcr-pull-secret
       initContainers:
@@ -125,6 +227,10 @@ spec:
         - name: skills-bootstrap
           image: ghcr.io/juninmd/vibe-code:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -155,9 +261,14 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+              ephemeral-storage: 1Gi
       containers:
         - name: harness-remote
           image: ghcr.io/juninmd/vibe-code:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           # IfNotPresent lets a locally-imported image run; k3s still pulls from
           # GHCR when the tag is absent. Bump the tag (or rollout restart) to
           # pick up a new build.
@@ -208,9 +319,12 @@ spec:
             requests:
               cpu: 50m
               memory: 1Gi
+              ephemeral-storage: 1Gi
             limits:
               cpu: "1"
               memory: 3Gi
+              # "Dentro do servidor" mode runs agents here: caches and /tmp count.
+              ephemeral-storage: 20Gi
           livenessProbe:
             httpGet:
               path: /health

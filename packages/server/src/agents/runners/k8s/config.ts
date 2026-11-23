@@ -26,6 +26,8 @@ export interface K8sRunnerConfig {
   cpuLimit: string;
   memoryRequest: string;
   memoryLimit: string;
+  ephemeralStorageLimit: string;
+  maxPodsPerUser: number;
 }
 
 type Env = Record<string, string | undefined>;
@@ -68,6 +70,8 @@ export function defaultRunnerSettings(env: Env = process.env): AgentRunnerSettin
     cpuLimit: env.VIBE_K8S_CPU_LIMIT || "2",
     memoryRequest: env.VIBE_K8S_MEMORY_REQUEST || "512Mi",
     memoryLimit: env.VIBE_K8S_MEMORY_LIMIT || "4Gi",
+    ephemeralStorageLimit: env.VIBE_K8S_EPHEMERAL_STORAGE_LIMIT || "10Gi",
+    maxPodsPerUser: positive(env.VIBE_K8S_MAX_PODS_PER_USER, 2),
   };
 }
 
@@ -128,5 +132,7 @@ export function toK8sConfig(
     cpuLimit: settings.cpuLimit,
     memoryRequest: settings.memoryRequest,
     memoryLimit: settings.memoryLimit,
+    ephemeralStorageLimit: settings.ephemeralStorageLimit,
+    maxPodsPerUser: Math.max(1, Math.floor(settings.maxPodsPerUser)),
   };
 }

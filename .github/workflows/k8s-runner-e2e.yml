@@ -1,0 +1,74 @@
+name: k8s runner e2e
+
+# Runner pods against a real API server (kind): the manifest's RBAC, Pod Security,
+# ResourceQuota and LimitRange must all admit the pods PodPool creates.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - packages/server/src/agents/runners/k8s/**
+      - infrastructure/k8s/harness-remote.yaml
+      - .github/workflows/k8s-runner-e2e.yml
+
+concurrency:
+  group: k8s-runner-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - run: bun install --frozen-lockfile
+
+      # kind, kubectl and yq ship with the ubuntu-latest image.
+      - name: Create cluster
+        run: kind create cluster --name vibe-e2e --wait 120s
+
+      - name: Fake runner image (`opencode serve` = a plain HTTP server on 4096)
+        run: |
+          mkdir -p /tmp/fake-runner
+          printf '#!/bin/sh\nexec python3 -m http.server 4096\n' > /tmp/fake-runner/opencode
+          chmod +x /tmp/fake-runner/opencode
+          printf 'FROM python:3.12-alpine\nCOPY opencode /usr/local/bin/opencode\n' > /tmp/fake-runner/Dockerfile
+          docker build -q -t vibe-fake-runner:e2e /tmp/fake-runner
+          kind load docker-image vibe-fake-runner:e2e --name vibe-e2e
+
+      - name: Apply the manifest's namespace, RBAC, policies, quota and limits
+        run: |
+          yq 'select(.kind == "Namespace" or .kind == "ServiceAccount" or .kind == "Role" or .kind == "RoleBinding" or .kind == "NetworkPolicy" or .kind == "ResourceQuota" or .kind == "LimitRange")' \
+            infrastructure/k8s/harness-remote.yaml | kubectl apply -f -
+          cat <<'YAML' | kubectl apply -f -
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: e2e-data
+            namespace: harness-remote
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 1Gi
+          YAML
+
+      - name: Run PodPool against the cluster as the server's ServiceAccount
+        working-directory: packages/server
+        run: |
+          export VIBE_K8S_E2E_API="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          export VIBE_K8S_E2E_CA="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)"
+          export VIBE_K8S_E2E_TOKEN="$(kubectl -n harness-remote create token harness-remote)"
+          bun test src/agents/runners/k8s/pod-pool.kind.test.ts --timeout 300000
+
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl -n harness-remote get pods,secrets,events -o wide || true
+          kubectl -n harness-remote describe resourcequota || true
