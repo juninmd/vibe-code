@@ -10,8 +10,16 @@ export class FakeKube implements KubeApi {
   /** Runs inside getPod, before it answers: lets tests interleave pool calls. */
   onGetPod?: () => Promise<void>;
   failDeletes = 0;
+  /** Condition a not-yet-ready pod reports (e.g. PodScheduled=False). */
+  pendingCondition?: { type: string; status: string; reason?: string; message?: string };
+
+  /** Pods the namespace quota admits; createPod fails like the API server above it. */
+  quotaPods = Number.POSITIVE_INFINITY;
 
   async createPod(_ns: string, pod: any): Promise<KubePod> {
+    if (this.pods.size >= this.quotaPods) {
+      throw new Error("POST pods: 403 exceeded quota: harness-remote, requested: pods=1");
+    }
     this.pods.set(pod.metadata.name, { manifest: pod, polls: 0 });
     return { metadata: { name: pod.metadata.name, uid: `uid-${pod.metadata.name}` } };
   }
@@ -29,7 +37,10 @@ export class FakeKube implements KubeApi {
         status: { phase: "Pending", containerStatuses: [{ state: { waiting: this.failWith } }] },
       };
     }
-    if (pod.polls <= this.readyAfter) return { metadata: { name }, status: { phase: "Pending" } };
+    if (pod.polls <= this.readyAfter) {
+      const conditions = this.pendingCondition ? [this.pendingCondition] : undefined;
+      return { metadata: { name }, status: { phase: "Pending", conditions } };
+    }
     pod.status = {
       phase: "Running",
       podIP: `10.0.0.${this.nextIp++}`,
@@ -40,7 +51,13 @@ export class FakeKube implements KubeApi {
   async listPods(): Promise<KubePod[]> {
     return [...this.pods.keys()].map((name) => ({ metadata: { name } }));
   }
+  /** Runs inside deletePod, before it answers: lets tests interleave pool calls. */
+  onDeletePod?: () => Promise<void>;
+
   async deletePod(_ns: string, name: string) {
+    const hook = this.onDeletePod;
+    this.onDeletePod = undefined;
+    await hook?.();
     if (this.failDeletes > 0) {
       this.failDeletes--;
       throw new Error("api blip");

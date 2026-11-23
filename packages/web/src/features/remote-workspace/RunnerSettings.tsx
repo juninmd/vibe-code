@@ -14,12 +14,14 @@ const NUMBER_FIELDS: [Field, string, number][] = [
   ["idleMinutes", "Apagar o pod após (min sem turno)", 1],
   ["maxLifetimeHours", "Vida máxima do pod (h)", 0.25],
   ["startTimeoutSeconds", "Tempo para o pod subir (s)", 10],
+  ["maxPodsPerUser", "Pods por usuário ao mesmo tempo", 1],
 ];
 const RESOURCE_FIELDS: [Field, string][] = [
   ["cpuRequest", "CPU reservada"],
   ["cpuLimit", "Limite de CPU"],
   ["memoryRequest", "Memória reservada"],
   ["memoryLimit", "Limite de memória"],
+  ["ephemeralStorageLimit", "Limite de disco temporário"],
 ];
 
 /** Settings → Execução: run agents inside the server or in one pod per task. */

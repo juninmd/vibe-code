@@ -19,6 +19,8 @@ const config = {
   memoryRequest: "1Gi",
   memoryLimit: "2Gi",
   forwardGitHubToken: false,
+  ephemeralStorageLimit: "10Gi",
+  maxPodsPerUser: 2,
 } satisfies K8sRunnerConfig;
 const input = {
   name: "vibe-agent-x",
@@ -26,6 +28,7 @@ const input = {
   gitCommonDir: "/data/repos/app.git",
   env: { OPENCODE_API_KEY: "k" },
   password: "pw",
+  owner: "ws-antonio",
 };
 
 describe("podEnv", () => {
@@ -106,7 +109,32 @@ describe("podManifest", () => {
     expect(container.securityContext.allowPrivilegeEscalation).toBe(false);
     expect(pod.spec.activeDeadlineSeconds).toBe(600);
     expect(pod.spec.restartPolicy).toBe("Never");
-    expect(pod.spec.nodeName).toBe("node-a");
+  });
+
+  it("bounds scratch disk so one agent cannot fill the node", () => {
+    expect(container.resources.limits["ephemeral-storage"]).toBe("10Gi");
+  });
+
+  it("reuses the server's cached image instead of re-pulling :latest", () => {
+    expect(container.imagePullPolicy).toBe("IfNotPresent");
+  });
+
+  it("goes through the scheduler to the server's node, so a full node stays Pending", () => {
+    expect(pod.spec).not.toHaveProperty("nodeName");
+    const term =
+      pod.spec.affinity?.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution
+        .nodeSelectorTerms[0];
+    expect(term?.matchExpressions[0]).toEqual({
+      key: "kubernetes.io/hostname",
+      operator: "In",
+      values: ["node-a"],
+    });
+  });
+
+  it("labels the owner with a hash, never the raw user name", () => {
+    const owner = pod.metadata.labels["vibe-code/owner"];
+    expect(owner).toMatch(/^[0-9a-f]{12}$/);
+    expect(JSON.stringify(pod.metadata.labels)).not.toContain("antonio");
   });
 
   it("keeps secrets out of the pod spec and in the per-pod Secret", () => {

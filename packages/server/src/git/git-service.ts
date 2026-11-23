@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { lstat, mkdir, readFile, realpath, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { runnerDataDir } from "../agents/runners/k8s/pod-spec";
 import { gitHubGitConfigEnv } from "./github-credentials";
 import type { ProviderRegistry } from "./providers/registry";
 
@@ -205,6 +206,8 @@ export class GitService {
         }
       }
     });
+    // OpenCode sessions a runner pod kept for this worktree (Kubernetes runner).
+    await rm(runnerDataDir(this.basePath, wtPath), { recursive: true, force: true });
   }
 
   async deleteLocalRepo(barePath: string, repoName: string): Promise<void> {

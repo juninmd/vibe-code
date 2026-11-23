@@ -13,6 +13,7 @@ import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
 import { AgentRunner } from "./agents/runners/k8s";
 import { readRunnerSettings } from "./agents/runners/k8s/config";
+import { taskOwner } from "./agents/runners/k8s/owner";
 import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createAutomationRouter } from "./api/automation";
@@ -105,6 +106,7 @@ const hub = new BroadcastHub(db);
 const agentRunner = new AgentRunner({
   settings: () => readRunnerSettings(db.settings),
   dataDir: DATA_DIR,
+  ownerOf: (workdir) => taskOwner(db, workdir),
 });
 const registry = new EngineRegistry({ opencodeServeStart: agentRunner.start });
 // Restore max_agents from DB (overrides env var if previously set via UI)

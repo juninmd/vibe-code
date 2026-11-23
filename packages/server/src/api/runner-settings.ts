@@ -37,6 +37,8 @@ const updateSchema = z
     cpuLimit: quantity,
     memoryRequest: quantity,
     memoryLimit: quantity,
+    ephemeralStorageLimit: quantity,
+    maxPodsPerUser: z.number().int().min(1).max(50),
   })
   .partial()
   .strict();

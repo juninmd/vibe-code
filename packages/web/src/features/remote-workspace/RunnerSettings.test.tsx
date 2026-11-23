@@ -23,6 +23,8 @@ const settings = {
   cpuLimit: "2",
   memoryRequest: "512Mi",
   memoryLimit: "4Gi",
+  ephemeralStorageLimit: "10Gi",
+  maxPodsPerUser: 2,
   forwardGitHubToken: true,
 };
 

@@ -17,18 +17,31 @@ const config: K8sRunnerConfig = {
   memoryRequest: "512Mi",
   memoryLimit: "4Gi",
   forwardGitHubToken: true,
+  ephemeralStorageLimit: "10Gi",
+  maxPodsPerUser: 2,
 };
 const WORKDIR = "/data/workspaces/app/run-1";
 
-function setup() {
+// Task worktrees and the user (workspace) each belongs to.
+const OWNERS: Record<string, string> = {
+  [WORKDIR]: "ws-ana",
+  "/data/workspaces/app/run-2": "ws-ana",
+  "/data/workspaces/app/run-3": "ws-ana",
+  "/data/workspaces/app/run-4": "ws-ana",
+  "/data/workspaces/app/run-9": "ws-bia",
+};
+
+function setup(overrides: Partial<K8sRunnerConfig> = {}) {
   const kube = new FakeKube();
+  const cfg = { ...config, ...overrides };
   let clock = 1_000_000;
   const dirs: string[] = [];
   const pool = new PodPool({
     api: kube,
     namespace: config.namespace,
-    config: () => config,
-    idleMs: () => config.idleMs,
+    config: () => cfg,
+    idleMs: () => cfg.idleMs,
+    ownerOf: (workdir) => OWNERS[workdir] ?? "default",
     gitCommonDir: async () => "/data/repos/app.git",
     ensureDir: async (p) => {
       dirs.push(p);
@@ -39,9 +52,9 @@ function setup() {
     },
     log: () => {},
   });
-  const start = (env: Record<string, string> = { OPENCODE_API_KEY: "k" }) =>
-    pool.start({ binary: "opencode", cwd: WORKDIR, env });
-  return { kube, pool, start, dirs, tick: (ms: number) => (clock += ms) };
+  const start = (env: Record<string, string> = { OPENCODE_API_KEY: "k" }, cwd = WORKDIR) =>
+    pool.start({ binary: "opencode", cwd, env });
+  return { kube, pool, start, dirs, cfg, tick: (ms: number) => (clock += ms) };
 }
 
 describe("PodPool", () => {
@@ -169,5 +182,93 @@ describe("PodPool", () => {
     expect(kube.pods.size).toBe(1);
     expect(await pool.cleanupOrphans()).toBe(1);
     expect(kube.pods.size).toBe(0);
+  });
+
+  describe("per-user pod cap", () => {
+    const key = { OPENCODE_API_KEY: "k" };
+    const run = (n: number) => `/data/workspaces/app/run-${n}`;
+
+    it("frees the user's oldest idle pod to start a new task", async () => {
+      const { kube, start, tick } = setup();
+      (await start(key, run(1))).close();
+      tick(1_000);
+      (await start(key, run(2))).close();
+      await start(key, run(3));
+      expect(kube.pods.size).toBe(2);
+      const workspaces = [...kube.pods.values()].map(
+        (p) => p.manifest.spec.containers[0].workingDir
+      );
+      expect(workspaces).toEqual([run(2), run(3)]);
+    });
+
+    it("refuses a new task when every pod of the user is mid-turn", async () => {
+      const { kube, start } = setup({ maxPodsPerUser: 1 });
+      await start(key, run(1));
+      await expect(start(key, run(2))).rejects.toThrow("por usuário");
+      expect(kube.pods.size).toBe(1);
+    });
+
+    it("does not let one user's pods count against another's", async () => {
+      const { kube, start } = setup({ maxPodsPerUser: 1 });
+      await start(key, run(1));
+      await start(key, run(9));
+      expect(kube.pods.size).toBe(2);
+      const owners = new Set(
+        [...kube.pods.values()].map((p) => p.manifest.metadata.labels["vibe-code/owner"])
+      );
+      expect(owners.size).toBe(2);
+    });
+
+    it("counts pods still starting, so concurrent tasks cannot overshoot the cap", async () => {
+      const { kube, start } = setup({ maxPodsPerUser: 1 });
+      const results = await Promise.allSettled([start(key, run(1)), start(key, run(2))]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(kube.pods.size).toBe(1);
+    });
+  });
+
+  it("over the namespace quota, frees another user's idle pod instead of failing", async () => {
+    const { kube, start } = setup();
+    kube.quotaPods = 1;
+    (await start({ OPENCODE_API_KEY: "k" }, "/data/workspaces/app/run-1")).close();
+    await start({ OPENCODE_API_KEY: "k" }, "/data/workspaces/app/run-9");
+    expect(kube.pods.size).toBe(1);
+    const [pod] = [...kube.pods.values()];
+    expect(pod.manifest.spec.containers[0].workingDir).toBe("/data/workspaces/app/run-9");
+  });
+
+  it("surfaces the quota error when every pod in the namespace is mid-turn", async () => {
+    const { kube, start } = setup();
+    kube.quotaPods = 1;
+    await start({ OPENCODE_API_KEY: "k" }, "/data/workspaces/app/run-1");
+    await expect(start({ OPENCODE_API_KEY: "k" }, "/data/workspaces/app/run-9")).rejects.toThrow(
+      "exceeded quota"
+    );
+  });
+
+  it("never frees a pod that started a turn while another was being deleted", async () => {
+    const { kube, start, cfg } = setup({ maxPodsPerUser: 3 });
+    const key = { OPENCODE_API_KEY: "k" };
+    const run = (n: number) => `/data/workspaces/app/run-${n}`;
+    for (const n of [1, 2, 3]) (await start(key, run(n))).close();
+    cfg.maxPodsPerUser = 1;
+    // run-2 starts a turn while run-1 (the oldest) is being deleted to make room.
+    let midTurn: Promise<unknown> | undefined;
+    kube.onDeletePod = async () => {
+      midTurn = start(key, run(2));
+      await midTurn;
+    };
+    const newTask = start(key, run(4));
+    await expect(newTask).rejects.toThrow("por usuário");
+    await midTurn;
+    const live = [...kube.pods.values()].map((p) => p.manifest.spec.containers[0].workingDir);
+    expect(live).toContain(run(2));
+  });
+
+  it("says why the scheduler left the pod Pending when the start times out", async () => {
+    const { kube, start } = setup();
+    kube.readyAfter = 1_000;
+    kube.pendingCondition = { type: "PodScheduled", status: "False", message: "Insufficient cpu" };
+    await expect(start()).rejects.toThrow("not scheduled: Insufficient cpu");
   });
 });

@@ -25,6 +25,10 @@ export interface AgentRunnerSettings {
   cpuLimit: string;
   memoryRequest: string;
   memoryLimit: string;
+  /** Cap on the pod's scratch disk (image layer, /tmp, caches); the worktree lives on the PVC. */
+  ephemeralStorageLimit: string;
+  /** Runner pods one user (workspace) may hold at once; their oldest idle pod makes room. */
+  maxPodsPerUser: number;
 }
 
 export interface AgentRunnerStatus {
