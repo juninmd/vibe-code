@@ -11,6 +11,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
 import { createInterface } from "node:readline";
 
 const BOOL_FIELDS = new Set(["draft", "maintainer_can_modify"]);
@@ -47,6 +48,8 @@ const child = spawn(
   "npx",
   ["-y", "@modelcontextprotocol/server-github", ...process.argv.slice(2)],
   {
+    // Not the agent's worktree: npx would apply that repo's package.json overrides.
+    cwd: tmpdir(),
     env: process.env,
     stdio: ["pipe", "pipe", "inherit"],
   }

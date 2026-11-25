@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createAuthRouter } from "../auth";
 import { createDb } from "../db";
-import { GITLAB_MCP_PACKAGE, resolveMcpServers } from "../mcp/default-servers";
+import { GITLAB_MCP_PACKAGE, NPX_NEUTRAL, resolveMcpServers } from "../mcp/default-servers";
 import { PendingFlows } from "../oauth/common";
 import { type ConnectFlow, createConnectFlows } from "./connect-flows";
 import { freshGitLabToken } from "./gitlab-oauth";
@@ -190,7 +190,7 @@ describe("default MCP servers", () => {
     db.settings.set("gitlab_base_url", "git.corp.local");
     const servers = await resolveMcpServers(db.settings);
     expect(Object.keys(servers).sort()).toEqual(["github", "gitlab"]);
-    expect(servers.gitlab.command).toEqual(["npx", "-y", GITLAB_MCP_PACKAGE]);
+    expect(servers.gitlab.command).toEqual(["node", NPX_NEUTRAL, GITLAB_MCP_PACKAGE]);
     expect((servers.gitlab.environment as Record<string, string>).GITLAB_API_URL).toBe(
       "https://git.corp.local/api/v4"
     );

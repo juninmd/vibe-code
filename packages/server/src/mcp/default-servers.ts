@@ -12,6 +12,7 @@ import { freshGitLabToken, gitlabBaseUrl, gitlabOAuthClient } from "../integrati
 /** Pinned: `npx -y pkg` without a version would run whatever was published last. */
 export const GITLAB_MCP_PACKAGE = "@zereight/mcp-gitlab@2.3.27";
 const GITHUB_MCP_PROXY = resolve(import.meta.dir, "../../scripts/github-mcp-proxy.mjs");
+export const NPX_NEUTRAL = resolve(import.meta.dir, "../../scripts/npx-neutral.mjs");
 
 export type DefaultMcpId = "github" | "gitlab";
 export type McpServerConfig = Record<string, unknown>;
@@ -35,7 +36,7 @@ export function githubMcpServer(token: string): McpServerConfig {
 export function gitlabMcpServer(token: string, baseUrl: string): McpServerConfig {
   return {
     type: "local",
-    command: ["npx", "-y", GITLAB_MCP_PACKAGE],
+    command: ["node", NPX_NEUTRAL, GITLAB_MCP_PACKAGE],
     enabled: true,
     environment: {
       GITLAB_PERSONAL_ACCESS_TOKEN: token,
