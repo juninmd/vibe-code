@@ -1,41 +1,46 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import type { AuthStatus, AuthUser } from "@vibe-code/shared";
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { parse as parseCookie } from "hono/utils/cookie";
 import type { Db } from "./db";
+import type { ConnectFlows } from "./integrations/connect-flows";
+import { finishGitLabConnect } from "./integrations/gitlab-oauth";
+import { isSecureCookie, pkcePair, publicBaseUrl, randomToken, safeEqual } from "./oauth/common";
+import {
+  allowedUsers,
+  createLoginUrl,
+  exchangeCodeForToken,
+  fetchGitHubUser,
+  isGitHubOAuthConfigured,
+} from "./oauth/github";
+import {
+  exchangeGoogleCode,
+  googleIdentity,
+  googleLoginUrl,
+  isGoogleOAuthConfigured,
+  isGoogleUserAllowed,
+} from "./oauth/google";
+import {
+  deleteSession,
+  getSession,
+  mapSession,
+  SESSION_COOKIE,
+  startSession,
+} from "./oauth/sessions";
 
-const SESSION_COOKIE = "vibe_session";
+export { isSecureCookie, publicBaseUrl };
+
 const STATE_COOKIE = "vibe_oauth_state";
-const SESSION_DAYS = 30;
-const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
-const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
-const GITHUB_USER_URL = "https://api.github.com/user";
+const PKCE_COOKIE = "vibe_oauth_pkce";
 
-interface GitHubUserResponse {
-  id: number;
-  login: string;
-  name: string | null;
-  avatar_url: string | null;
-}
-
-interface SessionRow {
-  id: string;
-  github_id: string;
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  access_token: string;
-  expires_at: string;
-}
-
-function isGitHubOAuthConfigured(): boolean {
-  return Boolean(process.env.GITHUB_OAUTH_CLIENT_ID && process.env.GITHUB_OAUTH_CLIENT_SECRET);
+function isOAuthLoginConfigured(): boolean {
+  return isGitHubOAuthConfigured() || isGoogleOAuthConfigured();
 }
 
 export function isAuthEnabled(): boolean {
-  return isGitHubOAuthConfigured() || Boolean(process.env.VIBE_CODE_API_KEY);
+  return isOAuthLoginConfigured() || Boolean(process.env.VIBE_CODE_API_KEY);
 }
 
 export function checkApiKey(c: Context): boolean {
@@ -48,123 +53,6 @@ export function checkApiKey(c: Context): boolean {
   const a = Buffer.from(key);
   const b = Buffer.from(provided);
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function isSecureCookie(c: Context): boolean {
-  return (
-    process.env.NODE_ENV === "production" ||
-    c.req.header("x-forwarded-proto") === "https" ||
-    new URL(c.req.url).protocol === "https:"
-  );
-}
-
-function publicBaseUrl(c: Context): string {
-  const configured = process.env.VIBE_CODE_PUBLIC_URL || process.env.APP_URL;
-  if (configured) return configured.replace(/\/+$/, "");
-  const url = new URL(c.req.url);
-  const proto = c.req.header("x-forwarded-proto") || url.protocol.replace(":", "");
-  const host = c.req.header("x-forwarded-host") || c.req.header("host") || url.host;
-  return `${proto}://${host}`;
-}
-
-function redirectUri(c: Context): string {
-  return `${publicBaseUrl(c)}/api/auth/github/callback`;
-}
-
-function randomToken(): string {
-  return randomBytes(32).toString("base64url");
-}
-
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
-
-function allowedUsers(): Set<string> {
-  return new Set(
-    (process.env.GITHUB_ALLOWED_USERS || "")
-      .split(",")
-      .map((u) => u.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-
-function sessionExpiry(): Date {
-  return new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-}
-
-function mapSession(row: SessionRow): AuthUser {
-  return {
-    githubId: row.github_id,
-    username: row.username,
-    displayName: row.display_name ?? undefined,
-    avatarUrl: row.avatar_url ?? undefined,
-  };
-}
-
-function getSession(db: Db, token: string | undefined): SessionRow | null {
-  if (!token) return null;
-  const id = hashToken(token);
-  const row = db.raw
-    .query<SessionRow, [string, string]>(
-      "SELECT * FROM auth_sessions WHERE id = ? AND expires_at > ?"
-    )
-    .get(id, new Date().toISOString());
-  return row ?? null;
-}
-
-function deleteSession(db: Db, token: string | undefined): void {
-  if (!token) return;
-  db.raw.prepare("DELETE FROM auth_sessions WHERE id = ?").run(hashToken(token));
-}
-
-async function exchangeCodeForToken(c: Context, code: string): Promise<string> {
-  const res = await fetch(GITHUB_TOKEN_URL, {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: process.env.GITHUB_OAUTH_CLIENT_ID,
-      client_secret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
-      code,
-      redirect_uri: redirectUri(c),
-    }),
-  });
-  const json = (await res.json()) as {
-    access_token?: string;
-    error?: string;
-    error_description?: string;
-  };
-  if (!res.ok || !json.access_token) {
-    throw new Error(json.error_description || json.error || `GitHub OAuth failed: ${res.status}`);
-  }
-  return json.access_token;
-}
-
-async function fetchGitHubUser(accessToken: string): Promise<GitHubUserResponse> {
-  const res = await fetch(GITHUB_USER_URL, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${accessToken}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "vibe-code",
-    },
-  });
-  if (!res.ok) throw new Error(`GitHub user lookup failed: ${res.status}`);
-  return (await res.json()) as GitHubUserResponse;
-}
-
-function createLoginUrl(c: Context, state: string): string {
-  const url = new URL(GITHUB_AUTHORIZE_URL);
-  url.searchParams.set("client_id", process.env.GITHUB_OAUTH_CLIENT_ID || "");
-  url.searchParams.set("redirect_uri", redirectUri(c));
-  url.searchParams.set("scope", process.env.GITHUB_OAUTH_SCOPE || "repo read:user user:email");
-  url.searchParams.set("state", state);
-  return url.toString();
 }
 
 export function getCurrentUser(db: Db, c: Context): AuthUser | null {
@@ -203,10 +91,13 @@ export function authStatus(db: Db, c: Context): AuthStatus {
   return {
     enabled,
     authenticated: !enabled || apiKeyAuth || Boolean(user),
-    user: apiKeyAuth ? { githubId: "api-key", username: "api-key", displayName: "API Key" } : user,
+    user: apiKeyAuth
+      ? { githubId: "api-key", username: "api-key", displayName: "API Key", provider: "api-key" }
+      : user,
     loginUrl: "/api/auth/github/start",
     methods: {
       github: isGitHubOAuthConfigured(),
+      google: isGoogleOAuthConfigured(),
       apiKey: Boolean(process.env.VIBE_CODE_API_KEY),
     },
   };
@@ -223,24 +114,32 @@ export function authMiddleware(db: Db): MiddlewareHandler {
     if (process.env.VIBE_CODE_API_KEY) {
       if (checkApiKey(c)) return next();
       // Fall through to session auth if OAuth is also configured
-      if (!process.env.GITHUB_OAUTH_CLIENT_ID) {
+      if (!isOAuthLoginConfigured()) {
         return c.json({ error: "unauthorized", message: "Valid API key required" }, 401);
       }
     }
 
     const row = getSession(db, getCookie(c, SESSION_COOKIE));
-    if (!row) return c.json({ error: "unauthorized", message: "GitHub login required" }, 401);
+    if (!row) return c.json({ error: "unauthorized", message: "Login required" }, 401);
 
+    // A Google session carries no GitHub token: keep the one connected for the agents.
     // Reads are ~150x cheaper than a SQLite write; only write when the active user changed.
-    if (db.settings.get("github_token") !== row.access_token)
-      db.settings.set("github_token", row.access_token);
-    if (db.settings.get("github_username") !== row.username)
-      db.settings.set("github_username", row.username);
+    if (row.access_token) {
+      if (db.settings.get("github_token") !== row.access_token)
+        db.settings.set("github_token", row.access_token);
+      if (db.settings.get("github_username") !== row.username)
+        db.settings.set("github_username", row.username);
+    }
     await next();
   };
 }
 
-export type LoginErrorCode = "invalid_state" | "not_allowed" | "github_failed";
+export type LoginErrorCode =
+  | "invalid_state"
+  | "not_allowed"
+  | "github_failed"
+  | "google_failed"
+  | "google_not_allowed";
 
 /**
  * A failed OAuth callback goes back to the app's login screen with a short
@@ -250,93 +149,126 @@ function loginError(c: Context, code: LoginErrorCode) {
   return c.redirect(`/?auth_error=${code}`);
 }
 
-export function createAuthRouter(db: Db) {
+function setFlowCookie(c: Context, name: string, value: string): void {
+  setCookie(c, name, value, {
+    httpOnly: true,
+    secure: isSecureCookie(c),
+    sameSite: "Lax",
+    path: "/",
+    maxAge: 10 * 60,
+  });
+}
+
+/** Read and clear the login `state` cookie; true when it matches the callback. */
+function takeLoginState(c: Context): boolean {
+  const state = c.req.query("state");
+  const storedState = getCookie(c, STATE_COOKIE);
+  deleteCookie(c, STATE_COOKIE, { path: "/" });
+  return Boolean(state && storedState && safeEqual(state, storedState));
+}
+
+function notConfigured(c: Context, message: string) {
+  return c.json({ error: "auth_not_configured", message }, 503);
+}
+
+export function createAuthRouter(db: Db, connectFlows?: ConnectFlows) {
   const app = new Hono();
 
   app.get("/me", (c: Context) => c.json({ data: authStatus(db, c) }));
 
   app.get("/github/start", (c: Context) => {
     if (!isGitHubOAuthConfigured()) {
-      return c.json(
-        {
-          error: "auth_not_configured",
-          message: "Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET on the server.",
-        },
-        503
+      return notConfigured(
+        c,
+        "Set GITHUB_OAUTH_CLIENT_ID and GITHUB_OAUTH_CLIENT_SECRET on the server."
       );
     }
     const state = randomToken();
-    setCookie(c, STATE_COOKIE, state, {
-      httpOnly: true,
-      secure: isSecureCookie(c),
-      sameSite: "Lax",
-      path: "/",
-      maxAge: 10 * 60,
-    });
+    setFlowCookie(c, STATE_COOKIE, state);
     return c.redirect(createLoginUrl(c, state));
   });
 
   app.get("/github/callback", async (c: Context) => {
+    // A connect flow (Settings → MCP) only stores the token for the agents;
+    // it was started by an authenticated call and must not change the session.
+    const connect = connectFlows?.take(c.req.query("state"));
+    if (connect && connect.provider !== "github") return c.redirect("/?connect_error=github");
     try {
       const code = c.req.query("code");
-      const state = c.req.query("state");
-      const storedState = getCookie(c, STATE_COOKIE);
-      deleteCookie(c, STATE_COOKIE, { path: "/" });
-
-      if (!code || !state || !storedState || !safeEqual(state, storedState)) {
-        return loginError(c, "invalid_state");
-      }
+      if (!connect && !takeLoginState(c)) return loginError(c, "invalid_state");
+      if (!code)
+        return connect ? c.redirect("/?connect_error=github") : loginError(c, "invalid_state");
 
       const accessToken = await exchangeCodeForToken(c, code);
       const ghUser = await fetchGitHubUser(accessToken);
+      if (connect) {
+        db.settings.set("github_token", accessToken);
+        db.settings.set("github_username", ghUser.login);
+        return c.redirect("/?connected=github");
+      }
       const allowlist = allowedUsers();
       if (allowlist.size > 0 && !allowlist.has(ghUser.login.toLowerCase())) {
         return loginError(c, "not_allowed");
       }
 
-      const sessionToken = randomToken();
-      const expiresAt = sessionExpiry();
-      db.raw
-        .prepare(
-          `INSERT OR REPLACE INTO auth_sessions
-           (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(
-          hashToken(sessionToken),
-          String(ghUser.id),
-          ghUser.login,
-          ghUser.name,
-          ghUser.avatar_url,
-          accessToken,
-          expiresAt.toISOString()
-        );
-
+      startSession(db, c, {
+        id: String(ghUser.id),
+        username: ghUser.login,
+        displayName: ghUser.name,
+        avatarUrl: ghUser.avatar_url,
+        accessToken,
+      });
       db.settings.set("github_token", accessToken);
       db.settings.set("github_username", ghUser.login);
-
-      setCookie(c, SESSION_COOKIE, sessionToken, {
-        httpOnly: true,
-        secure: isSecureCookie(c),
-        sameSite: "Lax",
-        path: "/",
-        maxAge: SESSION_DAYS * 24 * 60 * 60,
-      });
-
       return c.redirect("/");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[auth] GitHub login failed: ${message}`);
-      return loginError(c, "github_failed");
+      return connect ? c.redirect("/?connect_error=github") : loginError(c, "github_failed");
     }
   });
+
+  app.get("/google/start", (c: Context) => {
+    if (!isGoogleOAuthConfigured()) {
+      return notConfigured(
+        c,
+        "Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and GOOGLE_ALLOWED_EMAILS or GOOGLE_ALLOWED_DOMAINS on the server."
+      );
+    }
+    const state = randomToken();
+    const pkce = pkcePair();
+    setFlowCookie(c, STATE_COOKIE, state);
+    setFlowCookie(c, PKCE_COOKIE, pkce.verifier);
+    return c.redirect(googleLoginUrl(c, state, pkce.challenge));
+  });
+
+  app.get("/google/callback", async (c: Context) => {
+    const verifier = getCookie(c, PKCE_COOKIE);
+    deleteCookie(c, PKCE_COOKIE, { path: "/" });
+    const code = c.req.query("code");
+    if (!takeLoginState(c) || !code || !verifier || !isGoogleOAuthConfigured()) {
+      return loginError(c, "invalid_state");
+    }
+    try {
+      const user = await exchangeGoogleCode(c, code, verifier);
+      if (!isGoogleUserAllowed(user)) return loginError(c, "google_not_allowed");
+      startSession(db, c, googleIdentity(user));
+      return c.redirect("/");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[auth] Google login failed: ${message}`);
+      return loginError(c, "google_failed");
+    }
+  });
+
+  app.get("/gitlab/callback", (c: Context) => finishGitLabConnect(db, c, connectFlows));
 
   app.post("/logout", (c: Context) => {
     const token = getCookie(c, SESSION_COOKIE);
     const row = getSession(db, token);
     // The login copied its GitHub token into the server settings for the agents;
     // do not leave it behind once that user signs out.
-    if (row && db.settings.get("github_token") === row.access_token) {
+    if (row?.access_token && db.settings.get("github_token") === row.access_token) {
       db.settings.set("github_token", "");
       db.settings.set("github_username", "");
     }

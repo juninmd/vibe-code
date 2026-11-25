@@ -61,6 +61,10 @@ Repository contract entrypoints:
 - **`terminal/`** — interactive task terminals: `session-service.ts` (Bun PTY + headless screen snapshot), `harness.ts` (Claude Code / OpenCode launch + skill injection), `controller.ts` (worktree, run/task lifecycle); routes in `api/terminal.ts` (see `docs/terminal.md`)
   - `skill-plan.ts` picks skills from the task text (auto/manual plan with reasons); `harness.ts` turns the plan into a Claude Code plugin (`--plugin-dir`) or OpenCode project skills
 - **`lanes/lane-sync.ts`** — keeps board lanes and issue labels in step (opt-in; `decideLaneSync` is the conflict policy); shared mapping in `packages/shared/src/lanes.ts`; see `docs/lanes.md`
+- **`oauth/`** — login providers (GitHub, Google OIDC+PKCE) and the `auth_sessions` store; `auth.ts` keeps the middleware
+- **`integrations/`** — "connect" flows for the default MCPs (GitHub OAuth, GitLab PAT or OAuth2 with refresh); `mcp/default-servers.ts` adds GitHub/GitLab MCPs to every run
+- **`agents/custom-providers.ts`** — user-defined OpenAI-compatible providers (bearer, custom header, OAuth2 client credentials) merged into the OpenCode overlay; API in `api/custom-providers.ts`
+- **`vscode/`** — one loopback `code-server` per session worktree behind the authenticated proxy `/vscode/<taskId>/` (one-time ticket → path-scoped cookie)
 - **`sessions/`** — read-only readers for the local CLI session stores (OpenCode, Claude Code, Antigravity) plus `SessionService`, which projects them onto kanban cards
 - **`db/`** — SQLite via Bun; tables: `repositories`, `tasks`, `agent_runs`, `agent_logs`; WAL mode + foreign keys enabled
 - **`git/git-service.ts`** — clones repos as bare, creates per-task git worktrees under `~/.vibe-code/workspaces/`
@@ -109,6 +113,10 @@ POST /api/tasks/{id}/launch
 | `VIBE_ANTIGRAVITY_SESSIONS_DIR` | `~/.antigravity/sessions`, `~/.antigravity/cli/sessions`, `~/.config/antigravity/sessions` |
 | `VIBE_SESSION_ACTIVE_WINDOW_MS` | `900000` (15 min — newer than this ⇒ `active`) |
 | `VIBE_SESSION_IDLE_WINDOW_MS` | `86400000` (24 h — older than this ⇒ `done`) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` | unset — Google login also needs `GOOGLE_ALLOWED_EMAILS` or `GOOGLE_ALLOWED_DOMAINS` |
+| `GITLAB_OAUTH_CLIENT_ID` / `_SECRET` | unset — GitLab OAuth2 for the GitLab MCP (or set in Settings → MCP) |
+| `VIBE_VSCODE_BIN` | `code-server` on PATH — VS Code in the browser at `/vscode/<taskId>/` |
+| `VIBE_VSCODE_MAX` / `VIBE_VSCODE_IDLE_MS` | `3` / `1800000` |
 
 The three `*_SESSIONS_DIR` variables accept a comma-separated list and are only
 needed when a CLI stores its sessions somewhere other than the defaults.

@@ -939,10 +939,12 @@ export interface TestConnectionResult {
 }
 
 export interface AuthUser {
+  /** GitHub user id, `google:<sub>` for Google logins, `api-key` for the API key. */
   githubId: string;
   username: string;
   displayName?: string;
   avatarUrl?: string;
+  provider?: "github" | "google" | "api-key";
 }
 
 export interface AuthStatus {
@@ -951,7 +953,53 @@ export interface AuthStatus {
   user: AuthUser | null;
   loginUrl: string;
   /** Sign-in methods the server accepts, so the login screen only offers working ones. */
-  methods?: { github: boolean; apiKey: boolean };
+  methods?: { github: boolean; google?: boolean; apiKey: boolean };
+}
+
+// ─── Custom model providers ─────────────────────────────────────────────────
+
+export type CustomProviderAuth =
+  | { type: "none" }
+  | { type: "bearer" }
+  | { type: "header"; headerName: string; prefix?: string }
+  | { type: "oauth2"; tokenUrl: string; clientId: string; scope?: string };
+
+/** A custom OpenAI-compatible provider as the API returns it (secret masked). */
+export interface CustomProviderView {
+  id: string;
+  name: string;
+  baseUrl: string;
+  enabled: boolean;
+  auth: CustomProviderAuth;
+  headers: Record<string, string>;
+  models: string[];
+  secretSet: boolean;
+}
+
+export interface CustomProviderInput extends Omit<CustomProviderView, "id" | "secretSet"> {
+  /** Omitted or empty keeps the stored secret; null removes it. */
+  secret?: string | null;
+}
+
+// ─── Default MCP connections ────────────────────────────────────────────────
+
+export interface McpConnection {
+  id: "github" | "gitlab";
+  enabled: boolean;
+  connected: boolean;
+  method: "oauth" | "token" | null;
+  account?: string;
+  baseUrl?: string;
+  oauthAvailable: boolean;
+  overridden: boolean;
+}
+
+// ─── Remote VS Code ─────────────────────────────────────────────────────────
+
+export interface VsCodeStatus {
+  available: boolean;
+  binary?: string;
+  running: number;
 }
 
 // ─── Statistics Types ────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ config({ path: resolve(import.meta.dir, "../../../.env") });
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { AgentTemplateRegistry } from "./agents/agent-templates";
+import { customProviderSecrets } from "./agents/custom-providers";
 import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
 import { Orchestrator } from "./agents/orchestrator";
 import { EngineRegistry } from "./agents/registry";
@@ -18,6 +19,7 @@ import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createAutomationRouter } from "./api/automation";
 import { createConnectorsRouter } from "./api/connectors";
+import { createCustomProvidersRouter } from "./api/custom-providers";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
 import { createLabelsRouter } from "./api/labels";
@@ -42,6 +44,8 @@ import { resolveMaxAgents } from "./config/max-agents";
 import { createDb } from "./db";
 import { GitService } from "./git/git-service";
 import { ProviderRegistry } from "./git/providers/registry";
+import { createConnectFlows } from "./integrations/connect-flows";
+import { createIntegrationsRouter } from "./integrations/router";
 import { LaneSyncService } from "./lanes/lane-sync";
 import { createTelegramNotifier } from "./notifications/telegram";
 import { blockUnauthenticatedRemote, rejectUnauthenticatedSocket } from "./security/network-guard";
@@ -52,6 +56,9 @@ import { logValidationReport, validateSkills } from "./skills/validator";
 import { TerminalController } from "./terminal/controller";
 import { cleanupWorkspaces } from "./terminal/workspace-cleanup";
 import { redactSecrets, registerSecretSource } from "./utils/secret-redactor";
+import { isVsCodeSocket, VsCodeProxy } from "./vscode/proxy";
+import { createVsCodeRouter } from "./vscode/router";
+import { VsCodeService } from "./vscode/service";
 import { BroadcastHub } from "./ws/broadcast";
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -96,7 +103,11 @@ registerSecretSource(() =>
     "litellm_api_key",
     "opencode_go_api_key",
     "telegram_bot_token",
-  ].map((key) => db.settings.get(key))
+    "gitlab_refresh_token",
+    "gitlab_oauth_client_secret",
+  ]
+    .map((key) => db.settings.get(key))
+    .concat(customProviderSecrets(db.settings).map((secret) => secret ?? null))
 );
 const git = new GitService(DATA_DIR);
 const providerRegistry = new ProviderRegistry(db);
@@ -203,6 +214,14 @@ orchestrator.recoverInProgressTasks().catch((err) => {
   console.warn("[startup] recoverInProgressTasks failed:", err);
 });
 
+const vscode = new VsCodeService({
+  dataDir: DATA_DIR,
+  maxInstances: Number(process.env.VIBE_VSCODE_MAX) || 3,
+  idleMs: Number(process.env.VIBE_VSCODE_IDLE_MS) || undefined,
+});
+const vscodeProxy = new VsCodeProxy(vscode, (req) => isRequestAuthenticated(db, req));
+process.once("exit", () => vscode.stopAll());
+
 const app = new Hono();
 
 app.use(
@@ -214,7 +233,8 @@ app.use(
 );
 
 // auth routes are public (no middleware)
-const authRouter = createAuthRouter(db);
+const connectFlows = createConnectFlows();
+const authRouter = createAuthRouter(db, connectFlows);
 app.route("/api/auth", authRouter);
 
 // all other /api/* routes require authentication
@@ -312,6 +332,9 @@ api.route(
   "/settings/runner",
   createRunnerSettingsRouter(db.settings, () => agentRunner.clusterStatus())
 );
+api.route("/integrations", createIntegrationsRouter(db, connectFlows));
+api.route("/providers/custom", createCustomProvidersRouter(db));
+api.route("/vscode", createVsCodeRouter(db, vscode, vscodeProxy));
 api.route("/settings", createSettingsRouter(db, providerRegistry, skillsLoader, orchestrator));
 api.route("/skills", createSkillsRouter(skillsLoader, skillRegistry, db));
 api.route("/terminal", createTerminalRouter(db, terminalController));
@@ -404,6 +427,7 @@ const server = Bun.serve({
     );
     if (blocked) return blocked;
     const url = new URL(req.url);
+    if (VsCodeProxy.matches(url.pathname)) return vscodeProxy.handle(req, server as never);
     if (url.pathname === "/ws") {
       const authenticated = isRequestAuthenticated(db, req);
       const refused = rejectUnauthenticatedSocket(authenticated);
@@ -419,10 +443,12 @@ const server = Bun.serve({
   },
   websocket: {
     open(ws) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.open(ws as never);
       const client = hub.addClient(ws);
       wsClients.set(ws, client);
     },
     message(ws, message) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.message(ws as never, message);
       const client = wsClients.get(ws);
       if (!client) return;
       try {
@@ -491,6 +517,7 @@ const server = Bun.serve({
       }
     },
     close(ws) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.close(ws as never);
       const client = wsClients.get(ws);
       if (client) hub.removeClient(client);
       wsClients.delete(ws);

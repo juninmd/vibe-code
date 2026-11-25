@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { CustomProvidersSettings } from "./CustomProvidersSettings";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
+import { type ConnectResult, McpConnections } from "./McpConnections";
 import { RunnerSettings } from "./RunnerSettings";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
@@ -49,7 +51,11 @@ export function ManagementViews({
   setInspector,
   onPage,
   onSource,
+  settingsSection,
+  connectResult,
 }: {
+  settingsSection?: string;
+  connectResult?: ConnectResult | null;
   page: ManagementPage;
   workspace: Workspace;
   compact: boolean;
@@ -110,6 +116,9 @@ export function ManagementViews({
         {page === "agents" && <AgentsPage />}
         {page === "settings" && (
           <SettingsPage
+            key={settingsSection}
+            initialSection={settingsSection}
+            connectResult={connectResult}
             workspace={workspace}
             compact={compact}
             setCompact={setCompact}
@@ -833,7 +842,11 @@ function SettingsPage({
   inspector,
   setInspector,
   onSource,
+  initialSection,
+  connectResult,
 }: {
+  initialSection?: string;
+  connectResult?: ConnectResult | null;
   workspace: Workspace;
   compact: boolean;
   setCompact: (value: boolean) => void;
@@ -841,7 +854,7 @@ function SettingsPage({
   setInspector: (value: boolean) => void;
   onSource: (source: "demo" | "server") => void;
 }) {
-  const [section, setSection] = useState("general");
+  const [section, setSection] = useState(initialSection ?? "general");
   const [token, setToken] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [maxAgents, setMaxAgents] = useState("");
@@ -1366,6 +1379,8 @@ function SettingsPage({
           </section>
         </>
       )}
+      {section === "providers" && <CustomProvidersSettings />}
+      {section === "mcp" && <McpConnections connectResult={connectResult} />}
       {section === "mcp" && (
         <section className="rw-settings-card">
           <div className="rw-card-heading">

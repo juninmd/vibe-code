@@ -434,12 +434,10 @@ export class OpenCodeEngine implements AgentEngine {
   async listModels(): Promise<string[]> {
     const models = new Set<string>();
     const launch = await openCodeProviderLaunch({ discoverModels: true }).catch(() => null);
-    for (const id of Object.keys(
-      ((launch?.config.provider as Record<string, { models?: object }> | undefined)?.[
-        LITELLM_PROVIDER_ID
-      ]?.models ?? {}) as Record<string, unknown>
-    )) {
-      models.add(`${LITELLM_PROVIDER_ID}/${id}`);
+    // LiteLLM and custom providers declared in the inline config.
+    const declared = (launch?.config.provider ?? {}) as Record<string, { models?: object }>;
+    for (const [providerId, provider] of Object.entries(declared)) {
+      for (const id of Object.keys(provider.models ?? {})) models.add(`${providerId}/${id}`);
     }
 
     try {
@@ -515,7 +513,10 @@ export class OpenCodeEngine implements AgentEngine {
       },
       providerSettings
     );
-    if (isLiteLLMModel(model) && !launch.config.provider) {
+    if (
+      isLiteLLMModel(model) &&
+      !(launch.config.provider as Record<string, unknown> | undefined)?.[LITELLM_PROVIDER_ID]
+    ) {
       yield {
         type: "log",
         stream: "stderr",

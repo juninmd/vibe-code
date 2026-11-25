@@ -5,6 +5,8 @@ import { readOpenCodeProviderSettings } from "../agents/opencode-providers";
 import type { Orchestrator } from "../agents/orchestrator";
 import type { Db } from "../db";
 import type { ProviderRegistry } from "../git/providers/registry";
+import { storeGitLabPersonalToken } from "../integrations/gitlab-oauth";
+import { githubMcpServer, readUserMcpServers } from "../mcp/default-servers";
 import { resolveTelegramConfig } from "../notifications/telegram";
 import type { SkillsLoader } from "../skills/loader";
 
@@ -88,25 +90,9 @@ export function createSettingsRouter(
     const providers = readOpenCodeProviderSettings(db.settings);
     const telegram = resolveTelegramConfig(db);
 
-    const mcpServersStr = db.settings.get("mcp_servers") || "{}";
-    let mcpServers: Record<string, any> = {};
-    try {
-      mcpServers = JSON.parse(mcpServersStr);
-    } catch {}
-
-    if (!mcpServers.github) {
-      const token = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
-      if (token) {
-        mcpServers.github = {
-          type: "local",
-          command: ["npx", "-y", "@modelcontextprotocol/server-github"],
-          enabled: true,
-          environment: {
-            GITHUB_PERSONAL_ACCESS_TOKEN: token,
-          },
-        };
-      }
-    }
+    const mcpServers = readUserMcpServers(db.settings);
+    const ghMcpToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
+    if (!mcpServers.github && ghMcpToken) mcpServers.github = githubMcpServer(ghMcpToken);
 
     return c.json({
       data: {
@@ -181,7 +167,7 @@ export function createSettingsRouter(
       }
     }
     if (parsed.data.gitlabToken !== undefined) {
-      db.settings.set("gitlab_token", parsed.data.gitlabToken);
+      storeGitLabPersonalToken(db.settings, parsed.data.gitlabToken);
       // Auto-fetch username if token is set
       if (parsed.data.gitlabToken && providerRegistry) {
         try {

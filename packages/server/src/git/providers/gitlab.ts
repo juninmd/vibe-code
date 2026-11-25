@@ -11,7 +11,8 @@ const DEFAULT_BASE_URL = "https://gitlab.com";
 
 function headers(token: string): Record<string, string> {
   return {
-    "PRIVATE-TOKEN": token,
+    // Bearer accepts both personal access tokens and OAuth2 access tokens.
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
     "User-Agent": "vibe-code",
   };

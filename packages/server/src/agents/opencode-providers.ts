@@ -17,6 +17,11 @@
  */
 
 import type { Db } from "../db";
+import {
+  type CustomProvider,
+  readCustomProviders,
+  resolveCustomProviders,
+} from "./custom-providers";
 import { getLiteLLMBaseUrl, listLiteLLMModels } from "./litellm-client";
 
 export const LITELLM_PROVIDER_ID = "litellm";
@@ -37,6 +42,8 @@ export interface OpenCodeProviderSettings {
   /** OpenCode Go / Zen key. Optional when the server already ran `opencode auth login`. */
   goApiKey?: string;
   litellm: LiteLLMProviderSettings;
+  /** User-defined OpenAI-compatible providers (Settings → Provedores). */
+  custom: CustomProvider[];
 }
 
 function splitList(value: string | null | undefined): string[] {
@@ -66,6 +73,7 @@ export function readOpenCodeProviderSettings(
       apiKey: apiKey || undefined,
       models: splitList(settings.get("litellm_models") || env.LITELLM_MODELS),
     },
+    custom: readCustomProviders(settings),
   };
 }
 
@@ -129,6 +137,8 @@ export interface OpenCodeOverlayInput {
   permission?: Record<string, string>;
   mcp?: Record<string, unknown>;
   litellm?: { baseUrl: string; models: string[] } | null;
+  /** Ready-made `provider.<id>` entries (custom providers). */
+  providers?: Record<string, unknown>;
   /** Extra SKILL.md roots (vibe-code's skill catalog). */
   skillDirs?: string[];
 }
@@ -142,9 +152,10 @@ export function buildOpenCodeOverlay(input: OpenCodeOverlayInput): Record<string
   if (input.mcp && Object.keys(input.mcp).length > 0) config.mcp = input.mcp;
   const skillDirs = [...new Set((input.skillDirs ?? []).filter(Boolean))];
   if (skillDirs.length > 0) config.skills = skillDirs;
+  const providers: Record<string, unknown> = { ...input.providers };
   if (input.litellm) {
     const models = [...new Set(input.litellm.models.filter(Boolean))];
-    config.provider = {
+    Object.assign(providers, {
       [LITELLM_PROVIDER_ID]: {
         npm: "@ai-sdk/openai-compatible",
         name: "LiteLLM",
@@ -154,8 +165,9 @@ export function buildOpenCodeOverlay(input: OpenCodeOverlayInput): Record<string
         },
         models: Object.fromEntries(models.map((id) => [id, { name: id }])),
       },
-    };
+    });
   }
+  if (Object.keys(providers).length > 0) config.provider = providers;
   return config;
 }
 
@@ -202,14 +214,23 @@ export async function openCodeProviderLaunch(
     }
     litellm.models = models;
   }
+  const custom = await resolveCustomProviders(settings.custom, {
+    discoverModels: options.discoverModels,
+    model: options.model,
+  });
   const config = buildOpenCodeOverlay({
     permission: options.permission,
     mcp: options.mcp,
     skillDirs: options.skillDirs,
     litellm,
+    providers: custom.config,
   });
   return {
-    env: { ...providerEnv(settings, litellm), OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
+    env: {
+      ...providerEnv(settings, litellm),
+      ...custom.env,
+      OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+    },
     config,
   };
 }

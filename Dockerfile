@@ -98,6 +98,13 @@ RUN curl -fsSL https://opencode.ai/install | bash \
  && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
  && rm -rf /root/.opencode
 
+# VS Code in the browser (code-server), one loopback instance per session behind /vscode/<id>/
+ARG CODE_SERVER_VERSION=4.145.2
+RUN arch="$(dpkg --print-architecture)" \
+ && curl -fsSL "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server-${CODE_SERVER_VERSION}-linux-${arch}.tar.gz" \
+      | tar -xz -C /opt \
+ && ln -s "/opt/code-server-${CODE_SERVER_VERSION}-linux-${arch}/bin/code-server" /usr/local/bin/code-server
+
 # Git defaults expected by the agents
 RUN git config --system core.quotepath false \
  && git config --system init.defaultBranch main \

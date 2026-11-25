@@ -12,6 +12,7 @@ import { permissionModeOf, REMOTE_SESSION_TAG } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import { agentGitHubEnv, resolveGitHubToken } from "../../git/github-credentials";
+import { resolveMcpServers } from "../../mcp/default-servers";
 import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
 import type { SkillsLoader } from "../../skills/loader";
@@ -813,36 +814,8 @@ export async function executeAgent(
       openai: db.settings.get("openai_api_key") || undefined,
     };
 
-    const mcpServersStr = db.settings.get("mcp_servers") || "{}";
-    let mcpServers: Record<string, any> = {};
-    try {
-      mcpServers = JSON.parse(mcpServersStr);
-    } catch {
-      // ignore
-    }
-
-    if (!mcpServers.github) {
-      const ghToken = db.settings.get("github_token") || process.env.GITHUB_TOKEN;
-      if (ghToken) {
-        // Use proxy script to coerce boolean fields (draft, maintainer_can_modify)
-        // that weaker models pass as strings, causing MCP schema errors and loops.
-        const proxyScript = join(
-          process.cwd(),
-          "packages",
-          "server",
-          "scripts",
-          "github-mcp-proxy.mjs"
-        );
-        mcpServers.github = {
-          type: "local",
-          command: ["node", proxyScript],
-          enabled: true,
-          environment: {
-            GITHUB_PERSONAL_ACCESS_TOKEN: ghToken,
-          },
-        };
-      }
-    }
+    // User MCP servers plus the authenticated defaults (GitHub, GitLab).
+    const mcpServers = await resolveMcpServers(db.settings);
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
