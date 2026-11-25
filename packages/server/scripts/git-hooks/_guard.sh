@@ -24,7 +24,12 @@ scan_secrets() {
   fi
   printf '%s\n' "$input" | while read -r _lref lsha _rref rsha; do
     [ -z "$lsha" ] || [ "$lsha" = "$zero" ] && continue
-    if [ "$rsha" = "$zero" ]; then range="$lsha --not --remotes"; else range="$rsha..$lsha"; fi
+    # New branch, or a remote tip we never fetched: scan what no remote ref has yet.
+    if [ "$rsha" = "$zero" ] || ! git cat-file -e "$rsha^{commit}" 2>/dev/null; then
+      range="$lsha --not --remotes"
+    else
+      range="$rsha..$lsha"
+    fi
     gitleaks git --no-banner --redact --log-level error --log-opts="$range" "$root" >&2 || {
       say "gitleaks found secrets in the pushed commits; push blocked. Remove them and rewrite the commits."
       exit 1

@@ -4,7 +4,7 @@
  * Screenshots go to `refs/vibe-code/evidence/<branch>`, an orphan commit outside
  * the PR diff, and are embedded by commit sha.
  */
-import { readdir, readFile, stat } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitService } from "../../git/git-service";
 import { EVIDENCE_DIR } from "../../mcp/default-servers";
@@ -26,7 +26,8 @@ async function listImages(dir: string): Promise<EvidenceFile[]> {
   const files: EvidenceFile[] = [];
   for (const name of names.sort()) {
     const path = join(dir, name);
-    const info = await stat(path).catch(() => null);
+    // lstat: a symlink named *.png must not publish whatever it points at.
+    const info = await lstat(path).catch(() => null);
     if (info?.isFile() && info.size <= MAX_IMAGE_BYTES) files.push({ name, path });
     if (files.length === MAX_IMAGES) break;
   }
@@ -48,8 +49,10 @@ export async function prEvidenceSection(
 ): Promise<string> {
   const dir = join(wtPath, EVIDENCE_DIR);
   // The section brings its own heading; drop the agent's top-level "# Evidence".
+  const notesPath = join(dir, "EVIDENCE.md");
+  const notesFile = (await lstat(notesPath).catch(() => null))?.isFile();
   const notes = redactSecrets(
-    (await readFile(join(dir, "EVIDENCE.md"), "utf8").catch(() => ""))
+    (notesFile ? await readFile(notesPath, "utf8").catch(() => "") : "")
       .trim()
       .replace(/^#{1,2}\s*evid[eê]nc\w*\s*\n+/i, "")
   );

@@ -109,7 +109,8 @@ RUN arch="$(dpkg --print-architecture)" \
 
 # Default MCPs every session gets: Playwright (browser + screenshots as PR evidence) and
 # Context7 (library docs), pinned and preinstalled so runs never fetch them through npx.
-# Chromium and its system libraries come from the Playwright build the MCP pins.
+# Chromium and its system libraries come from the Playwright build the MCP pins. Its sandbox
+# is off (pods lack user namespaces): the runner pod is the isolation boundary.
 ARG PLAYWRIGHT_MCP_VERSION=0.0.85
 ARG CONTEXT7_MCP_VERSION=4.7.3
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \

@@ -1632,10 +1632,6 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = [
-        await buildPRBody(task, wtPath, repo.url, branch),
-        await prEvidenceSection(wtPath, repo.url, branch, git, sysLog),
-      ].join("\n\n");
 
       if (task.pendingApproval) {
         sysLog("Task requires human approval before PR creation");
@@ -1678,6 +1674,11 @@ export async function executeAgent(
       }
 
       if (!prUrl) {
+        // Evidence is pushed only once the PR is really being opened (after approval).
+        const prBody = [
+          await buildPRBody(task, wtPath, repo.url, branch),
+          await prEvidenceSection(wtPath, repo.url, branch, git, sysLog),
+        ].join("\n\n");
         prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
         db.tasks.updateField(task.id, "pr_url", prUrl);
       }

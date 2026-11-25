@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "../../db";
@@ -127,6 +127,9 @@ describe("publishRemoteSession", () => {
     await mkdir(evidence, { recursive: true });
     await writeFile(join(evidence, "EVIDENCE.md"), "# Evidence\n\n`bun test` → 3 pass, 0 fail\n");
     await writeFile(join(evidence, "home.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    // A link dressed as a screenshot must not publish the file it points at.
+    await writeFile(join(workspace, "..", "server.db"), "private");
+    await symlink(join(workspace, "..", "server.db"), join(evidence, "leak.png"));
 
     await publishRemoteSession(task.id, {}, deps);
 

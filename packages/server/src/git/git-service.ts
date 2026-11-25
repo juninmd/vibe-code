@@ -307,7 +307,9 @@ export class GitService {
   ): Promise<string> {
     const entries: string[] = [];
     for (const file of files) {
-      const blob = await this.exec(["git", "hash-object", "-w", "--", file.path], { cwd: wtPath });
+      const blob = await this.exec(["git", "hash-object", "-w", "--no-filters", "--", file.path], {
+        cwd: wtPath,
+      });
       entries.push(`100644 blob ${blob.stdout.trim()}\t${file.name}`);
     }
     const tree = await this.exec(["git", "mktree"], {
