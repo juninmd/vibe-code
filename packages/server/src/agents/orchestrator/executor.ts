@@ -29,8 +29,10 @@ import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
 import { handoffPreamble, handoffTranscript } from "./handoff";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
+import { prEvidenceSection } from "./pr-evidence";
 import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
+import { SESSION_TOOLING_RULES } from "./session-rules";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
 import { computeRunQualityScore, verifyWorktree, type WorktreeVerificationResult } from "./verify";
 
@@ -814,8 +816,8 @@ export async function executeAgent(
       openai: db.settings.get("openai_api_key") || undefined,
     };
 
-    // User MCP servers plus the authenticated defaults (GitHub, GitLab).
-    const mcpServers = await resolveMcpServers(db.settings);
+    // User MCP servers plus the defaults (GitHub, GitLab, Playwright, Context7).
+    const mcpServers = await resolveMcpServers(db.settings, { workspace: wtPath });
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
@@ -984,6 +986,7 @@ export async function executeAgent(
       "Work in the current isolated repository. Follow its AGENTS.md and validation instructions.",
       "Respond to the user's message and report changes and validation honestly.",
       "Preserve work for subsequent messages. Do not commit, push, open a PR or deploy unless the user asks.",
+      SESSION_TOOLING_RULES,
       ...(handoffFrom || restartAfterRewind
         ? [handoffPreamble(handoffTranscript(conversationLogs(db, task, run.id)), handoffFrom)]
         : []),
@@ -1616,7 +1619,10 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = await buildPRBody(task, wtPath, repo.url, branch);
+      const prBody = [
+        await buildPRBody(task, wtPath, repo.url, branch),
+        await prEvidenceSection(wtPath, repo.url, branch, git, sysLog),
+      ].join("\n\n");
 
       if (task.pendingApproval) {
         sysLog("Task requires human approval before PR creation");

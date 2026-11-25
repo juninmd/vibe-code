@@ -28,7 +28,8 @@ const gitlabAppSchema = z.object({
   baseUrl: httpUrl.optional(),
 });
 const enabledSchema = z.object({ enabled: z.boolean() });
-const mcpId = z.enum(["github", "gitlab"]);
+const mcpId = z.enum(["github", "gitlab", "playwright", "context7"]);
+const authMcpId = z.enum(["github", "gitlab"]);
 
 async function body<T>(c: Context, schema: z.ZodType<T>) {
   return schema.safeParse(await c.req.json().catch(() => null));
@@ -110,7 +111,7 @@ export function createIntegrationsRouter(
   });
 
   app.delete("/:id", (c) => {
-    const id = mcpId.safeParse(c.req.param("id"));
+    const id = authMcpId.safeParse(c.req.param("id"));
     if (!id.success) return c.json({ error: "not_found" }, 404);
     const provider: DefaultMcpId = id.data;
     if (provider === "github") {

@@ -984,7 +984,7 @@ export interface CustomProviderInput extends Omit<CustomProviderView, "id" | "se
 // ─── Default MCP connections ────────────────────────────────────────────────
 
 export interface McpConnection {
-  id: "github" | "gitlab";
+  id: "github" | "gitlab" | "playwright" | "context7";
   enabled: boolean;
   connected: boolean;
   method: "oauth" | "token" | null;
@@ -992,6 +992,8 @@ export interface McpConnection {
   baseUrl?: string;
   oauthAvailable: boolean;
   overridden: boolean;
+  /** Runs without sign-in (Playwright, Context7). */
+  authless?: boolean;
 }
 
 // ─── Remote VS Code ─────────────────────────────────────────────────────────

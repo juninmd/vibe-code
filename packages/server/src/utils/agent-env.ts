@@ -8,6 +8,7 @@
  * inherited. Provider keys the agent needs to call its model, and GITHUB_TOKEN
  * for opening PRs, are kept.
  */
+import { hookGuardEnv } from "../git/hook-guard";
 
 const SERVER_ONLY = new Set([
   "VIBE_CODE_API_KEY",
@@ -40,7 +41,7 @@ export function isServerOnlyEnv(
   return SERVER_ONLY.has(name) || SECRET_NAME.test(name) || extraDenied(env).has(name);
 }
 
-/** process.env minus server-only credentials. */
+/** process.env minus server-only credentials, with the git hook guard on. */
 export function agentProcessEnv(
   base: Record<string, string | undefined> = process.env
 ): Record<string, string> {
@@ -49,5 +50,5 @@ export function agentProcessEnv(
     if (value === undefined || isServerOnlyEnv(name, base)) continue;
     env[name] = value;
   }
-  return env;
+  return { ...env, ...hookGuardEnv(base) };
 }

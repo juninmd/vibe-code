@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { runnerDataDir } from "../agents/runners/k8s/pod-spec";
 import { gitHubGitConfigEnv } from "./github-credentials";
+import { hookGuardEnv } from "./hook-guard";
 import type { ProviderRegistry } from "./providers/registry";
 
 export class GitService {
@@ -49,6 +50,7 @@ export class GitService {
 
     return {
       ...base,
+      ...hookGuardEnv(base),
       GIT_TERMINAL_PROMPT: "0",
       GIT_CONFIG_COUNT: (existing + 1).toString(),
       [`GIT_CONFIG_KEY_${existing}`]: "safe.directory",
@@ -292,6 +294,43 @@ export class GitService {
       title,
       body,
     });
+  }
+
+  /**
+   * Pushes `files` as an orphan commit to `ref` (outside the branch history)
+   * and returns its sha. Images only, so the pre-push test run is skipped.
+   */
+  async publishEvidence(
+    wtPath: string,
+    ref: string,
+    files: { name: string; path: string }[]
+  ): Promise<string> {
+    const entries: string[] = [];
+    for (const file of files) {
+      const blob = await this.exec(["git", "hash-object", "-w", "--", file.path], { cwd: wtPath });
+      entries.push(`100644 blob ${blob.stdout.trim()}\t${file.name}`);
+    }
+    const tree = await this.exec(["git", "mktree"], {
+      cwd: wtPath,
+      stdin: `${entries.join("\n")}\n`,
+    });
+    const commit = await this.exec(
+      [
+        "git",
+        "-c",
+        "user.name=vibe-code",
+        "-c",
+        "user.email=agent@vibe-code.local",
+        "commit-tree",
+        tree.stdout.trim(),
+        "-m",
+        "evidence",
+      ],
+      { cwd: wtPath }
+    );
+    const sha = commit.stdout.trim();
+    await this.exec(["git", "push", "--no-verify", "origin", `+${sha}:${ref}`], { cwd: wtPath });
+    return sha;
   }
 
   getRepoOwnerAndName(url: string): string {
@@ -646,11 +685,12 @@ export class GitService {
 
   private async exec(
     cmd: string[],
-    options?: { cwd?: string }
+    options?: { cwd?: string; stdin?: string }
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const proc = Bun.spawn(cmd, {
       cwd: options?.cwd,
       env: this.authedGitEnv(),
+      stdin: options?.stdin === undefined ? undefined : Buffer.from(options.stdin),
       stdout: "pipe",
       stderr: "pipe",
     });

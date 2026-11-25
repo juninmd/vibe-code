@@ -3,6 +3,7 @@ import { REMOTE_SESSION_TAG, type Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
 import type { BroadcastHub } from "../../ws/broadcast";
+import { prEvidenceSection } from "./pr-evidence";
 
 export class RemotePullRequestError extends Error {
   constructor(
@@ -47,7 +48,10 @@ export async function publishRemoteSession(
   input: RemotePullRequestInput,
   deps: {
     db: Db;
-    git: Pick<GitService, "commitAll" | "hasCommitsAhead" | "push" | "createPR">;
+    git: Pick<
+      GitService,
+      "commitAll" | "hasCommitsAhead" | "push" | "createPR" | "publishEvidence"
+    >;
     hub: BroadcastHub;
     isRunning: (taskId: string) => boolean;
   }
@@ -123,6 +127,8 @@ export async function publishRemoteSession(
       input.body?.trim() ||
       [
         task.description.trim(),
+        "",
+        await prEvidenceSection(run.worktreePath, repo.url, branch, git, log),
         "",
         "---",
         `_Opened from a vibe-code remote session (${engine}${model ? ` · ${model}` : ""})._`,
