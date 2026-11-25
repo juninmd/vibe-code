@@ -74,7 +74,7 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
       // Process workspace.css so its readability guard test can read it via `?raw`.
-      css: { include: [/workspace\.css/] },
+      css: { include: [/workspace(-mobile)?\.css/] },
       globals: true,
       exclude: ["node_modules/**", "dist/**"],
       coverage: {
