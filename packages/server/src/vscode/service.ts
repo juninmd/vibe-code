@@ -83,7 +83,10 @@ function tailOf(stream: ReadableStream<Uint8Array>): () => string {
 }
 
 /** code-server reads $PORT before --bind-addr: the server's own PORT must not reach it. */
-export function codeServerEnv(base: Record<string, string>, folder: string) {
+export function codeServerEnv(
+  base: Record<string, string>,
+  folder: string
+): Record<string, string> {
   const { PORT: _port, ...env } = base;
   return { ...env, PWD: folder };
 }
