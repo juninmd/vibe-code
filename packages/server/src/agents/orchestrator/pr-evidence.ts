@@ -47,8 +47,11 @@ export async function prEvidenceSection(
   log: (line: string) => void = () => {}
 ): Promise<string> {
   const dir = join(wtPath, EVIDENCE_DIR);
+  // The section brings its own heading; drop the agent's top-level "# Evidence".
   const notes = redactSecrets(
-    (await readFile(join(dir, "EVIDENCE.md"), "utf8").catch(() => "")).trim()
+    (await readFile(join(dir, "EVIDENCE.md"), "utf8").catch(() => ""))
+      .trim()
+      .replace(/^#{1,2}\s*evid[eê]nc\w*\s*\n+/i, "")
   );
   const images = await listImages(dir);
   if (!notes && images.length === 0)

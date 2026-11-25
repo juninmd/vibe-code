@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createDb } from "../../db";
 import { GitService } from "../../git/git-service";
 import { BroadcastHub } from "../../ws/broadcast";
+import { ensureGitignoreEntry } from "./executor";
 import { publishRemoteSession, RemotePullRequestError, remoteSessionTitle } from "./remote-pr";
 
 const roots: string[] = [];
@@ -124,7 +125,7 @@ describe("publishRemoteSession", () => {
     await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
     const evidence = join(workspace, ".vibe-code", "evidence");
     await mkdir(evidence, { recursive: true });
-    await writeFile(join(evidence, "EVIDENCE.md"), "`bun test` → 3 pass, 0 fail\n");
+    await writeFile(join(evidence, "EVIDENCE.md"), "# Evidence\n\n`bun test` → 3 pass, 0 fail\n");
     await writeFile(join(evidence, "home.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
     await publishRemoteSession(task.id, {}, deps);
@@ -156,5 +157,20 @@ describe("publishRemoteSession", () => {
     );
     expect(error).toBeInstanceOf(RemotePullRequestError);
     expect(error.code).toBe("invalid_state");
+  });
+});
+
+describe("ensureGitignoreEntry", () => {
+  it("hides session files from status in a linked worktree, where .git is a file", async () => {
+    const { workspace } = await setup();
+    const root = join(workspace, "..");
+    const linked = join(root, "linked");
+    sh(workspace, "worktree", "add", "-q", linked);
+    await mkdir(join(linked, ".vibe-code", "evidence"), { recursive: true });
+    await writeFile(join(linked, ".vibe-code", "evidence", "shot.png"), "x");
+    expect(sh(linked, "status", "--porcelain")).toContain(".vibe-code/");
+    await ensureGitignoreEntry(linked, ".vibe-code/");
+    await ensureGitignoreEntry(linked, ".vibe-code/");
+    expect(sh(linked, "status", "--porcelain")).toBe("");
   });
 });

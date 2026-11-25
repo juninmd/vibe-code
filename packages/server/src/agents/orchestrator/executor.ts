@@ -1,5 +1,5 @@
-import { access, appendFile, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { access, appendFile, mkdir, readFile, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
   AgentRun,
   RunPhase,
@@ -169,11 +169,22 @@ export function buildValidationRepairPrompt(
     .join("\n");
 }
 
-/** Appends to .gitignore in the worktree, creating it if needed. */
-async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
-  // Use .git/info/exclude instead of .gitignore to avoid generating tracked file changes.
-  const gitignorePath = join(wtPath, ".git", "info", "exclude");
+/** Adds `entry` to the repo's info/exclude, so it stays out of status, diffs and commits. */
+export async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
+  // info/exclude instead of .gitignore avoids tracked changes. In a worktree `.git`
+  // is a file, so ask git where the (shared) exclude file lives.
   try {
+    const proc = Bun.spawn(
+      ["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"],
+      {
+        cwd: wtPath,
+        stdout: "pipe",
+        stderr: "ignore",
+      }
+    );
+    const gitignorePath = (await new Response(proc.stdout).text()).trim();
+    if ((await proc.exited) !== 0 || !gitignorePath) return;
+    await mkdir(dirname(gitignorePath), { recursive: true });
     const content = await readFile(gitignorePath, "utf8").catch(() => "");
     const lines = content.split("\n").map((l) => l.trim());
     if (!lines.includes(entry)) {
@@ -786,6 +797,8 @@ export async function executeAgent(
       // Ensure opencode.json won't pollute git history
     }
     await ensureGitignoreEntry(wtPath, "opencode.json");
+    // Harness context and Playwright evidence never show up as changes.
+    await ensureGitignoreEntry(wtPath, ".vibe-code/");
 
     // Generate a per-run virtual key in LiteLLM when enabled.
     // When disabled, engines use native API keys from the environment.

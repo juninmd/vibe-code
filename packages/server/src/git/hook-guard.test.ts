@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HOOK_GUARD_DIR, hookGuardEnv } from "./hook-guard";
@@ -43,8 +51,13 @@ function setup(files: Record<string, string> = {}, gitleaks = true) {
     );
     chmodSync(fake, 0o755);
   }
+  // Without the fake, hide any real gitleaks so the "missing" path is exercised.
+  const path = (process.env.PATH ?? "")
+    .split(":")
+    .filter((dir) => gitleaks || !existsSync(join(dir, "gitleaks")))
+    .join(":");
   const env = {
-    PATH: `${bin}:${process.env.PATH}`,
+    PATH: `${bin}:${path}`,
     ...hookGuardEnv({}),
     VIBE_REQUIRE_GITLEAKS: undefined as string | undefined,
   };
