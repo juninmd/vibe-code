@@ -16,7 +16,7 @@ Ask for a task from your phone, watch the harness work, and reply, installable a
 
 <br/>
 
-<img src="docs/screenshots/unified-remote/live-workspace-desktop.png" alt="Workspace remoto: navegação por projetos e sessões, conversa central e painel de contexto" width="860" />
+<img src="docs/screenshots/telas/desktop-04-conversa.png" alt="Workspace remoto: navegação por projetos e sessões, conversa central e painel de contexto" width="860" />
 
 </div>
 
@@ -630,14 +630,25 @@ in [docs/remote-control.md](docs/remote-control.md).
 
 ### Tour
 
-| Tela | Captura | O que mostra |
-|---|---|---|
-| **Code** (padrão) | ![Tela Code com lista de sessões, campo de tarefa e painel de contexto](.github/assets/screenshots/home.png) | Conversa com o agente, sessões à esquerda e contexto do ambiente à direita |
-| **Board** | TODO(screenshot): Board kanban com tasks nas colunas Backlog, In Progress, Review e Done | Pipeline de tasks com drag-and-drop |
-| **Detalhe da task** | TODO(screenshot): painel de detalhes com a aba Output e logs ao vivo | Status, engine, branch e logs do run |
-| **Session board** | TODO(screenshot): Session Board com sessões de CLI em dados fictícios | Sessões locais de OpenCode, Claude Code e Antigravity como cards |
+Prints reais de cada tela, no desktop (1440×900) e no celular (390×844). Conversa, alterações e terminal usam o modo `?demo=1`.
 
-> A captura da tela Code foi feita com um diretório de dados vazio. As demais telas precisam de tasks e sessões de exemplo, ainda não capturadas.
+| Tela | Desktop | Celular |
+|---|---|---|
+| **Login**<br/>Chave de acesso, Google ou GitHub | <img src="docs/screenshots/telas/desktop-01-login.png" alt="Login no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-01-login.png" alt="Login no celular" width="180" /> |
+| **Nova sessão**<br/>Projeto, branch, engine, modelo e permissões | <img src="docs/screenshots/telas/desktop-02-nova-sessao.png" alt="Nova sessão no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-02-nova-sessao.png" alt="Nova sessão no celular" width="180" /> |
+| **Conversa**<br/>Turnos do agente com worklog e resposta | <img src="docs/screenshots/telas/desktop-04-conversa.png" alt="Conversa no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-04-conversa.png" alt="Conversa no celular" width="180" /> |
+| **Alterações**<br/>Diff por arquivo, pronto para revisar e abrir PR | <img src="docs/screenshots/telas/desktop-05-alteracoes.png" alt="Alterações no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-05-alteracoes.png" alt="Alterações no celular" width="180" /> |
+| **Terminal**<br/>Terminal da sessão no worktree isolado | <img src="docs/screenshots/telas/desktop-06-terminal.png" alt="Terminal no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-06-terminal.png" alt="Terminal no celular" width="180" /> |
+| **Contexto**<br/>Ambiente, sessão e arquivos em revisão | <img src="docs/screenshots/telas/desktop-07-contexto.png" alt="Contexto no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-07-contexto.png" alt="Contexto no celular" width="180" /> |
+| **Skills**<br/>Biblioteca de skills, plugins e agentes | <img src="docs/screenshots/telas/desktop-08-skills.png" alt="Skills no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-08-skills.png" alt="Skills no celular" width="180" /> |
+| **Provedores**<br/>Chaves e provedores customizados (LiteLLM) | <img src="docs/screenshots/telas/desktop-09-provedores.png" alt="Provedores no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-09-provedores.png" alt="Provedores no celular" width="180" /> |
+| **MCP**<br/>GitHub, GitLab, Playwright e Context7 | <img src="docs/screenshots/telas/desktop-10-mcp.png" alt="MCP no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-10-mcp.png" alt="MCP no celular" width="180" /> |
+| **Quadro**<br/>Kanban de tarefas por etapa | <img src="docs/screenshots/telas/desktop-11-quadro.png" alt="Quadro no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-11-quadro.png" alt="Quadro no celular" width="180" /> |
+| **Terminais**<br/>Harnesses ativos e sessões de CLI | <img src="docs/screenshots/telas/desktop-12-terminais.png" alt="Terminais no desktop" width="480" /> | <img src="docs/screenshots/telas/celular-12-terminais.png" alt="Terminais no celular" width="180" /> |
+| **Navegação**<br/>Projetos e sessões na gaveta lateral | — | <img src="docs/screenshots/telas/celular-03-navegacao.png" alt="Navegação no celular" width="180" /> |
+| **VS Code**<br/>code-server no worktree da sessão | <img src="docs/screenshots/telas/desktop-13-vscode.png" alt="VS Code no navegador" width="480" /> | — |
+
+No celular, as abas da sessão cabem sem rolar, o título fica no topo e todo controle tem alvo de toque de 44 px.
 
 ### Session Board (sessões de CLI viram cards)
 

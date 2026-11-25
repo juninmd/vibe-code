@@ -1,0 +1,18 @@
+/* Phone polish, loaded after workspace.css: the title keeps the top bar, tabs fit without scrolling, controls are finger-sized. */
+@media (max-width: 480px) {
+  .rw-source-badge { justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border: 0; }
+  .rw-source-badge > .rw-status-dot { display: inline-block; width: 8px; height: 8px; flex-basis: 8px; }
+  .rw-source-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .rw-tabs button > svg { display: none; }
+  /* The model row scrolls sideways; the fade says there is more. */
+  .rw-composer-model { mask-image: linear-gradient(to right, #000 85%, transparent); }
+}
+@media (max-width: 767px) {
+  .rw-settings-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .rw-settings-tabs::-webkit-scrollbar { display: none; }
+  .rw-settings-tabs button { flex-shrink: 0; white-space: nowrap; }
+}
+@media (pointer: coarse) {
+  .rw-root :is(.rw-management-nav button, .rw-settings-tabs button, .rw-button, .rw-inline-button, .rw-composer-model select, .rw-default-toggle, .rw-branch select, .rw-sidebar-search, .rw-text-button, .rw-board select) { min-height: 44px; }
+  .rw-root :is(input[type="checkbox"], input[type="radio"]) { width: 22px; height: 22px; }
+}

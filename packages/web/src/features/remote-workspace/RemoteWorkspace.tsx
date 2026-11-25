@@ -23,6 +23,7 @@ import {
   TerminalView,
 } from "./WorkspaceViews";
 import "./workspace.css";
+import "./workspace-mobile.css";
 
 type Tab = "conversation" | "terminal" | "changes";
 type Dialog = "projects" | "commands" | "shortcuts" | null;
@@ -568,11 +569,13 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
             onClick={() => openManagement("settings")}
           >
             <span className="rw-status-dot waiting" />
-            {management
-              ? "Recursos do servidor"
-              : workspace.server
-                ? "Servidor conectado"
-                : "Demonstração"}
+            <span className="rw-source-label">
+              {management
+                ? "Recursos do servidor"
+                : workspace.server
+                  ? "Servidor conectado"
+                  : "Demonstração"}
+            </span>
           </button>
           <button
             type="button"

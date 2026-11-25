@@ -1,6 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+### Changed
+- **Mobile workspace**: phone top bar shows the session title with a status dot, session tabs fit on one row, settings tabs scroll in one row and every touch control is 44 px. README tour now has fresh desktop and phone screenshots of every screen (`docs/screenshots/telas/`).
+
 ### Removed
 - **Legacy panel (`/legacy`)**: the old control plane and everything only it used (96 web modules, their unit tests, the board/code-mode/first-run e2e specs, `@dnd-kit/*`, `@tanstack/react-virtual`, `ansi-to-html`, `diff2html` and the web-level `zustand`). `/legacy` now opens the workspace. The terminal and lanes e2e specs drive the workspace instead.
 
