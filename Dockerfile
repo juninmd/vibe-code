@@ -81,17 +81,47 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
       | tar -C /usr/local -xz \
  && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
 
-# uv (pinned installer) and the reviewer's scanners: semgrep (via uv), gitleaks, trufflehog
-# (its go.mod has replace directives, so it comes from the official pinned image).
+# uv (pinned installer) and the reviewer's scanners: semgrep (via uv), gitleaks (also the
+# pre-push guard, scripts/git-hooks), trufflehog and hadolint (official pinned images).
 COPY --from=ghcr.io/trufflesecurity/trufflehog:3.100.0 /usr/bin/trufflehog /usr/local/bin/trufflehog
+COPY --from=hadolint/hadolint:v2.15.1 /bin/hadolint /usr/local/bin/hadolint
 ARG UV_VERSION=0.13.9
 ARG SEMGREP_VERSION=1.186.0
+ARG GITLEAKS_VERSION=v8.30.1
 RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
       | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh \
  && UV_PYTHON_PREFERENCE=only-system UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin \
       uv tool install "semgrep==${SEMGREP_VERSION}" \
- && GOBIN=/usr/local/bin go install github.com/zricethezav/gitleaks/v8@latest \
+ && GOBIN=/usr/local/bin go install "github.com/zricethezav/gitleaks/v8@${GITLEAKS_VERSION}" \
  && go clean -cache -modcache
+
+# GitLab CLI (agents open MRs with `glab`), release tarball checked against its checksums.
+ARG GLAB_VERSION=1.130.0
+RUN arch="$(dpkg --print-architecture)" \
+ && base="https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}" \
+ && file="glab_${GLAB_VERSION}_linux_${arch}.tar.gz" \
+ && cd /tmp \
+ && curl -fsSLO "${base}/${file}" \
+ && curl -fsSL "${base}/checksums.txt" | grep " ${file}\$" | sha256sum -c - \
+ && tar -xzf "${file}" bin/glab \
+ && install -m 0755 bin/glab /usr/local/bin/glab \
+ && rm -rf /tmp/bin "/tmp/${file}"
+
+# Default MCPs every session gets: Playwright (browser + screenshots as PR evidence) and
+# Context7 (library docs), pinned and preinstalled so runs never fetch them through npx.
+# Chromium and its system libraries come from the Playwright build the MCP pins. Its sandbox
+# is off (pods lack user namespaces): the runner pod is the isolation boundary.
+ARG PLAYWRIGHT_MCP_VERSION=0.0.85
+ARG CONTEXT7_MCP_VERSION=4.7.3
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_MCP_BROWSER=chromium \
+    PLAYWRIGHT_MCP_NO_SANDBOX=true
+RUN npm i -g --ignore-scripts --no-audit --no-fund \
+      "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" "@upstash/context7-mcp@${CONTEXT7_MCP_VERSION}" \
+ && node "$(npm root -g)/@playwright/mcp/node_modules/playwright/cli.js" install --with-deps chromium \
+ && chmod -R a+rX /ms-playwright \
+ && npm cache clean --force \
+ && rm -rf /var/lib/apt/lists/*
 
 # OpenCode CLI (binary installer)
 RUN curl -fsSL https://opencode.ai/install | bash \
@@ -135,8 +165,10 @@ RUN mkdir -p /usr/local/gopath/bin /usr/local/cargo/registry /usr/local/cargo/gi
  && mkdir -p /data /home/vibe/.agents /home/vibe/.local/share /home/vibe/.local/state \
  && chown -R vibe:vibe /data /home/vibe
 
+# VIBE_REQUIRE_GITLEAKS: the pre-push guard blocks instead of skipping when gitleaks is missing.
 ENV HOME=/home/vibe \
     NODE_ENV=production \
+    VIBE_REQUIRE_GITLEAKS=1 \
     PORT=3000 \
     VIBE_CODE_DATA_DIR=/data \
     GIT_AUTHOR_NAME="vibe-code" \

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "../../db";
 import { GitService } from "../../git/git-service";
 import { BroadcastHub } from "../../ws/broadcast";
+import { ensureGitignoreEntry } from "./executor";
 import { publishRemoteSession, RemotePullRequestError, remoteSessionTitle } from "./remote-pr";
 
 const roots: string[] = [];
@@ -58,6 +59,7 @@ async function setup() {
       commitAll: git.commitAll.bind(git),
       hasCommitsAhead: git.hasCommitsAhead.bind(git),
       push: git.push.bind(git),
+      publishEvidence: git.publishEvidence.bind(git),
       createPR,
     },
     hub: new BroadcastHub(db),
@@ -97,6 +99,8 @@ describe("publishRemoteSession", () => {
       "main",
     ]);
     expect(body).toContain("opencode · opencode-go/glm-5.3");
+    // Reviewers are told when a session left no proof behind.
+    expect(body).toContain("_No evidence captured in this session._");
     expect(db.tasks.getById(task.id)?.prUrl).toBe("https://github.com/acme/app/pull/7");
 
     // A later turn adds more work: the same PR is updated, not duplicated.
@@ -116,6 +120,32 @@ describe("publishRemoteSession", () => {
     );
   });
 
+  it("puts the agent's evidence in the PR body and keeps screenshots out of the diff", async () => {
+    const { task, workspace, origin, deps, createPR } = await setup();
+    await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
+    const evidence = join(workspace, ".vibe-code", "evidence");
+    await mkdir(evidence, { recursive: true });
+    await writeFile(join(evidence, "EVIDENCE.md"), "# Evidence\n\n`bun test` → 3 pass, 0 fail\n");
+    await writeFile(join(evidence, "home.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    // A link dressed as a screenshot must not publish the file it points at.
+    await writeFile(join(workspace, "..", "server.db"), "private");
+    await symlink(join(workspace, "..", "server.db"), join(evidence, "leak.png"));
+
+    await publishRemoteSession(task.id, {}, deps);
+
+    const body = (createPR.mock.calls[0] as unknown as string[])[4];
+    const sha = sh(origin, "rev-parse", "refs/vibe-code/evidence/vibe-code/abc/session");
+    expect(body).toContain("## Evidence\n\n`bun test` → 3 pass, 0 fail");
+    expect(body).toContain(
+      `![home.png](https://github.com/acme/app/blob/${sha}/home.png?raw=true)`
+    );
+    expect(sh(origin, "ls-tree", "--name-only", sha)).toBe("home.png");
+    // The PR branch itself never carries the screenshots.
+    expect(sh(origin, "ls-tree", "-r", "--name-only", "vibe-code/abc/session")).not.toContain(
+      "home.png"
+    );
+  });
+
   it("refuses when there is nothing to publish", async () => {
     const { task, deps } = await setup();
     await expect(publishRemoteSession(task.id, {}, deps)).rejects.toMatchObject({
@@ -130,5 +160,20 @@ describe("publishRemoteSession", () => {
     );
     expect(error).toBeInstanceOf(RemotePullRequestError);
     expect(error.code).toBe("invalid_state");
+  });
+});
+
+describe("ensureGitignoreEntry", () => {
+  it("hides session files from status in a linked worktree, where .git is a file", async () => {
+    const { workspace } = await setup();
+    const root = join(workspace, "..");
+    const linked = join(root, "linked");
+    sh(workspace, "worktree", "add", "-q", linked);
+    await mkdir(join(linked, ".vibe-code", "evidence"), { recursive: true });
+    await writeFile(join(linked, ".vibe-code", "evidence", "shot.png"), "x");
+    expect(sh(linked, "status", "--porcelain")).toContain(".vibe-code/");
+    await ensureGitignoreEntry(linked, ".vibe-code/");
+    await ensureGitignoreEntry(linked, ".vibe-code/");
+    expect(sh(linked, "status", "--porcelain")).toBe("");
   });
 });

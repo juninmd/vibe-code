@@ -11,6 +11,7 @@ import type { SkillsLoader } from "../../skills/loader";
 import { matchSkillsForTask } from "../../skills/matcher";
 import { RepoSkillsLoader } from "../../skills/repo-loader";
 import { buildContractBundle } from "./contract-layers";
+import { SESSION_TOOLING_RULES } from "./session-rules";
 
 export interface BuildContextResult {
   prompt: string;
@@ -426,7 +427,9 @@ function assemblePrompt(task: Task, ctx: ProjectContext, contractBundle: Contrac
     "**Git:**",
     "- Stage all changed files with `git add -A` when done.",
     "- Use conventional commit format: `feat: <description>` or `fix: <description>`.",
-    "- One cohesive commit covering all changes."
+    "- One cohesive commit covering all changes.",
+    "",
+    SESSION_TOOLING_RULES
   );
 
   sections.push(`## Instructions\n${execLines.join("\n")}`);

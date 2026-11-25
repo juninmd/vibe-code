@@ -1,5 +1,5 @@
-import { access, appendFile, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { access, appendFile, mkdir, readFile, unlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
   AgentRun,
   RunPhase,
@@ -29,8 +29,10 @@ import { captureFrontendScreenshotIfNeeded } from "./frontend-shot";
 import { handoffPreamble, handoffTranscript } from "./handoff";
 import { writeHarnessContext } from "./harness-context";
 import { runPlannerIfNeeded } from "./planner";
+import { prEvidenceSection } from "./pr-evidence";
 import { appendRuntimeContextHints, buildContextAsync } from "./prompt";
 import { REVIEW_ENABLED, REVIEW_STRICT, runReviewPipeline } from "./review";
+import { SESSION_TOOLING_RULES } from "./session-rules";
 import { logAgentFinish, logAgentStart, logOrchestratorEvent } from "./terminal-logger";
 import { computeRunQualityScore, verifyWorktree, type WorktreeVerificationResult } from "./verify";
 
@@ -167,11 +169,22 @@ export function buildValidationRepairPrompt(
     .join("\n");
 }
 
-/** Appends to .gitignore in the worktree, creating it if needed. */
-async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
-  // Use .git/info/exclude instead of .gitignore to avoid generating tracked file changes.
-  const gitignorePath = join(wtPath, ".git", "info", "exclude");
+/** Adds `entry` to the repo's info/exclude, so it stays out of status, diffs and commits. */
+export async function ensureGitignoreEntry(wtPath: string, entry: string): Promise<void> {
+  // info/exclude instead of .gitignore avoids tracked changes. In a worktree `.git`
+  // is a file, so ask git where the (shared) exclude file lives.
   try {
+    const proc = Bun.spawn(
+      ["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"],
+      {
+        cwd: wtPath,
+        stdout: "pipe",
+        stderr: "ignore",
+      }
+    );
+    const gitignorePath = (await new Response(proc.stdout).text()).trim();
+    if ((await proc.exited) !== 0 || !gitignorePath) return;
+    await mkdir(dirname(gitignorePath), { recursive: true });
     const content = await readFile(gitignorePath, "utf8").catch(() => "");
     const lines = content.split("\n").map((l) => l.trim());
     if (!lines.includes(entry)) {
@@ -784,6 +797,8 @@ export async function executeAgent(
       // Ensure opencode.json won't pollute git history
     }
     await ensureGitignoreEntry(wtPath, "opencode.json");
+    // Harness context and Playwright evidence never show up as changes.
+    await ensureGitignoreEntry(wtPath, ".vibe-code/");
 
     // Generate a per-run virtual key in LiteLLM when enabled.
     // When disabled, engines use native API keys from the environment.
@@ -814,8 +829,8 @@ export async function executeAgent(
       openai: db.settings.get("openai_api_key") || undefined,
     };
 
-    // User MCP servers plus the authenticated defaults (GitHub, GitLab).
-    const mcpServers = await resolveMcpServers(db.settings);
+    // User MCP servers plus the defaults (GitHub, GitLab, Playwright, Context7).
+    const mcpServers = await resolveMcpServers(db.settings, { workspace: wtPath });
 
     if (resumeExistingBranch) {
       sysLog(`Branch: ${branch} (resuming from previous failed run)`);
@@ -984,6 +999,7 @@ export async function executeAgent(
       "Work in the current isolated repository. Follow its AGENTS.md and validation instructions.",
       "Respond to the user's message and report changes and validation honestly.",
       "Preserve work for subsequent messages. Do not commit, push, open a PR or deploy unless the user asks.",
+      SESSION_TOOLING_RULES,
       ...(handoffFrom || restartAfterRewind
         ? [handoffPreamble(handoffTranscript(conversationLogs(db, task, run.id)), handoffFrom)]
         : []),
@@ -1616,7 +1632,6 @@ export async function executeAgent(
       sysLog("Branch pushed ✓");
 
       sysLog("Creating pull request...");
-      const prBody = await buildPRBody(task, wtPath, repo.url, branch);
 
       if (task.pendingApproval) {
         sysLog("Task requires human approval before PR creation");
@@ -1659,6 +1674,11 @@ export async function executeAgent(
       }
 
       if (!prUrl) {
+        // Evidence is pushed only once the PR is really being opened (after approval).
+        const prBody = [
+          await buildPRBody(task, wtPath, repo.url, branch),
+          await prEvidenceSection(wtPath, repo.url, branch, git, sysLog),
+        ].join("\n\n");
         prUrl = await git.createPR(wtPath, repo.url, branch, task.title, prBody, baseBranch);
         db.tasks.updateField(task.id, "pr_url", prUrl);
       }

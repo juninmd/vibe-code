@@ -3,7 +3,16 @@ import type { McpConnection } from "@vibe-code/shared";
 import { useState } from "react";
 import { api } from "../../api/client";
 
-const LABELS: Record<McpConnection["id"], string> = { github: "GitHub", gitlab: "GitLab" };
+const LABELS: Record<McpConnection["id"], string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  playwright: "Playwright",
+  context7: "Context7",
+};
+const PURPOSE: Partial<Record<McpConnection["id"], string>> = {
+  playwright: "navegador para testar telas e tirar prints de evidência",
+  context7: "documentação atualizada das bibliotecas",
+};
 
 export function useMcpConnections(enabled = true) {
   return useQuery({
@@ -56,12 +65,13 @@ export function McpAuthNotice({ onOpen }: { onOpen: () => void }) {
 
 function describe(item: McpConnection): string {
   if (item.overridden) return "Substituído pelo seu JSON de MCP abaixo.";
+  if (item.authless) return `Sem autenticação · ${PURPOSE[item.id] ?? ""}`;
   if (!item.connected) return "Não autenticado · os agentes ficam sem este MCP.";
   const via = item.method === "oauth" ? "OAuth" : "token";
   return `Autenticado via ${via}${item.account ? ` · @${item.account}` : ""}${item.baseUrl ? ` · ${item.baseUrl}` : ""}`;
 }
 
-/** Settings → MCP: the GitHub and GitLab MCPs every run gets, and their sign-in. */
+/** Settings → MCP: the default MCPs every run gets, and the GitHub/GitLab sign-in. */
 export function McpConnections({ connectResult }: { connectResult?: ConnectResult | null }) {
   const query = useMcpConnections();
   const [busy, setBusy] = useState(false);
@@ -104,8 +114,8 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
       <div className="rw-card-heading">
         <h2 id="mcp-defaults-title">MCPs padrão</h2>
         <p>
-          Entram em toda sessão assim que você autentica. GitLab aceita token (inclusive on-prem) ou
-          OAuth2 quando a instância tem um aplicativo configurado.
+          Entram em toda sessão. GitHub e GitLab depois que você autentica: GitLab aceita token
+          (inclusive on-prem) ou OAuth2 quando a instância tem um aplicativo configurado.
         </p>
       </div>
       {message && (
@@ -144,7 +154,7 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
                 Entrar com GitLab (OAuth2)
               </button>
             )}
-            {item.connected && (
+            {item.connected && !item.authless && (
               <button
                 type="button"
                 className="rw-button"

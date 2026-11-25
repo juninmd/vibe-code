@@ -27,6 +27,8 @@ describe("agentProcessEnv", () => {
     expect(Object.keys(env).sort()).toEqual(
       [
         "ANTHROPIC_API_KEY",
+        // The git hook guard (gitleaks + tests on pre-push) rides along.
+        "GIT_CONFIG_PARAMETERS",
         "GITHUB_TOKEN",
         "HOME",
         "OPENCODE_API_KEY",

@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { createAuthRouter } from "../auth";
 import { createDb } from "../db";
-import { GITLAB_MCP_PACKAGE, NPX_NEUTRAL, resolveMcpServers } from "../mcp/default-servers";
+import {
+  CONTEXT7_MCP_PACKAGE,
+  GITLAB_MCP_PACKAGE,
+  mcpConnectionStatus,
+  NPX_NEUTRAL,
+  PLAYWRIGHT_MCP_PACKAGE,
+  resolveMcpServers,
+} from "../mcp/default-servers";
 import { PendingFlows } from "../oauth/common";
 import { type ConnectFlow, createConnectFlows } from "./connect-flows";
 import { freshGitLabToken } from "./gitlab-oauth";
@@ -183,13 +190,16 @@ describe("GitHub connect flow", () => {
 describe("default MCP servers", () => {
   it("adds GitHub and GitLab once authenticated, honoring overrides and toggles", async () => {
     const db = createDb(":memory:");
-    expect(await resolveMcpServers(db.settings)).toEqual({});
+    expect(Object.keys(await resolveMcpServers(db.settings)).sort()).toEqual([
+      "context7",
+      "playwright",
+    ]);
 
     db.settings.set("github_token", "gho_x");
     db.settings.set("gitlab_token", "glpat");
     db.settings.set("gitlab_base_url", "git.corp.local");
     const servers = await resolveMcpServers(db.settings);
-    expect(Object.keys(servers).sort()).toEqual(["github", "gitlab"]);
+    expect(Object.keys(servers).sort()).toEqual(["context7", "github", "gitlab", "playwright"]);
     expect(servers.gitlab.command).toEqual(["node", NPX_NEUTRAL, GITLAB_MCP_PACKAGE]);
     expect((servers.gitlab.environment as Record<string, string>).GITLAB_API_URL).toBe(
       "https://git.corp.local/api/v4"
@@ -201,5 +211,55 @@ describe("default MCP servers", () => {
     const custom = await resolveMcpServers(db.settings);
     expect(custom.github).toBeUndefined();
     expect(custom.gitlab).toEqual({ type: "remote", url: "x" });
+  });
+
+  it("gives every run Playwright (screenshots into the workspace) and Context7 without sign-in", async () => {
+    const db = createDb(":memory:");
+    const none = () => null;
+    const servers = await resolveMcpServers(db.settings, {
+      env: {},
+      workspace: "/w/task",
+      which: none,
+    });
+    // Pinned packages started outside the worktree, like the GitLab MCP.
+    expect(servers.playwright.command).toEqual([
+      "node",
+      NPX_NEUTRAL,
+      PLAYWRIGHT_MCP_PACKAGE,
+      "--headless",
+      "--isolated",
+      "--output-dir",
+      "/w/task/.vibe-code/evidence",
+    ]);
+    expect(servers.context7).toEqual({
+      type: "local",
+      command: ["node", NPX_NEUTRAL, CONTEXT7_MCP_PACKAGE],
+      enabled: true,
+    });
+    for (const pkg of [PLAYWRIGHT_MCP_PACKAGE, CONTEXT7_MCP_PACKAGE])
+      expect(pkg).toMatch(/@\d+\.\d+\.\d+$/);
+
+    // The image's preinstalled binaries win over npx; a Context7 key is passed through.
+    db.settings.set("context7_api_key", "ctx7sk-x");
+    const image = await resolveMcpServers(db.settings, {
+      env: {},
+      which: (bin) => `/usr/local/bin/${bin}`,
+    });
+    expect(image.playwright.command).toEqual([
+      "/usr/local/bin/playwright-mcp",
+      "--headless",
+      "--isolated",
+    ]);
+    expect(image.context7.environment).toEqual({ CONTEXT7_API_KEY: "ctx7sk-x" });
+
+    db.settings.set("mcp_default_playwright_enabled", "false");
+    db.settings.set("mcp_default_context7_enabled", "false");
+    expect(await resolveMcpServers(db.settings, { env: {}, which: none })).toEqual({});
+    const status = mcpConnectionStatus(db.settings, {});
+    expect(status.find((s) => s.id === "playwright")).toMatchObject({
+      enabled: false,
+      connected: true,
+      authless: true,
+    });
   });
 });

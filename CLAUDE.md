@@ -62,7 +62,8 @@ Repository contract entrypoints:
   - `skill-plan.ts` picks skills from the task text (auto/manual plan with reasons); `harness.ts` turns the plan into a Claude Code plugin (`--plugin-dir`) or OpenCode project skills
 - **`lanes/lane-sync.ts`** — keeps board lanes and issue labels in step (opt-in; `decideLaneSync` is the conflict policy); shared mapping in `packages/shared/src/lanes.ts`; see `docs/lanes.md`
 - **`oauth/`** — login providers (GitHub, Google OIDC+PKCE) and the `auth_sessions` store; `auth.ts` keeps the middleware
-- **`integrations/`** — "connect" flows for the default MCPs (GitHub OAuth, GitLab PAT or OAuth2 with refresh); `mcp/default-servers.ts` adds GitHub/GitLab MCPs to every run
+- **`integrations/`** — "connect" flows for the default MCPs (GitHub OAuth, GitLab PAT or OAuth2 with refresh); `mcp/default-servers.ts` adds GitHub/GitLab (once authenticated), Playwright and Context7 MCPs to every run
+- **`git/hook-guard.ts`** — every agent/server git call runs hooks from `scripts/git-hooks` (pre-push: gitleaks + repo tests, then the repo's own hooks); `orchestrator/pr-evidence.ts` puts `.vibe-code/evidence/` (EVIDENCE.md + Playwright screenshots, pushed to `refs/vibe-code/evidence/<branch>`) in the PR body
 - **`agents/custom-providers.ts`** — user-defined OpenAI-compatible providers (bearer, custom header, OAuth2 client credentials) merged into the OpenCode overlay; API in `api/custom-providers.ts`
 - **`vscode/`** — one loopback `code-server` per session worktree behind the authenticated proxy `/vscode/<taskId>/` (one-time ticket → path-scoped cookie)
 - **`sessions/`** — read-only readers for the local CLI session stores (OpenCode, Claude Code, Antigravity) plus `SessionService`, which projects them onto kanban cards
@@ -117,6 +118,10 @@ POST /api/tasks/{id}/launch
 | `GITLAB_OAUTH_CLIENT_ID` / `_SECRET` | unset — GitLab OAuth2 for the GitLab MCP (or set in Settings → MCP) |
 | `VIBE_VSCODE_BIN` | `code-server` on PATH — VS Code in the browser at `/vscode/<taskId>/` |
 | `VIBE_VSCODE_MAX` / `VIBE_VSCODE_IDLE_MS` | `3` / `1800000` |
+| `VIBE_GIT_HOOK_GUARD` | on — `off` stops routing git hooks through `scripts/git-hooks` (pre-push: gitleaks + repo tests) |
+| `VIBE_REQUIRE_GITLEAKS` | unset (image: `1`) — `1` blocks pushes when gitleaks is missing instead of skipping the scan |
+| `VIBE_PREPUSH_TESTS` / `VIBE_PREPUSH_TEST_TIMEOUT` | `on` / `900` s — the pre-push test run |
+| `CONTEXT7_API_KEY` | unset — optional key for the default Context7 MCP (or setting `context7_api_key`) |
 
 The three `*_SESSIONS_DIR` variables accept a comma-separated list and are only
 needed when a CLI stores its sessions somewhere other than the defaults.
