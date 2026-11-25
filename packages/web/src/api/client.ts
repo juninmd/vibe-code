@@ -9,6 +9,8 @@ import type {
   CreatePromptTemplateRequest,
   CreateRepoRequest,
   CreateTaskRequest,
+  CustomProviderInput,
+  CustomProviderView,
   DiffSummary,
   EngineEffectiveness,
   EngineInfo,
@@ -17,6 +19,7 @@ import type {
   InboxItem,
   LaneSettings,
   LaunchTaskRequest,
+  McpConnection,
   PromptTemplate,
   RegistryAssetRecord,
   RemotePluginCatalog,
@@ -47,6 +50,7 @@ import type {
   UpdateSettingsRequest,
   UpdateTaskRequest,
   UpsertScheduleRequest,
+  VsCodeStatus,
   Workspace,
 } from "@vibe-code/shared";
 
@@ -193,6 +197,52 @@ export const api = {
     me: () => request<AuthStatus>("/auth/me"),
     logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
     loginUrl: () => "/api/auth/github/start",
+    googleLoginUrl: () => "/api/auth/google/start",
+  },
+
+  integrations: {
+    mcp: () => request<McpConnection[]>("/integrations/mcp"),
+    setEnabled: (id: McpConnection["id"], enabled: boolean) =>
+      request<McpConnection[]>(`/integrations/mcp/${id}/enabled`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
+    connect: (id: McpConnection["id"]) =>
+      request<{ url: string }>(`/integrations/${id}/connect`, { method: "POST" }),
+    saveGitLabToken: (token: string, baseUrl: string) =>
+      request<McpConnection[]>("/integrations/gitlab/token", {
+        method: "PUT",
+        body: JSON.stringify({ token, baseUrl }),
+      }),
+    saveGitLabApp: (data: { clientId: string; clientSecret?: string; baseUrl: string }) =>
+      request<McpConnection[]>("/integrations/gitlab/oauth-app", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    disconnect: (id: McpConnection["id"]) =>
+      request<McpConnection[]>(`/integrations/${id}`, { method: "DELETE" }),
+  },
+
+  customProviders: {
+    list: () => request<CustomProviderView[]>("/providers/custom"),
+    save: (id: string, data: CustomProviderInput) =>
+      request<CustomProviderView>(`/providers/custom/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    remove: (id: string) =>
+      request<{ ok: boolean }>(`/providers/custom/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    test: (id: string) =>
+      request<{ ok: boolean; models: string[]; error?: string }>(
+        `/providers/custom/${encodeURIComponent(id)}/test`,
+        { method: "POST" }
+      ),
+  },
+
+  vscode: {
+    status: () => request<VsCodeStatus>("/vscode/status"),
+    open: (taskId: string) =>
+      request<{ url: string }>(`/vscode/tasks/${encodeURIComponent(taskId)}`, { method: "POST" }),
   },
 
   repos: {

@@ -230,6 +230,7 @@
 .rw-welcome-symbol { display: grid; place-items: center; width: 56px; height: 56px; color: var(--rw-accent); margin-bottom: 20px; }
 .rw-eyebrow { color: var(--rw-muted); font-size: 10px; letter-spacing: 1.4px; }
 .rw-welcome h1 { font-size: clamp(25px, 3vw, 34px); font-weight: 500; letter-spacing: -1.1px; margin: 12px 0 14px; }
+.rw-mcp-notice { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; max-width: 520px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--rw-warn) 40%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--rw-warn) 10%, transparent); color: var(--rw-text); font-size: 12.5px; }
 .rw-welcome > p:not(.rw-eyebrow) { color: var(--rw-secondary); white-space: pre-line; line-height: 1.8; max-width: 390px; font-size: 12px; }
 .rw-suggestions { margin-top: 30px; display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .rw-suggestions button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--rw-border); border-radius: 6px; padding: 9px 11px; color: var(--rw-secondary); font-size: 10px; }

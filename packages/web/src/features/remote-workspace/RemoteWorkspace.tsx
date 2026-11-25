@@ -7,11 +7,13 @@ import { draftStore } from "./composerHistory";
 import { HarnessTerminal } from "./HarnessTerminal";
 import { Icon } from "./Icon";
 import { type ManagementPage, ManagementViews } from "./ManagementViews";
+import { takeConnectResult } from "./McpConnections";
 import { STATUS } from "./model";
 import { isSurface, SURFACES, type SurfacePage, SurfaceViews } from "./surfaces/SurfaceViews";
 import { useAttention } from "./useAttention";
 import { useRemoteWorkspace } from "./useRemoteWorkspace";
 import { useViewHeading } from "./useViewHeading";
+import { VsCodeButton } from "./VsCodeButton";
 import {
   ChangesView,
   Composer,
@@ -72,9 +74,14 @@ function Modal({
 
 export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void }) {
   const workspace = useRemoteWorkspace();
+  // Returning from an OAuth connect lands on Settings → MCP with the outcome.
+  const [connectResult] = useState(takeConnectResult);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(
+    connectResult ? "mcp" : undefined
+  );
   const [view, setView] = useState<
     "session" | "overview" | "activity" | ManagementPage | SurfacePage
-  >("session");
+  >(connectResult ? "settings" : "session");
   const [tab, setTab] = useState<Tab>("conversation");
   const [dialog, setDialog] = useState<Dialog>(null);
   const [search, setSearch] = useState("");
@@ -133,7 +140,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
     setMobileContext(false);
     setDialog(null);
   };
-  const openManagement = (page: ManagementPage) => {
+  const openManagement = (page: ManagementPage, section?: string) => {
+    setSettingsSection(section);
     setView(page);
     setMobileNav(false);
     setMobileContext(false);
@@ -625,7 +633,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                 setCompact={setCompact}
                 inspector={inspector}
                 setInspector={setInspector}
-                onPage={openManagement}
+                onPage={(page) => openManagement(page)}
+                settingsSection={settingsSection}
+                connectResult={connectResult}
                 onSource={(source) => {
                   workspace.changeSource(source);
                   setView(source === "server" ? "overview" : "session");
@@ -705,6 +715,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                         <span className={`rw-status-dot ${selected.status}`} />
                         {STATUS[selected.status]}
                       </span>
+                      {workspace.server && selected.conversational && (
+                        <VsCodeButton taskId={selected.id} />
+                      )}
                       <PullRequestActions workspace={workspace} />
                     </span>
                   )}
@@ -718,6 +731,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                 >
                   <Conversation
                     workspace={workspace}
+                    onOpenSettings={(section) => openManagement("settings", section)}
                     onSuggest={(text) => {
                       setDraft(text);
                       document.querySelector<HTMLTextAreaElement>(".rw-composer textarea")?.focus();

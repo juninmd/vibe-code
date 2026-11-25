@@ -8,6 +8,7 @@ import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./compose
 import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
 import { ErrorNotice } from "./ManagementViews";
+import { McpAuthNotice } from "./McpConnections";
 import { type Change, STATUS } from "./model";
 import { GROUP_LABELS, type GroupBy, groupSessions } from "./surfaces/grouping";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
@@ -72,9 +73,11 @@ function useSessionDiff(workspace: Workspace) {
 export function Conversation({
   workspace,
   onSuggest,
+  onOpenSettings,
 }: {
   workspace: Workspace;
   onSuggest: (text: string) => void;
+  onOpenSettings?: (section: string) => void;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -120,6 +123,7 @@ export function Conversation({
             )}
           </p>
           <h1>O que vamos construir?</h1>
+          {server && onOpenSettings && <McpAuthNotice onOpen={() => onOpenSettings("mcp")} />}
           <p>
             {server
               ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
