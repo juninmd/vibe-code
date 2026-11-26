@@ -11,8 +11,8 @@ import { defineConfig } from "@playwright/test";
  * Run: bunx playwright test
  */
 
-const SERVER_PORT = 3123;
-const WEB_PORT = 5199;
+const SERVER_PORT = Number(process.env.VIBE_E2E_SERVER_PORT ?? 3123);
+const WEB_PORT = Number(process.env.VIBE_E2E_WEB_PORT ?? 5199);
 const PRODUCTION_UI = process.env.VIBE_E2E_PRODUCTION_UI === "1";
 
 // This module is evaluated by the runner AND re-imported by worker processes
@@ -66,7 +66,7 @@ export default defineConfig({
   use: {
     baseURL: E2E.webUrl,
     trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    screenshot: process.env.VIBE_E2E_SCREENSHOT === "on" ? "on" : "only-on-failure",
   },
   webServer: [
     {

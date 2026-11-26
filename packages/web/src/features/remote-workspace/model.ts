@@ -6,7 +6,7 @@ import {
   type TaskWithRun,
 } from "@vibe-code/shared";
 import { buildChatItems } from "../../components/code-mode/chat";
-import { splitWork, type WorkEntry } from "./workLog";
+import { splitWork, type WorkEntry } from "./workEntries";
 
 export type SessionStatus = "working" | "waiting" | "review" | "failed";
 export interface Message {

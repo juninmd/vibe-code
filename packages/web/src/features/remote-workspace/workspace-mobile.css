@@ -8,7 +8,11 @@
   .rw-composer-model { mask-image: linear-gradient(to right, #000 85%, transparent); }
 }
 @media (max-width: 767px) {
-  .rw-settings-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .rw-settings-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 14px; }
+  .rw-settings-group { flex-shrink: 0; }
+  .rw-settings-group-tabs { flex-wrap: nowrap; }
+  .rw-setup-list li { grid-template-columns: 24px 1fr; }
+  .rw-setup-list li .rw-button { grid-column: 2; justify-self: start; }
   .rw-settings-tabs::-webkit-scrollbar { display: none; }
   .rw-settings-tabs button { flex-shrink: 0; white-space: nowrap; }
 }

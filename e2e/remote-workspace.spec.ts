@@ -48,7 +48,7 @@ test("creates a real conversational task with model effort and keeps failed foll
   const title = "Revisar o workspace de integração";
   await page.getByLabel("Mensagem para o agente").fill(title);
   await page.getByRole("button", { name: "Criar sessão", exact: true }).click();
-  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
   await expect.poll(() => launches.length).toBe(1);
   const task = (await (await request.get(`${E2E.serverUrl}/api/tasks`)).json()).data.find((item: { description: string }) => item.description === title);
   expect(task.engine).toBe("opencode");
@@ -67,3 +67,52 @@ test("creates a real conversational task with model effort and keeps failed foll
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.screenshot({ path: "test-results/unified-prototype/real-workspace.png", fullPage: true });
 });
+
+test("a running remote conversation appears in Terminais and the 3D office", async ({ page, request }) => {
+  let repo = (await (await request.get(`${E2E.serverUrl}/api/repos`)).json()).data.find((item: { url: string }) => item.url === E2E.fixtureRepo);
+  if (!repo) repo = (await (await request.post(`${E2E.serverUrl}/api/repos`, { data: { url: E2E.fixtureRepo } })).json()).data;
+  await expect.poll(async () => (await (await request.get(`${E2E.serverUrl}/api/repos/${repo.id}`)).json()).data.status).toBe("ready");
+  const title = `Conversa remota ativa ${Date.now()}`;
+  const created = await request.post(`${E2E.serverUrl}/api/tasks`, {
+    data: { title, description: title, repoId: repo.id, engine: "opencode", tags: ["manual", "remote-session"] },
+  });
+  const createdBody = await created.json();
+  expect(created.ok(), JSON.stringify(createdBody)).toBe(true);
+  const taskId = createdBody.data.id as string;
+  await request.patch(`${E2E.serverUrl}/api/tasks/${taskId}`, { data: { status: "in_progress" } });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Terminais", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Conversas em andamento" })).toBeVisible();
+  await expect(page.locator(".rw-session-table").getByRole("button", { name: new RegExp(title) })).toBeVisible();
+
+  await page.getByRole("button", { name: "Escritório 3D", exact: true }).click();
+  await expect(page.locator(".rw-office-chip", { hasText: /[1-9]\d* (sessão aberta|sessões abertas)/ })).toBeVisible();
+});
+
+test("settings group the connection steps and show what is still missing", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Configurações", exact: true }).click();
+  const setup = page.getByRole("region", { name: "Primeiros passos" });
+  await expect(setup.getByText("Conectar o GitHub")).toBeVisible();
+  await expect(setup.getByText("Adicionar uma chave de LLM")).toBeVisible();
+  await page.screenshot({ path: "test-results/settings-setup.png", fullPage: true });
+  await setup.getByRole("button", { name: "Adicionar chave" }).click();
+  await expect(page.getByRole("heading", { name: "Chaves de LLM" })).toBeVisible();
+});
+
+for (const [device, viewport] of [["desktop", { width: 1440, height: 900 }], ["mobile", { width: 390, height: 844 }]] as const) {
+  test(`adds a project from the sidebar without opening settings (${device})`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.route("**/api/repos/github/list", (route) =>
+      route.fulfill({ json: { data: [{ name: "site", url: "https://github.com/acme/site.git", description: "Site institucional", isPrivate: true, provider: "github" }] } })
+    );
+    await page.goto("/");
+    if (device === "mobile") await page.getByRole("button", { name: /menu|navegação/i }).first().click();
+    await page.getByRole("button", { name: "Adicionar projeto", exact: true }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Adicionar projeto" });
+    await expect(dialog.getByRole("button", { name: "Ativar site" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Adicionar por URL" })).toBeDisabled();
+    await page.screenshot({ path: `test-results/add-project-${device}.png` });
+  });
+}

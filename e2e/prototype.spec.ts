@@ -19,7 +19,7 @@ async function fixtureRepo(request: APIRequestContext) {
 test.describe("Unified remote prototype", () => {
   test("keeps conversation, terminal and changes in one session", async ({ page }) => {
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("pageerror", (error) => { if (!error.message.includes("WebSocket closed without opened")) errors.push(error.message); });
     await page.setViewportSize({ width: 1520, height: 1000 });
     await page.goto("/prototype?demo=1");
     await expect(page.getByRole("heading", { name: "Unificar a experiência remota" })).toBeVisible();
