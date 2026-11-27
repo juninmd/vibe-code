@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../api/client";
+import { Button } from "../../ui/Button";
 import { Icon } from "./Icon";
 
 /** Opens the session's worktree in VS Code (code-server) in a new tab. */
@@ -32,9 +33,8 @@ export function VsCodeButton({ taskId }: { taskId: string }) {
   };
   return (
     <>
-      <button
-        type="button"
-        className="rw-button"
+      <Button
+        loading={busy}
         disabled={busy || !available}
         aria-label="Abrir no VS Code"
         title={
@@ -42,11 +42,11 @@ export function VsCodeButton({ taskId }: { taskId: string }) {
             ? "Abrir o workspace no VS Code do navegador"
             : "code-server não está instalado no servidor"
         }
+        iconStart={<Icon name="code" size={13} />}
         onClick={() => void open()}
       >
-        <Icon name="code" size={13} />
         <span className="rw-desktop-label">{busy ? "Abrindo…" : "VS Code"}</span>
-      </button>
+      </Button>
       {error && (
         <span className="rw-pr-error" role="alert">
           {error}

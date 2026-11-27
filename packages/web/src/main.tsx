@@ -8,6 +8,8 @@ import { getServerUrl, installNativeFetch, isNativeApp } from "./native/server-u
 import { registerServiceWorker } from "./pwa/register";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import "./index.css";
+import "@juninmd/sonido/styles.css";
+import "./sonido-bridge.css";
 
 const needsServerSetup = isNativeApp() && !getServerUrl();
 installNativeFetch();

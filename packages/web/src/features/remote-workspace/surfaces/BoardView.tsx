@@ -1,6 +1,8 @@
 import type { TaskStatus, TaskWithRun } from "@vibe-code/shared";
 import { useMemo, useState } from "react";
 import { api } from "../../../api/client";
+import { Badge } from "../../../ui/Badge";
+import { EmptyState } from "../../../ui/EmptyState";
 import { Icon } from "../Icon";
 import { ErrorNotice } from "../ManagementViews";
 import type { Workspace } from "../WorkspaceViews";
@@ -51,11 +53,12 @@ export function BoardView({
     return (
       <div className="rw-overview">
         <SurfaceHeading title="Quadro" description="Tarefas por etapa do pipeline." count={0} />
-        <div className="rw-empty-view">
-          <Icon name="grid" size={26} />
-          <h3>Disponível com o servidor</h3>
-          <p>Conecte ao servidor em Configurações para ver e mover as tarefas reais.</p>
-        </div>
+        <EmptyState
+          className="rw-empty-slot"
+          icon={<Icon name="grid" size={26} />}
+          title="Disponível com o servidor"
+          description="Conecte ao servidor em Configurações para ver e mover as tarefas reais."
+        />
       </div>
     );
 
@@ -90,7 +93,7 @@ export function BoardView({
             <header>
               <span className={`rw-status-dot ${DOT[status] ?? "waiting"}`} />
               <h2>{label}</h2>
-              <span className="rw-count">{lanes[status].length}</span>
+              <Badge>{lanes[status].length}</Badge>
             </header>
             <div className="rw-lane-cards">
               {lanes[status].map((task) => (

@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { Badge } from "../../ui/Badge";
+import { Button } from "../../ui/Button";
+import { EmptyState } from "../../ui/EmptyState";
+import { Skeleton } from "../../ui/Skeleton";
+import { Spinner } from "../../ui/Spinner";
 import { AccessModeSelect, ApprovalList } from "./ApprovalCard";
 import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
 import { resolvePublishAction } from "./gitActions";
@@ -178,11 +183,7 @@ export function Conversation({
               </p>
             </div>
           </div>
-          {workspace.historyLoading && (
-            <p role="status" className="rw-inline-state">
-              Carregando a conversa…
-            </p>
-          )}
+          {workspace.historyLoading && <Skeleton label="Carregando a conversa." rows={3} />}
           {workspace.historyError && (
             <div role="alert" className="rw-alert">
               Não foi possível carregar os logs.{" "}
@@ -265,7 +266,7 @@ export function Conversation({
           )}
           {working && (
             <div className="rw-thinking" role="status">
-              <span className="rw-status-dot working" />
+              <Spinner />
               {workspace.approvals.awaiting.has(selected.id)
                 ? "Aguardando sua aprovação"
                 : server
@@ -366,9 +367,9 @@ export function Composer({
       {server && selected && !selected.conversational ? (
         <div className="rw-readonly-note">
           <Icon name="terminal" /> Continue a sessão no harness atual.
-          <button type="button" className="rw-button primary" onClick={onTerminal}>
+          <Button variant="primary" onClick={onTerminal}>
             Abrir terminal
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -671,9 +672,9 @@ export function TerminalView({ workspace }: { workspace: Workspace }) {
               : "Um terminal no contexto da mesma sessão. Comandos locais simulados."}
           </p>
         </div>
-        <button
-          type="button"
-          className="rw-button subtle"
+        <Button
+          variant="subtle"
+          iconStart={<Icon name={copied ? "check" : "copy"} />}
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(text);
@@ -683,9 +684,8 @@ export function TerminalView({ workspace }: { workspace: Workspace }) {
             }
           }}
         >
-          <Icon name={copied ? "check" : "copy"} />
           {copied ? "Copiado" : "Copiar saída"}
-        </button>
+        </Button>
       </div>
       <div className="rw-terminal">
         <div className="rw-terminal-bar">
@@ -744,20 +744,19 @@ export function PullRequestActions({ workspace }: { workspace: Workspace }) {
   return (
     <span className="rw-pr-actions">
       {selected.prUrl && (
-        <a
-          className="rw-button"
+        <Button
           href={selected.prUrl}
           target="_blank"
           rel="noreferrer"
           aria-label="Ver PR"
+          iconStart={<Icon name="branch" size={13} />}
         >
-          <Icon name="branch" size={13} />
           <span className="rw-desktop-label">Ver PR</span>
-        </a>
+        </Button>
       )}
-      <button
-        type="button"
-        className={`rw-button ${action.primary ? "primary" : ""}`}
+      <Button
+        variant={action.primary ? "primary" : "default"}
+        loading={action.label === "Publicando…"}
         disabled={action.disabled}
         aria-label={action.label === "Publicando…" ? undefined : action.label}
         title={action.hint}
@@ -771,7 +770,7 @@ export function PullRequestActions({ workspace }: { workspace: Workspace }) {
         ) : (
           action.label
         )}
-      </button>
+      </Button>
       <span id="rw-publish-hint" className="rw-sr-only">
         {action.hint}
       </span>
@@ -810,7 +809,7 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
       <div className="rw-view-heading">
         <div>
           <h2>
-            Revisar alterações <span className="rw-count">{changes.length}</span>
+            Revisar alterações <Badge>{changes.length}</Badge>
           </h2>
           <p>
             {workspace.server
@@ -824,9 +823,7 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
         </span>
       </div>
       {diff.isLoading && workspace.server ? (
-        <p className="rw-inline-state" role="status">
-          Carregando alterações…
-        </p>
+        <Skeleton label="Carregando alterações." rows={4} />
       ) : diff.isError ? (
         <div className="rw-alert" role="alert">
           Não foi possível consultar as alterações.{" "}
@@ -835,11 +832,12 @@ export function ChangesView({ workspace }: { workspace: Workspace }) {
           </button>
         </div>
       ) : changes.length === 0 ? (
-        <div className="rw-empty-view">
-          <Icon name="code" size={28} />
-          <h3>Nenhuma alteração para revisar</h3>
-          <p>Os arquivos aparecerão aqui quando houver um diff disponível.</p>
-        </div>
+        <EmptyState
+          className="rw-empty-slot"
+          icon={<Icon name="code" size={28} />}
+          title="Nenhuma alteração para revisar"
+          description="Os arquivos aparecerão aqui quando houver um diff disponível."
+        />
       ) : (
         <div className="rw-diff-layout">
           <nav aria-label="Arquivos alterados">
@@ -966,7 +964,7 @@ export function SessionOverview({
             ))}
           </select>
         </label>
-        <span className="rw-count">{sessions.length}</span>
+        <Badge>{sessions.length}</Badge>
       </div>
       <div className="rw-session-table">
         <div className="rw-table-heading">
@@ -975,22 +973,23 @@ export function SessionOverview({
           <span>Estado</span>
         </div>
         {sessions.length === 0 ? (
-          <div className="rw-empty-view">
-            <Icon name="activity" size={26} />
-            <h3>{query ? "Nenhuma sessão encontrada" : "Tudo em dia por aqui"}</h3>
-            <p>
-              {query
+          <EmptyState
+            className="rw-empty-slot"
+            icon={<Icon name="activity" size={26} />}
+            title={query ? "Nenhuma sessão encontrada" : "Tudo em dia por aqui"}
+            description={
+              query
                 ? "Experimente buscar outro nome ou projeto."
-                : "Novas execuções e revisões aparecerão neste espaço."}
-            </p>
-          </div>
+                : "Novas execuções e revisões aparecerão neste espaço."
+            }
+          />
         ) : (
           groupSessions(sessions, groupBy, workspace.projects).flatMap((group) => [
             ...(group.label
               ? [
                   <h2 key={`group-${group.key}`} className="rw-group-heading">
                     {group.label}
-                    <span className="rw-count">{group.sessions.length}</span>
+                    <Badge>{group.sessions.length}</Badge>
                   </h2>,
                 ]
               : []),

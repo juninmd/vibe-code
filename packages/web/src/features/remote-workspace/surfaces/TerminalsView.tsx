@@ -3,6 +3,7 @@ import { SESSION_SOURCE_LABELS } from "@vibe-code/shared";
 import { useMemo, useState } from "react";
 import { useSessions } from "../../../hooks/useSessions";
 import { useTerminals } from "../../../hooks/useTerminals";
+import { EmptyState } from "../../../ui/EmptyState";
 import { formatRelativeTime } from "../../../utils/relative-time";
 import { Icon } from "../Icon";
 import { ErrorNotice } from "../ManagementViews";
@@ -44,11 +45,12 @@ export function TerminalsView({
       />
       <ErrorNotice error={live.error ?? error} />
       {!workspace.server ? (
-        <div className="rw-empty-view">
-          <Icon name="terminal" size={26} />
-          <h3>Disponível com o servidor</h3>
-          <p>Os terminais vivem no servidor. Conecte-se em Configurações para vê-los.</p>
-        </div>
+        <EmptyState
+          className="rw-empty-slot"
+          icon={<Icon name="terminal" size={26} />}
+          title="Disponível com o servidor"
+          description="Os terminais vivem no servidor. Conecte-se em Configurações para vê-los."
+        />
       ) : (
         <>
           <h2 className="rw-surface-section">Ativos no vibe-code</h2>
