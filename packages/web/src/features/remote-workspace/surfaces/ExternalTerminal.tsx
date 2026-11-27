@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { TaskTerminal, type TaskTerminalHandle } from "../../../components/TaskTerminal";
 import { useExternalTerminal } from "../../../hooks/useExternalTerminal";
 import { useTerminalSocket } from "../../../hooks/useTerminalSocket";
+import { Button } from "../../../ui/Button";
 import { Icon } from "../Icon";
 import { ErrorNotice } from "../ManagementViews";
 
@@ -52,13 +53,12 @@ export function ExternalTerminal({ card, onBack }: { card: SessionCard; onBack: 
           </section>
           <div className="rw-terminal-actions rw-external-actions">
             <span>{terminal.cwd}</span>
-            <button type="button" className="rw-button" onClick={copy}>
-              <Icon name="copy" size={13} />
+            <Button iconStart={<Icon name="copy" size={13} />} onClick={copy}>
               {copied ? "Copiado" : "Copiar comando"}
-            </button>
-            <button type="button" className="rw-button" disabled={busy} onClick={stop}>
+            </Button>
+            <Button disabled={busy} onClick={stop}>
               Parar terminal
-            </button>
+            </Button>
           </div>
         </>
       ) : (
@@ -66,10 +66,14 @@ export function ExternalTerminal({ card, onBack }: { card: SessionCard; onBack: 
           <h2>Sessão aberta fora do vibe-code</h2>
           <p>Um terminal novo no mesmo diretório retoma a conversa com:</p>
           <code className="rw-resume-command">{command}</code>
-          <button type="button" className="rw-button primary" disabled={busy} onClick={open}>
-            <Icon name="play" size={13} />
+          <Button
+            variant="primary"
+            loading={busy}
+            iconStart={<Icon name="play" size={13} />}
+            onClick={open}
+          >
             {busy ? "Abrindo…" : "Abrir terminal aqui"}
-          </button>
+          </Button>
         </div>
       )}
     </div>

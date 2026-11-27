@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Badge } from "../../../ui/Badge";
 
 export function SurfaceHeading({
   title,
@@ -19,7 +20,7 @@ export function SurfaceHeading({
         <p>{description}</p>
       </div>
       {children}
-      {count !== undefined && <span className="rw-count">{count}</span>}
+      {count !== undefined && <Badge>{count}</Badge>}
     </div>
   );
 }

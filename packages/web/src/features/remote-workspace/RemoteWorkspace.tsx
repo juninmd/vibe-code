@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useTheme } from "../../theme/ThemeProvider";
+import { Button } from "../../ui/Button";
+import { Skeleton } from "../../ui/Skeleton";
 import { CommandPalette, ShortcutList } from "./CommandPalette";
 import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
 import { draftStore } from "./composerHistory";
@@ -426,9 +428,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
         </div>
         <nav className="rw-project-tree" aria-label="Projetos e sessões">
           {workspace.server && workspace.data.isLoading && (
-            <p className="rw-inline-state" role="status">
-              Carregando projetos…
-            </p>
+            <Skeleton label="Carregando projetos." rows={2} />
           )}
           {workspace.projects.map((project) => {
             const sessions = filtered.filter((s) => s.projectId === project.id);
@@ -881,10 +881,13 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                   </div>
                 </dl>
                 {!workspace.server && selected?.status === "working" && (
-                  <button type="button" className="rw-button subtle" onClick={workspace.stop}>
-                    <Icon name="stop" size={13} />
+                  <Button
+                    variant="subtle"
+                    iconStart={<Icon name="stop" size={13} />}
+                    onClick={workspace.stop}
+                  >
                     Parar demonstração
-                  </button>
+                  </Button>
                 )}
               </section>
               <section>
@@ -1008,13 +1011,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
               <strong>{notice.title}</strong>
               <span>{notice.text}</span>
             </div>
-            <button
-              type="button"
-              className="rw-button"
-              onClick={() => openSession(notice.sessionId)}
-            >
-              Abrir
-            </button>
+            <Button onClick={() => openSession(notice.sessionId)}>Abrir</Button>
             <button
               type="button"
               className="rw-icon-button"
@@ -1027,13 +1024,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
         ))}
       </section>
       {dialog === "commands" && (
-        <Modal
-          title="Ir para…"
-          description="Comandos, páginas e sessões. Use ↑ ↓ e Enter."
-          onClose={() => setDialog(null)}
-        >
-          <CommandPalette commands={commands} />
-        </Modal>
+        <CommandPalette commands={commands} onClose={() => setDialog(null)} />
       )}
       {dialog === "shortcuts" && (
         <Modal

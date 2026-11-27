@@ -1,0 +1,42 @@
+/*
+ * Sonido layout bridge.
+ *
+ * The design system's default scale is roomier than this workspace's dense chrome. These rules
+ * only place Sonido inside the app's existing rows and columns; color, typography and the
+ * internals of each component stay Sonido's.
+ */
+.rw-settings-tabs {
+  margin-bottom: 22px;
+  max-width: 100%;
+}
+
+.rw-empty-slot {
+  width: min(100%, 560px);
+  margin: 28px auto;
+}
+
+.rw-pr-actions .sn-button {
+  min-height: 30px;
+  padding-inline: 10px;
+}
+
+.rw-thinking .sn-spinner {
+  flex: none;
+}
+
+.rw-inspector .sn-button {
+  margin-top: 14px;
+}
+
+.rw-skill-chips .sn-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767px) {
+  .rw-pr-actions .sn-button {
+    min-height: 44px;
+    padding-inline: 12px;
+  }
+}

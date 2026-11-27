@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../../api/client";
+import { Badge } from "../../ui/Badge";
+import { Button } from "../../ui/Button";
+import { Skeleton } from "../../ui/Skeleton";
+import { Tabs } from "../../ui/Tabs";
 import { CustomProvidersSettings } from "./CustomProvidersSettings";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
@@ -196,9 +200,7 @@ function SkillsPage({ workspace }: { workspace: Workspace }) {
             <option value="project">Projeto: {workspace.project.name}</option>
           )}
         </select>
-        <button
-          type="button"
-          className="rw-button"
+        <Button
           onClick={async () => {
             // The server caches the skill index; reload it so skills added on disk show up.
             if (scope === "global" && workspace.server) await api.skills.refresh().catch(() => {});
@@ -206,11 +208,11 @@ function SkillsPage({ workspace }: { workspace: Workspace }) {
           }}
         >
           Atualizar
-        </button>
+        </Button>
       </div>
       <ErrorNotice error={query.error} />
       {query.isLoading ? (
-        <p role="status">Carregando biblioteca…</p>
+        <Skeleton label="Carregando biblioteca." rows={4} />
       ) : (
         <p className="rw-section-note">
           {filtered.length} recursos ·{" "}
@@ -379,13 +381,14 @@ function PluginsPage() {
               placeholder="Padrão do repositório"
             />
           </label>
-          <button
+          <Button
             type="submit"
-            className="rw-button primary"
+            variant="primary"
+            loading={catalog.isFetching}
             disabled={catalog.isFetching || bulkBusy || !!action.busy}
           >
             {catalog.isFetching ? "Consultando…" : "Consultar repositório"}
-          </button>
+          </Button>
         </form>
       </section>
       <ErrorNotice error={catalog.error || installed.error || action.error} />
@@ -404,9 +407,9 @@ function PluginsPage() {
             </p>
           </div>
           <div className="rw-bulk-import-actions">
-            <button
-              type="button"
-              className="rw-button primary"
+            <Button
+              variant="primary"
+              loading={bulkBusy}
               disabled={
                 bulkBusy ||
                 !!action.busy ||
@@ -417,11 +420,9 @@ function PluginsPage() {
               onClick={() => void importAll()}
             >
               {bulkBusy ? "Importando skills…" : `Importar todas as skills (${allSkills.length})`}
-            </button>
+            </Button>
             {bulkBusy && (
-              <button
-                type="button"
-                className="rw-button"
+              <Button
                 disabled={stopping}
                 onClick={() => {
                   stopBulk.current = true;
@@ -429,7 +430,7 @@ function PluginsPage() {
                 }}
               >
                 {stopping ? "Parando…" : "Parar importação"}
-              </button>
+              </Button>
             )}
             <p className="rw-section-note">
               Todas as skills do repositório, incluindo as que estão fora do filtro. As já
@@ -501,9 +502,8 @@ function PluginsPage() {
                     {asset.path} · {asset.files} arquivos
                   </small>
                 </div>
-                <button
-                  type="button"
-                  className="rw-button"
+                <Button
+                  loading={action.busy === asset.path}
                   disabled={!!action.busy || bulkBusy}
                   onClick={() =>
                     void action.run(
@@ -523,7 +523,7 @@ function PluginsPage() {
                   }
                 >
                   {action.busy === asset.path ? "Importando…" : "Importar"}
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -555,9 +555,7 @@ function PluginsPage() {
                   arquivos · {record.reviewStatus === "active" ? "Ativo" : "Aguardando revisão"}
                 </small>
               </div>
-              <button type="button" className="rw-button" onClick={() => setReview(record)}>
-                Revisar
-              </button>
+              <Button onClick={() => setReview(record)}>Revisar</Button>
               <button
                 type="button"
                 className="rw-text-button"
@@ -610,9 +608,9 @@ function PluginsPage() {
           )}
           {review.reviewStatus === "pending_review" && (
             <div className="rw-form-actions">
-              <button
-                type="button"
-                className="rw-button primary"
+              <Button
+                variant="primary"
+                loading={action.busy === "approve"}
                 disabled={!!action.busy || bulkBusy || !content.data}
                 onClick={() =>
                   void action.run(
@@ -627,10 +625,9 @@ function PluginsPage() {
                 }
               >
                 Ativar plugin
-              </button>
-              <button
-                type="button"
-                className="rw-button"
+              </Button>
+              <Button
+                loading={action.busy === "reject"}
                 disabled={!!action.busy || bulkBusy}
                 onClick={() =>
                   void action.run(
@@ -645,7 +642,7 @@ function PluginsPage() {
                 }
               >
                 Rejeitar
-              </button>
+              </Button>
             </div>
           )}
         </section>
@@ -702,7 +699,7 @@ function AgentsPage() {
               <p>{selected.description}</p>
               <div className="rw-skill-chips">
                 {selected.skills.map((skill) => (
-                  <span key={skill.source_url}>{skill.cached_name}</span>
+                  <Badge key={skill.source_url}>{skill.cached_name}</Badge>
                 ))}
               </div>
               <div className="rw-markdown">
@@ -771,9 +768,14 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
             placeholder="https://github.com/owner/projeto"
           />
         </label>
-        <button type="submit" className="rw-button primary" disabled={!url.trim() || !!action.busy}>
+        <Button
+          type="submit"
+          variant="primary"
+          loading={action.busy === "add"}
+          disabled={!url.trim() || !!action.busy}
+        >
           {action.busy ? "Adicionando…" : "Adicionar projeto"}
-        </button>
+        </Button>
       </form>
       <ErrorNotice error={action.error || projects.error} />
       {action.notice && (
@@ -802,9 +804,8 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
               </small>
             </div>
             {(repo.defaultModel || repo.defaultEngine) && (
-              <button
-                type="button"
-                className="rw-button"
+              <Button
+                loading={action.busy === `default-${repo.id}`}
                 disabled={!!action.busy}
                 onClick={() =>
                   void action.run(
@@ -822,11 +823,11 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
                 }
               >
                 Limpar padrão
-              </button>
+              </Button>
             )}
           </div>
         ))}
-        {projects.isLoading && <p role="status">Carregando projetos…</p>}
+        {projects.isLoading && <Skeleton label="Carregando projetos." rows={3} />}
         {projects.data?.length === 0 && (
           <p className="rw-section-note">Nenhum projeto conectado.</p>
         )}
@@ -902,26 +903,21 @@ function SettingsPage({
     );
   return (
     <>
-      <nav className="rw-settings-tabs" aria-label="Seções de configurações">
-        {[
-          ["general", "Interface"],
-          ["projects", "Projetos"],
-          ["github", "Acesso ao GitHub"],
-          ["harness", "Harnesses e modelos"],
-          ["runner", "Execução"],
-          ["providers", "Provedores"],
-          ["mcp", "MCP"],
-        ].map(([id, label]) => (
-          <button
-            type="button"
-            key={id}
-            className={section === id ? "selected" : ""}
-            onClick={() => setSection(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <Tabs
+        label="Seções de configurações"
+        className="rw-settings-tabs"
+        value={section}
+        onChange={setSection}
+        tabs={[
+          { key: "general", label: "Interface" },
+          { key: "projects", label: "Projetos" },
+          { key: "github", label: "Acesso ao GitHub" },
+          { key: "harness", label: "Harnesses e modelos" },
+          { key: "runner", label: "Execução" },
+          { key: "providers", label: "Provedores" },
+          { key: "mcp", label: "MCP" },
+        ]}
+      />
       <ErrorNotice error={query.error || action.error} />
       {action.notice && (
         <p role="status" className="rw-success">
@@ -1020,16 +1016,16 @@ function SettingsPage({
               armazenamento do navegador.
             </p>
             <div className="rw-form-actions">
-              <button
+              <Button
                 type="submit"
-                className="rw-button primary"
+                variant="primary"
+                loading={action.busy === "save"}
                 disabled={!!action.busy || !token.trim() || !query.data}
               >
                 Salvar acesso ao GitHub
-              </button>
-              <button
-                type="button"
-                className="rw-button"
+              </Button>
+              <Button
+                loading={action.busy === "test"}
                 disabled={!!action.busy || !query.data?.github.tokenSet}
                 onClick={() =>
                   void action.run(
@@ -1045,7 +1041,7 @@ function SettingsPage({
                 }
               >
                 Testar conexão
-              </button>
+              </Button>
             </div>
           </form>
         </section>
@@ -1172,13 +1168,13 @@ function SettingsPage({
                   onChange={(event) => setMaxAgents(event.target.value)}
                 />
               </label>
-              <button
+              <Button
                 type="submit"
-                className="rw-button"
+                loading={action.busy === "save"}
                 disabled={!!action.busy || !maxAgents || !query.data}
               >
                 Salvar concorrência
-              </button>
+              </Button>
             </form>
           </section>
         </>
@@ -1222,13 +1218,14 @@ function SettingsPage({
                   />
                 </label>
               ))}
-              <button
+              <Button
                 type="submit"
-                className="rw-button primary"
+                variant="primary"
+                loading={action.busy === "save"}
                 disabled={!!action.busy || !Object.values(keys).some(Boolean) || !query.data}
               >
                 Salvar chaves
-              </button>
+              </Button>
             </form>
           </section>
           <section className="rw-settings-card">
@@ -1262,22 +1259,22 @@ function SettingsPage({
                 />
               </label>
               <span className="rw-pr-actions">
-                <button
+                <Button
                   type="submit"
-                  className="rw-button primary"
+                  variant="primary"
+                  loading={action.busy === "save"}
                   disabled={!!action.busy || !goKey || !query.data}
                 >
                   Salvar chave
-                </button>
+                </Button>
                 {query.data?.opencodeGo?.tokenSet && (
-                  <button
-                    type="button"
-                    className="rw-button"
+                  <Button
+                    loading={action.busy === "remove"}
                     disabled={!!action.busy}
                     onClick={() => void save({ opencodeGoApiKey: "" })}
                   >
                     Remover
-                  </button>
+                  </Button>
                 )}
               </span>
             </form>
@@ -1349,12 +1346,15 @@ function SettingsPage({
                 />
               </label>
               <span className="rw-pr-actions">
-                <button type="submit" className="rw-button" disabled={!!action.busy || !query.data}>
+                <Button
+                  type="submit"
+                  loading={action.busy === "save"}
+                  disabled={!!action.busy || !query.data}
+                >
                   Salvar gateway
-                </button>
-                <button
-                  type="button"
-                  className="rw-button"
+                </Button>
+                <Button
+                  loading={action.busy === "litellm-test"}
                   disabled={!!action.busy}
                   onClick={() =>
                     void action.run(
@@ -1372,7 +1372,7 @@ function SettingsPage({
                   }
                 >
                   Testar conexão
-                </button>
+                </Button>
                 {litellmTest && <small role="status">{litellmTest}</small>}
               </span>
             </form>
@@ -1418,13 +1418,14 @@ function SettingsPage({
                 onChange={(event) => setMcp(event.target.value)}
               />
             </label>
-            <button
+            <Button
               type="submit"
-              className="rw-button primary"
+              variant="primary"
+              loading={action.busy === "save"}
               disabled={!!action.busy || mcp === null || !query.data}
             >
               Salvar MCP
-            </button>
+            </Button>
           </form>
         </section>
       )}

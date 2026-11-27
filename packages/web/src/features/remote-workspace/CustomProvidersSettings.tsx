@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../../api/client";
+import { Button } from "../../ui/Button";
 import {
   AUTH_LABELS,
   type AuthType,
@@ -68,9 +69,8 @@ export function CustomProvidersSettings() {
             </small>
           </div>
           <span className="rw-pr-actions">
-            <button
-              type="button"
-              className="rw-button"
+            <Button
+              loading={busy}
               disabled={busy}
               onClick={() =>
                 run(async () => {
@@ -81,20 +81,17 @@ export function CustomProvidersSettings() {
               }
             >
               Testar
-            </button>
-            <button
-              type="button"
-              className="rw-button"
+            </Button>
+            <Button
               onClick={() => {
                 setDraft(toDraft(provider));
                 setEditing(true);
               }}
             >
               Editar
-            </button>
-            <button
-              type="button"
-              className="rw-button"
+            </Button>
+            <Button
+              loading={busy}
               disabled={busy}
               aria-label={`Remover ${provider.name}`}
               onClick={() =>
@@ -106,18 +103,14 @@ export function CustomProvidersSettings() {
               }
             >
               Remover
-            </button>
+            </Button>
           </span>
         </div>
       ))}
       {!draft ? (
         <span className="rw-pr-actions">
-          <button type="button" className="rw-button" onClick={() => setDraft({ ...EMPTY })}>
-            Adicionar provedor
-          </button>
-          <button
-            type="button"
-            className="rw-button"
+          <Button onClick={() => setDraft({ ...EMPTY })}>Adicionar provedor</Button>
+          <Button
             onClick={() =>
               setDraft({
                 ...EMPTY,
@@ -129,7 +122,7 @@ export function CustomProvidersSettings() {
             }
           >
             Modelo LiteLLM com header
-          </button>
+          </Button>
         </span>
       ) : (
         <form
@@ -268,19 +261,17 @@ export function CustomProvidersSettings() {
             />
           </label>
           <span className="rw-pr-actions">
-            <button type="submit" className="rw-button primary" disabled={busy}>
+            <Button type="submit" variant="primary" loading={busy}>
               Salvar provedor
-            </button>
-            <button
-              type="button"
-              className="rw-button"
+            </Button>
+            <Button
               onClick={() => {
                 setDraft(null);
                 setEditing(false);
               }}
             >
               Cancelar
-            </button>
+            </Button>
           </span>
         </form>
       )}

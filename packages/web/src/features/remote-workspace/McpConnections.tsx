@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { McpConnection } from "@vibe-code/shared";
 import { useState } from "react";
 import { api } from "../../api/client";
+import { Button } from "../../ui/Button";
 
 const LABELS: Record<McpConnection["id"], string> = {
   github: "GitHub",
@@ -56,9 +57,7 @@ export function McpAuthNotice({ onOpen }: { onOpen: () => void }) {
         Autentique {pending.map((item) => LABELS[item.id]).join(" e ")} para os agentes usarem o MCP
         padrão.
       </span>
-      <button type="button" className="rw-button" onClick={onOpen}>
-        Autenticar
-      </button>
+      <Button onClick={onOpen}>Autenticar</Button>
     </div>
   );
 }
@@ -135,29 +134,25 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
           </div>
           <span className="rw-pr-actions">
             {item.id === "github" && item.oauthAvailable && (
-              <button
-                type="button"
-                className={`rw-button ${item.connected ? "" : "primary"}`}
+              <Button
+                variant={item.connected ? "default" : "primary"}
                 disabled={busy}
                 onClick={() => connect("github")}
               >
                 {item.connected ? "Reconectar GitHub" : "Autenticar com GitHub"}
-              </button>
+              </Button>
             )}
             {item.id === "gitlab" && item.oauthAvailable && (
-              <button
-                type="button"
-                className={`rw-button ${item.connected ? "" : "primary"}`}
+              <Button
+                variant={item.connected ? "default" : "primary"}
                 disabled={busy}
                 onClick={() => connect("gitlab")}
               >
                 Entrar com GitLab (OAuth2)
-              </button>
+              </Button>
             )}
             {item.connected && !item.authless && (
-              <button
-                type="button"
-                className="rw-button"
+              <Button
                 disabled={busy}
                 onClick={() =>
                   run(async () => {
@@ -167,7 +162,7 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
                 }
               >
                 Desconectar
-              </button>
+              </Button>
             )}
             <label className="rw-setting-toggle">
               <span className="rw-sr-only">Usar {LABELS[item.id]} MCP</span>
@@ -220,16 +215,17 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
           />
         </label>
         <span className="rw-pr-actions">
-          <button
+          <Button
             type="submit"
-            className="rw-button primary"
+            variant="primary"
+            loading={busy}
             disabled={busy || token.trim().length < 8}
           >
             Salvar token do GitLab
-          </button>
-          <button type="button" className="rw-button" onClick={() => setShowApp(!showApp)}>
+          </Button>
+          <Button onClick={() => setShowApp(!showApp)}>
             {showApp ? "Ocultar OAuth2" : "Configurar OAuth2 do GitLab"}
-          </button>
+          </Button>
         </span>
       </form>
       {showApp && (
@@ -270,9 +266,9 @@ export function McpConnections({ connectResult }: { connectResult?: ConnectResul
               onChange={(event) => setApp({ ...app, clientSecret: event.target.value })}
             />
           </label>
-          <button type="submit" className="rw-button primary" disabled={busy || !app.clientId}>
+          <Button type="submit" variant="primary" loading={busy} disabled={busy || !app.clientId}>
             Salvar aplicativo OAuth
-          </button>
+          </Button>
         </form>
       )}
     </section>

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { TaskTerminal, type TaskTerminalHandle } from "../../components/TaskTerminal";
 import { useTerminalSocket } from "../../hooks/useTerminalSocket";
+import { Badge } from "../../ui/Badge";
+import { Button } from "../../ui/Button";
 import { ErrorNotice } from "./ManagementViews";
 import type { useRemoteWorkspace } from "./useRemoteWorkspace";
 
@@ -116,9 +118,8 @@ export function HarnessTerminal({
               {state.data?.effort ? ` · effort ${state.data.effort}` : ""} · Fechar esta aba mantém
               o harness em execução.
             </span>
-            <button
-              type="button"
-              className="rw-button"
+            <Button
+              loading={busy}
               disabled={busy}
               onClick={async () => {
                 setBusy(true);
@@ -135,7 +136,7 @@ export function HarnessTerminal({
               }}
             >
               Parar harness
-            </button>
+            </Button>
           </div>
         </>
       ) : (
@@ -256,9 +257,9 @@ export function HarnessTerminal({
               Usar seleção automática
             </button>
           </details>
-          <button
-            type="button"
-            className="rw-button primary"
+          <Button
+            variant="primary"
+            loading={busy}
             disabled={
               busy ||
               !supported ||
@@ -272,7 +273,7 @@ export function HarnessTerminal({
             {busy
               ? "Preparando harness…"
               : `Iniciar ${engine === "opencode" ? "OpenCode" : engine === "claude-code" ? "Claude Code" : "harness"}`}
-          </button>
+          </Button>
           <p className="rw-section-note">
             Iniciar executa o agente real no servidor. Modelo e effort são aplicados ao iniciar ou
             retomar.
@@ -284,9 +285,9 @@ export function HarnessTerminal({
           <strong>Skills aplicadas</strong>
           <div className="rw-skill-chips">
             {state.data.applied.map((skill) => (
-              <span key={skill.name} title={skill.reasons.join(", ")}>
+              <Badge key={skill.name} title={skill.reasons.join(", ")}>
                 {skill.name} · {skill.source}
-              </span>
+              </Badge>
             ))}
           </div>
         </div>

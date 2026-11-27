@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AgentRunnerSettings } from "@vibe-code/shared";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { Button } from "../../ui/Button";
 
 type Field = keyof AgentRunnerSettings;
 const TEXT_FIELDS: [Field, string, string][] = [
@@ -188,9 +189,9 @@ export function RunnerSettings() {
             {notice}
           </p>
         )}
-        <button type="submit" className="rw-button primary" disabled={busy}>
+        <Button type="submit" variant="primary" loading={busy}>
           Salvar execução
-        </button>
+        </Button>
       </form>
     </section>
   );
