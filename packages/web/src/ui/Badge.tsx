@@ -1,14 +1,14 @@
 import { type BadgeProps, Badge as SonidoBadge } from "@juninmd/sonido";
 import type { HTMLAttributes, ReactNode } from "react";
 
-/** A count or a category pill; Sonido owns the tone scale and the contrast fix. */
+/** The workspace's 10px count block; Sonido owns the size, the raised surface and the contrast. */
 export function Badge({
   children,
   tone = "neutral",
   ...rest
 }: { children: ReactNode; tone?: BadgeProps["tone"] } & HTMLAttributes<HTMLSpanElement>) {
   return (
-    <SonidoBadge tone={tone} {...rest}>
+    <SonidoBadge appearance="count" tone={tone} {...rest}>
       {children}
     </SonidoBadge>
   );

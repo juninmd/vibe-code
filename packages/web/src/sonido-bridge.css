@@ -40,3 +40,11 @@
     padding-inline: 12px;
   }
 }
+
+/*
+ * The workspace's accent is part of its identity: Sonido's outline button paints its border and
+ * label with --sn-color-accent, so point that token at the app's own accent instead of the coral.
+ */
+body {
+  --sn-color-accent: var(--rw-accent);
+}
