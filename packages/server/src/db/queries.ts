@@ -273,6 +273,7 @@ export interface WorkspaceRow {
   description: string | null;
   created_at: string;
   updated_at: string;
+  owner_account_id: string | null;
 }
 
 export interface Workspace {
@@ -282,6 +283,8 @@ export interface Workspace {
   description?: string;
   createdAt: string;
   updatedAt: string;
+  /** Account that owns the workspace; null for the operator/API-key scope. */
+  ownerAccountId?: string;
 }
 
 function mapWorkspace(row: WorkspaceRow): Workspace {
@@ -292,6 +295,7 @@ function mapWorkspace(row: WorkspaceRow): Workspace {
     description: row.description || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ownerAccountId: row.owner_account_id ?? undefined,
   };
 }
 
@@ -300,6 +304,7 @@ export interface CreateWorkspaceRequest {
   name: string;
   slug: string;
   description?: string;
+  ownerAccountId?: string | null;
 }
 
 export function createWorkspaceQueries(db: Database) {
@@ -322,13 +327,22 @@ export function createWorkspaceQueries(db: Database) {
         .get(slug);
       return row ? mapWorkspace(row) : null;
     },
+    /** Workspaces owned by an account, oldest first (first one is the default). */
+    listByOwner: (accountId: string): Workspace[] => {
+      const rows = db
+        .prepare<WorkspaceRow, [string]>(
+          "SELECT * FROM workspaces WHERE owner_account_id = ? ORDER BY created_at ASC"
+        )
+        .all(accountId);
+      return rows.map(mapWorkspace);
+    },
     create: (req: CreateWorkspaceRequest): Workspace => {
       const id = req.id || `ws-${Date.now()}`;
       const row = db
-        .prepare<WorkspaceRow, [string, string, string, string | null]>(
-          "INSERT INTO workspaces (id, name, slug, description) VALUES (?, ?, ?, ?) RETURNING *"
+        .prepare<WorkspaceRow, [string, string, string, string | null, string | null]>(
+          "INSERT INTO workspaces (id, name, slug, description, owner_account_id) VALUES (?, ?, ?, ?, ?) RETURNING *"
         )
-        .get(id, req.name, req.slug, req.description || null);
+        .get(id, req.name, req.slug, req.description || null, req.ownerAccountId ?? null);
       if (!row) throw new Error("Failed to create workspace");
       return mapWorkspace(row);
     },

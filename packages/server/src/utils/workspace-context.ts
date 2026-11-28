@@ -1,122 +1,92 @@
 /**
- * Workspace Context Utilities
- * Handles user → workspace mapping and isolation
+ * Workspace context: which workspace a request works in, and whether the
+ * signed-in account owns it (issue #262).
+ *
+ * Every OAuth session carries an internal `accountId`. The account owns
+ * workspaces (`workspaces.owner_account_id`); a request may only target a
+ * workspace it owns. Omitting the workspace selects the account's default
+ * workspace, created on first use.
+ *
+ * API-key access never reaches this module - the operator scope is handled by
+ * `security/access-control.ts`.
  */
-
 import type { AuthUser } from "@vibe-code/shared";
 import type { Context } from "hono";
 import type { Db } from "../db";
 
-function slugifyWorkspacePart(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "personal";
+function uniqueSlug(db: Db, base: string, suffix: string): string {
+  const root = `${base}-${suffix}`.replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!db.workspaces.getBySlug(root)) return root;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${root}-${i}`;
+    if (!db.workspaces.getBySlug(candidate)) return candidate;
+  }
+  throw new Error("Could not allocate a workspace slug");
 }
 
-function ensureWorkspaceExists(db: Db, workspaceId: string, user: AuthUser): void {
-  if (db.workspaces.get(workspaceId)) return;
-
-  const baseSlug = slugifyWorkspacePart(user.username);
-  const slug = db.workspaces.getBySlug(baseSlug) ? `${baseSlug}-${workspaceId}` : baseSlug;
+function defaultWorkspace(db: Db, accountId: string, user: AuthUser): string {
+  const existing = db.workspaces.listByOwner(accountId)[0];
+  if (existing) return existing.id;
+  const id = `ws-${accountId.replace(/^acc-/, "").slice(0, 12)}`;
+  if (db.workspaces.get(id)) return id;
   db.workspaces.create({
-    id: workspaceId,
-    name: user.displayName || user.username,
-    slug,
-    description: "Default GitHub workspace",
+    id,
+    name: user.displayName?.trim() || user.username,
+    slug: uniqueSlug(db, "personal", accountId.replace(/^acc-/, "").slice(0, 8)),
+    description: "Workspace pessoal",
+    ownerAccountId: accountId,
   });
+  return id;
 }
 
 /**
- * Get workspace ID from request context (header or query param)
- * Validates against user's authorized workspaces
+ * Get the workspace for this request, or null when it is not owned by the
+ * caller (403 at the API layer).
  */
 export async function getWorkspaceContext(
   c: Context,
   db: Db,
   user: AuthUser | null
 ): Promise<{ workspaceId: string; userId: string } | null> {
-  if (!user) {
-    console.warn("[workspace-context] ⚠️  No authenticated user");
-    return null;
-  }
+  if (!user) return null;
+  const accountId = user.accountId;
+  if (!accountId) return null;
 
-  // Extract workspace_id from request or middleware context.
-  // Priority: middleware-set env > header > query > body.
   const workspaceIdFromHeader = c.req.header("x-workspace-id");
   const workspaceIdFromQuery = c.req.query("workspace_id");
-  const workspaceIdFromEnv = (c.env as any)?.workspaceId;
+  const workspaceIdFromEnv = (c.env as { workspaceId?: string } | undefined)?.workspaceId;
   let workspaceId = workspaceIdFromEnv || workspaceIdFromHeader || workspaceIdFromQuery;
 
   if (!workspaceId && c.req.method !== "GET") {
     try {
-      const body = await c.req.json().catch(() => ({}));
+      const body = (await c.req.json().catch(() => ({}))) as { workspace_id?: string };
       workspaceId = body?.workspace_id;
     } catch {
       // ignore invalid JSON in non-GET requests
     }
   }
 
-  // For now: store github_username → workspace_id mapping in settings
-  // This is a temporary bridge until users table is fully integrated
-  const key = `user_workspace:${user.username}`;
-
-  if (!workspaceId) {
-    // Auto-assign user's default workspace when no workspace_id provided
-    const existing = db.settings.get(key);
-    if (existing) {
-      workspaceId = existing;
-    } else {
-      workspaceId = `ws-${user.username}`;
-      db.settings.set(key, workspaceId);
+  if (workspaceId) {
+    const workspace = db.workspaces.get(workspaceId);
+    if (!workspace || workspace.ownerAccountId !== accountId) {
+      console.warn("[workspace-context] denied cross-account workspace access", {
+        accountId,
+        workspaceId,
+      });
+      return null;
     }
-  }
-  const authorizedWs = db.settings.get(key);
-
-  // If no mapping exists, create default workspace for this user
-  if (!authorizedWs) {
-    console.debug("[workspace-context] 📝 Creating default workspace for user", {
-      username: user.username,
-      workspaceId,
-    });
-    // Store mapping: this user owns this workspace
-    db.settings.set(key, workspaceId);
-  } else if (authorizedWs !== workspaceId) {
-    // User is trying to access a different workspace than their default
-    console.error("[workspace-context] ❌ SECURITY: User attempting cross-workspace access", {
-      username: user.username,
-      authorizedWs,
-      requestedWs: workspaceId,
-    });
-    return null; // Deny access
+    return { workspaceId, userId: accountId };
   }
 
-  console.debug("[workspace-context] ✅ Workspace context validated", {
-    username: user.username,
-    workspaceId,
-  });
-
-  ensureWorkspaceExists(db, workspaceId, user);
-
-  return {
-    workspaceId,
-    userId: user.username, // For now, use github username as user ID
-  };
+  return { workspaceId: defaultWorkspace(db, accountId, user), userId: accountId };
 }
 
-/**
- * Enforce workspace isolation in request handler
- * Returns 403 if user doesn't have access to requested workspace
- */
+/** Enforce workspace isolation in a request handler. */
 export async function requireWorkspaceContext(
   c: Context,
   db: Db,
   user: AuthUser | null
 ): Promise<string | null> {
   const ctx = await getWorkspaceContext(c, db, user);
-  if (!ctx) {
-    return null;
-  }
-  return ctx.workspaceId;
+  return ctx?.workspaceId ?? null;
 }

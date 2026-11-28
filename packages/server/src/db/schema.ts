@@ -91,6 +91,30 @@ export function initDatabase(dbPath: string): Database {
       expires_at     TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS accounts (
+      id          TEXT PRIMARY KEY,
+      email       TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS account_identities (
+      provider     TEXT NOT NULL,
+      subject      TEXT NOT NULL,
+      account_id   TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      email        TEXT,
+      username     TEXT NOT NULL,
+      display_name TEXT,
+      avatar_url   TEXT,
+      access_token TEXT NOT NULL DEFAULT '',
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (provider, subject)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_account_identities_account
+      ON account_identities(account_id);
+
     CREATE TABLE IF NOT EXISTS prompt_templates (
       id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
       title       TEXT NOT NULL,
@@ -267,6 +291,26 @@ export function initDatabase(dbPath: string): Database {
   }
   if (!runColNames.includes("rewound_at")) {
     db.exec("ALTER TABLE agent_runs ADD COLUMN rewound_at TEXT");
+  }
+
+  // Accounts: a session now belongs to an account (issue #262). Legacy sessions
+  // were created before accounts existed, so they have no account and are
+  // rejected by the auth middleware; users sign in again.
+  const sessionCols = db.query("PRAGMA table_info(auth_sessions)").all() as { name: string }[];
+  const sessionColNames = sessionCols.map((c) => c.name);
+  if (!sessionColNames.includes("account_id")) {
+    db.exec("ALTER TABLE auth_sessions ADD COLUMN account_id TEXT");
+  }
+  if (!sessionColNames.includes("provider")) {
+    db.exec("ALTER TABLE auth_sessions ADD COLUMN provider TEXT");
+  }
+
+  // Workspaces belong to an account. NULL means "operator/API-key scope".
+  const workspaceCols = db.query("PRAGMA table_info(workspaces)").all() as { name: string }[];
+  const workspaceColNames = workspaceCols.map((c) => c.name);
+  if (!workspaceColNames.includes("owner_account_id")) {
+    db.exec("ALTER TABLE workspaces ADD COLUMN owner_account_id TEXT");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_account_id)");
   }
 
   // Labels system (Multica-inspired): colored labels per repo + task_labels join

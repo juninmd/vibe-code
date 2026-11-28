@@ -945,6 +945,8 @@ export interface AuthUser {
   displayName?: string;
   avatarUrl?: string;
   provider?: "github" | "google" | "api-key";
+  /** Internal account id; absent for the API key. */
+  accountId?: string;
 }
 
 export interface AuthStatus {

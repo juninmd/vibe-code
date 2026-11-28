@@ -28,7 +28,13 @@ export function hasGoogleClient(env: Env = process.env): boolean {
 }
 
 function allowlist(env: Env) {
-  return { emails: csvSet(env.GOOGLE_ALLOWED_EMAILS), domains: csvSet(env.GOOGLE_ALLOWED_DOMAINS) };
+  // The global login allowlist wins when configured; the Google-specific
+  // variables remain for older deployments.
+  const global = csvSet(env.VIBE_CODE_ALLOWED_EMAILS);
+  return {
+    emails: global.size > 0 ? global : csvSet(env.GOOGLE_ALLOWED_EMAILS),
+    domains: csvSet(env.GOOGLE_ALLOWED_DOMAINS),
+  };
 }
 
 /** Client configured AND an allowlist set: only then is the button offered. */

@@ -6,6 +6,7 @@ import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
+import { resolveAccountForIdentity } from "../accounts";
 import { ApprovalBroker } from "../agents/approvals";
 import type { Orchestrator } from "../agents/orchestrator";
 import { createDb } from "../db";
@@ -958,26 +959,48 @@ describe("remote session messages", () => {
     const { db, repo, task, app, inputs } = setup();
     const configuredKey = Boolean(process.env.VIBE_CODE_API_KEY);
     const keyPresent = "VIBE_CODE_API_KEY" in process.env;
+    const configuredEmails = process.env.VIBE_CODE_ALLOWED_EMAILS;
     if (!configuredKey) process.env.VIBE_CODE_API_KEY = "remote-test-auth";
+    process.env.VIBE_CODE_ALLOWED_EMAILS = "alice@example.com";
     try {
       db.settings.set("auth_enabled", "true");
-      const own = db.workspaces.create({ id: "remote-alice", name: "Alice", slug: "alice" });
-      const foreign = db.workspaces.create({ id: "remote-bob", name: "Bob", slug: "bob" });
-      db.settings.set("user_workspace:alice", own.id);
+      const { account } = resolveAccountForIdentity(db, {
+        provider: "github",
+        subject: "fixture-alice",
+        email: "alice@example.com",
+        username: "alice",
+        displayName: "Alice",
+        avatarUrl: null,
+        accessToken: "fixture-unused",
+      });
+      const own = db.workspaces.create({
+        id: "remote-alice",
+        name: "Alice",
+        slug: "alice",
+        ownerAccountId: account.id,
+      });
+      const foreign = db.workspaces.create({
+        id: "remote-bob",
+        name: "Bob",
+        slug: "bob",
+        ownerAccountId: "acc-bob",
+      });
       db.raw
         .prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?")
         .run(foreign.id, repo.id);
       const token = "remote-test-session";
       db.raw
         .prepare(
-          "INSERT INTO auth_sessions (id, github_id, username, access_token, expires_at) VALUES (?, ?, ?, ?, ?)"
+          "INSERT INTO auth_sessions (id, github_id, username, access_token, expires_at, account_id, provider) VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         .run(
           createHash("sha256").update(token).digest("hex"),
           "fixture-alice",
           "alice",
           "fixture-unused",
-          "9999-01-01T00:00:00.000Z"
+          "9999-01-01T00:00:00.000Z",
+          account.id,
+          "github"
         );
       const response = await app.request(`/api/tasks/${task.id}/messages`, {
         method: "POST",
@@ -1017,6 +1040,8 @@ describe("remote session messages", () => {
         if (keyPresent) process.env.VIBE_CODE_API_KEY = "";
         else delete process.env.VIBE_CODE_API_KEY;
       }
+      if (configuredEmails === undefined) delete process.env.VIBE_CODE_ALLOWED_EMAILS;
+      else process.env.VIBE_CODE_ALLOWED_EMAILS = configuredEmails;
     }
   });
   it("reloads conversation history across runs with a log cursor and task boundary", async () => {

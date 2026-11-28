@@ -1,6 +1,6 @@
 import type { AgentRun, TaskWithRun } from "@vibe-code/shared";
 import type { Context } from "hono";
-import { checkApiKey, getCurrentUser } from "../auth";
+import { checkApiKey, getCurrentUser, isAuthEnabled as isAuthConfigured } from "../auth";
 import type { Db } from "../db";
 import { requireWorkspaceContext } from "../utils/workspace-context";
 
@@ -26,10 +26,7 @@ interface ResolveAccessResult {
 function isAuthEnabled(db: Db): boolean {
   const status = db.settings.get("auth_enabled");
   if (status === "false") return false;
-  const hasClientId = Boolean(process.env.GITHUB_OAUTH_CLIENT_ID);
-  const hasClientSecret = Boolean(process.env.GITHUB_OAUTH_CLIENT_SECRET);
-  const hasApiKey = Boolean(process.env.VIBE_CODE_API_KEY);
-  return (hasClientId && hasClientSecret) || hasApiKey;
+  return isAuthConfigured();
 }
 
 function isLegacyFallbackEnabled(db: Db): boolean {

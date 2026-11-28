@@ -19,6 +19,9 @@ export interface SessionRow {
   /** GitHub token for GitHub logins; empty for Google logins. */
   access_token: string;
   expires_at: string;
+  /** Internal account (issue #262). Legacy sessions have none and are rejected. */
+  account_id: string | null;
+  provider: string | null;
 }
 
 export interface LoginIdentity {
@@ -28,6 +31,10 @@ export interface LoginIdentity {
   displayName: string | null;
   avatarUrl: string | null;
   accessToken: string;
+  /** Provider subject and account this login belongs to. */
+  provider?: "github" | "google";
+  subject?: string;
+  accountId?: string;
 }
 
 export function mapSession(row: SessionRow): AuthUser {
@@ -38,6 +45,7 @@ export function mapSession(row: SessionRow): AuthUser {
     displayName: row.display_name ?? undefined,
     avatarUrl: row.avatar_url ?? undefined,
     provider: google ? "google" : "github",
+    accountId: row.account_id ?? undefined,
   };
 }
 
@@ -63,8 +71,8 @@ export function startSession(db: Db, c: Context, identity: LoginIdentity): void 
   db.raw
     .prepare(
       `INSERT OR REPLACE INTO auth_sessions
-       (id, github_id, username, display_name, avatar_url, access_token, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       (id, github_id, username, display_name, avatar_url, access_token, expires_at, account_id, provider)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       hashToken(sessionToken),
@@ -73,7 +81,9 @@ export function startSession(db: Db, c: Context, identity: LoginIdentity): void 
       identity.displayName,
       identity.avatarUrl,
       identity.accessToken,
-      expiresAt.toISOString()
+      expiresAt.toISOString(),
+      identity.accountId ?? null,
+      identity.provider ?? null
     );
   setCookie(c, SESSION_COOKIE, sessionToken, {
     httpOnly: true,

@@ -7,19 +7,25 @@ import "./login.css";
 
 const LOGIN_ERRORS: Record<string, string> = {
   invalid_state: "O login com GitHub expirou ou foi interrompido. Tente de novo.",
-  not_allowed: "Esta conta do GitHub não tem permissão neste servidor (GITHUB_ALLOWED_USERS).",
+  not_allowed:
+    "Este e-mail não está na lista de acesso deste servidor. Peça para incluírem em VIBE_CODE_ALLOWED_EMAILS.",
   github_failed: "O GitHub recusou o login. Confira o OAuth app e tente de novo.",
   google_failed: "O Google recusou o login. Confira o cliente OAuth e tente de novo.",
   google_not_allowed:
-    "Esta conta do Google não tem permissão neste servidor (GOOGLE_ALLOWED_EMAILS/DOMAINS).",
+    "Este e-mail não está na lista de acesso deste servidor. Peça para incluírem em VIBE_CODE_ALLOWED_EMAILS.",
+  identity_taken:
+    "Esta conta já está vinculada a outro usuário. Entre com ela diretamente em vez de vincular.",
 };
 
 /** Error code the OAuth callback left in the URL; removed so a reload does not repeat it. */
 function takeLoginError(): string | null {
   const url = new URL(window.location.href);
-  const code = url.searchParams.get("auth_error");
+  const linkError = url.searchParams.get("link_error");
+  const code = url.searchParams.get("auth_error") ?? linkError;
   if (!code) return null;
   url.searchParams.delete("auth_error");
+  url.searchParams.delete("link_error");
+  url.searchParams.delete("linked");
   window.history.replaceState(null, "", url);
   return LOGIN_ERRORS[code] ?? LOGIN_ERRORS.github_failed;
 }
