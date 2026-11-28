@@ -146,6 +146,23 @@ export function initDatabase(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_project_repositories_repo
       ON project_repositories(repo_id);
 
+    CREATE TABLE IF NOT EXISTS pr_grants (
+      id            TEXT PRIMARY KEY,
+      task_id       TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      account_id    TEXT,
+      source        TEXT NOT NULL,
+      turn_id       TEXT,
+      repo_id       TEXT NOT NULL,
+      head_branch   TEXT NOT NULL,
+      target_branch TEXT NOT NULL,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      consumed_at   TEXT,
+      revoked_at    TEXT,
+      revoked_reason TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pr_grants_task ON pr_grants(task_id);
+
     CREATE TABLE IF NOT EXISTS prompt_templates (
       id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
       title       TEXT NOT NULL,

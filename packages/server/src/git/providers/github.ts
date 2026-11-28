@@ -146,6 +146,10 @@ export class GitHubProvider implements GitProviderAdapter {
     return data.html_url;
   }
 
+  async findPR(token: string, repoUrl: string, head: string, base: string): Promise<string | null> {
+    return this.findOpenPR(token, getRepoOwnerAndName(repoUrl), head, base);
+  }
+
   private async findOpenPR(
     token: string,
     repoPath: string,

@@ -276,6 +276,19 @@ export class GitService {
     await this.exec(["git", "checkout", branch], { cwd: wtPath });
   }
 
+  /** Existing open PR/MR for this head/base pair; null when none. */
+  async findPR(
+    _wtPath: string,
+    repoUrl: string,
+    branch: string,
+    base?: string
+  ): Promise<string | null> {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) return null;
+    return resolved.adapter.findPR(resolved.token, repoUrl, branch, base || "main");
+  }
+
   async createPR(
     _wtPath: string,
     repoUrl: string,
