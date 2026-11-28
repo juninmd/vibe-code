@@ -51,6 +51,9 @@ describe("Tasks Router (unit)", () => {
     memories: {
       getByTaskIdAndScope: mock().mockReturnValue(null),
     },
+    raw: {
+      prepare: mock().mockReturnValue({ run: mock().mockReturnValue({ changes: 0 }) }),
+    },
   };
   const mockOrchestrator = {
     launch: mock(),
