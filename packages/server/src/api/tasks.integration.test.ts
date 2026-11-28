@@ -1272,3 +1272,29 @@ describe("tool approvals", () => {
     expect((await answer(app, path, { reply: "once" })).status).toBe(404);
   });
 });
+
+describe("PUT /api/tasks/:id/schedule (routine PR toggle)", () => {
+  it("stores the open-PR toggle and preserves it when the cron is edited", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Routine", repoId: repo.id });
+    const app = buildApp(db);
+    const put = (body: unknown) =>
+      app.request(`/api/tasks/${task.id}/schedule`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    let response = await put({ cronExpression: "0 9 * * *", openPr: true });
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.openPr).toBe(true);
+
+    response = await put({ cronExpression: "0 10 * * *" });
+    expect((await response.json()).data.openPr).toBe(true);
+
+    response = await put({ cronExpression: "0 10 * * *", openPr: false });
+    expect((await response.json()).data.openPr).toBe(false);
+    db.close();
+  });
+});

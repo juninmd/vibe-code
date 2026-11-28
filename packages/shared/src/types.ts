@@ -300,6 +300,8 @@ export interface TaskSchedule {
   taskId: string;
   cronExpression: string;
   enabled: boolean;
+  /** Open (or update) the pull request at the end of each admitted occurrence. */
+  openPr: boolean;
   deadlineAt: string | null;
   lastRunAt: string | null;
   nextRunAt: string | null;

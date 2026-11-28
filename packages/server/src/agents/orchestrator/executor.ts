@@ -16,6 +16,7 @@ import { resolveMcpServers } from "../../mcp/default-servers";
 import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
 import { readAccountCredential } from "../../security/account-credentials";
+import { consumeGrant, findActiveGrant, grantPr, type PrGrantRow } from "../../security/pr-grants";
 import type { SkillsLoader } from "../../skills/loader";
 import { agentProcessEnv } from "../../utils/agent-env";
 import type { BroadcastHub } from "../../ws/broadcast";
@@ -1622,6 +1623,36 @@ export async function executeAgent(
     db.tasks.updateField(task.id, "branch_name", branch);
     let prUrl: string | null = null;
 
+    // Routines only publish when the stored toggle says so: the scheduled run
+    // turns it into a `routine_toggle` grant before the push (issue #262).
+    const routine = db.schedules.getByTaskId(task.id);
+    let routineGrant: PrGrantRow | null = null;
+    if (routine) {
+      routineGrant = findActiveGrant(db, task.id, {
+        repoId: repo.id,
+        headBranch: branch,
+        targetBranch: baseBranch,
+      });
+      if (!routineGrant && routine.openPr) {
+        const owner = repo.workspaceId
+          ? db.raw
+              .query<{ owner_account_id: string | null }, [string]>(
+                "SELECT owner_account_id FROM workspaces WHERE id = ?"
+              )
+              .get(repo.workspaceId)?.owner_account_id
+          : null;
+        routineGrant = grantPr(db, {
+          taskId: task.id,
+          accountId: owner ?? null,
+          source: "routine_toggle",
+          turnId: run.id,
+          repoId: repo.id,
+          headBranch: branch,
+          targetBranch: baseBranch,
+        });
+      }
+    }
+
     // Check if the model already created a PR via GitHub MCP tool
     const runLogs = db.logs.listByRun(run.id);
     for (const log of runLogs) {
@@ -1636,6 +1667,11 @@ export async function executeAgent(
 
     try {
       setRunPhase("pr_creating");
+      if (routine && !routineGrant) {
+        throw new Error(
+          'routine has "Abrir PR ao final" off; the branch is kept and no PR was opened'
+        );
+      }
       // Sync with base before push to avoid opening a PR with conflicts
       sysLog(`Syncing with origin/${baseBranch} before PR...`);
       const preSyncResult = await git.syncWithBase(wtPath, baseBranch);
@@ -1712,6 +1748,7 @@ export async function executeAgent(
         metadata: { branch, baseBranch },
       });
       prCreated = true;
+      if (routineGrant) consumeGrant(db, routineGrant.id);
       sysLog(`PR: ${prUrl}`);
     } catch (err: any) {
       sysLog(`Push/PR skipped: ${err.message || String(err)}`);

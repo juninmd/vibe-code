@@ -1370,6 +1370,7 @@ export function createTasksRouter(
   const upsertScheduleSchema = z.object({
     cronExpression: z.string().min(1),
     enabled: z.boolean().optional(),
+    openPr: z.boolean().optional(),
     deadlineAt: z.string().nullable().optional(),
   });
 
@@ -1396,11 +1397,13 @@ export function createTasksRouter(
       return c.json({ error: "validation", message: `Invalid cron expression: ${msg}` }, 400);
     }
 
+    const existingSchedule = db.schedules.getByTaskId(task.id);
     let schedule = db.schedules.upsert(
       task.id,
       parsed.data.cronExpression,
       parsed.data.deadlineAt ?? null,
-      nextRunAt
+      nextRunAt,
+      parsed.data.openPr ?? existingSchedule?.openPr ?? false
     );
 
     if (parsed.data.enabled === false) {
