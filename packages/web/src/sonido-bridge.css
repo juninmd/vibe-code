@@ -47,4 +47,6 @@
  */
 body {
   --sn-color-accent: var(--rw-accent);
+  --sn-color-on-accent: var(--rw-on-accent);
+  --sn-gradient: linear-gradient(135deg, var(--rw-accent), var(--rw-accent-line));
 }

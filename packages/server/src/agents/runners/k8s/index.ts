@@ -45,6 +45,7 @@ export class AgentRunner {
         namespace: this.namespace,
         config: () => toK8sConfig(deps.settings(), deps.dataDir, this.env, this.readNamespace),
         idleMs: () => deps.settings().idleMinutes * 60_000,
+        enabled: () => deps.settings().runner === "k8s",
       });
     } catch (error) {
       console.warn(`[k8s-runner] Kubernetes API unavailable: ${(error as Error).message}`);
@@ -76,10 +77,12 @@ export class AgentRunner {
   /** Clears pods left by a previous process and starts the idle reaper (in-cluster only). */
   startBackground(): void {
     if (!this.pool) return;
-    this.pool
-      .cleanupOrphans()
-      .then((n) => console.log(`[startup] k8s runner: deleted ${n} leftover runner pods`))
-      .catch((err) => console.warn("[startup] k8s runner orphan cleanup failed:", err));
+    if (this.deps.settings().runner === "k8s") {
+      this.pool
+        .cleanupOrphans()
+        .then((n) => console.log(`[startup] k8s runner: deleted ${n} leftover runner pods`))
+        .catch((err) => console.warn("[startup] k8s runner orphan cleanup failed:", err));
+    }
     this.pool.startReaper();
   }
 }

@@ -208,6 +208,16 @@ describe("publishRemoteSession", () => {
     expect(error).toBeInstanceOf(RemotePullRequestError);
     expect(error.code).toBe("invalid_state");
   });
+
+  it("refuses with invalid_state when worktreePath exists on disk without .git", async () => {
+    const { task, workspace, deps, authorize } = await setup();
+    authorize();
+    const { rm } = await import("node:fs/promises");
+    await rm(join(workspace, ".git"), { recursive: true, force: true });
+    const error = await publishRemoteSession(task.id, {}, deps).catch((e) => e);
+    expect(error).toBeInstanceOf(RemotePullRequestError);
+    expect(error.code).toBe("invalid_state");
+  });
 });
 
 describe("ensureGitignoreEntry", () => {

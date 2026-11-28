@@ -899,7 +899,7 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     <dt>Branch</dt>
                     <dd title={selected?.branch ?? workspace.branch}>
                       <Icon name="branch" size={12} />
-                      {selected?.branch ?? workspace.branch}
+                      <span className="rw-dd-text">{selected?.branch ?? workspace.branch}</span>
                     </dd>
                   </div>
                   <div>

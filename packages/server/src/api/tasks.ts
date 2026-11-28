@@ -1488,12 +1488,12 @@ export function createTasksRouter(
     const latestRun = db.runs.getLatestByTask(task.id);
 
     try {
-      // If there's a running agent with a worktree, diff in the worktree
+      // If there's a running agent with a valid git worktree, diff in the worktree
       const preserved = task.tags.includes(REMOTE_SESSION_TAG) || task.tags.includes("manual");
       const useWorktree =
         latestRun?.worktreePath &&
         (latestRun.status === "running" || preserved) &&
-        (await accessWorkspace(latestRun.worktreePath).then(
+        (await accessWorkspace(join(latestRun.worktreePath, ".git")).then(
           () => true,
           () => false
         ));
@@ -1557,7 +1557,7 @@ export function createTasksRouter(
       const useWorktree =
         latestRun?.worktreePath &&
         (latestRun.status === "running" || preserved) &&
-        (await accessWorkspace(latestRun.worktreePath).then(
+        (await accessWorkspace(join(latestRun.worktreePath, ".git")).then(
           () => true,
           () => false
         ));

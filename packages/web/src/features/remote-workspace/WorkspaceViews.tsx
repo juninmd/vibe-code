@@ -186,7 +186,12 @@ export function Conversation({
               )}
             </p>
             <h1>O que vamos construir?</h1>
-            {server && onOpenSettings && <McpAuthNotice onOpen={() => onOpenSettings("mcp")} />}
+            {server && onOpenSettings && (
+              <McpAuthNotice
+                onOpen={() => onOpenSettings("mcp")}
+                providers={workspace.data.data?.repos.map((repo) => repo.provider)}
+              />
+            )}
             <p>
               {server
                 ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
@@ -689,20 +694,26 @@ export function Composer({
                   {selected ? (
                     selected.branch
                   ) : (
-                    <select
-                      aria-label="Branch da nova sessão"
-                      value={workspace.branch}
-                      onChange={(e) => workspace.setBranch(e.target.value)}
-                    >
-                      <option value={project?.branch ?? "main"}>{project?.branch ?? "main"}</option>
-                      {(server ? (workspace.branches.data ?? []) : ["demo/interface-preview"])
-                        .filter((branch) => branch !== project?.branch)
-                        .map((branch) => (
-                          <option key={branch} value={branch}>
-                            {branch}
-                          </option>
-                        ))}
-                    </select>
+                    <>
+                      <span className="rw-branch-label">Base</span>
+                      <select
+                        aria-label="Branch da nova sessão"
+                        title="Branch inicial da sessão"
+                        value={workspace.branch}
+                        onChange={(e) => workspace.setBranch(e.target.value)}
+                      >
+                        <option value={project?.branch ?? "main"}>
+                          {project?.branch ?? "main"}
+                        </option>
+                        {(server ? (workspace.branches.data ?? []) : ["demo/interface-preview"])
+                          .filter((branch) => branch !== project?.branch)
+                          .map((branch) => (
+                            <option key={branch} value={branch}>
+                              {branch}
+                            </option>
+                          ))}
+                      </select>
+                    </>
                   )}
                 </span>
                 {!selected && server && workspace.repoProjects.length > 0 && (
@@ -710,6 +721,7 @@ export function Composer({
                     <Icon name="folder" size={12} />
                     <select
                       aria-label="Projeto da nova sessão"
+                      title="Projeto da nova sessão"
                       value={workspace.activeProject?.id ?? ""}
                       onChange={(event) => workspace.setActiveProjectId(event.target.value)}
                     >
@@ -723,7 +735,7 @@ export function Composer({
                 )}
                 {!selected && server && (
                   <span className="rw-branch">
-                    <Icon name="branch" size={12} />
+                    <span className="rw-branch-label">PR →</span>
                     <select
                       aria-label="Branch alvo do PR"
                       title="Branch em que o PR será aberto"

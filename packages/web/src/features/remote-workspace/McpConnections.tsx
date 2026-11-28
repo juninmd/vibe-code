@@ -46,11 +46,31 @@ export function takeConnectResult(): ConnectResult | null {
   return { ok: Boolean(ok), provider: (ok ?? failed ?? "").slice(0, 20) };
 }
 
+const DISMISS_KEY = "rw-mcp-notice-dismissed";
+
 /** Asks for sign-in when a default MCP is on but has no credentials. */
-export function McpAuthNotice({ onOpen }: { onOpen: () => void }) {
+export function McpAuthNotice({
+  onOpen,
+  providers,
+}: {
+  onOpen: () => void;
+  /** Providers actually used by the workspace's repos (e.g. ["github"]). */
+  providers?: string[];
+}) {
   const query = useMcpConnections();
-  const pending = pendingMcpAuth(query.data);
-  if (!pending.length) return null;
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(DISMISS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const pending = pendingMcpAuth(query.data).filter((item) => {
+    if (!providers || providers.length === 0) return true;
+    if (item.id === "github" || item.id === "gitlab") return providers.includes(item.id);
+    return true;
+  });
+  if (dismissed || !pending.length) return null;
   return (
     <div className="rw-mcp-notice" role="note">
       <span>
@@ -58,6 +78,18 @@ export function McpAuthNotice({ onOpen }: { onOpen: () => void }) {
         padrão.
       </span>
       <Button onClick={onOpen}>Autenticar</Button>
+      <Button
+        variant="subtle"
+        aria-label="Dispensar aviso de MCP"
+        onClick={() => {
+          setDismissed(true);
+          try {
+            sessionStorage.setItem(DISMISS_KEY, "1");
+          } catch {}
+        }}
+      >
+        Agora não
+      </Button>
     </div>
   );
 }

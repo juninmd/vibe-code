@@ -1,6 +1,10 @@
 # Changelog
 
 ## [Unreleased]
+### Fixed
+- **Workspace UI/UX e fluxo de PR (homologação live)**: rótulos explícitos (`Base` e `PR →`) e quebra responsiva no rodapé do composer (desktop e mobile); badge `⌘ K` sem corte na busca da sidebar; truncamento de branch longa no painel de contexto sem deslocar os demais campos; cartões do Quadro usando `sessionTitle`; aviso de MCP filtrando provedores em uso e dispensável; gradiente do Command Palette alinhado aos tokens `--rw-*`.
+- **Worktree sem `.git` e sweep k8s**: `/api/tasks/:id/diff`, `/api/tasks/:id/diff/file` e `POST /api/tasks/:id/pull-request` validam `.git` antes de rodar comandos git (evitando 500/502 em diretórios órfãos); `AgentRunner`/`PodPool` só executam varredura de pods órfãos quando o runner `k8s` está ativo ou há pods rastreados, eliminando spam de 403 nos logs em modo local.
+
 ### Changed
 - **Conversa do workspace (inspirada no T3 Code)**: cada prompt e as respostas seguintes viram um turno, com autor, hora relativa (`title` com a hora completa) e cópia da mensagem ou da resposta; blocos de código ganham barra com a linguagem e "Copiar", e o markdown cobre listas, tabelas, citações e links externos. O work log mostra cada ferramenta como linha expansível com estado (executando, concluído, falhou) e o comando completo sob demanda. O composer fica ancorado no rodapé, cresce com o texto, mostra `Enter`/`Shift+Enter`, envio pendente e Parar; a conversa segue o fim enquanto você está nele, mantém a âncora ao redimensionar e troca para "Novo conteúdo" quando você rolou para cima. Estados vazio, erro do harness e erro de carregamento também foram refeitos.
 - **Adding a repository**: "Adicionar projeto" in the sidebar, the project area and ⌘K opens a dialog that lists your GitHub repositories (search, one click to activate) or takes any Git URL, follows the clone and opens a session in the new project. "Nova sessão" opens it when there is no project yet instead of being disabled.

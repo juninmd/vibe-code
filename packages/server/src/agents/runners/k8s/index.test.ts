@@ -66,4 +66,16 @@ describe("AgentRunner", () => {
       activePods: 1,
     });
   });
+
+  it("skips orphan pod cleanup on startup when runner is local", async () => {
+    const { agent, kube } = runner(cluster, { runner: "local" });
+    let listed = 0;
+    kube.listPods = async () => {
+      listed++;
+      return [];
+    };
+    agent.startBackground();
+    await Promise.resolve();
+    expect(listed).toBe(0);
+  });
 });

@@ -36,6 +36,8 @@ export interface PodPoolDeps {
   config: () => K8sRunnerConfig;
   /** Read on every sweep, so a new idle time applies to running pods too. */
   idleMs: () => number;
+  /** When false and no pods are tracked, the reaper skips Kubernetes API sweeps. */
+  enabled?: () => boolean;
   /** Absolute path of the bare repository behind a worktree. */
   gitCommonDir?: (workdir: string) => Promise<string>;
   /** User (workspace) a task belongs to, for the per-user pod cap and label. */
@@ -336,6 +338,7 @@ export class PodPool {
   /** Runs the reaper on an interval; returns a stop function. */
   startReaper(intervalMs = 30_000): () => void {
     const timer = setInterval(() => {
+      if (this.deps.enabled && !this.deps.enabled() && this.entries.size === 0) return;
       // The orphan sweep retries pods whose delete failed after they left the pool.
       void this.reap()
         .then(() => this.cleanupOrphans())

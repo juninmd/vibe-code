@@ -5,6 +5,7 @@ import { Badge } from "../../../ui/Badge";
 import { EmptyState } from "../../../ui/EmptyState";
 import { Icon } from "../Icon";
 import { ErrorNotice } from "../ManagementViews";
+import { sessionTitle } from "../model";
 import type { Workspace } from "../WorkspaceViews";
 import { BOARD_LANES, groupByLane, planMove } from "./board";
 import { SurfaceHeading } from "./SurfaceHeading";
@@ -113,7 +114,7 @@ export function BoardView({
                   }}
                 >
                   <button type="button" onClick={() => onOpen(task.id)}>
-                    <strong>{task.title}</strong>
+                    <strong>{sessionTitle(task)}</strong>
                     <small>
                       {repoName(task)}
                       {task.engine ? ` · ${task.engine}` : ""}

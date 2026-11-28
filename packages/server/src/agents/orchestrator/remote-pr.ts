@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { join } from "node:path";
 import { REMOTE_SESSION_TAG, type Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
@@ -82,7 +83,7 @@ export async function publishRemoteSession(
   if (!run?.worktreePath || !branch)
     throw new RemotePullRequestError("invalid_state", "This session has no workspace yet.");
   try {
-    await access(run.worktreePath);
+    await access(join(run.worktreePath, ".git"));
   } catch {
     throw new RemotePullRequestError(
       "invalid_state",
