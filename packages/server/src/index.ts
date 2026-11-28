@@ -41,6 +41,7 @@ import { createTasksRouter } from "./api/tasks";
 import { createTemplatesRouter } from "./api/templates";
 import { createTerminalRouter } from "./api/terminal";
 import { createWorkspacesRouter } from "./api/workspaces";
+import { ArtifactStore, artifactLimits, setActiveArtifactStore } from "./artifacts/store";
 import { authMiddleware, createAuthRouter, isAuthEnabled, isRequestAuthenticated } from "./auth";
 import { PrAutomation } from "./automation/pr-automation";
 import { resolveMaxAgents } from "./config/max-agents";
@@ -340,10 +341,12 @@ async function serveSpaIndex(): Promise<Response> {
 const sessionService = new SessionService();
 
 const api = new Hono();
+const artifactStore = new ArtifactStore(db, artifactLimits(DATA_DIR));
+setActiveArtifactStore(artifactStore);
 api.route("/repos", createReposRouter(db, git, hub));
 api.route("/projects", createProjectsRouter(db));
 api.route("/credentials", createCredentialsRouter(db));
-api.route("/tasks", createTasksRouter(db, orchestrator, git, laneSync));
+api.route("/tasks", createTasksRouter(db, orchestrator, git, laneSync, artifactStore));
 api.route("/lanes", createLanesRouter(laneSync));
 api.route("/runs", createRunsRouter(db));
 api.route("/engines", createEnginesRouter(registry, orchestrator));
@@ -546,6 +549,17 @@ const server = Bun.serve({
 });
 
 console.log(`vibe-code server running on http://localhost:${server.port}`);
+// Artifact retention: expire rows and files on boot and every hour.
+const sweepArtifacts = () => {
+  artifactStore
+    .cleanupExpired()
+    .then((removed) => {
+      if (removed > 0) console.info(`[artifacts] removed ${removed} expired artifact(s)`);
+    })
+    .catch((err) => console.warn("[artifacts] cleanup failed", err));
+};
+sweepArtifacts();
+setInterval(sweepArtifacts, 60 * 60 * 1000).unref?.();
 if (!isAuthEnabled() && process.env.VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE !== "true") {
   console.warn(
     "[security] Authentication is off: only localhost can use the app. Set VIBE_CODE_API_KEY or GitHub OAuth to use it from your phone."
