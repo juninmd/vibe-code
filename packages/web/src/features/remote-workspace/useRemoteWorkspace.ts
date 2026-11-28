@@ -253,7 +253,12 @@ export function useRemoteWorkspace() {
       }
     }
     const id = selected?.id ?? `demo-${crypto.randomUUID()}`;
-    const message = { id: crypto.randomUUID(), role: "user" as const, text: prompt };
+    const message = {
+      id: crypto.randomUUID(),
+      role: "user" as const,
+      text: prompt,
+      at: new Date().toISOString(),
+    };
     const current: Session = selected ?? {
       id,
       projectId: project.id,
@@ -289,7 +294,12 @@ export function useRemoteWorkspace() {
                   status: "waiting",
                   messages: [
                     ...s.messages,
-                    { id: crypto.randomUUID(), role: "assistant", text: demoReply(prompt) },
+                    {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      text: demoReply(prompt),
+                      at: new Date().toISOString(),
+                    },
                   ],
                   updatedAt: new Date().toISOString(),
                 }

@@ -11,7 +11,8 @@ Arquivos que seguem um desenho específico citam a origem num comentário de uma
 | --- | --- | --- |
 | Regras de agente: riscos, toda superfície, testes, docs | T3 Code `AGENTS.md`, Paseo `AGENTS.md` | `AGENTS.md` §6 |
 | Regras de design: tokens, um CTA de destaque, estados | Paseo `docs/design.md` | `AGENTS.md` §6.3 |
-| Work log: chamadas de ferramenta agrupadas fora do texto, "ir para o fim" | T3 Code `WorkLog`, `useTimelineFollow` | `features/remote-workspace/workLog.ts` |
+| Work log: chamadas de ferramenta agrupadas fora do texto, "ir para o fim" | T3 Code `WorkLog`, `useTimelineFollow` | `features/remote-workspace/workEntries.ts`, `chatView.ts` |
+| Timeline da conversa: turnos por prompt, hora relativa, código com copiar, composer ancorado que cresce | T3 Code `ChatView`, `Composer` | `features/remote-workspace/WorkspaceViews.tsx`, `ChatMarkdown.tsx`, `CopyButton.tsx` |
 | Paleta de comandos com registro, ↑↓/Enter e atalhos globais (`?` lista) | T3 Code `keybindings.ts`, Paseo Command Center | `features/remote-workspace/commands.ts` |
 | Prompts anteriores com ↑/↓ e rascunho por sessão que sobrevive ao reload | Paseo `composer/recall.ts`, `composer/draft/` | `features/remote-workspace/composerHistory.ts` |
 | Aviso ciente de presença quando a sessão termina, ponto de não visto e contador no título | Paseo `agent-attention-policy.ts` | `features/remote-workspace/attention.ts` |

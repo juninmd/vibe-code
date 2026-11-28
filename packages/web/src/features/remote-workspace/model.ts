@@ -22,6 +22,10 @@ export interface Message {
   runId?: string;
   /** Marks the point where another engine took over the conversation. */
   handoff?: { from: string; to: string };
+  /** When the log line was written, for the relative time next to the turn. */
+  at?: string;
+  /** The harness failed this turn; rendered as an error notice, not as prose. */
+  error?: boolean;
 }
 export interface Change {
   path: string;
@@ -111,11 +115,13 @@ export function initialSessions(): Session[] {
         {
           id: "m1",
           role: "user",
+          at: new Date(Date.now() - 15 * 60_000).toISOString(),
           text: "Quero desenvolver de qualquer lugar, com uma experiência parecida com o Claude Code. Repositórios, conversa e execução precisam fazer parte do mesmo fluxo.",
         },
         {
           id: "m2",
           role: "assistant",
+          at: new Date(Date.now() - 14 * 60_000).toISOString(),
           text: "Podemos organizar tudo em torno de **projetos e sessões**.\n\nCada sessão mantém a conversa, o terminal e as alterações na mesma área de trabalho. A navegação lateral continua disponível e o contexto acompanha o que você está fazendo.",
           activity: [
             "Explorar a navegação por projetos",
@@ -124,14 +130,48 @@ export function initialSessions(): Session[] {
           ],
         },
         {
+          id: "m2-work",
+          role: "assistant",
+          at: new Date(Date.now() - 13 * 60_000).toISOString(),
+          text: "",
+          work: [
+            {
+              kind: "read",
+              label: "Leu",
+              detail: "src/workspace/WorkspaceShell.tsx",
+              result: "Read 48 non-empty lines",
+            },
+            {
+              kind: "search",
+              label: "Buscou",
+              detail: '"SessionTabs"',
+              result: "Found 6 matches",
+            },
+            {
+              kind: "edit",
+              label: "Editou",
+              detail: "src/workspace/SessionTabs.tsx",
+              result: "File saved",
+            },
+            {
+              kind: "command",
+              label: "Executou",
+              detail: "bun run typecheck",
+              result: "Command completed",
+            },
+          ],
+        },
+        {
           id: "m3",
           role: "user",
+          at: new Date(Date.now() - 11 * 60_000).toISOString(),
           text: "E se eu quiser conferir o terminal ou revisar o código sem perder a conversa?",
         },
         {
           id: "m4",
           role: "assistant",
-          text: "Use as abas **Conversa**, **Terminal** e **Alterações** logo acima. Elas compartilham a mesma sessão, branch e contexto.\n\nO painel à direita reúne o ambiente, a execução e os arquivos da revisão. Você pode recolhê-lo para dar mais espaço ao código.\n\nExperimente abrir as alterações ou enviar uma nova mensagem abaixo.",
+          at: new Date(Date.now() - 10 * 60_000).toISOString(),
+          text: "Use as abas **Conversa**, **Terminal** e **Alterações** logo acima. Elas compartilham a mesma sessão, branch e contexto.\n\nO painel à direita reúne o ambiente, a execução e os arquivos da revisão. Você pode recolhê-lo para dar mais espaço ao código.\n\n```ts\nconst tabs = ['conversation', 'terminal', 'changes'];\n```\n\nExperimente abrir as alterações ou enviar uma nova mensagem abaixo.",
         },
       ],
     },
@@ -251,7 +291,13 @@ export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] 
       if (!handoff) return [];
       engine = handoff[2];
       return [
-        { id: item.id, role: "assistant", text: "", handoff: { from: handoff[1], to: engine } },
+        {
+          id: item.id,
+          role: "assistant",
+          text: "",
+          at: item.timestamp,
+          handoff: { from: handoff[1], to: engine },
+        },
       ];
     }
     if (item.kind === "prompt")
@@ -260,15 +306,26 @@ export function messagesFromLogs(session: Session, logs: AgentLog[]): Message[] 
           id: item.id,
           role: "user",
           text: item.text,
+          at: item.timestamp,
           ...(item.runId ? { runId: item.runId } : {}),
         },
       ];
     if (item.kind === "error")
-      return [{ id: item.id, role: "assistant", engine, text: `Erro do harness:\n\n${item.text}` }];
+      return [
+        {
+          id: item.id,
+          role: "assistant",
+          engine,
+          text: item.text,
+          at: item.timestamp,
+          error: true,
+        },
+      ];
     return splitWork(item.text).map((segment, index) => ({
       id: `${item.id}-${index}`,
       role: "assistant",
       engine,
+      at: item.timestamp,
       ...(segment.type === "text" ? { text: segment.text } : { text: "", work: segment.entries }),
     }));
   });
