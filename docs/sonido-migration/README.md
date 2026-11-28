@@ -25,22 +25,9 @@ estado vazio e dos botões dentro de `rw-pr-actions`. Cor, tipografia e a estrut
 componentes continuam sendo do Sonido. As regras globais de `button`/`a` do workspace deixaram
 de alcançar classes `sn-*` para não sobrescrever o design system.
 
-## Capturas
+## Comparações
 
-`preview.html` + `preview.tsx` montam a mesma página com os dois lados. O lado **Antes** importa
-cópias do markup de `origin/main` em `legacy/`; o lado **Depois** importa os arquivos do app já
-apoiados no Sonido. A página usa o CSS real do app (`index.css` + `workspace.css`) e o
-`styles.css` instalado do Sonido.
-
-```bash
-bunx vite --config docs/sonido-migration/vite.config.mts
-# http://localhost:5303/preview.html
-# http://localhost:5303/preview.html?theme=light
-node C:/caminho/para/full.cjs "http://localhost:5303/preview.html" "docs/sonido-migration/antes-depois.png"
-```
-
-As capturas (`antes-depois.png`, `antes-depois-claro.png`) foram feitas em Chromium 1180×900,
-`fullPage`, com dados fictícios.
+As capturas (`antes-depois.png`, `antes-depois-claro.png`) foram geradas antes do merge, em Chromium 1180×900 (`deviceScaleFactor: 2`, `fullPage`), com dados fictícios. O harness que montava os dois lados (`preview*` e as cópias em `legacy/`) foi removido depois da revisão; as imagens ficam como registro da troca.
 
 ## O que ficou de fora
 
