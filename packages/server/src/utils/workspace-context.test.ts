@@ -1,8 +1,37 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import type { AuthUser } from "@vibe-code/shared";
 import type { Context } from "hono";
+import { resolveAccountForIdentity } from "../accounts";
 import { createDb, type Db } from "../db";
 import { getWorkspaceContext, requireWorkspaceContext } from "./workspace-context";
+
+function accountUser(db: Db, email = "jr_acn@hotmail.com", subject = "1"): AuthUser {
+  const { account } = resolveAccountForIdentity(db, {
+    provider: "github",
+    subject,
+    email,
+    username: "testuser",
+    displayName: "Test User",
+    avatarUrl: null,
+    accessToken: "",
+  });
+  return {
+    githubId: subject,
+    username: "testuser",
+    displayName: "Test User",
+    accountId: account.id,
+  };
+}
+
+function ownedWorkspace(db: Db, id: string, accountId: string, slug = id) {
+  return db.workspaces.create({
+    id,
+    name: id,
+    slug,
+    description: null,
+    ownerAccountId: accountId,
+  });
+}
 
 describe("Workspace Context Utilities", () => {
   let db: Db;
@@ -10,21 +39,17 @@ describe("Workspace Context Utilities", () => {
 
   beforeEach(() => {
     db = createDb(":memory:");
-    user = {
-      githubId: "123",
-      username: "testuser",
-      displayName: "Test User",
-    };
+    user = accountUser(db);
   });
 
   const createMockContext = (options: {
     header?: string;
     query?: string;
     envWs?: string;
-    body?: any;
+    body?: unknown;
     method?: string;
-  }): Context => {
-    return {
+  }): Context =>
+    ({
       req: {
         method: options.method || "GET",
         header: (name: string) => (name === "x-workspace-id" ? options.header : undefined),
@@ -33,193 +58,133 @@ describe("Workspace Context Utilities", () => {
           if (options.body === "error") throw new Error("Invalid JSON");
           return options.body;
         },
-      } as any,
-      env: {
-        workspaceId: options.envWs,
-      } as any,
-    } as Context;
-  };
+      },
+      env: { workspaceId: options.envWs },
+    }) as unknown as Context;
 
   describe("getWorkspaceContext", () => {
-    it("should return null if user is null", async () => {
-      const c = createMockContext({});
-      const result = await getWorkspaceContext(c, db, null);
-      expect(result).toBeNull();
+    it("returns null without an authenticated user", async () => {
+      expect(await getWorkspaceContext(createMockContext({}), db, null)).toBeNull();
     });
 
-    it("should extract workspaceId from c.env.workspaceId", async () => {
-      const c = createMockContext({ envWs: "env-ws" });
-      const result = await getWorkspaceContext(c, db, user);
-      expect(result).toEqual({ workspaceId: "env-ws", userId: "testuser" });
+    it("returns null for an API-key user (operator scope is handled elsewhere)", async () => {
+      const operator: AuthUser = { githubId: "api-key", username: "api-key", provider: "api-key" };
+      expect(await getWorkspaceContext(createMockContext({}), db, operator)).toBeNull();
     });
 
-    it("should extract workspaceId from header x-workspace-id", async () => {
-      const c = createMockContext({ header: "header-ws" });
-      const result = await getWorkspaceContext(c, db, user);
-      expect(result).toEqual({ workspaceId: "header-ws", userId: "testuser" });
+    it("uses c.env.workspaceId when the account owns it", async () => {
+      ownedWorkspace(db, "env-ws", user.accountId as string);
+      const result = await getWorkspaceContext(createMockContext({ envWs: "env-ws" }), db, user);
+      expect(result).toEqual({ workspaceId: "env-ws", userId: user.accountId });
     });
 
-    it("should extract workspaceId from query workspace_id", async () => {
-      const c = createMockContext({ query: "query-ws" });
-      const result = await getWorkspaceContext(c, db, user);
-      expect(result).toEqual({ workspaceId: "query-ws", userId: "testuser" });
+    it("uses the x-workspace-id header when owned", async () => {
+      ownedWorkspace(db, "header-ws", user.accountId as string);
+      const result = await getWorkspaceContext(
+        createMockContext({ header: "header-ws" }),
+        db,
+        user
+      );
+      expect(result).toEqual({ workspaceId: "header-ws", userId: user.accountId });
     });
 
-    it("should extract workspaceId from body json in non-GET request", async () => {
-      const c = createMockContext({ method: "POST", body: { workspace_id: "body-ws" } });
-      const result = await getWorkspaceContext(c, db, user);
-      expect(result).toEqual({ workspaceId: "body-ws", userId: "testuser" });
+    it("uses the workspace_id query when owned", async () => {
+      ownedWorkspace(db, "query-ws", user.accountId as string);
+      const result = await getWorkspaceContext(createMockContext({ query: "query-ws" }), db, user);
+      expect(result).toEqual({ workspaceId: "query-ws", userId: user.accountId });
     });
 
-    it("should ignore invalid JSON body", async () => {
-      const c = createMockContext({ method: "POST", body: "error" });
-      const result = await getWorkspaceContext(c, db, user);
-      expect(result).toEqual({ workspaceId: "ws-testuser", userId: "testuser" });
+    it("uses workspace_id from the body on non-GET requests when owned", async () => {
+      ownedWorkspace(db, "body-ws", user.accountId as string);
+      const result = await getWorkspaceContext(
+        createMockContext({ method: "POST", body: { workspace_id: "body-ws" } }),
+        db,
+        user
+      );
+      expect(result).toEqual({ workspaceId: "body-ws", userId: user.accountId });
     });
 
-    it("should prioritize c.env > header > query > body", async () => {
-      let c = createMockContext({
+    it("ignores an invalid JSON body", async () => {
+      const result = await getWorkspaceContext(
+        createMockContext({ method: "POST", body: "error" }),
+        db,
+        user
+      );
+      expect(result?.workspaceId).toBeDefined();
+      expect(result?.userId).toBe(user.accountId);
+    });
+
+    it("prioritizes c.env > header > query", async () => {
+      ownedWorkspace(db, "env", user.accountId as string);
+      ownedWorkspace(db, "header", user.accountId as string);
+      ownedWorkspace(db, "query", user.accountId as string);
+      const c = createMockContext({
         envWs: "env",
         header: "header",
         query: "query",
-        body: { workspace_id: "body" },
         method: "POST",
+        body: { workspace_id: "query" },
       });
-      let result = await getWorkspaceContext(c, db, user);
+      const result = await getWorkspaceContext(c, db, user);
       expect(result?.workspaceId).toBe("env");
-
-      // Reset db to avoid cross-workspace access error
-      db = createDb(":memory:");
-      c = createMockContext({
-        header: "header",
-        query: "query",
-        body: { workspace_id: "body" },
-        method: "POST",
-      });
-      result = await getWorkspaceContext(c, db, user);
-      expect(result?.workspaceId).toBe("header");
-
-      // Reset db again
-      db = createDb(":memory:");
-      c = createMockContext({ query: "query", body: { workspace_id: "body" }, method: "POST" });
-      result = await getWorkspaceContext(c, db, user);
-      expect(result?.workspaceId).toBe("query");
     });
 
-    it("should auto-assign and create default workspace if none provided", async () => {
-      const c = createMockContext({});
-      const result = await getWorkspaceContext(c, db, user);
-
-      expect(result).toEqual({ workspaceId: "ws-testuser", userId: "testuser" });
-      expect(db.settings.get("user_workspace:testuser")).toBe("ws-testuser");
-
-      const ws = db.workspaces.get("ws-testuser");
-      expect(ws).toBeDefined();
-      expect(ws?.slug).toBe("testuser");
+    it("creates a default workspace owned by the account when none is requested", async () => {
+      const result = await getWorkspaceContext(createMockContext({}), db, user);
+      expect(result?.userId).toBe(user.accountId);
+      const ws = db.workspaces.get(result?.workspaceId as string);
       expect(ws?.name).toBe("Test User");
+      expect(ws?.ownerAccountId).toBe(user.accountId);
+      expect(ws?.slug).toStartWith("personal-");
     });
 
-    it("should use existing auto-assigned workspace if none provided", async () => {
-      db.settings.set("user_workspace:testuser", "existing-ws");
-      const c = createMockContext({});
-      const result = await getWorkspaceContext(c, db, user);
-
-      expect(result).toEqual({ workspaceId: "existing-ws", userId: "testuser" });
+    it("reuses the account's default workspace on the next call", async () => {
+      const first = await getWorkspaceContext(createMockContext({}), db, user);
+      const second = await getWorkspaceContext(createMockContext({}), db, user);
+      expect(second?.workspaceId).toBe(first?.workspaceId);
+      expect(db.workspaces.listByOwner(user.accountId as string)).toHaveLength(1);
     });
 
-    it("should return null for cross-workspace access attempt", async () => {
-      db.settings.set("user_workspace:testuser", "my-ws");
-      const c = createMockContext({ header: "other-ws" });
-      const result = await getWorkspaceContext(c, db, user);
-
+    it("denies a workspace owned by another account", async () => {
+      const other = accountUser(db, "juninho140695@gmail.com", "2");
+      ownedWorkspace(db, "other-ws", other.accountId as string);
+      const result = await getWorkspaceContext(createMockContext({ header: "other-ws" }), db, user);
       expect(result).toBeNull();
     });
 
-    it("should call ensureWorkspaceExists and create base slug if available", async () => {
-      const c = createMockContext({ header: "my-custom-ws" });
-      await getWorkspaceContext(c, db, user);
-
-      const ws = db.workspaces.get("my-custom-ws");
-      expect(ws).toBeDefined();
-      expect(ws?.slug).toBe("testuser");
+    it("denies a workspace that does not exist", async () => {
+      const result = await getWorkspaceContext(createMockContext({ header: "missing" }), db, user);
+      expect(result).toBeNull();
     });
 
-    it("should call ensureWorkspaceExists and create suffixed slug if base slug is taken", async () => {
-      // pre-create workspace to take up base slug 'testuser'
-      db.workspaces.create({
-        id: "taken-ws",
-        name: "Taken",
-        slug: "testuser",
-        description: "Taken",
-      });
-
-      const c = createMockContext({ header: "my-custom-ws" });
-      await getWorkspaceContext(c, db, user);
-
-      const ws = db.workspaces.get("my-custom-ws");
-      expect(ws).toBeDefined();
-      expect(ws?.slug).toBe("testuser-my-custom-ws");
+    it("denies a legacy workspace without an owner", async () => {
+      db.workspaces.create({ id: "legacy", name: "Legacy", slug: "legacy" });
+      const result = await getWorkspaceContext(createMockContext({ header: "legacy" }), db, user);
+      expect(result).toBeNull();
     });
 
-    it("should do nothing in ensureWorkspaceExists if workspace already exists", async () => {
-      db.workspaces.create({
-        id: "existing-ws",
-        name: "Existing",
-        slug: "existing-slug",
-        description: "Existing",
-      });
-      const c = createMockContext({ header: "existing-ws" });
-      await getWorkspaceContext(c, db, user);
-
-      const ws = db.workspaces.get("existing-ws");
-      expect(ws?.slug).toBe("existing-slug"); // unchanged
-    });
-
-    it("should fallback to 'personal' if slugify results in empty string", async () => {
-      const userWithoutAlphanumeric: AuthUser = {
-        githubId: "123",
-        username: "---",
-      };
-      const c = createMockContext({ header: "my-ws" });
-      await getWorkspaceContext(c, db, userWithoutAlphanumeric);
-
-      const ws = db.workspaces.get("my-ws");
-      expect(ws?.slug).toBe("personal");
-    });
-
-    it("should fallback to 'personal' with suffix if slugify results in empty string and personal is taken", async () => {
-      const userWithoutAlphanumeric: AuthUser = {
-        githubId: "123",
-        username: "---",
-      };
-
-      db.workspaces.create({
-        id: "taken",
-        name: "Taken",
-        slug: "personal",
-        description: "Taken",
-      });
-
-      const c = createMockContext({ header: "my-ws" });
-      await getWorkspaceContext(c, db, userWithoutAlphanumeric);
-
-      const ws = db.workspaces.get("my-ws");
-      expect(ws?.slug).toBe("personal-my-ws");
+    it("keeps accounts isolated: each gets its own default", async () => {
+      const other = accountUser(db, "juninho140695@gmail.com", "2");
+      const mine = await getWorkspaceContext(createMockContext({}), db, user);
+      const theirs = await getWorkspaceContext(createMockContext({}), db, other);
+      expect(mine?.workspaceId).not.toBe(theirs?.workspaceId);
     });
   });
 
   describe("requireWorkspaceContext", () => {
-    it("should return workspaceId on success", async () => {
-      const c = createMockContext({ header: "ws-1" });
-      const result = await requireWorkspaceContext(c, db, user);
-      expect(result).toBe("ws-1");
+    it("returns the workspace id for the owner", async () => {
+      ownedWorkspace(db, "ws-1", user.accountId as string);
+      expect(await requireWorkspaceContext(createMockContext({ header: "ws-1" }), db, user)).toBe(
+        "ws-1"
+      );
     });
 
-    it("should return null on failure (e.g., cross-workspace)", async () => {
-      db.settings.set("user_workspace:testuser", "my-ws");
-      const c = createMockContext({ header: "other-ws" });
-      const result = await requireWorkspaceContext(c, db, user);
-      expect(result).toBeNull();
+    it("returns null when the account does not own the workspace", async () => {
+      const other = accountUser(db, "juninho140695@gmail.com", "2");
+      ownedWorkspace(db, "my-ws", other.accountId as string);
+      expect(await requireWorkspaceContext(createMockContext({ header: "my-ws" }), db, user)).toBe(
+        null
+      );
     });
   });
 });
