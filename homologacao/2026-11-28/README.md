@@ -58,3 +58,16 @@ as PRs #259, #263 e #264).
 | Cancelamento revoga pendências | `POST /api/tasks/:id/cancel` | `revoked_at` + `revoked_reason=session_cancelled` na linha |
 | Reconciliação por head/base | teste `remote-pr.test.ts` com `findPR` mockado | `created:false`, `createPR` não chamado, `pr_url` persistido |
 | Parser de pedido explícito | `pr-grants.test.ts` (22 casos) | aceita "abra um PR"/"create a pull request"; recusa pergunta, "talvez", negação e descrição |
+
+## Iteração 4 — artefatos de sessão (PR #271)
+
+| Verificação | Como | Resultado |
+| --- | --- | --- |
+| Upload de print | `POST /api/tasks/:id/artifacts/upload` (PNG 108 KB) | `201`, `mimeType=image/png`, `sha256` gravado, `expiresAt` 30 dias |
+| Visualizar inline | `GET .../artifacts/:id/file` com `Authorization` | `200`, `Content-Type: image/png`, `Content-Disposition: inline` |
+| Conteúdo idêntico | sha256 local vs download | `83e85711…b56aa2e` nos dois |
+| Sem credencial | mesmo GET sem header | `401` |
+| Tipo não-imagem | upload `notes.txt` | `Content-Disposition: attachment; filename="notes.txt"` |
+| Limite por arquivo | upload de 26 MB | `413 {"error":"too_large"}` |
+| UI desktop/telefone | `artifacts-desktop-1440.png`, `artifacts-mobile-390.png` | faixa "Evidências" com miniatura e download |
+| Raiz dedicada | `ls /data/artifacts` no pod | arquivos em `_operator/<task>/<id>.<ext>` |
