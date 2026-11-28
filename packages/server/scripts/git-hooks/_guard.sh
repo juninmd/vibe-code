@@ -58,8 +58,8 @@ run_tests() {
   say "running $cmd"
   bound=""
   command -v timeout >/dev/null 2>&1 && bound="timeout ${VIBE_PREPUSH_TEST_TIMEOUT:-900}"
-  # Tests that push to scratch repos must not re-enter this guard.
-  (cd "$root" && env -u GIT_CONFIG_PARAMETERS VIBE_HOOK_GUARD_ACTIVE=1 CI=true \
+  # Tests that push to scratch repos must not re-enter this guard or inherit git hook env vars.
+  (cd "$root" && env -u GIT_CONFIG_PARAMETERS -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_PREFIX VIBE_HOOK_GUARD_ACTIVE=1 CI=true \
     $bound sh -c "$cmd") >&2 || {
     say "tests failed ($cmd); push blocked. Set VIBE_PREPUSH_TESTS=off only with a reason."
     return 1
