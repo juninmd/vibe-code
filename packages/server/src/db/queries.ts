@@ -84,6 +84,9 @@ interface TaskRow {
   priority: number;
   column_order: number;
   base_branch: string | null;
+  project_id: string | null;
+  start_branch: string | null;
+  pr_target_branch: string | null;
   branch_name: string | null;
   pr_url: string | null;
   issue_url: string | null;
@@ -184,6 +187,9 @@ function mapTask(row: TaskRow): Task {
     priority: intToPriority(row.priority),
     columnOrder: row.column_order,
     baseBranch: row.base_branch,
+    projectId: row.project_id ?? null,
+    startBranch: row.start_branch ?? row.base_branch,
+    prTargetBranch: row.pr_target_branch ?? row.base_branch,
     branchName: row.branch_name,
     prUrl: row.pr_url,
     issueUrl: row.issue_url,
@@ -337,7 +343,7 @@ export function createWorkspaceQueries(db: Database) {
       return rows.map(mapWorkspace);
     },
     create: (req: CreateWorkspaceRequest): Workspace => {
-      const id = req.id || `ws-${Date.now()}`;
+      const id = req.id || `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const row = db
         .prepare<WorkspaceRow, [string, string, string, string | null, string | null]>(
           "INSERT INTO workspaces (id, name, slug, description, owner_account_id) VALUES (?, ?, ?, ?, ?) RETURNING *"
@@ -377,6 +383,143 @@ export function createWorkspaceQueries(db: Database) {
     remove: (id: string): void => {
       db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
     },
+  };
+}
+
+export interface ProjectRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectRequest {
+  id?: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+}
+
+function mapProject(row: ProjectRow): Project {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    description: row.description ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Projects group one or more repositories inside a workspace. A repository may
+ * belong to several projects (issue #262), so the relation lives in
+ * `project_repositories` instead of a column on `repositories`.
+ */
+export function createProjectQueries(db: Database) {
+  return {
+    listByWorkspace: (workspaceId: string): Project[] => {
+      const rows = db
+        .prepare<ProjectRow, [string]>(
+          "SELECT * FROM projects WHERE workspace_id = ? ORDER BY created_at ASC"
+        )
+        .all(workspaceId);
+      return rows.map(mapProject);
+    },
+    get: (id: string): Project | null => {
+      const row = db.prepare<ProjectRow, [string]>("SELECT * FROM projects WHERE id = ?").get(id);
+      return row ? mapProject(row) : null;
+    },
+    create: (req: CreateProjectRequest): Project => {
+      const id = req.id || `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const row = db
+        .prepare<ProjectRow, [string, string, string, string | null]>(
+          "INSERT INTO projects (id, workspace_id, name, description) VALUES (?, ?, ?, ?) RETURNING *"
+        )
+        .get(id, req.workspaceId, req.name, req.description ?? null);
+      if (!row) throw new Error("Failed to create project");
+      return mapProject(row);
+    },
+    update: (
+      id: string,
+      updates: { name?: string; description?: string | null }
+    ): Project | null => {
+      const sets: string[] = [];
+      const values: (string | null)[] = [];
+      if (updates.name !== undefined) {
+        sets.push("name = ?");
+        values.push(updates.name);
+      }
+      if (updates.description !== undefined) {
+        sets.push("description = ?");
+        values.push(updates.description);
+      }
+      if (sets.length === 0) {
+        const row = db.prepare<ProjectRow, [string]>("SELECT * FROM projects WHERE id = ?").get(id);
+        return row ? mapProject(row) : null;
+      }
+      sets.push("updated_at = datetime('now')");
+      values.push(id);
+      const row = db
+        .prepare<ProjectRow, (string | null)[]>(
+          `UPDATE projects SET ${sets.join(", ")} WHERE id = ? RETURNING *`
+        )
+        .get(...values);
+      return row ? mapProject(row) : null;
+    },
+    remove: (id: string): void => {
+      db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+    },
+    addRepo: (projectId: string, repoId: string): boolean => {
+      const row = db
+        .prepare<{ project_id: string }, [string, string]>(
+          "INSERT OR IGNORE INTO project_repositories (project_id, repo_id) VALUES (?, ?) RETURNING project_id"
+        )
+        .get(projectId, repoId);
+      return Boolean(row);
+    },
+    removeRepo: (projectId: string, repoId: string): void => {
+      db.prepare("DELETE FROM project_repositories WHERE project_id = ? AND repo_id = ?").run(
+        projectId,
+        repoId
+      );
+    },
+    listRepoIds: (projectId: string): string[] =>
+      db
+        .prepare<{ repo_id: string }, [string]>(
+          "SELECT repo_id FROM project_repositories WHERE project_id = ? ORDER BY created_at"
+        )
+        .all(projectId)
+        .map((row) => row.repo_id),
+    listProjectsForRepo: (repoId: string): Project[] =>
+      db
+        .prepare<ProjectRow, [string]>(
+          `SELECT p.* FROM projects p
+             JOIN project_repositories pr ON pr.project_id = p.id
+            WHERE pr.repo_id = ?
+            ORDER BY p.created_at`
+        )
+        .all(repoId)
+        .map(mapProject),
+    connects: (projectId: string, repoId: string): boolean =>
+      Boolean(
+        db
+          .prepare<{ project_id: string }, [string, string]>(
+            "SELECT project_id FROM project_repositories WHERE project_id = ? AND repo_id = ?"
+          )
+          .get(projectId, repoId)
+      ),
   };
 }
 
@@ -539,7 +682,7 @@ export function createTaskQueries(db: Database) {
 
         return db
           .prepare(
-            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+            "INSERT INTO tasks (title, description, repo_id, engine, model, base_branch, project_id, start_branch, pr_target_branch, priority, column_order, status, parent_task_id, tags, agent_id, workflow_id, depends_on, pending_approval, max_cost, issue_url, goal, desired_outcome, issue_number, loop_enabled, loop_max_attempts, loop_timeout_minutes, loop_feedback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
           )
           .get(
             title,
@@ -547,7 +690,10 @@ export function createTaskQueries(db: Database) {
             req.repoId,
             req.engine ?? null,
             req.model ?? null,
-            req.baseBranch ?? null,
+            req.startBranch ?? req.baseBranch ?? null,
+            req.projectId ?? null,
+            req.startBranch ?? req.baseBranch ?? null,
+            req.prTargetBranch ?? req.baseBranch ?? null,
             priorityInt,
             order,
             status,
@@ -630,6 +776,26 @@ export function createTaskQueries(db: Database) {
       if (req.priority !== undefined) {
         sets.push("priority = ?");
         values.push(priorityToInt(req.priority));
+      }
+      if (req.baseBranch !== undefined) {
+        sets.push("base_branch = ?");
+        values.push(req.baseBranch ?? null);
+        sets.push("start_branch = ?");
+        values.push(req.baseBranch ?? null);
+      }
+      if (req.projectId !== undefined) {
+        sets.push("project_id = ?");
+        values.push(req.projectId ?? null);
+      }
+      if (req.startBranch !== undefined) {
+        sets.push("start_branch = ?");
+        values.push(req.startBranch ?? null);
+        sets.push("base_branch = ?");
+        values.push(req.startBranch ?? null);
+      }
+      if (req.prTargetBranch !== undefined) {
+        sets.push("pr_target_branch = ?");
+        values.push(req.prTargetBranch ?? null);
       }
 
       if (sets.length === 0) {

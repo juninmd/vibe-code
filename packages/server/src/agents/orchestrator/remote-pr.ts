@@ -96,7 +96,8 @@ export async function publishRemoteSession(
     });
   };
 
-  const baseBranch = task.baseBranch || repo.defaultBranch;
+  // The PR targets the session's explicit target branch, falling back to the worktree base.
+  const baseBranch = task.prTargetBranch || task.baseBranch || repo.defaultBranch;
   // Later pushes describe the latest turn, not the prompt that opened the PR.
   const latestRequest = task.prUrl
     ? db.runs

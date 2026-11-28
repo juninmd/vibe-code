@@ -15,6 +15,7 @@ import { agentGitHubEnv, resolveGitHubToken } from "../../git/github-credentials
 import { resolveMcpServers } from "../../mcp/default-servers";
 import { createTelegramNotifier } from "../../notifications/telegram";
 import { sanitizeRunForExternal } from "../../security/access-control";
+import { readAccountCredential } from "../../security/account-credentials";
 import type { SkillsLoader } from "../../skills/loader";
 import { agentProcessEnv } from "../../utils/agent-env";
 import type { BroadcastHub } from "../../ws/broadcast";
@@ -829,6 +830,27 @@ export async function executeAgent(
       openai: db.settings.get("openai_api_key") || undefined,
     };
 
+    // Per-account OpenCode Go key: the workspace owner's encrypted credential
+    // wins over the server-wide setting (issue #262). An unreadable credential
+    // blocks the run with a redacted reason instead of silently using another
+    // account's key.
+    let accountOpenCodeKey: string | undefined;
+    if (repo.workspaceId) {
+      const owner = db.raw
+        .query<{ owner_account_id: string | null }, [string]>(
+          "SELECT owner_account_id FROM workspaces WHERE id = ?"
+        )
+        .get(repo.workspaceId)?.owner_account_id;
+      if (owner) {
+        try {
+          accountOpenCodeKey = readAccountCredential(db, owner, "opencode_go") ?? undefined;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "credential unavailable";
+          throw new Error(`OpenCode credential for this account is unusable: ${message}`);
+        }
+      }
+    }
+
     // User MCP servers plus the defaults (GitHub, GitLab, Playwright, Context7).
     const mcpServers = await resolveMcpServers(db.settings, { workspace: wtPath });
 
@@ -981,6 +1003,7 @@ export async function executeAgent(
     if (task.maxCost !== undefined && task.maxCost !== null) {
       agentEnv.VIBE_CODE_MAX_COST = task.maxCost.toString();
     }
+    if (accountOpenCodeKey) agentEnv.OPENCODE_API_KEY = accountOpenCodeKey;
 
     if (isRemoteSession) {
       try {

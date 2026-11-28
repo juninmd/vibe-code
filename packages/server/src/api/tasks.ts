@@ -59,6 +59,9 @@ const createTaskSchema = z.object({
   engine: z.string().optional(),
   model: z.string().optional(),
   baseBranch: z.string().optional(),
+  projectId: z.string().optional(),
+  startBranch: z.string().optional(),
+  prTargetBranch: z.string().optional(),
   priority: z.enum(["none", "low", "medium", "high", "urgent"]).optional(),
   tags: z.array(z.string()).optional(),
   agentId: z.string().optional(),
@@ -441,7 +444,45 @@ export function createTasksRouter(
     const title = parsed.data.title?.trim()
       ? parsed.data.title.trim()
       : deriveSessionTitle(parsed.data.description ?? parsed.data.goal ?? "");
-    const task = db.tasks.create({ ...parsed.data, title, engine, model });
+    // Project + branches: a session always belongs to a project and records the
+    // branch it starts from and the branch the PR targets (issue #262).
+    const projectId =
+      parsed.data.projectId ?? db.projects?.listProjectsForRepo(repo.id)[0]?.id ?? undefined;
+    if (parsed.data.projectId) {
+      const project = db.projects.get(parsed.data.projectId);
+      if (!project) {
+        return c.json({ error: "not_found", message: "Project not found" }, 404);
+      }
+      if (project.workspaceId !== repo.workspaceId) {
+        return c.json(
+          {
+            error: "project_forbidden",
+            message: "Project and repository are in different workspaces",
+          },
+          403
+        );
+      }
+      if (!db.projects.connects(project.id, repo.id)) {
+        return c.json(
+          { error: "repo_not_in_project", message: "Repository does not belong to this project" },
+          400
+        );
+      }
+    }
+    const startBranch =
+      parsed.data.startBranch?.trim() || parsed.data.baseBranch?.trim() || repo.defaultBranch;
+    const prTargetBranch =
+      parsed.data.prTargetBranch?.trim() || parsed.data.baseBranch?.trim() || startBranch;
+    const task = db.tasks.create({
+      ...parsed.data,
+      title,
+      engine,
+      model,
+      projectId,
+      startBranch,
+      prTargetBranch,
+      baseBranch: startBranch,
+    });
     return c.json({ data: task }, 201);
   });
 

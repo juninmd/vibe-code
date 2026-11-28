@@ -6,6 +6,7 @@ import {
   createLogQueries,
   createMemoryQueries,
   createMetricsQueries,
+  createProjectQueries,
   createPromptTemplateQueries,
   createRepoQueries,
   createReviewIssueQueries,
@@ -64,6 +65,7 @@ export function createDb(dbPath: string) {
 
   const queries = {
     workspaces: createWorkspaceQueries(tracked),
+    projects: createProjectQueries(tracked),
     repos: createRepoQueries(tracked),
     tasks: createTaskQueries(tracked),
     runs: createRunQueries(tracked),
