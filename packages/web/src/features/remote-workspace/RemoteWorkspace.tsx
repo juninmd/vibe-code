@@ -104,6 +104,8 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
   // Re-inserting the key keeps the most recently edited drafts when storage is pruned.
   const setDraft = (text: string) =>
     setDrafts(({ [draftId]: _previous, ...rest }) => ({ ...rest, [draftId]: text }));
+  const focusComposer = () =>
+    document.querySelector<HTMLTextAreaElement>(".rw-composer textarea")?.focus();
   const active = workspace.sessions.filter((s) => s.status === "working");
   const reviews = workspace.sessions.filter((s) => s.status === "review");
   const selected = workspace.selected;
@@ -790,8 +792,9 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
                     onOpenSettings={(section) => openManagement("settings", section)}
                     onSuggest={(text) => {
                       setDraft(text);
-                      document.querySelector<HTMLTextAreaElement>(".rw-composer textarea")?.focus();
+                      focusComposer();
                     }}
+                    onCompose={focusComposer}
                   />
                   <Composer
                     workspace={workspace}

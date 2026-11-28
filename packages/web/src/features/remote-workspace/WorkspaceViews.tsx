@@ -1,14 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
+import { Kbd } from "../../ui/Kbd";
 import { Skeleton } from "../../ui/Skeleton";
 import { Spinner } from "../../ui/Spinner";
 import { AccessModeSelect, ApprovalList } from "./ApprovalCard";
+import { ChatMarkdown } from "./ChatMarkdown";
+import { CopyButton } from "./CopyButton";
+import {
+  absoluteTime,
+  fitComposerHeight,
+  groupTurns,
+  hasNewContent,
+  isAtBottom,
+  relativeTime,
+} from "./chatView";
 import { caretAtEdge, promptHistory, recordPrompt, stepHistory } from "./composerHistory";
 import { resolvePublishAction } from "./gitActions";
 import { Icon } from "./Icon";
@@ -79,203 +88,324 @@ export function Conversation({
   workspace,
   onSuggest,
   onOpenSettings,
+  onCompose,
 }: {
   workspace: Workspace;
   onSuggest: (text: string) => void;
   onOpenSettings?: (section: string) => void;
+  /** Focuses the composer from the empty transcript. */
+  onCompose?: () => void;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  const previousCount = useRef(0);
   const [behind, setBehind] = useState(false);
+  const [unseen, setUnseen] = useState(false);
   const { selected, messages, server } = workspace;
   const engineLabel = (name: string) =>
     workspace.engines.data?.find((engine) => engine.name === name)?.displayName ??
     (name === "opencode" ? "OpenCode" : name);
   const count = messages.length;
   const working = selected?.status === "working";
+  const turns = groupTurns(messages);
+  const latest = messages[count - 1];
+  // Streaming appends to the same message, so the log count alone would not re-anchor.
+  const streamed = latest?.text.length ?? 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a different session resets scroll following.
   useEffect(() => {
     atBottom.current = true;
+    previousCount.current = 0;
     setBehind(false);
+    setUnseen(false);
   }, [selected?.id]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the transcript when a turn or status changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the transcript when a turn, a status or the streamed text changes.
   useEffect(() => {
-    if (scroll.current && atBottom.current) scroll.current.scrollTop = scroll.current.scrollHeight;
-  }, [count, working]);
+    const el = scroll.current;
+    if (!el) return;
+    // Sending a prompt always lands on it, even if the reader had scrolled up.
+    const sent = latest?.role === "user";
+    if (!atBottom.current && !sent) return;
+    atBottom.current = true;
+    setBehind(false);
+    setUnseen(false);
+    el.scrollTop = el.scrollHeight;
+  }, [count, working, streamed]);
+  // A viewport change (rotation, window resize) must not strand the reader when they were following.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe when another session mounts.
+  useEffect(() => {
+    const el = scroll.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const keepFollowing = () => {
+      if (atBottom.current) el.scrollTop = el.scrollHeight;
+    };
+    const observer = new ResizeObserver(keepFollowing);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, [selected?.id]);
+  useEffect(() => {
+    // `0` marks the first render of a session, so switching never counts as new content.
+    if (previousCount.current > 0 && hasNewContent(behind, previousCount.current, count))
+      setUnseen(true);
+    previousCount.current = count;
+  }, [count, behind]);
+  const jumpToLatest = () => {
+    const el = scroll.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    atBottom.current = true;
+    setBehind(false);
+    setUnseen(false);
+  };
   return (
-    <div
-      className="rw-conversation"
-      ref={scroll}
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-        setBehind(!atBottom.current);
-      }}
-    >
-      {!selected ? (
-        <div className="rw-welcome">
-          <span className="rw-welcome-symbol" aria-hidden="true">
-            <Icon name="code" size={30} />
-          </span>
-          <p className="rw-eyebrow">
-            {server && workspace.project ? (
-              <>
-                NOVA SESSÃO EM <strong>{workspace.project.name.toUpperCase()}</strong> ·{" "}
-                {workspace.branch}
-              </>
-            ) : (
-              "UM ESPAÇO PARA SUAS IDEIAS"
-            )}
-          </p>
-          <h1>O que vamos construir?</h1>
-          {server && onOpenSettings && <McpAuthNotice onOpen={() => onOpenSettings("mcp")} />}
-          <p>
-            {server
-              ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
-              : "Do primeiro prompt à revisão do código.\nTudo na mesma sessão, de onde você estiver."}
-          </p>
-          {(!server || workspace.project) && (
-            <div className="rw-suggestions">
-              <button
-                type="button"
-                onClick={() =>
-                  onSuggest(
-                    "Me ajude a entender a estrutura deste projeto e sugerir o próximo passo."
-                  )
-                }
-              >
-                <Icon name="folder" /> Explorar este projeto <Icon name="chevron" size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onSuggest(
-                    "Quero implementar uma nova funcionalidade. Vamos começar pelo escopo e pelos critérios de aceite."
-                  )
-                }
-              >
-                <Icon name="plus" /> Começar uma mudança <Icon name="chevron" size={13} />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onSuggest(
-                    "Encontre a causa deste bug, escreva um teste que reproduza e corrija: "
-                  )
-                }
-              >
-                <Icon name="activity" /> Corrigir um bug <Icon name="chevron" size={13} />
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rw-transcript">
-          <div className="rw-session-intro">
-            <span className="rw-agent-mark">
-              o<span>_</span>
+    <div className="rw-conversation-shell">
+      <section
+        className="rw-conversation"
+        ref={scroll}
+        aria-label="Conversa"
+        onScroll={(e) => {
+          const next = isAtBottom(e.currentTarget);
+          atBottom.current = next;
+          setBehind(!next);
+          if (next) setUnseen(false);
+        }}
+      >
+        {!selected ? (
+          <div className="rw-welcome">
+            <span className="rw-welcome-symbol" aria-hidden="true">
+              <Icon name="code" size={30} />
             </span>
-            <div>
-              <h1>{selected.title}</h1>
-              <p>
-                {server ? "Histórico do servidor" : "Conversa de demonstração"} <span>·</span>{" "}
-                {selected.engine === "opencode" ? "OpenCode" : selected.engine}
-              </p>
-            </div>
+            <p className="rw-eyebrow">
+              {server && workspace.project ? (
+                <>
+                  NOVA SESSÃO EM <strong>{workspace.project.name.toUpperCase()}</strong> ·{" "}
+                  {workspace.branch}
+                </>
+              ) : (
+                "UM ESPAÇO PARA SUAS IDEIAS"
+              )}
+            </p>
+            <h1>O que vamos construir?</h1>
+            {server && onOpenSettings && <McpAuthNotice onOpen={() => onOpenSettings("mcp")} />}
+            <p>
+              {server
+                ? "Descreva a tarefa. O agente trabalha num workspace isolado, você acompanha a conversa e abre o PR quando quiser."
+                : "Do primeiro prompt à revisão do código.\nTudo na mesma sessão, de onde você estiver."}
+            </p>
+            {(!server || workspace.project) && (
+              <div className="rw-suggestions">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSuggest(
+                      "Me ajude a entender a estrutura deste projeto e sugerir o próximo passo."
+                    )
+                  }
+                >
+                  <Icon name="folder" /> Explorar este projeto <Icon name="chevron" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSuggest(
+                      "Quero implementar uma nova funcionalidade. Vamos começar pelo escopo e pelos critérios de aceite."
+                    )
+                  }
+                >
+                  <Icon name="plus" /> Começar uma mudança <Icon name="chevron" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSuggest(
+                      "Encontre a causa deste bug, escreva um teste que reproduza e corrija: "
+                    )
+                  }
+                >
+                  <Icon name="activity" /> Corrigir um bug <Icon name="chevron" size={13} />
+                </button>
+              </div>
+            )}
           </div>
-          {workspace.historyLoading && <Skeleton label="Carregando a conversa." rows={3} />}
-          {workspace.historyError && (
-            <div role="alert" className="rw-alert">
-              Não foi possível carregar os logs.{" "}
-              <button type="button" onClick={() => void workspace.refreshHistory()}>
-                Atualizar dados
-              </button>
+        ) : (
+          <div className="rw-transcript">
+            <div className="rw-session-intro">
+              <span className="rw-agent-mark" aria-hidden="true">
+                o<span>_</span>
+              </span>
+              <div>
+                <h1>{selected.title}</h1>
+                <p>
+                  <span className="rw-intro-state">
+                    <span className={`rw-status-dot ${selected.status}`} />
+                    {STATUS[selected.status]}
+                  </span>
+                  <span>·</span>
+                  {server ? "Histórico do servidor" : "Conversa de demonstração"}
+                  <span>·</span>
+                  {engineLabel(selected.engine)}
+                </p>
+              </div>
             </div>
-          )}
-          {messages.map((message, index) =>
-            message.handoff ? (
-              <p key={message.id} className="rw-handoff" role="note">
-                <Icon name="branch" size={12} /> {engineLabel(message.handoff.to)} assumiu a
-                conversa de {engineLabel(message.handoff.from)}, com o histórico até aqui
-              </p>
-            ) : (
-              <article
-                key={message.id}
-                className={`rw-message rw-message-${message.role}${message.work ? " rw-message-work" : ""}`}
-                aria-label={message.role === "user" ? "Mensagem do usuário" : "Resposta do agente"}
-              >
-                {message.role === "assistant" &&
-                  (messages[index - 1]?.role !== "assistant" || messages[index - 1]?.handoff) && (
-                    <div className="rw-message-author">
-                      <span className="rw-agent-small">o_</span>{" "}
-                      {engineLabel(message.engine ?? selected.engine)}
-                      <span>{server ? "Histórico" : "Demonstração"}</span>
+            {workspace.historyLoading && <Skeleton label="Carregando a conversa." rows={3} />}
+            {workspace.historyError && (
+              <div role="alert" className="rw-alert">
+                Não foi possível carregar os logs.{" "}
+                <button type="button" onClick={() => void workspace.refreshHistory()}>
+                  Atualizar dados
+                </button>
+              </div>
+            )}
+            {!count && !workspace.historyLoading && !workspace.historyError && (
+              <div className="rw-thread-empty">
+                <Icon name="chat" size={20} />
+                <p>Nenhuma mensagem nesta sessão ainda.</p>
+                {onCompose && (
+                  <button type="button" onClick={onCompose}>
+                    <Icon name="plus" size={12} /> Escrever a primeira mensagem
+                  </button>
+                )}
+              </div>
+            )}
+            {turns.map((turn) => {
+              const first = turn.messages[0];
+              if (turn.role === "handoff" && first.handoff)
+                return (
+                  <p key={turn.key} className="rw-handoff" role="note">
+                    <Icon name="branch" size={12} /> {engineLabel(first.handoff.to)} assumiu a
+                    conversa de {engineLabel(first.handoff.from)}, com o histórico até aqui
+                  </p>
+                );
+              const at = first.at;
+              if (turn.role === "user")
+                return (
+                  <article
+                    key={turn.key}
+                    className="rw-message rw-message-user"
+                    aria-label="Mensagem do usuário"
+                  >
+                    <ChatMarkdown text={first.text} />
+                    <div className="rw-message-meta">
+                      {at && (
+                        <time dateTime={at} title={absoluteTime(at)}>
+                          {relativeTime(at)}
+                        </time>
+                      )}
+                      <CopyButton text={first.text} label="Copiar mensagem" hideLabel />
                     </div>
-                  )}
-                {message.activity && (
-                  <details className="rw-activity-fold">
-                    <summary>
-                      <Icon name="check" size={13} /> Exploração da proposta{" "}
-                      <span>{message.activity.length} etapas</span>
-                    </summary>
-                    <ul>
-                      {message.activity.map((text) => (
-                        <li key={text}>
-                          <Icon name="check" size={12} />
-                          {text}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-                {message.work ? (
-                  <WorkLog entries={message.work} live={working && index === count - 1} />
-                ) : (
-                  <div className="rw-message-text">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
-                  </div>
-                )}
-                {message.runId && server && selected.conversational && !working && (
-                  <RewindButton
-                    onRewind={async () => {
-                      const text = await workspace.rewind(message.runId ?? "");
-                      if (text !== null) onSuggest(text);
-                    }}
-                  />
-                )}
-              </article>
-            )
-          )}
-          <ApprovalList
-            approvals={workspace.approvals.of(selected.id)}
-            answering={workspace.approvals.answering}
-            error={workspace.approvals.error}
-            onAnswer={(approval, reply) => void workspace.approvals.answer(approval, reply)}
-          />
-          {behind && (
-            <button
-              type="button"
-              className="rw-jump-latest"
-              onClick={() => {
-                const el = scroll.current;
-                if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-              }}
-            >
-              <Icon name="arrow" size={13} /> Ir para o fim
-            </button>
-          )}
-          {working && (
-            <div className="rw-thinking" role="status">
-              <Spinner />
-              {workspace.approvals.awaiting.has(selected.id)
-                ? "Aguardando sua aprovação"
-                : server
-                  ? "Sessão em execução no servidor"
-                  : "Preparando uma resposta de demonstração…"}
-            </div>
-          )}
-        </div>
+                    {first.runId && server && selected.conversational && !working && (
+                      <RewindButton
+                        onRewind={async () => {
+                          const text = await workspace.rewind(first.runId ?? "");
+                          if (text !== null) onSuggest(text);
+                        }}
+                      />
+                    )}
+                  </article>
+                );
+              const lastText = [...turn.messages].reverse().find((message) => message.text);
+              const liveTurn = working && turn === turns[turns.length - 1];
+              const prose = turn.messages
+                .map((message) => message.text)
+                .filter(Boolean)
+                .join("\n\n");
+              return (
+                <article
+                  key={turn.key}
+                  className="rw-message rw-message-assistant"
+                  aria-label="Resposta do agente"
+                >
+                  <header className="rw-message-author">
+                    <span className="rw-agent-small" aria-hidden="true">
+                      o_
+                    </span>
+                    <span>{engineLabel(first.engine ?? selected.engine)}</span>
+                    {at && (
+                      <time className="rw-message-time" dateTime={at} title={absoluteTime(at)}>
+                        {relativeTime(at)}
+                      </time>
+                    )}
+                    {prose && (
+                      <CopyButton
+                        text={prose}
+                        label="Copiar resposta"
+                        hideLabel
+                        className="rw-message-copy"
+                      />
+                    )}
+                  </header>
+                  {turn.messages.map((message) => (
+                    <Fragment key={message.id}>
+                      {message.activity && (
+                        <details className="rw-activity-fold">
+                          <summary>
+                            <Icon name="check" size={13} /> Exploração da proposta{" "}
+                            <span>{message.activity.length} etapas</span>
+                          </summary>
+                          <ul>
+                            {message.activity.map((entry) => (
+                              <li key={entry}>
+                                <Icon name="check" size={12} />
+                                {entry}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      {message.error ? (
+                        <p className="rw-message-error" role="alert">
+                          <Icon name="close" size={13} />
+                          <span>{message.text}</span>
+                        </p>
+                      ) : message.work ? (
+                        <WorkLog
+                          entries={message.work}
+                          live={liveTurn && latest?.id === message.id}
+                        />
+                      ) : message.text ? (
+                        <ChatMarkdown
+                          text={message.text}
+                          streaming={liveTurn && latest?.id === lastText?.id}
+                        />
+                      ) : null}
+                    </Fragment>
+                  ))}
+                </article>
+              );
+            })}
+            <ApprovalList
+              approvals={workspace.approvals.of(selected.id)}
+              answering={workspace.approvals.answering}
+              error={workspace.approvals.error}
+              onAnswer={(approval, reply) => void workspace.approvals.answer(approval, reply)}
+            />
+            {working && (
+              <div className="rw-thinking" role="status">
+                <Spinner />
+                {workspace.approvals.awaiting.has(selected.id)
+                  ? "Aguardando sua aprovação"
+                  : server
+                    ? "Sessão em execução no servidor"
+                    : "Preparando uma resposta de demonstração…"}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+      {selected && behind && (
+        <button
+          type="button"
+          className={`rw-jump-latest${unseen ? " has-new" : ""}`}
+          onClick={jumpToLatest}
+        >
+          <Icon name="arrow" size={13} />
+          {unseen ? "Novo conteúdo" : "Ir para o fim"}
+          {unseen && <span className="rw-jump-dot" aria-hidden="true" />}
+        </button>
       )}
+      <span className="rw-sr-only" role="status">
+        {unseen ? "Novo conteúdo na conversa" : ""}
+      </span>
     </div>
   );
 }
@@ -357,275 +487,314 @@ export function Composer({
     setDraft(step.text);
     return true;
   };
+  const field = useRef<HTMLTextAreaElement>(null);
+  // Grows with the draft up to 40% of the viewport; CSS keeps the same cap on resize.
+  const fitComposer = () => {
+    const el = field.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = Math.round(window.innerHeight * 0.4);
+    el.style.height = `${fitComposerHeight(el.scrollHeight, max)}px`;
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the draft also changes from recall and suggestions.
+  useEffect(() => {
+    fitComposer();
+  }, [draft]);
   return (
-    <div className="rw-composer-wrap">
-      <ErrorNotice
-        error={
-          workspace.sendError || models.error || workspace.branches.error || workspace.engines.error
-        }
-      />
-      {server && selected && !selected.conversational ? (
-        <div className="rw-readonly-note">
-          <Icon name="terminal" /> Continue a sessão no harness atual.
-          <Button variant="primary" onClick={onTerminal}>
-            Abrir terminal
-          </Button>
-        </div>
-      ) : (
-        <>
-          <form
-            className="rw-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              send();
-            }}
-          >
-            <textarea
-              aria-label="Mensagem para o agente"
-              placeholder={
-                selected
-                  ? "Continue a conversa ou descreva o próximo passo…"
-                  : "Descreva o que você quer construir…"
-              }
-              rows={2}
-              value={draft}
-              disabled={working || workspace.sending}
-              onChange={(e) => {
-                recall.current.position = -1;
-                setDraft(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  send();
-                } else if (
-                  (e.key === "ArrowUp" || e.key === "ArrowDown") &&
-                  !e.altKey &&
-                  !e.metaKey &&
-                  !e.ctrlKey &&
-                  !e.shiftKey &&
-                  recallPrompt(e.key === "ArrowUp" ? "older" : "newer", e.currentTarget)
-                ) {
-                  e.preventDefault();
-                }
-              }}
-            />
-            <div className="rw-composer-tools">
-              <button
-                type="button"
-                className="rw-icon-button"
-                title="Mostrar contexto da sessão"
-                aria-label="Mostrar contexto da sessão"
-                onClick={onContext}
-              >
-                <Icon name="plus" />
-              </button>
-              <span className="rw-composer-hint">
-                {working
-                  ? "O agente está trabalhando"
-                  : history.length
-                    ? "Enter envia · ↑ prompts anteriores"
-                    : "Enter para enviar"}
-              </span>
-              {working ? (
-                <button
-                  type="button"
-                  className="rw-send"
-                  onClick={workspace.stop}
-                  aria-label={server ? "Parar execução" : "Parar demonstração"}
-                >
-                  <Icon name="stop" size={15} />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  className="rw-send"
-                  disabled={
-                    !draft.trim() ||
-                    workspace.sending ||
-                    !project ||
-                    (server && !selected && !workspace.engines.data)
-                  }
-                  aria-label={server && !selected ? "Criar sessão" : "Enviar mensagem"}
-                >
-                  <Icon name="arrow" size={18} />
-                </button>
-              )}
-            </div>
-          </form>
-          <div className="rw-composer-settings">
-            <div className="rw-composer-target">
-              <button type="button" onClick={onRepository} className="rw-inline-button">
-                <Icon name="folder" size={14} />
-                <span>
-                  {project?.owner}/{project?.name}
-                </span>
-                <Icon name="chevron" size={10} />
-              </button>
-              <span className="rw-branch">
-                <Icon name="branch" size={12} />
-                {selected ? (
-                  selected.branch
-                ) : (
-                  <select
-                    aria-label="Branch da nova sessão"
-                    value={workspace.branch}
-                    onChange={(e) => workspace.setBranch(e.target.value)}
-                  >
-                    <option value={project?.branch ?? "main"}>{project?.branch ?? "main"}</option>
-                    {(server ? (workspace.branches.data ?? []) : ["demo/interface-preview"])
-                      .filter((branch) => branch !== project?.branch)
-                      .map((branch) => (
-                        <option key={branch} value={branch}>
-                          {branch}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </span>
-            </div>
-            <div className="rw-composer-model">
-              <select
-                aria-label="Engine da sessão"
-                value={selectedEngine}
-                title={selected ? "Engine do próximo turno" : "Engine da nova sessão"}
-                disabled={!!selected && !canSwitchModel}
-                onChange={(e) => {
-                  if (selected) {
-                    // Handoff: the next turn opens a new session of this engine with the transcript.
-                    workspace.setNextEngine(
-                      e.target.value === selected.engine ? "" : e.target.value
-                    );
-                    workspace.setNextModel("");
-                    return;
-                  }
-                  workspace.setEngine(e.target.value);
-                  workspace.setModel("");
-                  workspace.setEffort("");
-                }}
-              >
-                {!engineOptions.some((engine) => engine.name === selectedEngine) && (
-                  <option value={selectedEngine}>{engineName(selectedEngine)}</option>
-                )}
-                {(selected
-                  ? engineOptions.filter(
-                      (engine) => !server || ("supportsResume" in engine && engine.supportsResume)
-                    )
-                  : engineOptions
-                ).map((engine) => (
-                  <option value={engine.name} key={engine.name}>
-                    {engine.displayName}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Modelo da sessão"
-                title={selected ? "Modelo do próximo turno" : "Modelo da nova sessão"}
-                value={selected ? workspace.nextModel : workspace.model}
-                disabled={!!selected && !canSwitchModel}
-                onChange={(e) => {
-                  if (selected) {
-                    workspace.setNextModel(e.target.value);
-                    return;
-                  }
-                  workspace.setModel(e.target.value);
-                  workspace.setEffort("");
-                }}
-              >
-                <option value="">
-                  {selected
-                    ? workspace.nextEngine
-                      ? "Modelo padrão"
-                      : selected.model
-                    : projectDefault && !workspace.model
-                      ? `Padrão do projeto (${projectDefault})`
-                      : "Modelo padrão"}
-                </option>
-                {server &&
-                  !selected &&
-                  workspace.model &&
-                  !models.data?.some((m) => m.id === workspace.model) && (
-                    // Keep a saved/default model visible even while the list loads or its
-                    // provider is unreachable, instead of silently showing "Modelo padrão".
-                    <option value={workspace.model}>
-                      {models.isFetching
-                        ? workspace.model
-                        : `${workspace.model} (indisponível agora)`}
-                    </option>
-                  )}
-                {server ? (
-                  models.data
-                    ?.filter(
-                      (model) => !selected || workspace.nextEngine || model.id !== selected.model
-                    )
-                    .map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.id}
-                      </option>
-                    ))
-                ) : (
-                  <option value="demo/modelo-exemplo">demo/modelo-exemplo</option>
-                )}
-              </select>
-              {selectedEngine === "opencode" && (!selected || selected.conversational) && (
-                <AccessModeSelect
-                  supervised={selected ? !!selected.supervised : workspace.supervised}
-                  disabled={!server && !!selected}
-                  onChange={(on) =>
-                    selected ? void workspace.setSessionSupervised(on) : workspace.setSupervised(on)
-                  }
-                />
-              )}
-              <select
-                aria-label="Effort do modelo"
-                value={selected?.effort ?? workspace.effort}
-                disabled={!!selected || !efforts.length}
-                onChange={(event) => workspace.setEffort(event.target.value)}
-              >
-                <option value="">Effort padrão</option>
-                {efforts.map((effort) => (
-                  <option value={effort} key={effort}>
-                    {effort}
-                  </option>
-                ))}
-              </select>
-              {server && !selected && project && (
-                <button
-                  type="button"
-                  className={`rw-default-toggle ${isProjectDefault ? "is-default" : ""}`}
-                  disabled={workspace.savingDefault || (!workspace.model && !projectDefault)}
-                  aria-pressed={isProjectDefault}
-                  title={
-                    isProjectDefault
-                      ? "Remover o padrão deste projeto"
-                      : "Usar este harness e modelo em novas sessões deste projeto"
-                  }
-                  onClick={() => void workspace.saveProjectDefault(isProjectDefault)}
-                >
-                  <Icon name={isProjectDefault ? "check" : "plus"} size={11} />
-                  {isProjectDefault ? "Padrão do projeto" : "Definir padrão"}
-                </button>
-              )}
-            </div>
+    <div className="rw-composer-dock">
+      <div className="rw-composer-wrap">
+        <ErrorNotice
+          error={
+            workspace.sendError ||
+            models.error ||
+            workspace.branches.error ||
+            workspace.engines.error
+          }
+        />
+        {server && selected && !selected.conversational ? (
+          <div className="rw-readonly-note">
+            <Icon name="terminal" /> Continue a sessão no harness atual.
+            <Button variant="primary" onClick={onTerminal}>
+              Abrir terminal
+            </Button>
           </div>
-        </>
-      )}
-      <p className="rw-composer-caption">
-        {server
-          ? selected
-            ? selected.conversational
-              ? workspace.nextEngine
-                ? `${engineName(workspace.nextEngine)} assume no próximo turno, com a conversa até aqui e o mesmo workspace.`
-                : workspace.nextModel
-                  ? `Próximo turno com ${workspace.nextModel}, na mesma conversa e workspace.`
-                  : "Sua mensagem continua a mesma conversa e o mesmo workspace."
-              : "O terminal mantém o contexto e a conversa do harness."
-            : (workspace.engines.data?.find((engine) => engine.name === workspace.engine)
-                  ?.supportsResume ?? workspace.engine === "opencode")
-              ? "Enviar inicia o agente no workspace isolado."
-              : "Crie a sessão e abra o terminal para iniciar este harness."
-          : "Protótipo interativo · respostas e comandos demonstrativos"}
-      </p>
+        ) : (
+          <>
+            <form
+              className="rw-composer"
+              aria-busy={working || workspace.sending}
+              onSubmit={(event) => {
+                event.preventDefault();
+                send();
+              }}
+            >
+              <textarea
+                ref={field}
+                aria-label="Mensagem para o agente"
+                aria-describedby="rw-composer-hint"
+                aria-keyshortcuts="Enter"
+                placeholder={
+                  working
+                    ? "O agente está trabalhando…"
+                    : selected
+                      ? "Continue a conversa ou descreva o próximo passo…"
+                      : "Descreva o que você quer construir…"
+                }
+                rows={2}
+                value={draft}
+                disabled={working || workspace.sending}
+                title="Shift+Enter quebra a linha · ↑/↓ recupera prompts anteriores"
+                onChange={(e) => {
+                  recall.current.position = -1;
+                  setDraft(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    send();
+                  } else if (
+                    (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+                    !e.altKey &&
+                    !e.metaKey &&
+                    !e.ctrlKey &&
+                    !e.shiftKey &&
+                    recallPrompt(e.key === "ArrowUp" ? "older" : "newer", e.currentTarget)
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+              />
+              <div className="rw-composer-tools">
+                <button
+                  type="button"
+                  className="rw-icon-button"
+                  title="Mostrar contexto da sessão"
+                  aria-label="Mostrar contexto da sessão"
+                  onClick={onContext}
+                >
+                  <Icon name="plus" />
+                </button>
+                <span className="rw-composer-hint" id="rw-composer-hint">
+                  {working || workspace.sending ? (
+                    <>
+                      <Spinner size={11} />
+                      {working ? "O agente está trabalhando" : "Enviando mensagem…"}
+                    </>
+                  ) : (
+                    <>
+                      <Kbd>Enter</Kbd> envia{" "}
+                      <span className="rw-hint-shift">
+                        <span aria-hidden="true">·</span> <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> nova
+                        linha
+                      </span>
+                    </>
+                  )}
+                </span>
+                {working ? (
+                  <button
+                    type="button"
+                    className="rw-send is-stop"
+                    onClick={workspace.stop}
+                    disabled={workspace.sending}
+                    title="Parar"
+                    aria-label={server ? "Parar execução" : "Parar demonstração"}
+                  >
+                    {workspace.sending ? <Spinner size={12} /> : <Icon name="stop" size={14} />}
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="rw-send"
+                    disabled={
+                      !draft.trim() ||
+                      workspace.sending ||
+                      !project ||
+                      (server && !selected && !workspace.engines.data)
+                    }
+                    title={server && !selected ? "Criar sessão (Enter)" : "Enviar (Enter)"}
+                    aria-label={server && !selected ? "Criar sessão" : "Enviar mensagem"}
+                  >
+                    {workspace.sending ? <Spinner size={13} /> : <Icon name="arrow" size={18} />}
+                  </button>
+                )}
+              </div>
+            </form>
+            <div className="rw-composer-settings">
+              <div className="rw-composer-target">
+                <button type="button" onClick={onRepository} className="rw-inline-button">
+                  <Icon name="folder" size={14} />
+                  <span>
+                    {project?.owner}/{project?.name}
+                  </span>
+                  <Icon name="chevron" size={10} />
+                </button>
+                <span className="rw-branch">
+                  <Icon name="branch" size={12} />
+                  {selected ? (
+                    selected.branch
+                  ) : (
+                    <select
+                      aria-label="Branch da nova sessão"
+                      value={workspace.branch}
+                      onChange={(e) => workspace.setBranch(e.target.value)}
+                    >
+                      <option value={project?.branch ?? "main"}>{project?.branch ?? "main"}</option>
+                      {(server ? (workspace.branches.data ?? []) : ["demo/interface-preview"])
+                        .filter((branch) => branch !== project?.branch)
+                        .map((branch) => (
+                          <option key={branch} value={branch}>
+                            {branch}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </span>
+              </div>
+              <div className="rw-composer-model">
+                <select
+                  aria-label="Engine da sessão"
+                  value={selectedEngine}
+                  title={selected ? "Engine do próximo turno" : "Engine da nova sessão"}
+                  disabled={!!selected && !canSwitchModel}
+                  onChange={(e) => {
+                    if (selected) {
+                      // Handoff: the next turn opens a new session of this engine with the transcript.
+                      workspace.setNextEngine(
+                        e.target.value === selected.engine ? "" : e.target.value
+                      );
+                      workspace.setNextModel("");
+                      return;
+                    }
+                    workspace.setEngine(e.target.value);
+                    workspace.setModel("");
+                    workspace.setEffort("");
+                  }}
+                >
+                  {!engineOptions.some((engine) => engine.name === selectedEngine) && (
+                    <option value={selectedEngine}>{engineName(selectedEngine)}</option>
+                  )}
+                  {(selected
+                    ? engineOptions.filter(
+                        (engine) => !server || ("supportsResume" in engine && engine.supportsResume)
+                      )
+                    : engineOptions
+                  ).map((engine) => (
+                    <option value={engine.name} key={engine.name}>
+                      {engine.displayName}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Modelo da sessão"
+                  title={selected ? "Modelo do próximo turno" : "Modelo da nova sessão"}
+                  value={selected ? workspace.nextModel : workspace.model}
+                  disabled={!!selected && !canSwitchModel}
+                  onChange={(e) => {
+                    if (selected) {
+                      workspace.setNextModel(e.target.value);
+                      return;
+                    }
+                    workspace.setModel(e.target.value);
+                    workspace.setEffort("");
+                  }}
+                >
+                  <option value="">
+                    {selected
+                      ? workspace.nextEngine
+                        ? "Modelo padrão"
+                        : selected.model
+                      : projectDefault && !workspace.model
+                        ? `Padrão do projeto (${projectDefault})`
+                        : "Modelo padrão"}
+                  </option>
+                  {server &&
+                    !selected &&
+                    workspace.model &&
+                    !models.data?.some((m) => m.id === workspace.model) && (
+                      // Keep a saved/default model visible even while the list loads or its
+                      // provider is unreachable, instead of silently showing "Modelo padrão".
+                      <option value={workspace.model}>
+                        {models.isFetching
+                          ? workspace.model
+                          : `${workspace.model} (indisponível agora)`}
+                      </option>
+                    )}
+                  {server ? (
+                    models.data
+                      ?.filter(
+                        (model) => !selected || workspace.nextEngine || model.id !== selected.model
+                      )
+                      .map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.id}
+                        </option>
+                      ))
+                  ) : (
+                    <option value="demo/modelo-exemplo">demo/modelo-exemplo</option>
+                  )}
+                </select>
+                {selectedEngine === "opencode" && (!selected || selected.conversational) && (
+                  <AccessModeSelect
+                    supervised={selected ? !!selected.supervised : workspace.supervised}
+                    disabled={!server && !!selected}
+                    onChange={(on) =>
+                      selected
+                        ? void workspace.setSessionSupervised(on)
+                        : workspace.setSupervised(on)
+                    }
+                  />
+                )}
+                <select
+                  aria-label="Effort do modelo"
+                  value={selected?.effort ?? workspace.effort}
+                  disabled={!!selected || !efforts.length}
+                  onChange={(event) => workspace.setEffort(event.target.value)}
+                >
+                  <option value="">Effort padrão</option>
+                  {efforts.map((effort) => (
+                    <option value={effort} key={effort}>
+                      {effort}
+                    </option>
+                  ))}
+                </select>
+                {server && !selected && project && (
+                  <button
+                    type="button"
+                    className={`rw-default-toggle ${isProjectDefault ? "is-default" : ""}`}
+                    disabled={workspace.savingDefault || (!workspace.model && !projectDefault)}
+                    aria-pressed={isProjectDefault}
+                    title={
+                      isProjectDefault
+                        ? "Remover o padrão deste projeto"
+                        : "Usar este harness e modelo em novas sessões deste projeto"
+                    }
+                    onClick={() => void workspace.saveProjectDefault(isProjectDefault)}
+                  >
+                    <Icon name={isProjectDefault ? "check" : "plus"} size={11} />
+                    {isProjectDefault ? "Padrão do projeto" : "Definir padrão"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        <p className="rw-composer-caption">
+          {server
+            ? selected
+              ? selected.conversational
+                ? workspace.nextEngine
+                  ? `${engineName(workspace.nextEngine)} assume no próximo turno, com a conversa até aqui e o mesmo workspace.`
+                  : workspace.nextModel
+                    ? `Próximo turno com ${workspace.nextModel}, na mesma conversa e workspace.`
+                    : "Sua mensagem continua a mesma conversa e o mesmo workspace."
+                : "O terminal mantém o contexto e a conversa do harness."
+              : (workspace.engines.data?.find((engine) => engine.name === workspace.engine)
+                    ?.supportsResume ?? workspace.engine === "opencode")
+                ? "Enviar inicia o agente no workspace isolado."
+                : "Crie a sessão e abra o terminal para iniciar este harness."
+            : "Protótipo interativo · respostas e comandos demonstrativos"}
+        </p>
+      </div>
     </div>
   );
 }
