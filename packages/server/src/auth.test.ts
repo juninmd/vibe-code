@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import * as honoCookie from "hono/cookie";
 import { authMiddleware, authStatus, checkApiKey, createAuthRouter, getCurrentUser } from "./auth";
+import { createDb } from "./db";
 
 function createMockContext(headers: Record<string, string> = {}, url = "http://localhost/api") {
   return {
@@ -104,6 +105,7 @@ describe("auth utilities", () => {
             github_id: "gh1",
             username: "user1",
             access_token: "token123",
+            account_id: "acc-1",
           }),
         }),
       },
@@ -127,6 +129,7 @@ describe("auth utilities", () => {
             github_id: "gh1",
             username: "user1",
             access_token: "token123",
+            account_id: "acc-1",
           }),
         }),
       },
@@ -282,26 +285,113 @@ describe("createAuthRouter", () => {
     return fetchSpy;
   }
 
-  it("GET /github/callback succeeds and creates session", async () => {
-    const db = {
-      raw: {
-        prepare: mock().mockReturnValue({ run: mock() }),
-      },
-      settings: {
-        set: mock(),
-      },
-    };
-    const router = createAuthRouter(db as any);
+  it("GET /github/callback succeeds and creates an account session", async () => {
+    process.env.VIBE_CODE_ALLOWED_EMAILS = "User1@Example.com";
+    const db = createDb(":memory:");
+    const router = createAuthRouter(db);
     const req = new Request("http://localhost/github/callback?code=foo&state=valid");
 
-    const fetchSpy = setupGitHubCallbackMocks();
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
+    const fetchSpy = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ email: "user1@example.com", primary: true, verified: true }]),
+          { status: 200 }
+        )
+      );
 
     const res = await router.request(req);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/");
-    expect(db.settings.set).toHaveBeenCalledTimes(2);
-    expect(db.raw.prepare).toHaveBeenCalled();
 
+    const session = db.raw
+      .query<{ account_id: string | null; provider: string | null }, []>(
+        "SELECT account_id, provider FROM auth_sessions"
+      )
+      .get();
+    expect(session?.provider).toBe("github");
+    expect(session?.account_id).toStartWith("acc-");
+    const identity = db.raw
+      .query<{ email: string; subject: string }, []>(
+        "SELECT email, subject FROM account_identities"
+      )
+      .get();
+    expect(identity).toEqual({ email: "user1@example.com", subject: "1" });
+
+    delete process.env.VIBE_CODE_ALLOWED_EMAILS;
+    fetchSpy.mockRestore();
+  });
+
+  it("GET /github/callback denies a non-allowlisted e-mail", async () => {
+    process.env.VIBE_CODE_ALLOWED_EMAILS = "someone@else.com";
+    const db = createDb(":memory:");
+    const router = createAuthRouter(db);
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
+    const fetchSpy = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ email: "user1@example.com", primary: true, verified: true }]),
+          { status: 200 }
+        )
+      );
+
+    const res = await router.request(
+      new Request("http://localhost/github/callback?code=foo&state=valid")
+    );
+    expect(res.headers.get("location")).toBe("/?auth_error=not_allowed");
+    expect(db.raw.query("SELECT * FROM auth_sessions").all()).toHaveLength(0);
+
+    delete process.env.VIBE_CODE_ALLOWED_EMAILS;
+    fetchSpy.mockRestore();
+  });
+
+  it("GET /github/callback denies an unverified e-mail", async () => {
+    process.env.VIBE_CODE_ALLOWED_EMAILS = "user1@example.com";
+    const db = createDb(":memory:");
+    const router = createAuthRouter(db);
+    spyOn(honoCookie, "getCookie").mockReturnValueOnce("valid");
+    const fetchSpy = spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: "token123" }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 1, login: "user1", name: "User 1", avatar_url: "url1" }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([{ email: "user1@example.com", primary: true, verified: false }]),
+          { status: 200 }
+        )
+      );
+
+    const res = await router.request(
+      new Request("http://localhost/github/callback?code=foo&state=valid")
+    );
+    expect(res.headers.get("location")).toBe("/?auth_error=not_allowed");
+    expect(db.raw.query("SELECT * FROM auth_sessions").all()).toHaveLength(0);
+
+    delete process.env.VIBE_CODE_ALLOWED_EMAILS;
     fetchSpy.mockRestore();
   });
 

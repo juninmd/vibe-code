@@ -5,12 +5,19 @@ import { csvSet, publicBaseUrl } from "./common";
 const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_USER_URL = "https://api.github.com/user";
+const GITHUB_EMAILS_URL = "https://api.github.com/user/emails";
 
 export interface GitHubUserResponse {
   id: number;
   login: string;
   name: string | null;
   avatar_url: string | null;
+}
+
+interface GitHubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
 }
 
 export function isGitHubOAuthConfigured(): boolean {
@@ -58,6 +65,30 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUserRe
   });
   if (!res.ok) throw new Error(`GitHub user lookup failed: ${res.status}`);
   return (await res.json()) as GitHubUserResponse;
+}
+
+/**
+ * Primary e-mail, only when GitHub reports it as verified. The login allowlist
+ * is e-mail based, so an unverified address must never unlock the app
+ * (issue #262). Requires the `user:email` scope.
+ */
+export async function fetchVerifiedGitHubEmail(accessToken: string): Promise<string | null> {
+  const res = await fetch(GITHUB_EMAILS_URL, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "vibe-code",
+    },
+  });
+  if (!res.ok) throw new Error(`GitHub e-mail lookup failed: ${res.status}`);
+  const emails = (await res.json()) as GitHubEmail[];
+  const verified = emails.filter((entry) => entry.verified);
+  return (
+    (verified.find((entry) => entry.primary)?.email ?? verified[0]?.email ?? null)
+      ?.trim()
+      .toLowerCase() ?? null
+  );
 }
 
 export function createLoginUrl(c: Context, state: string): string {

@@ -7,6 +7,7 @@ config({ path: resolve(import.meta.dir, "../../../.env") });
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { allowedLoginEmails, pruneDisallowedSessions } from "./accounts";
 import { AgentTemplateRegistry } from "./agents/agent-templates";
 import { customProviderSecrets } from "./agents/custom-providers";
 import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
@@ -92,6 +93,12 @@ const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
 
 const db = createDb(DB_PATH);
 useDbForOpenCodeProviders(db);
+// Sessions created before accounts existed, or accounts whose allowlisted
+// e-mail was revoked, must not survive a restart (issue #262).
+if (isAuthEnabled() && allowedLoginEmails().size > 0) {
+  const removed = pruneDisallowedSessions(db);
+  if (removed > 0) console.info(`[auth] invalidated ${removed} session(s) on boot`);
+}
 // Credentials saved in Settings are scrubbed from every log line and WS message.
 registerSecretSource(() =>
   [
