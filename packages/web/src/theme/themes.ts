@@ -1,3 +1,5 @@
+import { sonidoTheme } from "./sonido";
+
 export interface ThemeColors {
   // Backgrounds
   bgApp: string;
@@ -269,7 +271,8 @@ export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   const c = theme.colors;
 
-  root.setAttribute("data-theme", theme.name);
+  // One attribute for both layers: `sonidoTheme` maps the app's palette to the design system's.
+  root.setAttribute("data-theme", sonidoTheme(theme.name));
 
   root.style.setProperty("--bg-app", c.bgApp);
   root.style.setProperty("--bg-surface", c.bgSurface);

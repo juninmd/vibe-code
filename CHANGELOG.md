@@ -6,6 +6,7 @@
 - **Settings**: tabs grouped (primeiros passos, contas e acesso, projetos, agentes, preferências), a "Começar" checklist (GitHub, LLM key, project) shown first when connected to the server, "Provedores" renamed to "Chaves de LLM" with readable provider names, and hints where a field or MCP depends on another screen.
 - **Terminais and Escritório 3D** list the app's own sessions that are running or waiting for you (remote conversations have no PTY or CLI session file, so they were missing).
 - **E2E**: server/web ports and screenshots are configurable (`VIBE_E2E_SERVER_PORT`, `VIBE_E2E_WEB_PORT`, `VIBE_E2E_SCREENSHOT`).
+- **Web on the Sonido design system**: `packages/web` now installs `@juninmd/sonido@^2.2.1` and imports its stylesheet at the entry. Buttons, the settings tabs, count/category pills, empty states, loading skeletons, the busy spinner, keycaps and the ⌘K palette come from the design system; the app keeps its props, ARIA and `filterCommands`. `data-theme` is shared with Sonido (the GitHub palette maps to Sonido's dark tokens) and the only extra CSS is a documented layout bridge. Before/after screenshots and the mapping live in `docs/sonido-migration/`.
 - **Mobile workspace**: phone top bar shows the session title with a status dot, session tabs fit on one row, settings tabs scroll in one row and every touch control is 44 px. README tour now has fresh desktop and phone screenshots of every screen (`docs/screenshots/telas/`).
 
 ### Removed

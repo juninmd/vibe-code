@@ -17,6 +17,6 @@
   .rw-settings-tabs button { flex-shrink: 0; white-space: nowrap; }
 }
 @media (pointer: coarse) {
-  .rw-root :is(.rw-management-nav button, .rw-settings-tabs button, .rw-button, .rw-inline-button, .rw-composer-model select, .rw-default-toggle, .rw-branch select, .rw-sidebar-search, .rw-text-button, .rw-board select) { min-height: 44px; }
+  .rw-root :is(.rw-management-nav button, .rw-settings-tabs button, .rw-inline-button, .rw-composer-model select, .rw-default-toggle, .rw-branch select, .rw-sidebar-search, .rw-text-button, .rw-board select) { min-height: 44px; }
   .rw-root :is(input[type="checkbox"], input[type="radio"]) { width: 22px; height: 22px; }
 }
