@@ -46,6 +46,9 @@ export interface GitProviderAdapter {
   /** Create a pull/merge request */
   createPR(token: string, params: CreatePRParams): Promise<string>;
 
+  /** Existing open PR/MR for this head/base pair, by URL; null when none. */
+  findPR(token: string, repoUrl: string, head: string, base: string): Promise<string | null>;
+
   /** Check if a PR/MR identified by its URL has been merged */
   isPrMerged(token: string, prUrl: string): Promise<boolean>;
 

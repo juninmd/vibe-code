@@ -27,6 +27,7 @@ import {
   buildTaskExecutionPlan,
   materializeTaskExecutionPlan,
 } from "../agents/orchestrator/task-plan";
+import { getCurrentUser } from "../auth";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
 import type { LaneSyncService } from "../lanes/lane-sync";
@@ -39,6 +40,7 @@ import {
   sanitizeRunForExternal,
   sanitizeTaskForExternal,
 } from "../security/access-control";
+import { detectExplicitPrRequest, grantPr, revokeTaskGrants } from "../security/pr-grants";
 import { deriveSessionTitle } from "../utils/session-name";
 
 function computeNextRun(expression: string): string | null {
@@ -731,6 +733,22 @@ export function createTasksRouter(
       );
     }
     const switchingEngine = nextEngine !== task.engine;
+    // An explicit order in the person's message authorizes the PR; ambiguous
+    // text does not. Agent output never reaches this path.
+    if (detectExplicitPrRequest(parsed.data.message) && task.branchName) {
+      const repo = db.repos.getById(task.repoId);
+      if (repo) {
+        grantPr(db, {
+          taskId: id,
+          accountId: getCurrentUser(db, c)?.accountId ?? null,
+          source: "explicit_command",
+          turnId: db.runs.listByTask(id)[0]?.id ?? null,
+          repoId: repo.id,
+          headBranch: task.branchName,
+          targetBranch: task.prTargetBranch || task.baseBranch || repo.defaultBranch,
+        });
+      }
+    }
     let persisted = false;
     try {
       const previous = db.runs.listByTask(id).find((r) => !!r.worktreePath);
@@ -855,6 +873,8 @@ export function createTasksRouter(
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
 
+    // Cancelling drops any pending authorization to publish.
+    revokeTaskGrants(db, task.id, "session_cancelled");
     try {
       await orchestrator.cancel(task.id);
       return c.json({ data: { ok: true } });
@@ -1157,12 +1177,34 @@ export function createTasksRouter(
       .safeParse((await c.req.json().catch(() => ({}))) ?? {});
     if (!parsed.success)
       return c.json({ error: "invalid_input", message: parsed.error.message }, 400);
+    // The API call is the person's explicit request: record the authorization
+    // before the push (issue #262), bound to the session branch pair.
+    const task = db.tasks.getById(id);
+    const repo = task ? db.repos.getById(task.repoId) : null;
+    if (task && repo && task.branchName) {
+      grantPr(db, {
+        taskId: id,
+        accountId: getCurrentUser(db, c)?.accountId ?? null,
+        source: "api_request",
+        turnId: db.runs.listByTask(id)[0]?.id ?? null,
+        repoId: repo.id,
+        headBranch: task.branchName,
+        targetBranch: task.prTargetBranch || task.baseBranch || repo.defaultBranch,
+      });
+    }
     try {
       const result = await orchestrator.publishRemoteSession(id, parsed.data);
       return c.json({ data: result }, result.created ? 201 : 200);
     } catch (err) {
       if (err instanceof RemotePullRequestError) {
-        const status = err.code === "not_found" ? 404 : err.code === "publish_failed" ? 502 : 409;
+        const status =
+          err.code === "not_found"
+            ? 404
+            : err.code === "publish_failed"
+              ? 502
+              : err.code === "no_grant"
+                ? 403
+                : 409;
         return c.json({ error: err.code, message: err.message }, status);
       }
       throw err;

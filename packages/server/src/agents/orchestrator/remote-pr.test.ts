@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "../../db";
 import { GitService } from "../../git/git-service";
+import { grantPr } from "../../security/pr-grants";
 import { BroadcastHub } from "../../ws/broadcast";
 import { ensureGitignoreEntry } from "./executor";
 import { publishRemoteSession, RemotePullRequestError, remoteSessionTitle } from "./remote-pr";
@@ -53,6 +54,7 @@ async function setup() {
 
   const git = new GitService(root);
   const createPR = mock(async () => "https://github.com/acme/app/pull/7");
+  const findPR = mock(async (): Promise<string | null> => null);
   const deps = {
     db,
     git: {
@@ -61,11 +63,20 @@ async function setup() {
       push: git.push.bind(git),
       publishEvidence: git.publishEvidence.bind(git),
       createPR,
+      findPR,
     },
     hub: new BroadcastHub(db),
     isRunning: () => false,
   };
-  return { db, task, workspace, origin, deps, createPR };
+  const authorize = (target = "main") =>
+    grantPr(db, {
+      taskId: task.id,
+      repoId: repo.id,
+      source: "api_request",
+      headBranch: "vibe-code/abc/session",
+      targetBranch: target,
+    });
+  return { db, task, repo, workspace, origin, deps, createPR, findPR, authorize };
 }
 
 describe("remoteSessionTitle", () => {
@@ -80,9 +91,10 @@ describe("remoteSessionTitle", () => {
 
 describe("publishRemoteSession", () => {
   it("commits the session work, pushes the branch and opens the PR once", async () => {
-    const { db, task, workspace, origin, deps, createPR } = await setup();
+    const { db, task, workspace, origin, deps, createPR, authorize } = await setup();
     await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
 
+    authorize();
     const first = await publishRemoteSession(task.id, {}, deps);
     expect(first).toEqual({
       prUrl: "https://github.com/acme/app/pull/7",
@@ -105,6 +117,7 @@ describe("publishRemoteSession", () => {
 
     // A later turn adds more work: the same PR is updated, not duplicated.
     await writeFile(join(workspace, "toggle.ts"), "export const dark = true;\n");
+    authorize();
     const second = await publishRemoteSession(task.id, { title: "Wire the toggle" }, deps);
     expect(second.created).toBe(false);
     expect(createPR).toHaveBeenCalledTimes(1);
@@ -114,14 +127,15 @@ describe("publishRemoteSession", () => {
     const run = db.runs.listByTask(task.id)[0];
     db.logs.create(run.id, "stdin", "Add a keyboard shortcut");
     await writeFile(join(workspace, "shortcut.ts"), "export const key = 'd';\n");
+    authorize();
     await publishRemoteSession(task.id, {}, deps);
     expect(sh(origin, "log", "-1", "--format=%s", "vibe-code/abc/session")).toBe(
       "Add a keyboard shortcut"
     );
-  });
+  }, 20_000);
 
   it("puts the agent's evidence in the PR body and keeps screenshots out of the diff", async () => {
-    const { task, workspace, origin, deps, createPR } = await setup();
+    const { task, workspace, origin, deps, createPR, authorize } = await setup();
     await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
     const evidence = join(workspace, ".vibe-code", "evidence");
     await mkdir(evidence, { recursive: true });
@@ -131,6 +145,7 @@ describe("publishRemoteSession", () => {
     await writeFile(join(workspace, "..", "server.db"), "private");
     await symlink(join(workspace, "..", "server.db"), join(evidence, "leak.png"));
 
+    authorize();
     await publishRemoteSession(task.id, {}, deps);
 
     const body = (createPR.mock.calls[0] as unknown as string[])[4];
@@ -147,10 +162,42 @@ describe("publishRemoteSession", () => {
   });
 
   it("refuses when there is nothing to publish", async () => {
-    const { task, deps } = await setup();
+    const { task, deps, authorize } = await setup();
+    authorize();
     await expect(publishRemoteSession(task.id, {}, deps)).rejects.toMatchObject({
       code: "nothing_to_publish",
     });
+  });
+
+  it("refuses to publish without an explicit grant", async () => {
+    const { task, workspace, deps } = await setup();
+    await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
+    const error = await publishRemoteSession(task.id, {}, deps).catch((e) => e);
+    expect(error).toBeInstanceOf(RemotePullRequestError);
+    expect(error.code).toBe("no_grant");
+  });
+
+  it("reconciles an existing PR by repo/head/base instead of opening a duplicate", async () => {
+    const { task, workspace, deps, createPR, findPR, authorize, db } = await setup();
+    await writeFile(join(workspace, "theme.css"), ":root { --bg: #000; }\n");
+    findPR.mockResolvedValueOnce("https://github.com/acme/app/pull/7");
+
+    authorize();
+    const result = await publishRemoteSession(task.id, {}, deps);
+
+    expect(result).toEqual({
+      prUrl: "https://github.com/acme/app/pull/7",
+      branch: "vibe-code/abc/session",
+      created: false,
+    });
+    expect(createPR).not.toHaveBeenCalled();
+    expect(findPR).toHaveBeenCalledWith(
+      workspace,
+      "https://github.com/acme/app.git",
+      "vibe-code/abc/session",
+      "main"
+    );
+    expect(db.tasks.getById(task.id)?.prUrl).toBe("https://github.com/acme/app/pull/7");
   });
 
   it("refuses while a turn is running", async () => {

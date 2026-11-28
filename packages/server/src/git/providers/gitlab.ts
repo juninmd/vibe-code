@@ -175,13 +175,20 @@ export class GitLabProvider implements GitProviderAdapter {
     return data.web_url;
   }
 
+  async findPR(token: string, repoUrl: string, head: string, base: string): Promise<string | null> {
+    const projectPath = getProjectPath(repoUrl, this.baseUrl);
+    return this.findOpenMR(token, encodeURIComponent(projectPath), head, base);
+  }
+
   private async findOpenMR(
     token: string,
     encodedProjectPath: string,
-    sourceBranch: string
+    sourceBranch: string,
+    targetBranch?: string
   ): Promise<string | null> {
+    const target = targetBranch ? `&target_branch=${encodeURIComponent(targetBranch)}` : "";
     const url = this.api(
-      `/projects/${encodedProjectPath}/merge_requests?state=opened&source_branch=${encodeURIComponent(sourceBranch)}&per_page=1`
+      `/projects/${encodedProjectPath}/merge_requests?state=opened&source_branch=${encodeURIComponent(sourceBranch)}${target}&per_page=1`
     );
     const res = await fetch(url, { headers: headers(token) });
     if (!res.ok) return null;

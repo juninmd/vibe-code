@@ -2,12 +2,18 @@ import { access } from "node:fs/promises";
 import { REMOTE_SESSION_TAG, type Task } from "@vibe-code/shared";
 import type { Db } from "../../db";
 import type { GitService } from "../../git/git-service";
+import { consumeGrant, findActiveGrant } from "../../security/pr-grants";
 import type { BroadcastHub } from "../../ws/broadcast";
 import { prEvidenceSection } from "./pr-evidence";
 
 export class RemotePullRequestError extends Error {
   constructor(
-    readonly code: "not_found" | "invalid_state" | "nothing_to_publish" | "publish_failed",
+    readonly code:
+      | "not_found"
+      | "invalid_state"
+      | "nothing_to_publish"
+      | "no_grant"
+      | "publish_failed",
     message: string
   ) {
     super(message);
@@ -51,7 +57,7 @@ export async function publishRemoteSession(
     git: Pick<
       GitService,
       "commitAll" | "hasCommitsAhead" | "push" | "createPR" | "publishEvidence"
-    >;
+    > & { findPR?: GitService["findPR"] };
     hub: BroadcastHub;
     isRunning: (taskId: string) => boolean;
   }
@@ -98,6 +104,20 @@ export async function publishRemoteSession(
 
   // The PR targets the session's explicit target branch, falling back to the worktree base.
   const baseBranch = task.prTargetBranch || task.baseBranch || repo.defaultBranch;
+
+  // Publishing needs an authorization recorded before the push: who asked,
+  // where, and for which head/target pair. Agent output cannot create one.
+  const grant = findActiveGrant(db, taskId, {
+    repoId: repo.id,
+    headBranch: branch,
+    targetBranch: baseBranch,
+  });
+  if (!grant) {
+    throw new RemotePullRequestError(
+      "no_grant",
+      "Publishing a pull request needs an explicit request (for example, click Criar PR or ask for it in the conversation)."
+    );
+  }
   // Later pushes describe the latest turn, not the prompt that opened the PR.
   const latestRequest = task.prUrl
     ? db.runs
@@ -118,9 +138,19 @@ export async function publishRemoteSession(
       );
     log(`Pushing ${branch}...`);
     await git.push(run.worktreePath, branch);
-    if (task.prUrl) {
-      log(`Pull request updated: ${task.prUrl}`);
-      return { prUrl: task.prUrl, branch, created: false };
+    // Reconcile before creating: a retry or a killed turn may have opened the PR
+    // already. Match repo + head + base and reuse it instead of duplicating.
+    const reconciled = await git
+      .findPR?.(run.worktreePath, repo.url, branch, baseBranch)
+      .catch(() => null);
+    const existingUrl = task.prUrl ?? reconciled ?? null;
+    if (existingUrl) {
+      if (!task.prUrl) db.tasks.updateField(task.id, "pr_url", existingUrl);
+      consumeGrant(db, grant.id);
+      const updated = db.tasks.getById(task.id);
+      if (updated) hub.broadcastAll({ type: "task_updated", task: updated });
+      log(`Pull request updated: ${existingUrl}`);
+      return { prUrl: existingUrl, branch, created: false };
     }
     const engine = run.engine || task.engine || "opencode";
     const model = task.model?.split("#")[0];
@@ -136,6 +166,7 @@ export async function publishRemoteSession(
       ].join("\n");
     const prUrl = await git.createPR(run.worktreePath, repo.url, branch, title, body, baseBranch);
     db.tasks.updateField(task.id, "pr_url", prUrl);
+    consumeGrant(db, grant.id);
     const updated = db.tasks.getById(task.id);
     if (updated) hub.broadcastAll({ type: "task_updated", task: updated });
     log(`Pull request created: ${prUrl}`);
