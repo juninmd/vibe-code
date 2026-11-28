@@ -36,3 +36,15 @@ as PRs #259, #263 e #264).
   tarefa" fica indisponível. A execução "Dentro do servidor" funciona.
 - **Chave OpenCode Go por conta** e demais itens da issue #262 (projetos com
   vários repositórios, grants de PR, artefatos) seguem fora desta entrega.
+
+## Iteração 2 — projetos, branches e credencial por conta (PRs #266/#267)
+
+| Verificação | Comando | Resultado |
+| --- | --- | --- |
+| Projeto criado e listado no cluster | `POST /api/projects` + `GET /api/projects?workspace_id=...` | `201` com `repoIds`, lista com o projeto |
+| Repositório vinculado ao projeto | `POST /api/projects/:id/repos` | `repoIds: ["f7d72de7a080cd16"]` |
+| Sessão grava projeto e par de branches | `POST /api/tasks` com `projectId/startBranch/prTargetBranch` | `projectId=proj-...`, `startBranch=main`, `prTargetBranch=main`, `baseBranch=main` |
+| Chave de criptografia no pod | `printenv VIBE_CODE_CREDENTIAL_KEY_VERSION` | `v1` |
+| Credencial de conta exige sessão de conta | `GET /api/credentials` com chave de operador | `400 {"error":"account_required"}` |
+| Unidade AES-GCM | `bun test src/security/credentials.test.ts` | 10 passando (round-trip, AAD por conta, rotação v1→v2, linha ilegível) |
+| Projetos | `bun test src/api/projects.integration.test.ts` | repo em 2 projetos, repo de outro workspace 403, projeto de outra conta 403, branch pair persistido |
