@@ -73,11 +73,19 @@ export async function resolveAccessContext(c: Context, db: Db): Promise<ResolveA
     };
   }
 
-  // API key auth: grant global access when a valid API key is presented
+  // API key auth: grant global access when a valid API key is presented. An
+  // explicit workspace header scopes the operator to that workspace, which is
+  // what the projects flow needs to attach repositories.
   if (checkApiKey(c)) {
+    const requested = c.req.header("x-workspace-id") ?? c.req.query("workspace_id");
+    const workspace = requested ? db.workspaces.get(requested) : null;
     return {
       ok: true,
-      context: { authEnabled: false, userId: null, workspaceId: null },
+      context: {
+        authEnabled: Boolean(workspace),
+        userId: null,
+        workspaceId: workspace?.id ?? null,
+      },
     };
   }
 

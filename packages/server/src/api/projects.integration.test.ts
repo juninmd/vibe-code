@@ -98,6 +98,22 @@ describe("projects", () => {
     db.close();
   });
 
+  it("lets the operator scope requests to a workspace with the header", async () => {
+    const { db, app } = setup();
+    process.env.VIBE_CODE_API_KEY = "operator-key";
+    const workspace = db.workspaces.create({ name: "Ops", slug: "ops" });
+    const r = repo(db, workspace.id, "ops-repo");
+    const auth = { Authorization: "Bearer operator-key", "x-workspace-id": workspace.id };
+    const created = await app.request("/api/projects", {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Ops", repoIds: [r.id] }),
+    });
+    expect(created.status).toBe(201);
+    expect((await created.json()).data.repoIds).toEqual([r.id]);
+    db.close();
+  });
+
   it("persists project and branch pair on a session", () => {
     const { db } = setup();
     const workspace = db.workspaces.create({ name: "W", slug: "w2" });
