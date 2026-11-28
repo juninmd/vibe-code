@@ -1,9 +1,0 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "lib": ["ES2020"],
-    "noEmit": true
-  },
-  "include": ["vite.config.ts"]
-}

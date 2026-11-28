@@ -1,2 +1,0 @@
-#!/bin/bash
-bun "$(dirname "$0")/vibe-task.ts" "$@"
