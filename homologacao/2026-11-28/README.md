@@ -48,3 +48,13 @@ as PRs #259, #263 e #264).
 | Credencial de conta exige sessão de conta | `GET /api/credentials` com chave de operador | `400 {"error":"account_required"}` |
 | Unidade AES-GCM | `bun test src/security/credentials.test.ts` | 10 passando (round-trip, AAD por conta, rotação v1→v2, linha ilegível) |
 | Projetos | `bun test src/api/projects.integration.test.ts` | repo em 2 projetos, repo de outro workspace 403, projeto de outra conta 403, branch pair persistido |
+
+## Iteração 3 — grants de publicação de PR (PR #269)
+
+| Verificação | Como | Resultado |
+| --- | --- | --- |
+| Grant criado antes do push | `POST /api/tasks/:id/pull-request` | linha em `pr_grants` com `source=api_request`, `head_branch=vibe-code/homolog/grant`, `target_branch=main`, `turn_id` preenchido |
+| Publicação sem grant | `publishRemoteSession` direto no pod após revogar | `{"code":"no_grant"}` |
+| Cancelamento revoga pendências | `POST /api/tasks/:id/cancel` | `revoked_at` + `revoked_reason=session_cancelled` na linha |
+| Reconciliação por head/base | teste `remote-pr.test.ts` com `findPR` mockado | `created:false`, `createPR` não chamado, `pr_url` persistido |
+| Parser de pedido explícito | `pr-grants.test.ts` (22 casos) | aceita "abra um PR"/"create a pull request"; recusa pergunta, "talvez", negação e descrição |
