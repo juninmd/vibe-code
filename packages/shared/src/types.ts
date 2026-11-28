@@ -1,0 +1,1576 @@
+import type { ApprovalReply, ToolApproval } from "./approvals";
+import type { LaneLabelMap } from "./lanes";
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+export type TaskStatus =
+  | "scheduled"
+  | "backlog"
+  | "in_progress"
+  | "blocked"
+  | "review"
+  | "done"
+  | "failed"
+  | "archived";
+export type RepoStatus = "pending" | "cloning" | "ready" | "error";
+
+export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
+
+export const TASK_PRIORITY_LEVELS: TaskPriority[] = ["none", "low", "medium", "high", "urgent"];
+
+export const TASK_PRIORITY_META: Record<
+  TaskPriority,
+  { label: string; icon: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  none: {
+    label: "No priority",
+    icon: "—",
+    textColor: "text-dimmed",
+    bgColor: "bg-surface-hover",
+    borderColor: "border-strong",
+  },
+  low: {
+    label: "Low",
+    icon: "↑",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  medium: {
+    label: "Medium",
+    icon: "↑↑",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  high: {
+    label: "High",
+    icon: "↑↑",
+    textColor: "text-orange-400",
+    bgColor: "bg-orange-500/10",
+    borderColor: "border-orange-500/30",
+  },
+  urgent: {
+    label: "Urgent",
+    icon: "!!",
+    textColor: "text-purple-400",
+    bgColor: "bg-purple-500/10",
+    borderColor: "border-purple-500/30",
+  },
+};
+
+export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type RunPhase =
+  | "setup"
+  | "worktree_ready"
+  | "agent_running"
+  | "generating"
+  | "validating"
+  | "evaluating"
+  | "reviewing"
+  | "fixing"
+  | "pr_creating"
+  | "stalled"
+  | "timed_out"
+  /** Interactive agent terminal driven by hand (no headless pipeline). */
+  | "terminal";
+export type LogStream = "stdout" | "stderr" | "system" | "stdin" | "review";
+
+export const TASK_COLUMNS: TaskStatus[] = [
+  "scheduled",
+  "backlog",
+  "in_progress",
+  "blocked",
+  "review",
+  "done",
+];
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  scheduled: "Agendadas",
+  backlog: "Todo",
+  in_progress: "Working",
+  blocked: "Blocked",
+  review: "Review",
+  done: "Done",
+  failed: "Failed",
+  archived: "Archived",
+};
+
+// ─── Entities ────────────────────────────────────────────────────────────────
+
+export interface Repository {
+  id: string;
+  workspaceId?: string;
+  name: string;
+  url: string;
+  defaultBranch: string;
+  localPath: string | null;
+  status: RepoStatus;
+  provider: GitProvider;
+  errorMessage: string | null;
+  /** Engine new sessions in this project start with (null = workspace preference). */
+  defaultEngine?: string | null;
+  /** Model new sessions start with, `provider/model[#effort]` (null = engine default). */
+  defaultModel?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateRepoDefaultsRequest {
+  defaultEngine?: string | null;
+  defaultModel?: string | null;
+}
+
+export interface Label {
+  id: string;
+  repoId: string;
+  name: string;
+  color: string;
+  createdAt: string;
+}
+
+export interface Task {
+  id: string;
+  issueNumber?: number;
+  title: string;
+  description: string;
+  repoId: string;
+  status: TaskStatus;
+  engine: string | null;
+  model: string | null;
+  priority: TaskPriority;
+  columnOrder: number;
+  baseBranch: string | null;
+  /** Project this session belongs to (1 project : n repositories). */
+  projectId?: string | null;
+  /** Branch the worktree started from. */
+  startBranch?: string | null;
+  /** Branch the published PR targets. */
+  prTargetBranch?: string | null;
+  branchName: string | null;
+  prUrl: string | null;
+  issueUrl: string | null;
+  /** Lane (see lanes.ts) this task and its issue last agreed on; null before the first sync. */
+  issueLane?: string | null;
+  parentTaskId: string | null;
+  agentId: string | null;
+  workflowId: string | null;
+  matchedSkills: string[];
+  tags: string[];
+  notes: string;
+  goal: string | null;
+  desiredOutcome: string | null;
+  /** Planner-expanded spec written to SPEC.md in the worktree before the main agent runs. */
+  plannerSpec?: string | null;
+  /** IDs of tasks that must complete before this task can start. */
+  dependsOn: string[];
+  /** When true, task requires human approval before PR is created. */
+  pendingApproval: boolean;
+  /** Budget hard-stop limit in dollars. */
+  maxCost?: number;
+  loopConfig?: LoopConfig;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RunStateSnapshot {
+  phase?: RunPhase | string;
+  ts?: string;
+  branch?: string | null;
+  worktreePath?: string | null;
+  sessionId?: string | null;
+  resumeFromRunId?: string | null;
+  validatorAttempts?: number;
+  validationCommands?: string[];
+  validationSummary?: string | null;
+  qualityScore?: number | null;
+  message?: string;
+}
+
+export interface AgentRun {
+  id: string;
+  taskId: string;
+  engine: string;
+  status: RunStatus;
+  currentStatus: RunPhase | null;
+  worktreePath: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  exitCode: number | null;
+  errorMessage: string | null;
+  sessionId?: string | null;
+  /** Commit holding the worktree as it was before this turn (conversational sessions). */
+  checkpoint?: string | null;
+  /** Set when the operator rewound the conversation to before this turn. */
+  rewoundAt?: string | null;
+  litellmTokenId?: string | null;
+  matchedSkills?: string | null;
+  stateSnapshot?: string | null;
+  tokenUsage?: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }
+  >;
+  costStats?: {
+    total_tokens: number;
+    input_tokens: number;
+    output_tokens: number;
+    cached?: number;
+    input?: number;
+    output?: number;
+    total?: number;
+    duration_ms?: number;
+    tool_calls?: number;
+    models?: Record<
+      string,
+      {
+        total_tokens: number;
+        input_tokens: number;
+        output_tokens: number;
+        cached?: number;
+        input?: number;
+        output?: number;
+        total?: number;
+      }
+    >;
+  };
+  createdAt: string;
+}
+
+export interface TaskUsageSummary {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  inputCost: number;
+  outputCost: number;
+  runCount: number;
+  sessionIds: string[];
+  models: Record<
+    string,
+    {
+      total_tokens: number;
+      input_tokens: number;
+      output_tokens: number;
+      input_cost: number;
+      output_cost: number;
+      total_cost: number;
+    }
+  >;
+}
+
+export interface AgentLog {
+  id: number;
+  runId: string;
+  stream: LogStream;
+  content: string;
+  timestamp: string;
+}
+
+// ─── Prompt Template ────────────────────────────────────────────────────────
+
+export interface PromptTemplate {
+  id: string;
+  title: string;
+  description: string | null;
+  content: string;
+  category: string | null;
+  isBuiltin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePromptTemplateRequest {
+  title: string;
+  description?: string;
+  content: string;
+  category?: string;
+}
+
+// ─── Task Schedule ────────────────────────────────────────────────────────────
+
+export interface TaskSchedule {
+  id: string;
+  taskId: string;
+  cronExpression: string;
+  enabled: boolean;
+  /** Open (or update) the pull request at the end of each admitted occurrence. */
+  openPr: boolean;
+  deadlineAt: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskScheduleWithTask {
+  schedule: TaskSchedule;
+  task: TaskWithRun;
+}
+
+export interface UpsertScheduleRequest {
+  cronExpression: string;
+  enabled?: boolean;
+  deadlineAt?: string | null;
+}
+
+// ─── API Request Types ───────────────────────────────────────────────────────
+
+export interface LoopConfig {
+  enabled: boolean;
+  maxAttempts: number;
+  timeoutMinutes: number;
+  feedback?: string;
+  currentAttempt?: number;
+}
+
+export interface CreateRepoRequest {
+  url: string;
+  defaultBranch?: string;
+}
+
+export interface CreateTaskRequest {
+  /**
+   * Optional. In the remote-control flow the harness derives the session name
+   * from `description` when no title is supplied.
+   */
+  title?: string;
+  description?: string;
+  repoId: string;
+  parentTaskId?: string;
+  engine?: string;
+  model?: string;
+  baseBranch?: string;
+  projectId?: string;
+  /** Branch the worktree starts from; defaults to the repository's default branch. */
+  startBranch?: string;
+  /** Branch the PR targets; defaults to `startBranch`. */
+  prTargetBranch?: string;
+  priority?: TaskPriority;
+  tags?: string[];
+  agentId?: string;
+  workflowId?: string;
+  dependsOn?: string[];
+  maxCost?: number;
+  issueUrl?: string;
+  goal?: string;
+  desiredOutcome?: string;
+  loopConfig?: LoopConfig;
+}
+
+export interface UpdateTaskRequest {
+  title?: string;
+  description?: string;
+  status?: TaskStatus;
+  columnOrder?: number;
+  engine?: string;
+  model?: string;
+  priority?: TaskPriority;
+  baseBranch?: string | null;
+  projectId?: string | null;
+  startBranch?: string | null;
+  prTargetBranch?: string | null;
+  tags?: string[];
+  notes?: string;
+  goal?: string | null;
+  desiredOutcome?: string | null;
+  dependsOn?: string[];
+  pendingApproval?: boolean;
+  maxCost?: number;
+}
+
+export interface CreateLabelRequest {
+  name: string;
+  color: string;
+  repoId: string;
+}
+
+export interface UpdateTaskLabelsRequest {
+  labelIds: string[];
+}
+
+export interface LaunchTaskRequest {
+  engine?: string;
+  model?: string;
+}
+
+// ─── API Response Types ──────────────────────────────────────────────────────
+
+export interface ApiResponse<T> {
+  data: T;
+}
+
+export interface ApiError {
+  error: string;
+  message: string;
+}
+
+export interface EngineInfo {
+  name: string;
+  displayName: string;
+  available: boolean;
+  version: string | null;
+  activeRuns: number;
+  setupIssue?: string | null;
+  /** True when the engine can continue an existing CLI conversation (`resumeSessionId`). */
+  supportsResume?: boolean;
+}
+
+export interface RuntimeCapacity {
+  activeAgents: number;
+  maxAgents: number;
+  availableEngines: number;
+  totalEngines: number;
+}
+
+export interface RuntimeWorkload {
+  totalTasks: number;
+  runningTasks: number;
+  failedTasks: number;
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  lastRunAt: string | null;
+}
+
+export interface ActiveRunDetail {
+  taskId: string;
+  runId: string;
+  engineName: string;
+  phase: RunPhase | string | null;
+}
+
+export interface RetryQueueEntry {
+  taskId: string;
+  attempt: number;
+  dueInMs: number;
+  reason: string;
+}
+
+export interface RuntimeOverview {
+  id: string;
+  name: string;
+  kind: "local";
+  status: "healthy" | "degraded" | "saturated";
+  lastSeenAt: string;
+  platform: string;
+  cpuCount: number;
+  uptimeSecs: number;
+  dataDir: string;
+  capacity: RuntimeCapacity;
+  engines: EngineInfo[];
+  workload: RuntimeWorkload;
+  activeRunDetails: ActiveRunDetail[];
+  retryQueue: RetryQueueEntry[];
+}
+
+export interface InboxItem {
+  id: string;
+  type: "task_failed" | "task_review" | "task_running" | "engine_unavailable" | "runtime_saturated";
+  severity: "info" | "warning" | "critical" | "success";
+  title: string;
+  description: string;
+  taskId: string | null;
+  repoId: string | null;
+  repoName: string | null;
+  createdAt: string;
+  actionLabel: string;
+}
+
+export type GitProvider = "github" | "gitlab" | "manual";
+
+export interface RemoteRepo {
+  name: string;
+  url: string;
+  description: string;
+  isPrivate: boolean;
+  provider: GitProvider;
+}
+
+export interface RepositoryIssue {
+  id: string;
+  number: number;
+  title: string;
+  body: string | null;
+  state: "open" | "closed";
+  labels: string[];
+  assignee: string | null;
+  assignees: string[];
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+}
+
+/** @deprecated Use RemoteRepo instead */
+export type GitHubRepo = RemoteRepo;
+
+export interface TaskWithRun extends Task {
+  latestRun?: AgentRun;
+  repo?: Repository;
+  labels?: Label[];
+  usageSummary?: TaskUsageSummary;
+}
+
+export type TaskArtifactKind =
+  | "pull_request"
+  | "branch"
+  | "docs"
+  | "worktree"
+  | "archive"
+  | "plan"
+  | "replay"
+  | "reflection"
+  | "memory"
+  | "governance"
+  | "other";
+
+export interface TaskArtifact {
+  id: string;
+  taskId: string;
+  runId: string | null;
+  kind: TaskArtifactKind;
+  title: string;
+  uri: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  /** Present when the artifact is a stored file under the artifacts root. */
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  expiresAt?: string;
+  accountId?: string;
+  /** Relative URL that streams or downloads the file. */
+  downloadUrl?: string;
+}
+
+export interface TaskPollResponse {
+  tasks: TaskWithRun[];
+  focusedTask: TaskWithRun | null;
+  focusedLogs: AgentLog[];
+  serverTime: string;
+}
+
+// ─── Diff Types ─────────────────────────────────────────────────────────────
+
+export interface DiffFileSummary {
+  path: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+  oldPath?: string;
+}
+
+export interface DiffSummary {
+  files: DiffFileSummary[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+export type ExecutionEventType =
+  | "log"
+  | "phase"
+  | "tool_use"
+  | "tool_result"
+  | "cost"
+  | "approval"
+  | "blocked"
+  | "status";
+
+export interface ExecutionTimelineEvent {
+  id: string;
+  runId: string;
+  taskId: string;
+  type: ExecutionEventType;
+  timestamp: string;
+  content?: string;
+  phase?: RunPhase | string;
+  toolName?: string;
+  toolId?: string;
+  toolStatus?: "success" | "error";
+  costStats?: AgentRun["costStats"];
+  metadata?: Record<string, unknown>;
+}
+
+// ─── WebSocket Protocol ──────────────────────────────────────────────────────
+
+export type WsProtocolVersion = "v1" | "v2";
+
+export type TerminalSignal = "sigint" | "sigterm" | "sighup";
+
+/** Engines that can run as an interactive terminal harness inside a task. */
+export const HARNESS_ENGINES = ["claude-code", "opencode"] as const;
+export type HarnessEngine = (typeof HARNESS_ENGINES)[number];
+
+/**
+ * Tag for tasks driven by hand in a terminal. The autopilot (headless auto-launch of
+ * Todo tasks, recovery after restarts) leaves them alone.
+ */
+export const MANUAL_TASK_TAG = "manual";
+/** Conversational runs preserve their workspace and await the next remote message. */
+export const REMOTE_SESSION_TAG = "remote-session";
+
+/** Why a skill is part of a task's agent plugin. */
+export type SkillSource =
+  /** Built-in, applied to every task. */
+  | "always"
+  /** Picked by vibe-code from the task text. */
+  | "auto"
+  /** Chosen by the operator. */
+  | "manual";
+
+/** `auto` = vibe-code picks the skills; `manual` = the operator's list is final. */
+export type SkillMode = "auto" | "manual";
+
+export interface AppliedSkill {
+  name: string;
+  source: SkillSource;
+  /** Short, human-readable explanation ("matches: jest, flaky"). */
+  reasons: string[];
+}
+
+export interface TerminalStartRequest {
+  /** A harness, or "shell" for a plain shell in the task workspace. */
+  engine?: HarnessEngine | "shell";
+  model?: string;
+  /** Harness-native effort/variant, applied when the terminal starts. */
+  effort?: string;
+  /** Names of skills the operator picked; makes the task's skills manual. */
+  skills?: string[];
+  /** Go back to automatic skill selection (ignored when `skills` is set). */
+  skillMode?: SkillMode;
+  cols?: number;
+  rows?: number;
+}
+
+export interface SkillPlan {
+  mode: SkillMode;
+  applied: AppliedSkill[];
+}
+
+export interface TerminalState {
+  taskId: string;
+  /** True while a PTY session is running for this task. */
+  live: boolean;
+  runId: string | null;
+  engine: HarnessEngine | "shell" | null;
+  model?: string | null;
+  effort?: string | null;
+  /** Names of the skills currently injected into the task workspace. */
+  skills: string[];
+  /** Same skills with the reason each one was applied. */
+  applied: AppliedSkill[];
+  skillMode: SkillMode;
+  /** Workspace path of the latest session, when one exists. */
+  cwd: string | null;
+}
+
+/**
+ * A running (PTY-backed) terminal, as listed for the unified Terminals view.
+ * Only live sessions appear here — a worktree without a running process is just
+ * a task, and is not listed.
+ */
+export interface TerminalLiveSession {
+  taskId: string;
+  runId: string | null;
+  /** The harness running in the terminal, or "shell" for a plain shell. */
+  engine: HarnessEngine | "shell";
+  /** Workspace (worktree) the terminal is attached to. */
+  cwd: string;
+  /** Names of the skills injected into the session. */
+  skills: string[];
+  cols: number;
+  rows: number;
+  /** Last rendered lines of the terminal screen as plain text, for previews. */
+  preview: string[];
+}
+
+/**
+ * A terminal the app opened for a CLI session that was started *outside* vibe-code.
+ * The app never owns that process's PTY, so this is a fresh terminal in the session's
+ * own directory that resumes the session in its CLI.
+ */
+export interface ExternalTerminal {
+  id: string;
+  source: SessionSource;
+  sessionId: string;
+  cwd: string;
+}
+
+export type WsClientMessage =
+  | { type: "subscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "unsubscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "agent_input"; taskId: string; input: string; version?: WsProtocolVersion }
+  | { type: "execution_subscribe"; taskId: string; version?: WsProtocolVersion }
+  | { type: "execution_unsubscribe"; taskId: string; version?: WsProtocolVersion }
+  | {
+      type: "terminal_open";
+      taskId: string;
+      runId?: string;
+      cols?: number;
+      rows?: number;
+      version?: WsProtocolVersion;
+    }
+  | { type: "terminal_close"; taskId: string; version?: WsProtocolVersion }
+  | { type: "terminal_input"; taskId: string; input: string; version?: WsProtocolVersion }
+  | {
+      type: "terminal_resize";
+      taskId: string;
+      cols: number;
+      rows: number;
+      version?: WsProtocolVersion;
+    }
+  | {
+      type: "terminal_signal";
+      taskId: string;
+      signal: TerminalSignal;
+      version?: WsProtocolVersion;
+    }
+  | { type: "ping"; version?: WsProtocolVersion };
+
+export type WsServerMessage =
+  | { type: "tool_approval_requested"; approval: ToolApproval }
+  | { type: "tool_approval_resolved"; taskId: string; approvalId: string; reply: ApprovalReply }
+  | { type: "task_created"; task: Task }
+  | { type: "task_updated"; task: Task }
+  | { type: "repo_updated"; repo: Repository }
+  | { type: "run_updated"; run: AgentRun }
+  | {
+      type: "agent_log";
+      runId: string;
+      taskId: string;
+      stream: LogStream;
+      content: string;
+      timestamp: string;
+    }
+  | {
+      type: "agent_logs_batch";
+      taskId: string;
+      logs: Array<{ runId: string; stream: LogStream; content: string; timestamp: string }>;
+    }
+  | { type: "run_status"; runId: string; taskId: string; status: RunStatus }
+  | { type: "skill_created"; skillId: string }
+  | { type: "skill_updated"; skillId: string }
+  | { type: "skill_deleted"; skillId: string }
+  | { type: "autopilot_created"; autopilotId: string }
+  | { type: "autopilot_updated"; autopilotId: string }
+  | { type: "autopilot_deleted"; autopilotId: string }
+  | {
+      type: "agent_tool_use";
+      runId: string;
+      taskId: string;
+      toolId: string;
+      toolName: string;
+      parameters?: Record<string, unknown>;
+      timestamp: string;
+    }
+  | {
+      type: "agent_tool_result";
+      runId: string;
+      taskId: string;
+      toolId: string;
+      output: string;
+      status: "success" | "error";
+      timestamp: string;
+    }
+  | {
+      type: "phase_changed";
+      runId: string;
+      taskId: string;
+      phase: RunPhase;
+      timestamp: string;
+    }
+  | {
+      type: "task_blocked";
+      taskId: string;
+      blockedBy: string[];
+    }
+  | {
+      type: "task_unblocked";
+      taskId: string;
+      unblockedBy: string;
+    }
+  | {
+      type: "task_approval_pending";
+      taskId: string;
+      message: string;
+    }
+  | {
+      type: "approval_requested";
+      taskId: string;
+      message: string;
+      command?: string;
+    }
+  | {
+      type: "approval_rejected";
+      taskId: string;
+      reason: string;
+    }
+  | {
+      type: "execution_event";
+      taskId: string;
+      runId: string;
+      event: ExecutionTimelineEvent;
+    }
+  | {
+      type: "terminal_opened";
+      taskId: string;
+      runId: string | null;
+      cols: number;
+      rows: number;
+    }
+  | {
+      type: "terminal_output";
+      taskId: string;
+      runId: string | null;
+      chunk: string;
+      stream: "stdout" | "stderr";
+      timestamp: string;
+      /** True when the chunk is the scrollback replayed to a newly attached client. */
+      replay?: boolean;
+    }
+  | {
+      type: "terminal_closed";
+      taskId: string;
+      runId: string | null;
+      exitCode: number | null;
+      timestamp: string;
+      reason?: "exit" | "closed";
+    }
+  | { type: "error"; message: string };
+
+// ─── Task Specification ("Spec-Driven") ──────────────────────────────────────
+
+export interface TaskSpec {
+  objective: string;
+  acceptance: string[];
+  constraints: string[];
+  context: string;
+  outOfScope: string[];
+}
+
+export interface TaskExecutionPlanNode {
+  id: string;
+  title: string;
+  description: string;
+  dependsOn: string[];
+  acceptanceCriteria: string[];
+  tags: string[];
+  maxCost?: number;
+  workflowId?: string | null;
+  agentId?: string | null;
+}
+
+export interface TaskExecutionPlan {
+  objective: string;
+  summary: string;
+  source: "heuristic" | "planner";
+  generatedAt: string;
+  nodes: TaskExecutionPlanNode[];
+}
+
+export interface TaskPlanMaterialization {
+  plan: TaskExecutionPlan;
+  createdTasks: Task[];
+  reusedTasks: Task[];
+}
+
+// ─── Settings Types ──────────────────────────────────────────────────────────
+
+export interface ProviderSettings {
+  token: string;
+  tokenSet: boolean;
+  baseUrl?: string;
+  username?: string;
+}
+
+export interface LiteLLMSettings {
+  baseUrl: string;
+  enabled: boolean;
+  /** A static gateway key (or LITELLM_API_KEY/LITELLM_MASTER_KEY) is configured. */
+  apiKeySet?: boolean;
+  apiKey?: string;
+  /** Models declared up front (merged with the gateway's /v1/models). */
+  models?: string[];
+}
+
+export interface OpenCodeGoSettings {
+  /** OpenCode Go key saved in vibe-code (or OPENCODE_API_KEY on the server). */
+  tokenSet: boolean;
+  token: string;
+}
+
+export interface ApiKeyEntry {
+  tokenSet: boolean;
+  token: string;
+}
+
+export interface TelegramSettings {
+  botToken: string;
+  botTokenSet: boolean;
+  chatId: string;
+  enabled: boolean;
+}
+
+export interface SettingsResponse {
+  github: ProviderSettings;
+  gitlab: ProviderSettings;
+  litellm: LiteLLMSettings;
+  opencodeGo?: OpenCodeGoSettings;
+  telegram: TelegramSettings;
+  apiKeys: {
+    gemini: ApiKeyEntry;
+    anthropic: ApiKeyEntry;
+    openai: ApiKeyEntry;
+  };
+  skillsPath: string;
+  theme: string;
+  maxAgents?: number;
+  mcpServers?: Record<string, any>;
+}
+
+export interface UpdateSettingsRequest {
+  githubToken?: string;
+  gitlabToken?: string;
+  gitlabBaseUrl?: string;
+  litellmBaseUrl?: string;
+  litellmEnabled?: boolean;
+  /** Static LiteLLM key used as the OpenCode provider key (empty string clears it). */
+  litellmApiKey?: string;
+  /** Comma/newline separated LiteLLM model ids to always offer. */
+  litellmModels?: string;
+  /** OpenCode Go subscription key (empty string clears it). */
+  opencodeGoApiKey?: string;
+  geminiApiKey?: string;
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
+  theme?: string;
+  maxAgents?: number;
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  telegramEnabled?: boolean;
+  mcpServers?: Record<string, any>;
+}
+
+export interface TestConnectionResult {
+  ok: boolean;
+  username?: string;
+  error?: string;
+}
+
+export interface AuthUser {
+  /** GitHub user id, `google:<sub>` for Google logins, `api-key` for the API key. */
+  githubId: string;
+  username: string;
+  displayName?: string;
+  avatarUrl?: string;
+  provider?: "github" | "google" | "api-key";
+  /** Internal account id; absent for the API key. */
+  accountId?: string;
+}
+
+export interface AuthStatus {
+  enabled: boolean;
+  authenticated: boolean;
+  user: AuthUser | null;
+  loginUrl: string;
+  /** Sign-in methods the server accepts, so the login screen only offers working ones. */
+  methods?: { github: boolean; google?: boolean; apiKey: boolean };
+}
+
+// ─── Custom model providers ─────────────────────────────────────────────────
+
+export type CustomProviderAuth =
+  | { type: "none" }
+  | { type: "bearer" }
+  | { type: "header"; headerName: string; prefix?: string }
+  | { type: "oauth2"; tokenUrl: string; clientId: string; scope?: string };
+
+/** A custom OpenAI-compatible provider as the API returns it (secret masked). */
+export interface CustomProviderView {
+  id: string;
+  name: string;
+  baseUrl: string;
+  enabled: boolean;
+  auth: CustomProviderAuth;
+  headers: Record<string, string>;
+  models: string[];
+  secretSet: boolean;
+}
+
+export interface CustomProviderInput extends Omit<CustomProviderView, "id" | "secretSet"> {
+  /** Omitted or empty keeps the stored secret; null removes it. */
+  secret?: string | null;
+}
+
+// ─── Default MCP connections ────────────────────────────────────────────────
+
+export interface McpConnection {
+  id: "github" | "gitlab" | "playwright" | "context7";
+  enabled: boolean;
+  connected: boolean;
+  method: "oauth" | "token" | null;
+  account?: string;
+  baseUrl?: string;
+  oauthAvailable: boolean;
+  overridden: boolean;
+  /** Runs without sign-in (Playwright, Context7). */
+  authless?: boolean;
+}
+
+// ─── Remote VS Code ─────────────────────────────────────────────────────────
+
+export interface VsCodeStatus {
+  available: boolean;
+  binary?: string;
+  running: number;
+}
+
+// ─── Statistics Types ────────────────────────────────────────────────────────
+
+export interface StatsOverview {
+  totalRepos: number;
+  totalTasks: number;
+  totalRuns: number;
+  /** Runs that finished successfully (excludes queued, running and cancelled). */
+  completedRuns: number;
+  failedRuns: number;
+  successRate: number;
+  avgRunDurationSecs: number;
+  totalPRsCreated: number;
+  totalPRsMerged: number;
+}
+
+export interface StatusBreakdown {
+  status: string;
+  count: number;
+}
+
+export interface RepoStats {
+  repoId: string;
+  repoName: string;
+  total: number;
+  done: number;
+  failed: number;
+}
+
+export interface EngineStats {
+  engine: string;
+  runs: number;
+  completed: number;
+  failed: number;
+  avgDurationSecs: number;
+}
+
+export interface ModelStats {
+  model: string;
+  runs: number;
+}
+
+export interface DailyActivity {
+  date: string;
+  runs: number;
+  completed: number;
+  failed: number;
+}
+
+export interface StatsResponse {
+  overview: StatsOverview;
+  tasksByStatus: StatusBreakdown[];
+  tasksByRepo: RepoStats[];
+  runsByEngine: EngineStats[];
+  runsByModel: ModelStats[];
+  dailyActivity: DailyActivity[];
+  favoriteEngine: string | null;
+  favoriteModel: string | null;
+}
+
+// ─── Skills / Rules / Agents / Workflows Types ──────────────────────────────
+
+export type SkillCategory = "skill" | "rule" | "agent" | "workflow";
+
+export type RegistryReviewStatus = "pending_review" | "active" | "rejected";
+
+export interface GovernanceMetadata {
+  version?: string;
+  sourceRef?: string;
+  sourceUrl?: string;
+  compatibility?: string | null;
+  reviewStatus?: RegistryReviewStatus;
+  installedAt?: string;
+  reviewedAt?: string | null;
+}
+
+export interface SkillEntry {
+  name: string;
+  description: string;
+  category: "skill";
+  filePath: string;
+  scope?: "global" | "workspace";
+  version?: string;
+  dependencies?: string[];
+  tags?: string[];
+  author?: string;
+  governance?: GovernanceMetadata;
+}
+
+export interface RuleEntry {
+  name: string;
+  description: string;
+  applyTo: string;
+  category: "rule";
+  filePath: string;
+  scope?: "global" | "workspace";
+  dependencies?: string[];
+  governance?: GovernanceMetadata;
+}
+
+export interface AgentEntry {
+  name: string;
+  description: string;
+  category: "agent";
+  filePath: string;
+  scope?: "global" | "workspace";
+  skills?: string[];
+  governance?: GovernanceMetadata;
+}
+
+export interface WorkflowEntry {
+  name: string;
+  description: string;
+  category: "workflow";
+  filePath: string;
+  scope?: "global" | "workspace";
+  governance?: GovernanceMetadata;
+}
+
+// ─── Agent Templates (built-in specialised agents) ──────────────────────────
+
+/**
+ * A skill a template pulls in when it runs. `source_url` is where the skill
+ * came from; the `cached_*` fields describe the local copy kept for it.
+ */
+export interface AgentTemplateSkillRef {
+  source_url: string;
+  cached_name: string;
+  cached_description: string;
+}
+
+/** A built-in specialised agent, loaded from `agents/templates/*.json`. */
+export interface AgentTemplate {
+  /** kebab-case id; always matches the template filename. */
+  slug: string;
+  name: string;
+  description: string;
+  /** Grouping label shown in the picker (e.g. "Engineering"). */
+  category?: string;
+  /** Icon hint from the template (names a lucide-style glyph). */
+  icon?: string;
+  /** Accent token name (e.g. "info"), resolved to a colour by the UI. */
+  accent?: string;
+  instructions: string;
+  skills: AgentTemplateSkillRef[];
+}
+
+export interface RegistryAssetRecord {
+  id: string;
+  name: string;
+  category: SkillCategory;
+  filePath: string;
+  sourceRepo: string;
+  sourceRef: string;
+  sourceUrl: string;
+  reviewStatus: RegistryReviewStatus;
+  installedAt: string;
+  reviewedAt: string | null;
+  version?: string;
+  compatibility?: string | null;
+  checksum: string;
+  bundleRoot?: string;
+  fileCount?: number;
+}
+
+export interface RemotePluginCatalog {
+  repo: string;
+  ref: string;
+  commit: string;
+  assets: { name: string; path: string; category: SkillCategory; files: number }[];
+}
+
+export interface HarnessModel {
+  id: string;
+  name: string;
+  efforts: string[];
+}
+
+export interface InstallRegistryAssetRequest {
+  repoPath: string;
+  ref?: string;
+  assetPath?: string;
+}
+
+export interface ContractLayer {
+  id: "global_rules" | "repo_contract" | "workflow_contract" | "task_context";
+  title: string;
+  priority: number;
+  content: string;
+  source: string;
+}
+
+export interface ContractBundle {
+  layers: ContractLayer[];
+}
+
+export interface HygieneReport {
+  generatedAt: string;
+  pendingRegistryReviews: number;
+  stalePendingReviews: number;
+  memoriesNeedingCompaction: number;
+  blockedByFailedDependencies: number;
+  notes: string[];
+}
+
+export type SkillsEntry = SkillEntry | RuleEntry | AgentEntry | WorkflowEntry;
+
+export interface SkillsIndex {
+  skills: SkillEntry[];
+  rules: RuleEntry[];
+  agents: AgentEntry[];
+  workflows: WorkflowEntry[];
+}
+
+// ─── Skill Payload (structured context for engines) ─────────────────────────
+
+export interface SkillPayloadItem {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export interface SkillPayload {
+  rules: SkillPayloadItem[];
+  skills: SkillPayloadItem[];
+  workflow: SkillPayloadItem | null;
+  agents: SkillPayloadItem[];
+  projectInstructions: string | null;
+}
+
+// ─── Review Finding (persisted feedback) ────────────────────────────────────
+
+export interface ReviewFinding {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  persona: string;
+  severity: "blocker" | "warning" | "info";
+  content: string;
+  filePath: string | null;
+  resolved: boolean;
+  createdAt: string;
+}
+
+// ─── Run Metrics (evaluation harness) ───────────────────────────────────────
+
+export interface RunMetrics {
+  id: string;
+  runId: string;
+  taskId: string;
+  repoId: string;
+  engine: string;
+  model: string | null;
+  matchedSkills: string[];
+  matchedRules: string[];
+  durationMs: number | null;
+  validatorAttempts: number;
+  reviewBlockers: number;
+  reviewWarnings: number;
+  finalStatus: string;
+  prCreated: boolean;
+  createdAt: string;
+}
+
+// ─── Skill Stats (evaluation responses) ─────────────────────────────────────
+
+export interface SkillEffectiveness {
+  name: string;
+  totalRuns: number;
+  successRate: number;
+  avgBlockers: number;
+  avgWarnings: number;
+}
+
+export interface EngineEffectiveness {
+  engine: string;
+  totalRuns: number;
+  successRate: number;
+  avgDurationSecs: number;
+  avgBlockers: number;
+  prRate: number;
+}
+
+// ─── CLI Sessions → Kanban Cards ─────────────────────────────────────────────
+
+/** Coding CLI whose local session store is read to build cards. */
+export type SessionSource = "opencode" | "claude-code" | "antigravity";
+
+export const SESSION_SOURCES: SessionSource[] = ["opencode", "claude-code", "antigravity"];
+
+export const SESSION_SOURCE_LABELS: Record<SessionSource, string> = {
+  opencode: "OpenCode",
+  "claude-code": "Claude Code",
+  antigravity: "Antigravity",
+};
+
+/** Kanban column a session lands in. Derived from the session's own activity. */
+export type SessionCardStatus = "active" | "idle" | "done" | "failed";
+
+export const SESSION_COLUMNS: SessionCardStatus[] = ["active", "idle", "done", "failed"];
+
+export const SESSION_STATUS_LABELS: Record<SessionCardStatus, string> = {
+  active: "Active",
+  idle: "Idle",
+  done: "Done",
+  failed: "Failed",
+};
+
+export const SESSION_STATUS_META: Record<
+  SessionCardStatus,
+  { label: string; textColor: string; bgColor: string; borderColor: string }
+> = {
+  active: {
+    label: "Active",
+    textColor: "text-cyan-400",
+    bgColor: "bg-cyan-500/10",
+    borderColor: "border-cyan-500/30",
+  },
+  idle: {
+    label: "Idle",
+    textColor: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/30",
+  },
+  done: {
+    label: "Done",
+    textColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/30",
+  },
+  failed: {
+    label: "Failed",
+    textColor: "text-red-400",
+    bgColor: "bg-red-500/10",
+    borderColor: "border-red-500/30",
+  },
+};
+
+/**
+ * A CLI session projected onto a kanban card.
+ *
+ * Deliberately minimal: this is everything a card renders and nothing else.
+ * The readers parse full transcripts (message bodies, tool calls and results,
+ * token/cost breakdowns, model and provider metadata, parent/child session
+ * graphs, file paths) to derive these values and then drop all of it — none of
+ * it crosses the API boundary.
+ */
+export interface SessionCard {
+  /** Board-unique id: `${source}:${sessionId}`. */
+  id: string;
+  /** Native session id, as accepted by the CLI's own resume flag. */
+  sessionId: string;
+  source: SessionSource;
+  title: string;
+  status: SessionCardStatus;
+  /** Working directory the session ran in, shortened for display. */
+  project: string;
+  branch: string | null;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Per-source scan result, so the board can explain an empty column. */
+export interface SessionSourceStatus {
+  source: SessionSource;
+  /** True when at least one store directory for this CLI exists on disk. */
+  available: boolean;
+  /** Directories that were scanned (empty when the CLI is not installed). */
+  roots: string[];
+  cards: number;
+  error: string | null;
+}
+
+export interface SessionBoardResponse {
+  cards: SessionCard[];
+  sources: SessionSourceStatus[];
+  scannedAt: string;
+}
+
+/** Command that resumes a card's session in its own CLI. */
+export function sessionResumeCommand(card: Pick<SessionCard, "source" | "sessionId">): string {
+  switch (card.source) {
+    case "opencode":
+      return `opencode --session ${card.sessionId}`;
+    case "claude-code":
+      return `claude --resume ${card.sessionId}`;
+    case "antigravity":
+      // The Antigravity CLI binary is `agy` (the IDE is `Antigravity`); it resumes
+      // conversations by id with `--conversation`.
+      return `agy --conversation ${card.sessionId}`;
+  }
+}
+
+// ─── Vibe-Code v2: Workspaces (Multi-tenant) ─────────────────────────────────
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Account that owns the workspace; null for the operator/API-key scope. */
+  ownerAccountId?: string;
+}
+
+export interface Project {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Repositories linked to this project. */
+  repoIds: string[];
+}
+
+export type WorkspaceMemberRole = "owner" | "member" | "viewer";
+
+export interface WorkspaceMember {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceMemberRole;
+  joinedAt: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+  createdAt: string;
+}
+
+// ─── Vibe-Code v2: Skills (Reusable Templates) ────────────────────────────────
+
+export interface SkillParameter {
+  name: string;
+  type: "string" | "number" | "boolean" | "json";
+  description?: string;
+  required?: boolean;
+  default?: unknown;
+}
+
+export interface SkillDefinition {
+  agents: Array<{
+    engine: string;
+    model?: string;
+    prompt: string;
+  }>;
+  sequence: "parallel" | "serial";
+  timeout?: number;
+}
+
+export interface Skill {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  definition: SkillDefinition;
+  inputs?: SkillParameter[];
+  outputs?: SkillParameter[];
+  version: number;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Vibe-Code v2: Autopilots (Workflows) ──────────────────────────────────────
+
+export type AutopilotTriggerType = "schedule" | "event" | "manual";
+
+export interface CronTrigger {
+  expression: string;
+  timezone?: string;
+}
+
+export interface EventTrigger {
+  type: "pr_comment" | "issue_label" | "task_created" | "task_updated";
+  matcher?: string; // regex or specific value
+}
+
+export interface AutopilotTriggerConfig {
+  type: AutopilotTriggerType;
+  cron?: CronTrigger;
+  event?: EventTrigger;
+}
+
+export interface Autopilot {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  skillId: string;
+  triggerType: AutopilotTriggerType;
+  triggerConfig?: AutopilotTriggerConfig;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Lane <-> issue label sync ───────────────────────────────────────────────
+
+export interface LaneSyncRepoStatus {
+  repoId: string;
+  name: string;
+  ok: boolean;
+  error?: string;
+  /** Tasks linked to an issue of this repository. */
+  linked: number;
+  /** Cards moved because their issue was relabelled. */
+  pulled: number;
+  /** Issues relabelled because their card moved. */
+  pushed: number;
+  /** Cards created from issues that carry a lane label. */
+  imported: number;
+}
+
+export interface LaneSyncStatus {
+  running: boolean;
+  lastSyncAt: string | null;
+  repos: LaneSyncRepoStatus[];
+}
+
+export interface LaneSettings {
+  /** Off until the operator turns it on: syncing writes labels to real issues. */
+  enabled: boolean;
+  /** Labels the operator customised; everything else follows the provider default. */
+  overrides: Partial<LaneLabelMap>;
+  defaults: Record<"github" | "gitlab", LaneLabelMap>;
+  status: LaneSyncStatus;
+}
+
+export interface UpdateLaneSettingsRequest {
+  enabled?: boolean;
+  /** Replaces the overrides; an empty string or a missing lane goes back to the default. */
+  labels?: Partial<LaneLabelMap>;
+}

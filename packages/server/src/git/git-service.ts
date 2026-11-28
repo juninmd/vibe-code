@@ -1,0 +1,730 @@
+import { existsSync } from "node:fs";
+import { lstat, mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { homedir } from "node:os";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { runnerDataDir } from "../agents/runners/k8s/pod-spec";
+import { gitHubGitConfigEnv } from "./github-credentials";
+import { hookGuardEnv } from "./hook-guard";
+import type { ProviderRegistry } from "./providers/registry";
+
+export class GitService {
+  private basePath: string;
+  private _providers: ProviderRegistry | null = null;
+  // Why: git's own lockfiles (packed-refs.lock, config.lock, worktree admin
+  // dirs) don't tolerate parallel mutations on the same bare repo. Two tasks
+  // sharing a repo can collide on clone/fetch + worktree-add. Lock per-bare.
+  // Ported from multica server/internal/daemon/repocache/cache.go.
+  private static repoLocks = new Map<string, Promise<unknown>>();
+
+  private static async withRepoLock<T>(barePath: string, fn: () => Promise<T>): Promise<T> {
+    const prev = (GitService.repoLocks.get(barePath) ?? Promise.resolve()).catch(() => {});
+    let release: () => void = () => {};
+    const next = new Promise<void>((r) => {
+      release = r;
+    });
+    const tail = prev.then(() => next);
+    GitService.repoLocks.set(barePath, tail);
+    try {
+      await prev;
+      return await fn();
+    } finally {
+      release();
+      if (GitService.repoLocks.get(barePath) === tail) {
+        GitService.repoLocks.delete(barePath);
+      }
+    }
+  }
+
+  static gitEnv(): Record<string, string | undefined> {
+    const base = process.env;
+    let existing = 0;
+
+    for (const key of Object.keys(base)) {
+      if (key === "GIT_CONFIG_COUNT") {
+        const val = parseInt(base[key] || "0", 10);
+        if (!Number.isNaN(val)) {
+          existing = val;
+        }
+      }
+    }
+
+    return {
+      ...base,
+      ...hookGuardEnv(base),
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_COUNT: (existing + 1).toString(),
+      [`GIT_CONFIG_KEY_${existing}`]: "safe.directory",
+      [`GIT_CONFIG_VALUE_${existing}`]: "*",
+    };
+  }
+
+  /** gitEnv plus the signed-in user's GitHub token, so clone/fetch/push reach private repos. */
+  private authedGitEnv(): Record<string, string | undefined> {
+    const env = GitService.gitEnv();
+    return { ...env, ...gitHubGitConfigEnv(this._providers?.getToken("github"), env) };
+  }
+
+  set providers(registry: ProviderRegistry) {
+    this._providers = registry;
+  }
+
+  get providerRegistry(): ProviderRegistry | null {
+    return this._providers;
+  }
+
+  constructor(basePath?: string) {
+    this.basePath = basePath ?? join(homedir(), ".vibe-code");
+  }
+
+  get reposDir(): string {
+    return join(this.basePath, "repos");
+  }
+
+  get workspacesDir(): string {
+    return join(this.basePath, "workspaces");
+  }
+
+  async init(): Promise<void> {
+    await mkdir(this.reposDir, { recursive: true });
+    await mkdir(this.workspacesDir, { recursive: true });
+  }
+
+  async detectDefaultBranch(url: string): Promise<string> {
+    try {
+      const result = await this.exec([
+        "git",
+        "ls-remote",
+        "--symref",
+        this.injectToken(url),
+        "HEAD",
+      ]);
+      // Output like: ref: refs/heads/main	HEAD
+      const match = result.stdout.match(/ref: refs\/heads\/(\S+)\s+HEAD/);
+      if (match) return match[1];
+    } catch {
+      // Fallback
+    }
+    return "main";
+  }
+
+  private injectToken(url: string): string {
+    const token = process.env.GIT_TOKEN;
+    if (token && url.startsWith("https://github.com/")) {
+      return url.replace("https://", `https://${token}@`);
+    }
+    return url;
+  }
+
+  async isRepoSource(source: string): Promise<boolean> {
+    try {
+      await this.exec(["git", "ls-remote", this.injectToken(source), "HEAD"]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private getCollisionSafeName(url: string, defaultName: string): string {
+    try {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        const u = new URL(url);
+        const host = u.hostname;
+        const ownerAndName = u.pathname.replace(/^\//, "").replace(/\.git$/, "");
+        const pathSlug = ownerAndName.replace(/\//g, "+");
+        return `${host}+${pathSlug}`;
+      }
+      const sshMatch = url.match(/^git@([^:]+):([^/]+)\/([^.]+)(?:\.git)?$/);
+      if (sshMatch) {
+        const [, host, owner, name] = sshMatch;
+        return `${host}+${owner}+${name}`;
+      }
+    } catch {
+      // ignore, fallback to defaultName
+    }
+    return defaultName;
+  }
+
+  async cloneRepo(url: string, name: string): Promise<string> {
+    const safeName = this.getCollisionSafeName(url, name);
+    const barePath = join(this.reposDir, `${safeName}.git`);
+    await GitService.withRepoLock(barePath, () =>
+      this.exec(["git", "clone", "--bare", this.injectToken(url), barePath])
+    );
+    return barePath;
+  }
+
+  async fetchRepo(barePath: string): Promise<void> {
+    await GitService.withRepoLock(barePath, () => this.fetchOrigin({ barePath }));
+  }
+
+  async createWorktree(
+    barePath: string,
+    branch: string,
+    repoName: string,
+    runId: string,
+    base: string = "main",
+    isNewBranch: boolean = true
+  ): Promise<string> {
+    const wtPath = join(this.workspacesDir, repoName, runId);
+    await mkdir(join(this.workspacesDir, repoName), { recursive: true });
+
+    await GitService.withRepoLock(barePath, async () => {
+      // Fetch + worktree-add must be atomic vs other tasks on the same bare.
+      await this.fetchOrigin({ barePath });
+      const args = ["git", "--git-dir", barePath, "worktree", "add"];
+      if (isNewBranch) {
+        args.push("-b", branch, wtPath, `origin/${base}`);
+      } else {
+        args.push(wtPath, branch);
+      }
+      await this.exec(args);
+    });
+
+    // Ensure git identity is set in the worktree so commits never fail.
+    // Only set locally if not already configured globally.
+    try {
+      await this.exec(["git", "config", "user.email"], { cwd: wtPath });
+    } catch {
+      await this.exec(["git", "config", "--local", "user.email", "vibe-code@localhost"], {
+        cwd: wtPath,
+      });
+      await this.exec(["git", "config", "--local", "user.name", "vibe-code"], { cwd: wtPath });
+    }
+
+    return wtPath;
+  }
+
+  async removeWorktree(barePath: string, wtPath: string): Promise<void> {
+    await GitService.withRepoLock(barePath, async () => {
+      try {
+        await this.exec(["git", "--git-dir", barePath, "worktree", "remove", "--force", wtPath]);
+      } catch {
+        try {
+          const { rm } = await import("node:fs/promises");
+          await rm(wtPath, { recursive: true, force: true });
+          await this.exec(["git", "--git-dir", barePath, "worktree", "prune"]);
+        } catch {
+          // Best effort cleanup
+        }
+      }
+    });
+    // OpenCode sessions a runner pod kept for this worktree (Kubernetes runner).
+    await rm(runnerDataDir(this.basePath, wtPath), { recursive: true, force: true });
+  }
+
+  async deleteLocalRepo(barePath: string, repoName: string): Promise<void> {
+    await rm(join(this.workspacesDir, repoName), { recursive: true, force: true });
+    await rm(barePath, { recursive: true, force: true });
+  }
+
+  async hasChanges(wtPath: string): Promise<boolean> {
+    const result = await this.exec(["git", "status", "--porcelain"], { cwd: wtPath });
+    return result.stdout.trim().length > 0;
+  }
+
+  async hasCommitsAhead(wtPath: string, baseBranch: string): Promise<boolean> {
+    try {
+      // Bare-cloned repos don't have origin/<branch> tracking refs, only local branch refs.
+      const result = await this.exec(["git", "log", `${baseBranch}..HEAD`, "--oneline"], {
+        cwd: wtPath,
+      });
+      return result.stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async commitAll(wtPath: string, message: string): Promise<void> {
+    await this.exec(["git", "add", "-A"], { cwd: wtPath });
+    // Safety: ensure accidental `.vibe-code` directory (from misconfigured DATA_DIR)
+    // is not staged or committed. Remove from the index if present (keep files).
+    try {
+      await this.exec(["git", "rm", "-r", "--cached", ".vibe-code"], { cwd: wtPath });
+    } catch {
+      // ignore: path may not exist or not be tracked
+    }
+    // Check the index, not the working tree: after unstaging `.vibe-code` the
+    // only remaining changes may be unstaged (e.g. harness context files), and
+    // `git commit` with an empty index exits 1 with "nothing to commit".
+    const staged = await this.exec(["git", "diff", "--cached", "--name-only"], { cwd: wtPath });
+    if (staged.stdout.trim().length > 0) {
+      // Ensure git identity is set (required in some environments)
+      try {
+        await this.exec(["git", "config", "user.email"], { cwd: wtPath });
+      } catch {
+        await this.exec(["git", "config", "user.email", "vibe-code@localhost"], { cwd: wtPath });
+        await this.exec(["git", "config", "user.name", "vibe-code"], { cwd: wtPath });
+      }
+      try {
+        await this.exec(["git", "commit", "-m", message], { cwd: wtPath });
+      } catch (err) {
+        // Target-repo hooks (husky/commitlint) can reject orchestrator commits.
+        // Quality gates run in the validation pipeline, so bypass hooks here.
+        console.warn(
+          `[git] commit with hooks failed, retrying with --no-verify: ${err instanceof Error ? err.message : err}`
+        );
+        await this.exec(["git", "commit", "--no-verify", "-m", message], { cwd: wtPath });
+      }
+    }
+  }
+
+  async push(wtPath: string, branch: string): Promise<void> {
+    await this.exec(["git", "push", "-u", "origin", branch], { cwd: wtPath });
+  }
+
+  async checkout(wtPath: string, branch: string): Promise<void> {
+    await this.exec(["git", "checkout", branch], { cwd: wtPath });
+  }
+
+  /** Existing open PR/MR for this head/base pair; null when none. */
+  async findPR(
+    _wtPath: string,
+    repoUrl: string,
+    branch: string,
+    base?: string
+  ): Promise<string | null> {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) return null;
+    return resolved.adapter.findPR(resolved.token, repoUrl, branch, base || "main");
+  }
+
+  async createPR(
+    _wtPath: string,
+    repoUrl: string,
+    branch: string,
+    title: string,
+    body: string,
+    base?: string
+  ): Promise<string> {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) throw new Error(`No git provider configured for ${repoUrl}`);
+    return resolved.adapter.createPR(resolved.token, {
+      repoUrl,
+      head: branch,
+      base: base || "main",
+      title,
+      body,
+    });
+  }
+
+  /**
+   * Pushes `files` as an orphan commit to `ref` (outside the branch history)
+   * and returns its sha. Images only, so the pre-push test run is skipped.
+   */
+  async publishEvidence(
+    wtPath: string,
+    ref: string,
+    files: { name: string; path: string }[]
+  ): Promise<string> {
+    const entries: string[] = [];
+    for (const file of files) {
+      const blob = await this.exec(["git", "hash-object", "-w", "--no-filters", "--", file.path], {
+        cwd: wtPath,
+      });
+      entries.push(`100644 blob ${blob.stdout.trim()}\t${file.name}`);
+    }
+    const tree = await this.exec(["git", "mktree"], {
+      cwd: wtPath,
+      stdin: `${entries.join("\n")}\n`,
+    });
+    const commit = await this.exec(
+      [
+        "git",
+        "-c",
+        "user.name=vibe-code",
+        "-c",
+        "user.email=agent@vibe-code.local",
+        "commit-tree",
+        tree.stdout.trim(),
+        "-m",
+        "evidence",
+      ],
+      { cwd: wtPath }
+    );
+    const sha = commit.stdout.trim();
+    await this.exec(["git", "push", "--no-verify", "origin", `+${sha}:${ref}`], { cwd: wtPath });
+    return sha;
+  }
+
+  getRepoOwnerAndName(url: string): string {
+    // Matches https://github.com/owner/repo[.git] or git@github.com:owner/repo[.git]
+    const match = url.match(/[:/]([^/:]+\/[^/.]+)(?:\.git)?$/);
+    return match ? match[1] : url;
+  }
+
+  async listBranches(barePath: string): Promise<string[]> {
+    try {
+      const result = await this.exec([
+        "git",
+        "--git-dir",
+        barePath,
+        "branch",
+        "-r",
+        "--format=%(refname:short)",
+      ]);
+      return result.stdout
+        .trim()
+        .split("\n")
+        .map((b) => b.trim().replace(/^origin\//, ""))
+        .filter((b) => b && b !== "HEAD");
+    } catch {
+      return [];
+    }
+  }
+
+  async listRemoteBranches(repo: {
+    url: string;
+    provider: string;
+    localPath?: string | null;
+  }): Promise<string[]> {
+    const resolved = this._providers?.resolve(repo.url);
+    if (resolved) {
+      try {
+        return await resolved.adapter.listBranches(resolved.token, repo.url);
+      } catch {
+        /* no token, API down or rate-limited: fall back to the local clone */
+      }
+    }
+    // Never invent a branch (the repo name used to be returned here): read the clone's own refs.
+    return repo.localPath ? this.listLocalBranches(repo.localPath) : [];
+  }
+
+  /** Branch names known to a local (bare) clone: its heads plus origin's remote-tracking refs. */
+  async listLocalBranches(barePath: string): Promise<string[]> {
+    try {
+      const result = await this.exec([
+        "git",
+        "--git-dir",
+        barePath,
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/heads",
+        "refs/remotes/origin",
+      ]);
+      const names = result.stdout
+        .split("\n")
+        .map((ref) => ref.trim().replace(/^refs\/(heads|remotes\/origin)\//, ""))
+        .filter((name) => name && name !== "HEAD");
+      return [...new Set(names)];
+    } catch {
+      return [];
+    }
+  }
+
+  async createRemoteRepo(
+    provider: "github" | "gitlab",
+    name: string,
+    description: string,
+    isPrivate: boolean
+  ): Promise<{ name: string; url: string; description: string; isPrivate: boolean }> {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) throw new Error(`Provider ${provider} not configured or missing token`);
+    const repo = await adapter.createRepo(token, { name, description, isPrivate });
+    return {
+      name: repo.name,
+      url: repo.url,
+      description: repo.description,
+      isPrivate: repo.isPrivate,
+    };
+  }
+
+  /** True when a token for the provider is available (settings or environment). */
+  isProviderConfigured(provider: "github" | "gitlab"): boolean {
+    return !!this._providers?.get(provider) && !!this._providers.getToken(provider);
+  }
+
+  async listRemoteRepos(
+    provider: "github" | "gitlab",
+    limit = 20
+  ): Promise<
+    { name: string; url: string; description: string; isPrivate: boolean; provider: string }[]
+  > {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) return [];
+    return adapter.listRepos(token, limit);
+  }
+
+  async searchRemoteRepos(
+    provider: "github" | "gitlab",
+    query: string,
+    limit = 20
+  ): Promise<
+    { name: string; url: string; description: string; isPrivate: boolean; provider: string }[]
+  > {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const adapter = this._providers.get(provider);
+    const token = this._providers.getToken(provider);
+    if (!adapter || !token) throw new Error(`No ${provider} token configured`);
+    return adapter.searchRepos(token, query, limit);
+  }
+
+  /** @deprecated Use listRemoteRepos('github') instead */
+  async listGitHubRepos(limit = 200) {
+    return this.listRemoteRepos("github", limit);
+  }
+
+  /** @deprecated Use createRemoteRepo('github', ...) instead */
+  async createGitHubRepo(name: string, description: string, isPrivate: boolean) {
+    return this.createRemoteRepo("github", name, description, isPrivate);
+  }
+
+  async listIssues(
+    repoUrl: string,
+    options?: { state?: "open" | "closed" | "all"; labels?: string[]; limit?: number }
+  ) {
+    if (!this._providers) throw new Error("Provider registry not configured");
+    const resolved = this._providers.resolve(repoUrl);
+    if (!resolved) throw new Error(`No git provider configured for ${repoUrl}`);
+    return resolved.adapter.listIssues(resolved.token, repoUrl, options);
+  }
+
+  async diffSummary(
+    baseBranch: string,
+    headBranch: string,
+    opts: { cwd?: string; gitDir?: string; workingTree?: boolean }
+  ): Promise<
+    { path: string; status: string; additions: number; deletions: number; oldPath?: string }[]
+  > {
+    const args = ["git"];
+    if (opts.gitDir) args.push("--git-dir", opts.gitDir);
+    const revision =
+      opts.workingTree && opts.cwd
+        ? (
+            await this.exec(["git", "merge-base", baseBranch, "HEAD"], { cwd: opts.cwd })
+          ).stdout.trim()
+        : `${baseBranch}...${headBranch}`;
+    args.push("diff", "--numstat", "-M", revision);
+
+    const numstat = await this.exec(args, { cwd: opts.cwd }).catch(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    }));
+
+    // Also get name-status for file status (A/M/D/R)
+    const statusArgs = ["git"];
+    if (opts.gitDir) statusArgs.push("--git-dir", opts.gitDir);
+    statusArgs.push("diff", "--name-status", "-M", revision);
+
+    const nameStatus = await this.exec(statusArgs, { cwd: opts.cwd }).catch(() => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 1,
+    }));
+
+    const statusMap = new Map<string, { status: string; oldPath?: string }>();
+    for (const line of nameStatus.stdout.trim().split("\n")) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      const code = parts[0].charAt(0);
+      const status =
+        code === "A" ? "added" : code === "D" ? "deleted" : code === "R" ? "renamed" : "modified";
+      const filePath = code === "R" ? parts[2] : parts[1];
+      const oldPath = code === "R" ? parts[1] : undefined;
+      if (filePath) statusMap.set(filePath, { status, oldPath });
+    }
+
+    const files: {
+      path: string;
+      status: string;
+      additions: number;
+      deletions: number;
+      oldPath?: string;
+    }[] = [];
+    for (const line of numstat.stdout.trim().split("\n")) {
+      if (!line) continue;
+      const [add, del, ...pathParts] = line.split("\t");
+      const filePath = pathParts
+        .join("\t")
+        .replace(/^.* => /, "")
+        .replace(/[{}]/g, "");
+      const info = statusMap.get(filePath);
+      files.push({
+        path: filePath,
+        status: info?.status ?? "modified",
+        additions: add === "-" ? 0 : parseInt(add, 10) || 0,
+        deletions: del === "-" ? 0 : parseInt(del, 10) || 0,
+        oldPath: info?.oldPath,
+      });
+    }
+
+    if (opts.workingTree && opts.cwd) {
+      const untracked = await this.exec(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        { cwd: opts.cwd }
+      );
+      for (const path of untracked.stdout.split("\0").filter(Boolean)) {
+        const content = await this.untrackedContent(opts.cwd, path);
+        if (content === undefined) continue;
+        files.push({
+          path,
+          status: "added",
+          additions:
+            content === null ? 0 : content.split("\n").length - (content.endsWith("\n") ? 1 : 0),
+          deletions: 0,
+          oldPath: undefined,
+        });
+      }
+    }
+    return files;
+  }
+
+  private async untrackedContent(cwd: string, path: string): Promise<string | null | undefined> {
+    const target = resolve(cwd, path);
+    const local = relative(await realpath(cwd), await realpath(target));
+    if (
+      isAbsolute(local) ||
+      local === ".." ||
+      local.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    )
+      return undefined;
+    const info = await lstat(target);
+    if (!info.isFile()) return undefined;
+    if (info.size > 1024 * 1024) return null;
+    const content = await readFile(target);
+    return content.includes(0) ? null : content.toString("utf8");
+  }
+
+  async diffFileContent(
+    baseBranch: string,
+    headBranch: string,
+    filePath: string,
+    opts: { cwd?: string; gitDir?: string; workingTree?: boolean }
+  ): Promise<string> {
+    const args = ["git"];
+    if (opts.gitDir) args.push("--git-dir", opts.gitDir);
+    if (opts.workingTree && opts.cwd) {
+      const untracked = await this.exec(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z", "--", filePath],
+        { cwd: opts.cwd }
+      );
+      if (untracked.stdout.split("\0").includes(filePath)) {
+        const content = await this.untrackedContent(opts.cwd, filePath);
+        if (content === undefined) return "";
+        if (content === null)
+          return "Arquivo binário ou maior que 1 MiB; prévia de conteúdo indisponível.";
+        return `--- /dev/null\n+++ b/${filePath}\n${content
+          .split("\n")
+          .map((line) => `+${line}`)
+          .join("\n")}`;
+      }
+    }
+    const revision =
+      opts.workingTree && opts.cwd
+        ? (
+            await this.exec(["git", "merge-base", baseBranch, "HEAD"], { cwd: opts.cwd })
+          ).stdout.trim()
+        : `${baseBranch}...${headBranch}`;
+    args.push("diff", "-M", revision, "--", filePath);
+
+    const result = await this.exec(args, { cwd: opts.cwd });
+    return result.stdout;
+  }
+
+  async branchExists(barePath: string, branch: string): Promise<boolean> {
+    try {
+      await this.exec(["git", "--git-dir", barePath, "rev-parse", "--verify", branch]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  getBarePath(repoName: string, url?: string): string {
+    if (url) {
+      const safeName = this.getCollisionSafeName(url, repoName);
+      const collisionSafePath = join(this.reposDir, `${safeName}.git`);
+      const legacyPath = join(this.reposDir, `${repoName}.git`);
+      if (existsSync(collisionSafePath)) return collisionSafePath;
+      if (existsSync(legacyPath)) return legacyPath;
+      return collisionSafePath;
+    }
+    return join(this.reposDir, `${repoName}.git`);
+  }
+
+  /**
+   * Syncs the worktree branch with the remote base branch via rebase.
+   * Call before starting agent work and before creating a PR to avoid conflicts.
+   * Returns true if sync succeeded, false if rebase had conflicts (caller should handle).
+   */
+  async syncWithBase(
+    wtPath: string,
+    baseBranch: string,
+    options: { preserveConflict?: boolean } = {}
+  ): Promise<{ ok: boolean; message: string }> {
+    try {
+      // Fetch latest from origin
+      await this.fetchOrigin({
+        cwd: wtPath,
+        refspecs: [`+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`],
+      });
+      // Rebase onto base branch
+      const result = await this.exec(["git", "rebase", `origin/${baseBranch}`], { cwd: wtPath });
+      if (result.exitCode !== 0) {
+        if (!options.preserveConflict) {
+          // Abort the failed rebase to leave worktree clean.
+          await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+        }
+        return { ok: false, message: result.stderr.trim() || "Rebase failed" };
+      }
+      return { ok: true, message: `Synced with origin/${baseBranch}` };
+    } catch (err) {
+      if (!options.preserveConflict) {
+        await this.exec(["git", "rebase", "--abort"], { cwd: wtPath }).catch(() => {});
+      }
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  private async fetchOrigin(
+    options: { barePath?: string; cwd?: string; refspecs?: string[] } = {}
+  ): Promise<void> {
+    const args = ["git"];
+    if (options.barePath) {
+      args.push("--git-dir", options.barePath);
+    }
+    args.push(
+      "fetch",
+      "--prune",
+      "origin",
+      ...(options.refspecs ?? ["+refs/heads/*:refs/remotes/origin/*"])
+    );
+    await this.exec(args, { cwd: options.cwd });
+  }
+
+  private async exec(
+    cmd: string[],
+    options?: { cwd?: string; stdin?: string }
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const proc = Bun.spawn(cmd, {
+      cwd: options?.cwd,
+      env: this.authedGitEnv(),
+      stdin: options?.stdin === undefined ? undefined : Buffer.from(options.stdin),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    const exitCode = await proc.exited;
+
+    if (exitCode !== 0) {
+      const sanitized = cmd.map((s) => s.replace(/https?:\/\/[^@]+@/g, "https://***@")).join(" ");
+      // Include stdout when stderr is empty — git hooks (husky, commitlint)
+      // report failures on stdout.
+      const detail = stderr.trim() || stdout.trim();
+      throw new Error(`Command failed (exit ${exitCode}): ${sanitized}\n${detail.slice(-2000)}`);
+    }
+
+    return { stdout, stderr, exitCode };
+  }
+}

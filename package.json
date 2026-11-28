@@ -1,0 +1,52 @@
+{
+  "name": "vibe-code",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bash ./scripts/dev-safe.sh",
+    "dev:raw": "bun run --filter '*' dev",
+    "dev:server": "bun run --filter @vibe-code/server dev",
+    "dev:web": "bun run --filter @vibe-code/web dev",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "test:e2e": "playwright test",
+    "lint": "node_modules/.bin/biome check packages/",
+    "lint:fix": "node_modules/.bin/biome check --write packages/",
+    "format": "bunx biome format --write packages/",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "packages/**/*.{ts,tsx}": [
+      "node_modules/.bin/biome check --write --no-errors-on-unmatched"
+    ]
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
+    "@commitlint/cli": "^21.2.0",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@playwright/test": "^1.61.1",
+    "fast-check": "^4.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "playwright": "^1.62.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.7",
+    "@openrouter/ai-sdk-provider": "^2.9.0",
+    "ai": "^6.0.219",
+    "hono": "^4.13.5",
+    "nanoid": "^5.1.16",
+    "ollama-ai-provider": "^1.2.0",
+    "zod": "4.6.7"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "4.6.7",
+      "typescript": "5.8.3"
+    }
+  }
+}

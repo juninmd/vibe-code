@@ -1,0 +1,541 @@
+/**
+ * Integration tests for ConflictResolver — end-to-end flow:
+ *   conflict detected → child task created → prompt has --force-with-lease → no --force
+ */
+import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { createDb } from "../db";
+import type { BroadcastHub } from "../ws/broadcast";
+import { ConflictResolver } from "./conflict-resolver";
+
+type Db = ReturnType<typeof createDb>;
+
+const { Orchestrator } = await import("./orchestrator");
+
+mock.module("playwright", () => ({ chromium: {} }));
+mock.module("./orchestrator/review", () => ({
+  REVIEW_ENABLED: false,
+  REVIEW_STRICT: false,
+  runReviewPipeline: async () => ({ blockers: [], actionableFindings: [], docsFindings: [] }),
+}));
+
+function makeHub(): BroadcastHub {
+  return {
+    broadcastAll: () => {},
+    broadcastToTask: () => {},
+    batchLog: () => {},
+    flushLogs: () => {},
+    addClient: () => ({ ws: {} as unknown, subscribedTasks: new Set() }),
+    removeClient: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+  } as unknown as BroadcastHub;
+}
+
+function makeDb(): Db {
+  const db = createDb(":memory:");
+  db.settings.set("litellm_enabled", "false");
+  db.settings.set("telegram_enabled", "false");
+  return db;
+}
+
+function makeOrchestrator(db: Db) {
+  const hub = makeHub();
+  const git = {
+    cloneBare: async () => {},
+    createWorktree: async () => "/tmp/fake-wt",
+    removeWorktree: async () => {},
+    push: async () => {},
+    syncWithBase: async () => ({ ok: true, message: "ok" }),
+    currentBranch: async () => "feature-branch",
+    listWorktrees: async () => [],
+    exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
+  } as any;
+  const registry = { get: () => undefined, list: () => [] } as any;
+  return new Orchestrator(db, git, registry, hub, 2);
+}
+
+describe("ConflictResolver", () => {
+  let db: Db;
+  let resolver: ConflictResolver;
+  let orchestrator: ReturnType<typeof makeOrchestrator>;
+  let repoId: string;
+
+  beforeEach(() => {
+    db = makeDb();
+    orchestrator = makeOrchestrator(db);
+    resolver = new ConflictResolver(db, orchestrator as any);
+
+    // Create a test repo
+    const repo = db.repos.create({
+      url: "https://github.com/owner/test-repo",
+      defaultBranch: "main",
+    });
+    repoId = repo.id;
+  });
+
+  describe("conflict detection — prompt safety", () => {
+    it("generated prompt contains git push --force-with-lease", async () => {
+      // Create a parent task with a PR
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: add awesome feature",
+        description: "Adds great stuff",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/42");
+      db.tasks.updateField(parent.id, "branch_name", "feat/awesome");
+
+      // Mock isPRConflicting to return true
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: false, mergeable_state: "dirty" }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+
+      // Advance the internal timer so check() actually runs
+      (resolver as any).lastCheckAt = 0;
+
+      await resolver.check();
+
+      fetchSpy.mockRestore();
+
+      // Child conflict task must exist
+      const children = db.tasks.listChildren(parent.id);
+      const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
+      expect(conflictTask).toBeDefined();
+
+      // Prompt must contain --force-with-lease
+      expect(conflictTask?.description).toContain("--force-with-lease");
+
+      // Prompt must NOT contain bare --force (without --lease)
+      const descLines = conflictTask?.description?.split("\n") ?? [];
+      const hasBareForcePush = descLines.some((line) => {
+        // Match `git push --force` but not `git push --force-with-lease`
+        return /git push .*--force(?!-with-lease)/.test(line);
+      });
+      expect(hasBareForcePush).toBe(false);
+    });
+
+    it("does not create duplicate conflict tasks when one is already in_progress", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: another feature",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/99");
+      db.tasks.updateField(parent.id, "branch_name", "feat/another");
+
+      // Manually create an existing conflict child
+      db.tasks.create({
+        repoId,
+        title: "fix(conflicts): existing",
+        status: "in_progress",
+        parentTaskId: parent.id,
+        tags: ["conflict-resolution"],
+      });
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => ({ mergeable: false }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+
+      await resolver.check();
+      fetchSpy.mockRestore();
+
+      const children = db.tasks.listChildren(parent.id);
+      const conflictTasks = children.filter((t) => t.tags?.includes("conflict-resolution"));
+      // Must still be exactly 1 — no duplicate created
+      expect(conflictTasks).toHaveLength(1);
+    });
+
+    it("skips check when called within CONFLICT_CHECK_INTERVAL_MS", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch");
+      db.settings.set("github_token", "test-token");
+
+      // First call (timer not set yet) — sets lastCheckAt
+      (resolver as any).lastCheckAt = Date.now(); // already just ran
+
+      await resolver.check();
+
+      // fetch must NOT have been called because timer throttles
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+  });
+
+  describe("conflict task structure", () => {
+    it("child task reuses parent branch and engine", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: branch reuse test",
+        status: "review",
+        engine: "claude-code",
+        model: "claude-sonnet-4-6",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/7");
+      db.tasks.updateField(parent.id, "branch_name", "feat/branch-reuse");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: false }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+      fetchSpy.mockRestore();
+
+      const children = db.tasks.listChildren(parent.id);
+      const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
+      expect(conflictTask).toBeDefined();
+      expect(conflictTask?.engine).toBe("claude-code");
+      expect(conflictTask?.model).toBe("claude-sonnet-4-6");
+      expect(conflictTask?.branchName).toBe("feat/branch-reuse");
+      expect(conflictTask?.parentTaskId).toBe(parent.id);
+    });
+
+    it("child task title references parent title", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: implement payment gateway",
+        status: "in_progress",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/11");
+      db.tasks.updateField(parent.id, "branch_name", "feat/payment");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable_state: "dirty" }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+      fetchSpy.mockRestore();
+
+      const children = db.tasks.listChildren(parent.id);
+      const conflictTask = children.find((t) => t.tags?.includes("conflict-resolution"));
+      expect(conflictTask?.title).toContain("fix(conflicts):");
+      expect(conflictTask?.title).toContain("implement payment gateway");
+    });
+
+    it("launches conflict task with the persisted PR branch", async () => {
+      const launch = mock(async () => undefined);
+      resolver = new ConflictResolver(db, { launch } as any);
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: launch branch test",
+        status: "review",
+        engine: "claude-code",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/12");
+      db.tasks.updateField(parent.id, "branch_name", "feat/launch-branch");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: false }),
+      } as any);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+      fetchSpy.mockRestore();
+
+      expect(launch).toHaveBeenCalledTimes(1);
+      expect((launch.mock.calls as any)[0]?.[0].branchName).toBe("feat/launch-branch");
+    });
+
+    it("skips if github_token is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: missing token",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/16");
+      db.tasks.updateField(parent.id, "branch_name", "feat/missing-token");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      // Clear environment variable if any
+      const originalEnvToken = process.env.GITHUB_TOKEN;
+      delete process.env.GITHUB_TOKEN;
+
+      // Clear token in db
+      db.settings.set("github_token", "");
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // restore
+      if (originalEnvToken) process.env.GITHUB_TOKEN = originalEnvToken;
+      fetchSpy.mockRestore();
+    });
+
+    it("skips if no candidates are active", async () => {
+      // Create only inactive tasks
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: inactive",
+        status: "done",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/17");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      (resolver as any).lastCheckAt = 0;
+      await resolver.check();
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+    });
+
+    it("catches errors thrown during task check loop", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: throws error",
+        status: "review",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/18");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockImplementationOnce((() => {
+        throw new Error("Network error during check");
+      }) as unknown as typeof fetch);
+
+      db.settings.set("github_token", "test-token");
+      (resolver as any).lastCheckAt = 0;
+
+      const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
+
+      await resolver.check();
+
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy.mock.calls[0][0]).toContain("Error checking task");
+
+      fetchSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe("isPRConflicting — GitHub API parsing", () => {
+    it("detects conflict via mergeable=false", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: false, mergeable_state: "clean" }),
+      } as any);
+
+      const result = await (resolver as any).isPRConflicting(
+        "https://github.com/owner/repo/pull/1",
+        "token"
+      );
+      expect(result).toBe(true);
+      fetchSpy.mockRestore();
+    });
+
+    it("detects conflict via mergeable_state=dirty", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: null, mergeable_state: "dirty" }),
+      } as any);
+
+      const result = await (resolver as any).isPRConflicting(
+        "https://github.com/owner/repo/pull/2",
+        "token"
+      );
+      expect(result).toBe(true);
+      fetchSpy.mockRestore();
+    });
+
+    it("returns false for clean PR", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ mergeable: true, mergeable_state: "clean" }),
+      } as any);
+
+      const result = await (resolver as any).isPRConflicting(
+        "https://github.com/owner/repo/pull/3",
+        "token"
+      );
+      expect(result).toBe(false);
+      fetchSpy.mockRestore();
+    });
+
+    it("returns false for non-GitHub URL", async () => {
+      const result = await (resolver as any).isPRConflicting("https://gitlab.com/x/y/mr/1", "tk");
+      expect(result).toBe(false);
+    });
+
+    it("returns false if github API request fails", async () => {
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: false,
+      } as any);
+
+      const result = await (resolver as any).isPRConflicting(
+        "https://github.com/owner/repo/pull/4",
+        "token"
+      );
+      expect(result).toBe(false);
+      fetchSpy.mockRestore();
+    });
+  });
+
+  it("handles telegram error during createConflictResolutionTask gracefully", async () => {
+    const parent = db.tasks.create({
+      repoId,
+      title: "feat: telegram fail",
+      status: "review",
+    });
+    db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/19");
+    db.tasks.updateField(parent.id, "branch_name", "feat/telegram-fail");
+
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation((async (
+      url: RequestInfo | URL
+    ) => {
+      if (typeof url === "string" && url.includes("github.com")) {
+        return { ok: true, json: async () => ({ mergeable: false }) } as any;
+      }
+      if (typeof url === "string" && url.includes("api.telegram.org")) {
+        throw new Error("Telegram failure");
+      }
+      return { ok: true, json: async () => ({}) } as any;
+    }) as unknown as typeof fetch);
+
+    db.settings.set("github_token", "test-token");
+    db.settings.set("telegram_enabled", "true");
+    db.settings.set("telegram_bot_token", "dummy");
+    db.settings.set("telegram_chat_id", "dummy");
+
+    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+
+    (resolver as any).lastCheckAt = 0;
+    await resolver.check();
+
+    expect(consoleWarnSpy).toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
+  it("handles telegram error during notifyConflictResolved gracefully", async () => {
+    const parent = db.tasks.create({
+      repoId,
+      title: "feat: telegram fail notify",
+      status: "done",
+    });
+    const launchTask = db.tasks.getById(parent.id);
+
+    db.settings.set("telegram_enabled", "true");
+    db.settings.set("telegram_bot_token", "dummy");
+    db.settings.set("telegram_chat_id", "dummy");
+
+    const fetchSpy = spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("Telegram network error")
+    );
+    const consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
+
+    await resolver.notifyConflictResolved(launchTask as any);
+
+    expect(consoleWarnSpy).toHaveBeenCalled();
+
+    fetchSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
+  describe("notifyConflictResolved", () => {
+    it("returns early if telegram is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task without telegram",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
+      db.settings.set("telegram_enabled", "false");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+
+    it("returns early if repo is missing in notifyConflictResolved but continues if valid", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: missing repo test",
+        status: "done",
+      });
+      const repoSpy = spyOn(db.repos, "getById").mockReturnValue(null as any);
+      const launchTask = db.tasks.getById(parent.id);
+
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy-bot");
+      db.settings.set("telegram_chat_id", "dummy-chat");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as any);
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).toHaveBeenCalled(); // It should fallback to task.repoId if repo is missing in Telegram message
+      fetchSpy.mockRestore();
+      repoSpy.mockRestore();
+    });
+
+    it("notifies via Telegram when configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task",
+        status: "done",
+      });
+      db.tasks.updateField(parent.id, "pr_url", "https://github.com/owner/test-repo/pull/1337");
+      db.tasks.updateField(parent.id, "branch_name", "feat/finished");
+      const launchTask = db.tasks.getById(parent.id);
+
+      db.settings.set("telegram_enabled", "true");
+      db.settings.set("telegram_bot_token", "dummy-bot");
+      db.settings.set("telegram_chat_id", "dummy-chat");
+
+      const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true }),
+      } as any);
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).toHaveBeenCalled();
+      const callArgs = fetchSpy.mock.calls[0];
+      expect(callArgs[0]).toContain("https://api.telegram.org/botdummy-bot/sendMessage");
+      expect(callArgs[1]?.body).toContain("Merge conflicts resolved");
+      expect(callArgs[1]?.body).toContain("feat/finished");
+
+      fetchSpy.mockRestore();
+    });
+
+    it("does nothing if Telegram is not configured", async () => {
+      const parent = db.tasks.create({
+        repoId,
+        title: "feat: a finished task without telegram",
+        status: "done",
+      });
+      const launchTask = db.tasks.getById(parent.id);
+      db.settings.set("telegram_enabled", "false");
+
+      const fetchSpy = spyOn(globalThis, "fetch");
+
+      await resolver.notifyConflictResolved(launchTask as any);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+  });
+});
