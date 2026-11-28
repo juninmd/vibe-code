@@ -1,0 +1,727 @@
+import { existsSync } from "node:fs";
+import { type AgentRun, MANUAL_TASK_TAG, REMOTE_SESSION_TAG, type Task } from "@vibe-code/shared";
+import type { Db } from "../db";
+import type { GitService } from "../git/git-service";
+import type { SkillsLoader } from "../skills/loader";
+import type { BroadcastHub } from "../ws/broadcast";
+import { ApprovalBroker, approvalLogLine } from "./approvals";
+import { executeAgent } from "./orchestrator/executor";
+import { retryPR } from "./orchestrator/pr-retry";
+import { publishRemoteSession, type RemotePullRequestInput } from "./orchestrator/remote-pr";
+import { logOrchestratorEvent } from "./orchestrator/terminal-logger";
+import type { EngineRegistry } from "./registry";
+
+interface ActiveRun {
+  runId: string;
+  taskId: string;
+  engineName: string;
+  abort: AbortController;
+}
+
+interface PendingRetry {
+  attempt: number;
+  dueAt: number;
+  reason: string;
+  engineOverride?: string;
+  modelOverride?: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const AUTO_RETRY_MAX = Number(process.env.VIBE_CODE_AUTO_RETRY_MAX) || 2;
+const AUTO_RETRY_MAX_BACKOFF_MS =
+  Number(process.env.VIBE_CODE_AUTO_RETRY_MAX_BACKOFF_MS) || 300_000;
+
+function retryBackoffMs(attempt: number): number {
+  return Math.min(10_000 * 2 ** (attempt - 1), AUTO_RETRY_MAX_BACKOFF_MS);
+}
+
+function appendTaskNote(existing: string | undefined, note: string): string {
+  const trimmed = note.trim();
+  if (!trimmed) return existing ?? "";
+  return [existing?.trim(), `[${new Date().toISOString()}] ${trimmed}`]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function capacityError(maxConcurrent: number): Error & { capacityExceeded: true } {
+  const err = new Error(`Max concurrent agents reached (${maxConcurrent}).`) as Error & {
+    capacityExceeded: true;
+  };
+  err.capacityExceeded = true;
+  return err;
+}
+
+export class Orchestrator {
+  private activeRuns = new Map<string, ActiveRun>();
+  private retryQueue = new Map<string, PendingRetry>();
+  private retryAttempts = new Map<string, number>();
+  private retryingTasks = new Set<string>();
+  private maxConcurrent: number;
+  skillsLoader?: SkillsLoader;
+  /** Tool calls of supervised sessions waiting for the operator. */
+  readonly approvals = new ApprovalBroker((notice) => {
+    const { approval } = notice;
+    this.sysLog(approval.runId, approval.taskId, approvalLogLine(notice));
+    this.hub.broadcastToTask(
+      approval.taskId,
+      notice.kind === "requested"
+        ? { type: "tool_approval_requested", approval }
+        : {
+            type: "tool_approval_resolved",
+            taskId: approval.taskId,
+            approvalId: approval.id,
+            reply: notice.reply,
+          }
+    );
+  });
+
+  constructor(
+    private db: Db,
+    private git: GitService,
+    private registry: EngineRegistry,
+    public hub: BroadcastHub,
+    maxConcurrent = 4
+  ) {
+    this.maxConcurrent = maxConcurrent;
+
+    // Ensure all active process trees are killed when the orchestrator shuts down
+    const shutdown = async () => {
+      console.log(
+        "[orchestrator] Shutdown signal received. Terminating all active process trees..."
+      );
+      for (const [taskId] of this.activeRuns) {
+        try {
+          await this.cancel(taskId);
+        } catch (err) {
+          console.error(`[orchestrator] Error terminating task ${taskId}:`, err);
+        }
+      }
+    };
+    process.on("SIGINT", async () => {
+      await shutdown();
+      process.exit(0);
+    });
+    process.on("SIGTERM", async () => {
+      await shutdown();
+      process.exit(0);
+    });
+  }
+
+  /** In-memory tracked runs + DB in_progress tasks not yet in activeRuns (e.g. after restart) */
+  get activeCount(): number {
+    const dbInProgress = this.db.tasks.list(undefined, "in_progress").length;
+    return Math.max(this.activeRuns.size, dbInProgress);
+  }
+
+  get maxConcurrentAgents(): number {
+    return this.maxConcurrent;
+  }
+
+  setMaxConcurrent(n: number): void {
+    this.maxConcurrent = Math.max(1, Math.min(50, n));
+  }
+
+  /** Whether an engine can continue a remote conversation instead of starting fresh. */
+  supportsSessionResume(engineName?: string | null): boolean {
+    // Fail closed: a task without a persisted engine may resolve to an engine
+    // that ignores the resume option, which would silently drop the context.
+    if (!engineName) return false;
+    return this.registry.isResumable(engineName);
+  }
+
+  getActiveRunEngines(): Map<string, string> {
+    const result = new Map<string, string>();
+    for (const [taskId, active] of this.activeRuns) {
+      result.set(taskId, active.engineName);
+    }
+    return result;
+  }
+
+  getActiveRunDetails(): Array<{
+    taskId: string;
+    runId: string;
+    engineName: string;
+    phase: string | null;
+  }> {
+    return [...this.activeRuns.values()]
+      .filter((a) => a.runId !== "__pending__")
+      .map((active) => {
+        const run = this.db.runs.getById(active.runId);
+        let phase: string | null = null;
+        if (run?.stateSnapshot) {
+          try {
+            phase = (JSON.parse(run.stateSnapshot) as { phase?: string }).phase ?? null;
+          } catch {
+            /* ignore */
+          }
+        }
+        return { taskId: active.taskId, runId: active.runId, engineName: active.engineName, phase };
+      });
+  }
+
+  /**
+   * Tasks driven by hand in a terminal are never touched by the autopilot: it would
+   * start a second, headless agent on the same branch.
+   */
+  private isHandDriven(task: Task): boolean {
+    if (task.tags?.includes(MANUAL_TASK_TAG) || task.tags?.includes(REMOTE_SESSION_TAG))
+      return true;
+    // With lane sync on, issue labels move cards around: that must never start an agent.
+    if (task.issueUrl && this.db.settings.get("lane_sync_enabled") === "true") return true;
+    return this.db.runs.getLatestByTask(task.id)?.currentStatus === "terminal";
+  }
+
+  async sweepBacklog(): Promise<void> {
+    if (this.activeCount >= this.maxConcurrent) return;
+
+    const PRIORITY_ORDER: Record<string, number> = {
+      urgent: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+      none: 0,
+    };
+
+    // Get all tasks in backlog ordered by priority
+    const backlog = this.db.tasks
+      .list(undefined, "backlog")
+      .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
+
+    for (const task of backlog) {
+      if (this.activeCount >= this.maxConcurrent) break;
+      if (this.activeRuns.has(task.id)) continue;
+      if (this.isHandDriven(task)) continue;
+
+      // Check if blocked by dependencies
+      if (task.dependsOn.length > 0) {
+        if (this.checkBlockedByDependencies(task.id, task.dependsOn).length > 0) continue;
+      }
+
+      try {
+        await this.launch(task);
+        logOrchestratorEvent(`Heartbeat: Auto-launched task "${task.title.slice(0, 40)}"`);
+      } catch {
+        // Fail silently during sweep - maybe engine not available or concurrency hit
+      }
+    }
+  }
+
+  getRetryQueueSnapshot(): Array<{
+    taskId: string;
+    attempt: number;
+    dueInMs: number;
+    reason: string;
+  }> {
+    return [...this.retryQueue.entries()].map(([taskId, entry]) => ({
+      taskId,
+      attempt: entry.attempt,
+      dueInMs: Math.max(0, entry.dueAt - Date.now()),
+      reason: entry.reason,
+    }));
+  }
+
+  async launch(
+    task: Task,
+    engineOverride?: string,
+    modelOverride?: string,
+    remoteInput?: string
+  ): Promise<AgentRun> {
+    if (this.activeRuns.has(task.id)) throw new Error("This session is already running");
+    if (this.activeCount >= this.maxConcurrent) {
+      logOrchestratorEvent(`Max concurrent agents reached (${this.maxConcurrent})`, "warn");
+      throw capacityError(this.maxConcurrent);
+    }
+
+    if (task.maxCost !== undefined && task.maxCost !== null && task.maxCost > 0) {
+      const runs = this.db.runs.listByTask(task.id);
+      let taskTotalCost = 0;
+      for (const r of runs) {
+        if (r.tokenUsage) {
+          for (const modelUsage of Object.values(r.tokenUsage) as any[]) {
+            taskTotalCost += modelUsage.total_cost || 0;
+          }
+        }
+      }
+
+      if (taskTotalCost >= task.maxCost) {
+        logOrchestratorEvent(
+          `Task [${task.id.slice(0, 8)}] launch blocked: task total cost ($${taskTotalCost.toFixed(4)}) is at or above maxCost limit ($${task.maxCost.toFixed(4)})`,
+          "warn"
+        );
+        throw new Error(
+          `Task cost limit exceeded ($${taskTotalCost.toFixed(4)} >= $${task.maxCost.toFixed(4)})`
+        );
+      }
+    }
+
+    if (task.dependsOn.length > 0) {
+      const incompleteDeps = this.checkBlockedByDependencies(task.id, task.dependsOn);
+      if (incompleteDeps.length > 0) {
+        const depTitles = incompleteDeps
+          .map((id) => this.db.tasks.getById(id)?.title ?? id)
+          .map((t) => t.slice(0, 40))
+          .join(", ");
+        throw new Error(`Task is blocked by incomplete dependencies: ${depTitles}`);
+      }
+    }
+
+    // Cancel any pending retry for this task. Manual launches reset the retry budget.
+    this.cancelRetry(task.id);
+    if (!this.retryingTasks.has(task.id)) this.retryAttempts.delete(task.id);
+
+    // Reserve a slot immediately to prevent race conditions between concurrent launches
+    const placeholder: ActiveRun = {
+      runId: "__pending__",
+      taskId: task.id,
+      engineName: "__pending__",
+      abort: new AbortController(),
+    };
+    this.activeRuns.set(task.id, placeholder);
+
+    try {
+      const engineName = engineOverride ?? task.engine;
+      const engine =
+        engineName && engineName !== "auto"
+          ? this.registry.get(engineName)
+          : await this.registry.getFirstAvailable();
+      if (!engine) {
+        if (!engineName) throw new Error("No AI engines available");
+        throw new Error(`Engine "${engineName}" not found or unavailable`);
+      }
+
+      const model = modelOverride ?? task.model ?? undefined;
+      let repo = this.db.repos.getById(task.repoId);
+      if (!repo) throw new Error("Repository not found");
+      if (repo.status === "pending") {
+        await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
+      } else if (repo.status === "ready") {
+        // Self-heal: the DB may say "ready" while the bare clone was deleted
+        // from disk (e.g. data dir wiped). Re-clone instead of failing at fetch.
+        const barePath = repo.localPath ?? this.git.getBarePath(repo.name, repo.url);
+        if (!existsSync(barePath)) {
+          logOrchestratorEvent(
+            `Bare repo missing on disk for "${repo.name}" (${barePath}); re-cloning`,
+            "warn"
+          );
+          await this.cloneRepo(repo.id, repo.url, repo.name, repo.defaultBranch);
+        }
+      } else {
+        throw new Error(`Repository is in "${repo.status}" state`);
+      }
+      repo = this.db.repos.getById(task.repoId) ?? repo;
+
+      const run = this.db.runs.create(task.id, engine.name);
+      logOrchestratorEvent(
+        `Launching task "${task.title.slice(0, 50)}" [${task.id.slice(0, 8)}] ` +
+          `engine=${engine.name} model=${model ?? "default"} repo=${repo.name}`
+      );
+      this.db.tasks.update(task.id, {
+        status: "in_progress",
+        ...(engineOverride ? { engine: engineOverride } : {}),
+        ...(model && model !== task.model ? { model } : {}),
+      });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "in_progress" } });
+
+      const abort = new AbortController();
+      this.activeRuns.set(task.id, {
+        runId: run.id,
+        taskId: task.id,
+        engineName: engine.name,
+        abort,
+      });
+      executeAgent(
+        task,
+        run,
+        engine,
+        repo,
+        abort,
+        this.db,
+        this.git,
+        this.hub,
+        (c) => this.sysLog(run.id, task.id, c),
+        () => {
+          this.approvals.cancelRun(run.id);
+          const active = this.activeRuns.get(task.id);
+          if (active?.runId === run.id) this.activeRuns.delete(task.id);
+          this.checkLoopAndRelaunch(task.id, engineOverride, modelOverride);
+          if (this.db.tasks.getById(task.id)?.status !== "failed") {
+            this.retryAttempts.delete(task.id);
+          }
+          this.maybeScheduleRetry(task.id, engineOverride, modelOverride);
+        },
+        model,
+        this.skillsLoader,
+        this,
+        this.registry,
+        remoteInput
+      ).catch((err) => {
+        const active = this.activeRuns.get(task.id);
+        if (active?.runId === run.id) this.activeRuns.delete(task.id);
+        console.error(`[orchestrator] Agent run failed for task ${task.id}:`, err);
+      });
+
+      return run;
+    } catch (err) {
+      // Release the reserved slot on any setup failure
+      this.activeRuns.delete(task.id);
+      throw err;
+    }
+  }
+
+  async cancel(taskId: string): Promise<void> {
+    const childTasks = this.db.tasks.listChildren(taskId);
+    for (const childTask of childTasks) {
+      await this.cancelChildTask(childTask.id, taskId);
+    }
+
+    // Cancel any pending auto-retry first
+    this.cancelRetry(taskId);
+
+    const active = this.activeRuns.get(taskId);
+    if (!active) {
+      const task = this.db.tasks.getById(taskId);
+      if (task?.status === "in_progress") {
+        const updated = this.db.tasks.update(taskId, { status: "backlog" });
+        if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+      }
+      return;
+    }
+
+    active.abort.abort();
+    try {
+      const engine = this.registry.get(active.engineName);
+      if (engine) engine.abort(active.runId);
+    } catch (err) {
+      console.error(`[orchestrator] Error aborting engine for task ${taskId}:`, err);
+    }
+
+    this.db.runs.updateStatus(active.runId, "cancelled", { finished_at: new Date().toISOString() });
+    const task = this.db.tasks.update(taskId, { status: "backlog" });
+    if (!task?.tags.includes(REMOTE_SESSION_TAG)) this.activeRuns.delete(taskId);
+    if (task) this.hub.broadcastAll({ type: "task_updated", task });
+    this.hub.broadcastAll({ type: "run_status", runId: active.runId, taskId, status: "cancelled" });
+  }
+
+  async retryPR(taskId: string): Promise<string> {
+    return retryPR(taskId, this.db, this.git, this.registry, this.hub);
+  }
+
+  /** Commit, push and open/update the PR of a conversational session. */
+  async publishRemoteSession(taskId: string, input: RemotePullRequestInput = {}) {
+    return publishRemoteSession(taskId, input, {
+      db: this.db,
+      git: this.git,
+      hub: this.hub,
+      isRunning: (id) => this.activeRuns.has(id),
+    });
+  }
+
+  async triggerScheduled(templateTaskId: string): Promise<AgentRun> {
+    const template = this.db.tasks.getById(templateTaskId);
+    if (template?.status !== "scheduled") throw new Error("Invalid template task");
+
+    if (this.activeCount >= this.maxConcurrent) {
+      throw capacityError(this.maxConcurrent);
+    }
+
+    const alreadyRunning =
+      this.activeRuns.has(templateTaskId) ||
+      Array.from(this.activeRuns.values()).some(
+        (r) =>
+          r.taskId === templateTaskId ||
+          this.db.tasks.getById(r.taskId)?.parentTaskId === templateTaskId
+      );
+    if (alreadyRunning) throw new Error("A derived task from this template is already running");
+
+    const derived = this.db.tasks.create({
+      ...template,
+      id: undefined,
+      status: "backlog",
+      parentTaskId: template.id,
+    } as any);
+    this.hub.broadcastAll({ type: "task_updated", task: derived });
+    // launch() reserves a slot in activeRuns synchronously before any await,
+    // preventing concurrent triggers from double-launching the same template.
+    return this.launch(derived);
+  }
+
+  sendInput(taskId: string, input: string): boolean {
+    const active = this.activeRuns.get(taskId);
+    if (!active) return false;
+    const engine = this.registry.get(active.engineName);
+    if (!engine?.sendInput(active.runId, input)) return false;
+
+    this.db.logs.create(active.runId, "stdin", input);
+    this.hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId: active.runId,
+      taskId,
+      stream: "stdin",
+      content: input,
+      timestamp: new Date().toISOString(),
+    });
+    return true;
+  }
+
+  checkBlockedByDependencies(_taskId: string, dependsOn: string[]): string[] {
+    return dependsOn.filter((depId) => {
+      const dep = this.db.tasks.getById(depId);
+      if (!dep) return true;
+      if (dep.status === "review" || dep.status === "done" || dep.status === "archived") {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  unblockDependents(completedTaskId: string): string[] {
+    const blocked: string[] = [];
+    const allTasks = this.db.tasks.list();
+    for (const task of allTasks) {
+      if (task.dependsOn.includes(completedTaskId)) {
+        const stillBlocked = this.checkBlockedByDependencies(task.id, task.dependsOn);
+        if (stillBlocked.length === 0 && task.status === "backlog") {
+          blocked.push(task.id);
+          this.hub.broadcastAll({
+            type: "task_unblocked",
+            taskId: task.id,
+            unblockedBy: completedTaskId,
+          });
+        }
+      }
+    }
+    return blocked;
+  }
+
+  private checkLoopAndRelaunch(
+    taskId: string,
+    engineOverride?: string,
+    modelOverride?: string
+  ): void {
+    const task = this.db.tasks.getById(taskId);
+    if (!task?.loopConfig?.enabled || task.tags.includes(REMOTE_SESSION_TAG)) return;
+
+    const currentAttempt = task.loopConfig?.currentAttempt ?? 0;
+    const maxAttempts = task.loopConfig?.maxAttempts ?? 3;
+
+    const terminalStatuses = ["error", "cancelled", "failed"];
+    // Only relaunch if terminal and under max attempts
+    if (!terminalStatuses.includes(task.status)) return;
+    if (currentAttempt >= maxAttempts) {
+      logOrchestratorEvent(
+        `[ralph-loop] Task [${taskId.slice(0, 8)}] exhausted ${maxAttempts} attempts — stopping loop`
+      );
+      return;
+    }
+
+    this.db.tasks.incrementLoopAttempt(taskId);
+
+    const delay = 2000;
+    setTimeout(async () => {
+      const t = this.db.tasks.getById(taskId);
+      if (!t) return;
+      logOrchestratorEvent(
+        `[ralph-loop] Relaunching task [${taskId.slice(0, 8)}] ` +
+          `(attempt ${currentAttempt + 1}/${maxAttempts})`
+      );
+      const updated = this.db.tasks.update(taskId, { status: "backlog" });
+      if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+      try {
+        await this.launch({ ...t, status: "backlog" }, engineOverride, modelOverride);
+      } catch (err) {
+        console.error(`[ralph-loop] Relaunch failed for task ${taskId}:`, err);
+      }
+    }, delay);
+  }
+
+  private maybeScheduleRetry(
+    taskId: string,
+    engineOverride?: string,
+    modelOverride?: string
+  ): void {
+    const task = this.db.tasks.getById(taskId);
+    if (task?.status !== "failed" || task.tags.includes(REMOTE_SESSION_TAG)) return;
+
+    if (AUTO_RETRY_MAX <= 0) {
+      this.blockFailedTask(taskId, "Agent failed and automatic retry is disabled.");
+      return;
+    }
+
+    const attempt = (this.retryAttempts.get(taskId) ?? 0) + 1;
+    if (attempt > AUTO_RETRY_MAX) {
+      this.blockFailedTask(
+        taskId,
+        `Agent failed after ${AUTO_RETRY_MAX} automatic retry attempt(s).`
+      );
+      return;
+    }
+    this.retryAttempts.set(taskId, attempt);
+
+    const delayMs = retryBackoffMs(attempt);
+    const dueAt = Date.now() + delayMs;
+
+    const timer = setTimeout(async () => {
+      this.retryQueue.delete(taskId);
+      const t = this.db.tasks.getById(taskId);
+      if (t?.status !== "failed") return;
+
+      logOrchestratorEvent(
+        `Auto-retrying task [${taskId.slice(0, 8)}] (attempt ${attempt}/${AUTO_RETRY_MAX})`
+      );
+      const updated = this.db.tasks.update(taskId, { status: "backlog" });
+      if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+
+      try {
+        this.retryingTasks.add(taskId);
+        await this.launch({ ...t, status: "backlog" }, engineOverride, modelOverride);
+      } catch (err) {
+        console.error(`[orchestrator] Auto-retry launch failed for task ${taskId}:`, err);
+      } finally {
+        this.retryingTasks.delete(taskId);
+      }
+    }, delayMs);
+
+    const existing = this.retryQueue.get(taskId);
+    if (existing) clearTimeout(existing.timer);
+
+    const run = this.db.runs.getLatestByTask(taskId);
+    const reason = run?.errorMessage?.startsWith("Agent stalled") ? "stalled" : "failed";
+
+    this.retryQueue.set(taskId, {
+      attempt,
+      dueAt,
+      reason,
+      engineOverride,
+      modelOverride,
+      timer,
+    });
+
+    logOrchestratorEvent(
+      `Task [${taskId.slice(0, 8)}] scheduled for auto-retry ${attempt}/${AUTO_RETRY_MAX} ` +
+        `in ${Math.round(delayMs / 1000)}s (reason: ${reason})`
+    );
+  }
+
+  private cancelRetry(taskId: string): void {
+    const entry = this.retryQueue.get(taskId);
+    if (entry) {
+      clearTimeout(entry.timer);
+      this.retryQueue.delete(taskId);
+      logOrchestratorEvent(`Auto-retry cancelled for task [${taskId.slice(0, 8)}]`);
+    }
+  }
+
+  private blockFailedTask(taskId: string, reason: string): void {
+    const task = this.db.tasks.getById(taskId);
+    if (task?.status !== "failed") return;
+
+    this.cancelRetry(taskId);
+    this.retryAttempts.delete(taskId);
+    const note = appendTaskNote(task.notes, reason);
+    const blocked = this.db.tasks.update(taskId, { status: "blocked", notes: note });
+    if (blocked) {
+      this.hub.broadcastAll({ type: "task_updated", task: blocked });
+      this.hub.broadcastAll({ type: "task_blocked", taskId, blockedBy: [reason] });
+    }
+    logOrchestratorEvent(`Task [${taskId.slice(0, 8)}] blocked: ${reason}`, "warn");
+  }
+
+  private async cancelChildTask(taskId: string, parentTaskId: string): Promise<void> {
+    const child = this.db.tasks.getById(taskId);
+    if (!child) return;
+
+    for (const grandChild of this.db.tasks.listChildren(taskId)) {
+      await this.cancelChildTask(grandChild.id, taskId);
+    }
+
+    const note = appendTaskNote(
+      child.notes,
+      `Cancelled because parent task ${parentTaskId.slice(0, 8)} was cancelled.`
+    );
+
+    const active = this.activeRuns.get(taskId);
+    if (active) {
+      active.abort.abort();
+      const engine = this.registry.get(active.engineName);
+      if (engine) engine.abort(active.runId);
+      this.db.runs.updateStatus(active.runId, "cancelled", {
+        finished_at: new Date().toISOString(),
+      });
+      this.activeRuns.delete(taskId);
+    }
+
+    const updated = this.db.tasks.update(taskId, { status: "blocked", notes: note });
+    if (updated) this.hub.broadcastAll({ type: "task_updated", task: updated });
+  }
+
+  private sysLog(runId: string, taskId: string, content: string): void {
+    this.db.logs.create(runId, "system", content);
+    this.hub.broadcastToTask(taskId, {
+      type: "agent_log",
+      runId,
+      taskId,
+      stream: "system",
+      content,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async recoverInProgressTasks(): Promise<void> {
+    const PRIORITY_ORDER: Record<string, number> = {
+      urgent: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+      none: 0,
+    };
+    const inProgress = this.db.tasks.list(undefined, "in_progress");
+    // A terminal session died with the server, but its workspace is intact: park the
+    // task in Todo (the autopilot skips it) so the user can resume it by hand.
+    for (const task of inProgress.filter((t) => this.isHandDriven(t))) {
+      this.db.tasks.update(task.id, { status: "backlog" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    }
+    const orphans = inProgress
+      .filter((task) => !this.isHandDriven(task))
+      .sort((a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0));
+    if (orphans.length === 0) return;
+    // Block ALL — no subprocesses at startup
+    for (const task of orphans) {
+      this.db.tasks.update(task.id, { status: "blocked" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "blocked" } });
+    }
+    // Promote top-N to backlog for sweepBacklog to pick up respecting the limit
+    const toResume = orphans.slice(0, this.maxConcurrent);
+    for (const task of toResume) {
+      this.db.tasks.update(task.id, { status: "backlog" });
+      this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    }
+    logOrchestratorEvent(
+      `Recovered ${orphans.length} orphaned tasks: ${toResume.length} promoted to backlog, ${orphans.length - toResume.length} remain blocked`
+    );
+  }
+
+  async unblockTask(taskId: string): Promise<void> {
+    const task = this.db.tasks.getById(taskId);
+    if (task?.status !== "blocked") return;
+    this.db.tasks.update(taskId, { status: "backlog" });
+    this.hub.broadcastAll({ type: "task_updated", task: { ...task, status: "backlog" } });
+    await this.sweepBacklog();
+  }
+
+  private async cloneRepo(
+    repoId: string,
+    url: string,
+    name: string,
+    _defaultBranch: string
+  ): Promise<void> {
+    this.db.repos.updateStatus(repoId, "cloning");
+    try {
+      const localPath = await this.git.cloneRepo(url, name);
+      this.db.repos.updateStatus(repoId, "ready", localPath);
+    } catch (err: any) {
+      this.db.repos.updateStatus(repoId, "error", null, err.message || String(err));
+      throw err;
+    }
+  }
+}
