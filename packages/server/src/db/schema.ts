@@ -115,6 +115,37 @@ export function initDatabase(dbPath: string): Database {
     CREATE INDEX IF NOT EXISTS idx_account_identities_account
       ON account_identities(account_id);
 
+    CREATE TABLE IF NOT EXISTS account_credentials (
+      account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      kind        TEXT NOT NULL,
+      version     TEXT NOT NULL,
+      iv          BLOB NOT NULL,
+      tag         BLOB NOT NULL,
+      ciphertext  BLOB NOT NULL,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (account_id, kind)
+    );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id           TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      description  TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS project_repositories (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      repo_id    TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (project_id, repo_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_project_repositories_repo
+      ON project_repositories(repo_id);
+
     CREATE TABLE IF NOT EXISTS prompt_templates (
       id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
       title       TEXT NOT NULL,
@@ -312,6 +343,48 @@ export function initDatabase(dbPath: string): Database {
     db.exec("ALTER TABLE workspaces ADD COLUMN owner_account_id TEXT");
     db.exec("CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_account_id)");
   }
+
+  // Projects group one or more repositories inside a workspace (issue #262).
+  // Legacy repositories get an initial project so old tasks keep a home.
+  const reposWithoutProject = db
+    .query(
+      `SELECT r.id, r.name, r.workspace_id FROM repositories r
+        WHERE r.workspace_id IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM project_repositories pr WHERE pr.repo_id = r.id)`
+    )
+    .all() as { id: string; name: string; workspace_id: string }[];
+  for (const repo of reposWithoutProject) {
+    const projectId = `proj-${repo.id}`;
+    db.prepare(
+      "INSERT OR IGNORE INTO projects (id, workspace_id, name, description) VALUES (?, ?, ?, ?)"
+    ).run(projectId, repo.workspace_id, repo.name, "Projeto inicial migrado do repositório");
+    db.prepare(
+      "INSERT OR IGNORE INTO project_repositories (project_id, repo_id) VALUES (?, ?)"
+    ).run(projectId, repo.id);
+  }
+
+  // Sessions record their project and the branch pair explicitly: the worktree
+  // starts at `start_branch` and the PR targets `pr_target_branch`.
+  if (!taskColNames.includes("project_id")) {
+    db.exec(
+      "ALTER TABLE tasks ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL"
+    );
+  }
+  if (!taskColNames.includes("start_branch")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN start_branch TEXT");
+  }
+  if (!taskColNames.includes("pr_target_branch")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN pr_target_branch TEXT");
+  }
+  db.exec(`
+    UPDATE tasks
+       SET project_id = (SELECT pr.project_id FROM project_repositories pr WHERE pr.repo_id = tasks.repo_id LIMIT 1)
+     WHERE project_id IS NULL;
+    UPDATE tasks SET start_branch = COALESCE(start_branch, base_branch)
+     WHERE start_branch IS NULL;
+    UPDATE tasks SET pr_target_branch = COALESCE(pr_target_branch, base_branch)
+     WHERE pr_target_branch IS NULL;
+  `);
 
   // Labels system (Multica-inspired): colored labels per repo + task_labels join
   db.exec(`

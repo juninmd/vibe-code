@@ -141,6 +141,12 @@ export interface Task {
   priority: TaskPriority;
   columnOrder: number;
   baseBranch: string | null;
+  /** Project this session belongs to (1 project : n repositories). */
+  projectId?: string | null;
+  /** Branch the worktree started from. */
+  startBranch?: string | null;
+  /** Branch the published PR targets. */
+  prTargetBranch?: string | null;
   branchName: string | null;
   prUrl: string | null;
   issueUrl: string | null;
@@ -339,6 +345,11 @@ export interface CreateTaskRequest {
   engine?: string;
   model?: string;
   baseBranch?: string;
+  projectId?: string;
+  /** Branch the worktree starts from; defaults to the repository's default branch. */
+  startBranch?: string;
+  /** Branch the PR targets; defaults to `startBranch`. */
+  prTargetBranch?: string;
   priority?: TaskPriority;
   tags?: string[];
   agentId?: string;
@@ -359,6 +370,10 @@ export interface UpdateTaskRequest {
   engine?: string;
   model?: string;
   priority?: TaskPriority;
+  baseBranch?: string | null;
+  projectId?: string | null;
+  startBranch?: string | null;
+  prTargetBranch?: string | null;
   tags?: string[];
   notes?: string;
   goal?: string | null;

@@ -20,11 +20,13 @@ import { ScheduleRunner } from "./agents/schedule-runner";
 import { createAgentTemplatesRouter } from "./api/agent-templates";
 import { createAutomationRouter } from "./api/automation";
 import { createConnectorsRouter } from "./api/connectors";
+import { createCredentialsRouter } from "./api/credentials";
 import { createCustomProvidersRouter } from "./api/custom-providers";
 import { createEnginesRouter } from "./api/engines";
 import { createInboxRouter } from "./api/inbox";
 import { createLabelsRouter } from "./api/labels";
 import { createLanesRouter } from "./api/lanes";
+import { createProjectsRouter } from "./api/projects";
 import { createPromptsRouter } from "./api/prompts";
 import { createReposRouter } from "./api/repos";
 import { createReviewsRouter } from "./api/reviews";
@@ -49,6 +51,7 @@ import { createConnectFlows } from "./integrations/connect-flows";
 import { createIntegrationsRouter } from "./integrations/router";
 import { LaneSyncService } from "./lanes/lane-sync";
 import { createTelegramNotifier } from "./notifications/telegram";
+import { rotateAccountCredentials } from "./security/account-credentials";
 import { blockUnauthenticatedRemote, rejectUnauthenticatedSocket } from "./security/network-guard";
 import { SessionService } from "./sessions/session-service";
 import { SkillsLoader } from "./skills/loader";
@@ -98,6 +101,14 @@ useDbForOpenCodeProviders(db);
 if (isAuthEnabled() && allowedLoginEmails().size > 0) {
   const removed = pruneDisallowedSessions(db);
   if (removed > 0) console.info(`[auth] invalidated ${removed} session(s) on boot`);
+}
+try {
+  const rotated = rotateAccountCredentials(db);
+  if (rotated > 0) console.info(`[credentials] re-encrypted ${rotated} credential(s)`);
+} catch (err) {
+  console.warn(
+    `[credentials] encryption disabled: ${err instanceof Error ? err.message : String(err)}`
+  );
 }
 // Credentials saved in Settings are scrubbed from every log line and WS message.
 registerSecretSource(() =>
@@ -330,6 +341,8 @@ const sessionService = new SessionService();
 
 const api = new Hono();
 api.route("/repos", createReposRouter(db, git, hub));
+api.route("/projects", createProjectsRouter(db));
+api.route("/credentials", createCredentialsRouter(db));
 api.route("/tasks", createTasksRouter(db, orchestrator, git, laneSync));
 api.route("/lanes", createLanesRouter(laneSync));
 api.route("/runs", createRunsRouter(db));
