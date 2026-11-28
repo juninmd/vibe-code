@@ -1326,6 +1326,7 @@ interface ScheduleRow {
   task_id: string;
   cron_expression: string;
   enabled: number;
+  open_pr: number;
   deadline_at: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
@@ -1339,6 +1340,7 @@ function mapSchedule(row: ScheduleRow): TaskSchedule {
     taskId: row.task_id,
     cronExpression: row.cron_expression,
     enabled: row.enabled === 1,
+    openPr: row.open_pr === 1,
     deadlineAt: row.deadline_at,
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
@@ -1359,21 +1361,23 @@ export function createScheduleQueries(db: Database) {
       taskId: string,
       cronExpression: string,
       deadlineAt: string | null,
-      nextRunAt: string | null
+      nextRunAt: string | null,
+      openPr = false
     ): TaskSchedule => {
       const row = db
-        .prepare<ScheduleRow, [string, string, string | null, string | null]>(
-          `INSERT INTO task_schedules (task_id, cron_expression, deadline_at, next_run_at)
-           VALUES (?, ?, ?, ?)
+        .prepare<ScheduleRow, [string, string, string | null, string | null, number]>(
+          `INSERT INTO task_schedules (task_id, cron_expression, deadline_at, next_run_at, open_pr)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT(task_id) DO UPDATE SET
              cron_expression = excluded.cron_expression,
              deadline_at = excluded.deadline_at,
              next_run_at = excluded.next_run_at,
+             open_pr = excluded.open_pr,
              enabled = 1,
              updated_at = datetime('now')
            RETURNING *`
         )
-        .get(taskId, cronExpression, deadlineAt, nextRunAt);
+        .get(taskId, cronExpression, deadlineAt, nextRunAt, openPr ? 1 : 0);
       if (!row) throw new Error("Failed to upsert schedule");
       return mapSchedule(row);
     },

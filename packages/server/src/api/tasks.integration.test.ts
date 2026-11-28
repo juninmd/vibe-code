@@ -1,0 +1,1300 @@
+/**
+ * Integration tests for the tasks API router.
+ * Uses a real SQLite :memory: database and stubbed Orchestrator/GitService.
+ */
+import { describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { Hono } from "hono";
+import { resolveAccountForIdentity } from "../accounts";
+import { ApprovalBroker } from "../agents/approvals";
+import type { Orchestrator } from "../agents/orchestrator";
+import { createDb } from "../db";
+import type { GitService } from "../git/git-service";
+import { createTasksRouter } from "./tasks";
+
+type Db = ReturnType<typeof createDb>;
+
+function makeDb(): Db {
+  const db = createDb(":memory:");
+  db.settings.set("auth_enabled", "false");
+  return db;
+}
+
+function makeOrchestrator(overrides: Partial<Orchestrator> = {}): Orchestrator {
+  return {
+    launch: async () => ({
+      id: "run-1",
+      taskId: "t",
+      engine: "claude-code",
+      status: "queued",
+      currentStatus: null,
+      worktreePath: null,
+      startedAt: null,
+      finishedAt: null,
+      exitCode: null,
+      errorMessage: null,
+      createdAt: new Date().toISOString(),
+    }),
+    cancel: async () => {},
+    retry: async (task: any) => ({
+      id: "run-2",
+      taskId: task.id,
+      engine: "claude-code",
+      status: "queued",
+      currentStatus: null,
+      worktreePath: null,
+      startedAt: null,
+      finishedAt: null,
+      exitCode: null,
+      errorMessage: null,
+      createdAt: new Date().toISOString(),
+    }),
+    sendInput: () => {},
+    supportsSessionResume: () => true,
+    activeCount: 0,
+    maxConcurrentAgents: 4,
+    hub: { broadcastToTask: () => {}, broadcastAll: () => {} },
+    ...overrides,
+  } as unknown as Orchestrator;
+}
+
+function makeGit(): GitService {
+  return {} as unknown as GitService;
+}
+
+function seedRepo(db: Db) {
+  const repo = db.repos.create({ url: "https://github.com/test/repo.git" });
+  db.repos.updateStatus(repo.id, "ready", "/tmp/repo.git");
+  const result = db.repos.getById(repo.id);
+  if (!result) throw new Error("Repo not found");
+  return result;
+}
+
+function buildApp(db: Db, orchestrator: Orchestrator = makeOrchestrator()) {
+  const app = new Hono();
+  app.route("/api/tasks", createTasksRouter(db, orchestrator, makeGit()));
+  return app;
+}
+
+describe("GET /api/tasks", () => {
+  it("returns empty data array when no tasks exist", async () => {
+    const app = buildApp(makeDb());
+    const res = await app.request("/api/tasks");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual([]);
+  });
+
+  it("returns tasks list", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.tasks.create({ title: "Task A", repoId: repo.id });
+    db.tasks.create({ title: "Task B", repoId: repo.id });
+
+    const res = await buildApp(db).request("/api/tasks");
+    const body = await res.json();
+    expect(body.data).toHaveLength(2);
+    expect(body.data.map((t: any) => t.title)).toContain("Task A");
+    expect(body.data.map((t: any) => t.title)).toContain("Task B");
+  });
+
+  it("returns task-level token and session summary across runs", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Usage task", repoId: repo.id });
+    const run1 = db.runs.create(task.id, "opencode");
+    const run2 = db.runs.create(task.id, "claude-code");
+    db.runs.updateSessionId(run1.id, "sess-opencode");
+    db.runs.updateSessionId(run2.id, "sess-claude");
+    db.runs.updateTokenUsage(run1.id, {
+      "github-models/openai/gpt-4o-mini": {
+        total_tokens: 100,
+        input_tokens: 70,
+        output_tokens: 30,
+        input_cost: 0.001,
+        output_cost: 0.002,
+        total_cost: 0.003,
+      },
+    });
+    db.runs.updateTokenUsage(run2.id, {
+      "claude-sonnet": {
+        total_tokens: 50,
+        input_tokens: 40,
+        output_tokens: 10,
+        input_cost: 0.004,
+        output_cost: 0.005,
+        total_cost: 0.009,
+      },
+    });
+
+    const res = await buildApp(db).request("/api/tasks");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(body.data[0].usageSummary.totalTokens).toBe(150);
+    expect(body.data[0].usageSummary.inputTokens).toBe(110);
+    expect(body.data[0].usageSummary.outputTokens).toBe(40);
+    expect(body.data[0].usageSummary.totalCost).toBe(0.012);
+    expect(body.data[0].usageSummary.sessionIds).toEqual(["sess-claude", "sess-opencode"]);
+  });
+
+  it("filters tasks by repo_id", async () => {
+    const db = makeDb();
+    const repo1 = seedRepo(db);
+    const repo2 = db.repos.create({ url: "https://github.com/other/repo.git" });
+    db.tasks.create({ title: "Mine", repoId: repo1.id });
+    db.tasks.create({ title: "Other", repoId: repo2.id });
+
+    const res = await buildApp(db).request(`/api/tasks?repo_id=${repo1.id}`);
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].title).toBe("Mine");
+  });
+
+  it("returns aggregated polling payload with tasks and focused task/log deltas", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Polling task", repoId: repo.id });
+    const run = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(run.id, "running", { current_status: "Working..." });
+    db.logs.create(run.id, "stdout", "first line");
+    const second = db.logs.create(run.id, "stdout", "second line");
+
+    const res = await buildApp(db).request(
+      `/api/tasks/poll?repo_id=${repo.id}&focused_task_id=${task.id}&focused_logs_after_id=${second.id - 1}`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    expect(Array.isArray(body.data.tasks)).toBe(true);
+    expect(body.data.tasks).toHaveLength(1);
+    expect(body.data.focusedTask?.id).toBe(task.id);
+    expect(body.data.focusedTask?.latestRun?.status).toBe("running");
+    expect(body.data.focusedLogs).toHaveLength(1);
+    expect(body.data.focusedLogs[0].content).toBe("second line");
+    expect(typeof body.data.serverTime).toBe("string");
+  });
+
+  it("returns empty focused details when focused task is not found", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.tasks.create({ title: "Any", repoId: repo.id });
+
+    const res = await buildApp(db).request(
+      `/api/tasks/poll?repo_id=${repo.id}&focused_task_id=missing-task-id&focused_logs_after_id=0`
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.focusedTask).toBeNull();
+    expect(body.data.focusedLogs).toEqual([]);
+  });
+});
+
+describe("POST /api/tasks", () => {
+  it("creates a task and returns 201", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const app = buildApp(db);
+
+    const res = await app.request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New Task", repoId: repo.id }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.title).toBe("New Task");
+    expect(body.data.status).toBe("backlog");
+    expect(body.data.id).toBeDefined();
+  });
+
+  it("accepts delegated task fields", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const parent = db.tasks.create({ title: "Parent objective", repoId: repo.id, maxCost: 40 });
+
+    const res = await buildApp(db).request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Delegated child",
+        repoId: repo.id,
+        parentTaskId: parent.id,
+        dependsOn: [parent.id],
+        maxCost: 12,
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.parentTaskId).toBe(parent.id);
+    expect(body.data.dependsOn).toEqual([parent.id]);
+    expect(body.data.maxCost).toBe(12);
+  });
+
+  it("derives a session name when the title is missing", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const res = await buildApp(db).request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repoId: repo.id,
+        description: "Fix the login validation error",
+      }),
+    });
+    // Title is optional: the harness names the session from the prompt.
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(typeof body.data.title).toBe("string");
+    expect(body.data.title.length).toBeGreaterThan(0);
+    expect(body.data.title).toContain("fix-the-login-validation-error");
+  });
+
+  it("returns 400 when repoId is missing", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Task without repo" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when repo does not exist", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Orphan task", repoId: "non-existent" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/tasks/:id", () => {
+  it("returns a task by id", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Find me", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.title).toBe("Find me");
+  });
+
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/does-not-exist");
+    expect(res.status).toBe(404);
+  });
+
+  it("builds and materializes a task plan", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Implement autonomous validation flow",
+      repoId: repo.id,
+      description:
+        "- Audit the current validation loop\n- Implement deterministic validation\n- Add regression tests and docs",
+      maxCost: 30,
+    });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ materialize: true }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.plan.nodes).toHaveLength(3);
+    expect(body.data.createdTasks).toHaveLength(3);
+    expect(body.data.createdTasks[2].dependsOn.length).toBeGreaterThan(0);
+    expect(db.tasks.listChildren(task.id)).toHaveLength(3);
+  });
+});
+
+describe("PATCH /api/tasks/:id", () => {
+  it("updates the task title", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Old title", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "New title" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.title).toBe("New title");
+  });
+
+  it("updates the task status", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "T", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "in_progress" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe("in_progress");
+  });
+
+  it("accepts blocked as a task status", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Blocked task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "blocked" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe("blocked");
+  });
+
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/tasks/:id/launch", () => {
+  it("returns 429 with a user-friendly message when capacity is full", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Queued task", repoId: repo.id });
+    const err = new Error("capacity") as Error & { capacityExceeded: true };
+    err.capacityExceeded = true;
+    const orchestrator = makeOrchestrator({
+      launch: async () => {
+        throw err;
+      },
+    });
+
+    const res = await buildApp(db, orchestrator).request(`/api/tasks/${task.id}/launch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(429);
+    expect(body.error).toBe("capacity_full");
+    expect(body.message).toContain("slots de agentes");
+    expect(db.tasks.getById(task.id)?.status).toBe("backlog");
+  });
+});
+
+describe("POST /api/tasks/:id/retry", () => {
+  it("allows retrying a blocked task", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Blocked task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "blocked" });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engine: "claude-code" }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(body.data.id).toBe("run-1");
+  });
+
+  it("returns 400 when task is not failed or blocked", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "In progress task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "in_progress" });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_state");
+  });
+
+  it("returns 500 when orchestrator launch fails", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Failed task", repoId: repo.id });
+    db.tasks.update(task.id, { status: "failed" });
+    const orchestrator = makeOrchestrator({
+      launch: async () => {
+        throw new Error("launch error");
+      },
+    });
+
+    const res = await buildApp(db, orchestrator).request(`/api/tasks/${task.id}/retry`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("retry_failed");
+  });
+});
+
+describe("POST /api/tasks/:id/preview-prompt", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/preview-prompt", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns fallback prompt when git is not available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task without git", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(false);
+    expect(body.data.prompt).toContain("Task without git");
+  });
+
+  it("returns fallback prompt when repository does not exist", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task with missing repo", repoId: repo.id });
+
+    // Mock db.repos.getById to simulate repo not found without triggering cascade delete
+    const originalGetById = db.repos.getById;
+    db.repos.getById = (id: string) => {
+      if (id === repo.id) return null;
+      return originalGetById(id);
+    };
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(false);
+  });
+
+  it("materializes context correctly when git is available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Materialized task", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/path",
+      createWorktree: async () => "/mock/worktree",
+      removeWorktree: async () => {},
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const res = await app.request(`/api/tasks/${task.id}/preview-prompt`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.materialized).toBe(true);
+    expect(typeof body.data.prompt).toBe("string");
+  });
+});
+
+describe("GET /api/tasks/:id/memory", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/memory");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns task memory and defaults to task scope", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task with memory", repoId: repo.id });
+    db.memories.create({
+      taskId: task.id,
+      scope: "task",
+      content: "some memory content",
+      needsCompaction: false,
+    });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`);
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.scope).toBe("task");
+    expect(body.data.memory.content).toBe("some memory content");
+    expect(body.data.needsCompaction).toBe(false);
+  });
+});
+
+describe("PUT /api/tasks/:id/memory", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/memory", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "task", content: "test" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when scope or content is missing", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "task" }), // missing content
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("bad_request");
+  });
+
+  it("updates memory correctly", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/memory`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "shared", content: "new shared memory" }),
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.memory.content).toBe("new shared memory");
+    expect(body.data.memory.scope).toBe("shared");
+
+    const mem = db.memories.getByTaskIdAndScope(task.id, "shared");
+    expect(mem?.content).toBe("new shared memory");
+  });
+});
+
+describe("POST /api/tasks/:id/open-editor", () => {
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/open-editor", {
+      method: "POST",
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when no path is available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+
+    // Simulate git and local path missing
+    db.repos.updateStatus(repo.id, "ready", null);
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/open-editor`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("invalid_state");
+  });
+
+  it("returns the path when onlyPath is true", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor?onlyPath=true`, {
+      method: "POST",
+    });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.ok).toBe(true);
+    expect(body.data.path).toBe("/tmp/local/repo");
+  });
+
+  it("spawns editor and returns path", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    // Stub Bun.spawn
+    const originalSpawn = Bun.spawn;
+    let spawnCalled = false;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      spawnCalled = true;
+      return { unref: () => {} };
+    }) as any;
+
+    try {
+      const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor`, {
+        method: "POST",
+      });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.ok).toBe(true);
+      expect(body.data.path).toBe("/tmp/local/repo");
+      expect(spawnCalled).toBe(true);
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("returns 500 when editor fails to spawn", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.repos.updateStatus(repo.id, "ready", "/tmp/local/repo");
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      throw new Error("Spawn error");
+    }) as any;
+
+    try {
+      const res = await buildApp(db).request(`/api/tasks/${task.id}/open-editor`, {
+        method: "POST",
+      });
+      const body = await res.json();
+      expect(res.status).toBe(500);
+      expect(body.error).toBe("editor_failed");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
+
+describe("GET /api/tasks/:id/download", () => {
+  it("returns 503 if git is not available", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), undefined));
+
+    const res = await app.request(`/api/tasks/${task.id}/download`);
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("unavailable");
+  });
+
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost/download");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when task has no branch", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id }); // branchName is null
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}/download`);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_state");
+  });
+
+  it("returns 500 when git archive fails", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.tasks.updateField(task.id, "branch_name", "feat/my-branch");
+
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/bare",
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((_cmd: string[], _opts: any) => {
+      return {
+        exited: Promise.resolve(1),
+        stderr: new Blob(["git archive failed"]).stream(),
+      };
+    }) as any;
+
+    try {
+      const res = await app.request(`/api/tasks/${task.id}/download`);
+      expect(res.status).toBe(500);
+      expect((await res.json()).error).toBe("archive_failed");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+
+  it("returns the zip buffer when git archive succeeds", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Task", repoId: repo.id });
+    db.tasks.updateField(task.id, "branch_name", "feat/my-branch");
+
+    const app = new Hono();
+    const { createTasksRouter } = await import("./tasks");
+    const mockGit = {
+      getBarePath: () => "/mock/bare",
+    };
+    app.route("/api/tasks", createTasksRouter(db, makeOrchestrator(), mockGit as any));
+
+    const { writeFileSync } = await import("node:fs");
+
+    const originalSpawn = Bun.spawn;
+    Bun.spawn = ((cmd: string[], _opts: any) => {
+      // Create a dummy file at the output path so Bun.file() succeeds
+      const outPathIndex = cmd.indexOf("-o") + 1;
+      const tmpPath = cmd[outPathIndex];
+      if (tmpPath) {
+        writeFileSync(tmpPath, "mock-zip-content");
+      }
+      return {
+        exited: Promise.resolve(0),
+      };
+    }) as any;
+
+    try {
+      const res = await app.request(`/api/tasks/${task.id}/download`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("application/zip");
+      const text = await res.text();
+      expect(text).toBe("mock-zip-content");
+    } finally {
+      Bun.spawn = originalSpawn;
+    }
+  });
+});
+
+describe("DELETE /api/tasks/:id", () => {
+  it("deletes a task", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Delete me", repoId: repo.id });
+
+    const res = await buildApp(db).request(`/api/tasks/${task.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(db.tasks.getById(task.id)).toBeNull();
+  });
+
+  it("returns 404 for unknown task", async () => {
+    const res = await buildApp(makeDb()).request("/api/tasks/ghost", { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("remote session messages", () => {
+  function setup() {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      description: "Initial request",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    const inputs: string[] = [];
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async (_task, _engine, _model, input) => {
+          inputs.push(input ?? "");
+          return db.runs.create(task.id, "opencode");
+        },
+      })
+    );
+    return { db, repo, task, app, inputs };
+  }
+  it("accepts a message, launches a turn and persists user input", async () => {
+    const { db, task, app, inputs } = setup();
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "  Add tests  " }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Add tests"]);
+    const run = (await response.json()).data;
+    expect(db.logs.listByRun(run.id)[0]).toMatchObject({ stream: "stdin", content: "Add tests" });
+  });
+  it("hands the conversation to another engine and drops the previous engine's model", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Continue in Claude"]);
+    expect(db.tasks.getById(task.id)).toMatchObject({ engine: "claude-code", model: null });
+  });
+  it("hands off even when the broken previous turn never reported a session", async () => {
+    const { db, task, app, inputs } = setup();
+    db.tasks.updateField(task.id, "branch_name", "vibe/remote");
+    const failed = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(failed.id, "failed", { worktree_path: tmpdir() });
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Try with Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(202);
+    expect(inputs).toEqual(["Try with Claude"]);
+  });
+  it("keeps the engine and model when the switched turn cannot start", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    db.tasks.updateField(task.id, "model", "opencode/big-pickle");
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async () => {
+          throw Object.assign(new Error("full"), { capacityExceeded: true });
+        },
+      })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue in Claude", engine: "claude-code" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(429);
+    expect(db.tasks.getById(task.id)).toMatchObject({
+      engine: "opencode",
+      model: "opencode/big-pickle",
+    });
+  });
+  it("refuses to hand off to an engine that cannot resume", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session"],
+    });
+    const app = buildApp(
+      db,
+      makeOrchestrator({ supportsSessionResume: (engine: string) => engine === "opencode" })
+    );
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Switch", engine: "unknown-engine" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(409);
+    expect(db.tasks.getById(task.id)?.engine).toBe("opencode");
+  });
+  it("rewinds only an idle session, to a turn that has a checkpoint", async () => {
+    const { db, task, app } = setup();
+    const rewind = (body: unknown) =>
+      app.request(`/api/tasks/${task.id}/rewind`, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+    db.runs.create(task.id, "opencode");
+    const second = db.runs.create(task.id, "opencode");
+    expect((await rewind({})).status).toBe(400);
+    expect((await rewind({ runId: "missing" })).status).toBe(404);
+    const noCheckpoint = await rewind({ runId: second.id });
+    expect(noCheckpoint.status).toBe(409);
+    expect((await noCheckpoint.json()).error).toBe("no_checkpoint");
+    db.tasks.update(task.id, { status: "in_progress" });
+    expect((await rewind({ runId: second.id })).status).toBe(409);
+    expect(db.runs.getById(second.id)?.rewoundAt).toBeNull();
+  });
+  it("rejects empty input, concurrent turns and autonomous tasks", async () => {
+    const { db, task, app, inputs } = setup();
+    const send = (message: string) =>
+      app.request(`/api/tasks/${task.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message }),
+        headers: { "Content-Type": "application/json" },
+      });
+    expect((await send("  ")).status).toBe(400);
+    db.tasks.update(task.id, { status: "in_progress" });
+    expect((await send("Another turn")).status).toBe(409);
+    db.tasks.update(task.id, { status: "backlog", tags: [] });
+    expect((await send("Another turn")).status).toBe(409);
+    expect(inputs).toEqual([]);
+  });
+  it("rejects a continuation without a resumable CLI session", async () => {
+    const { db, task, app, inputs } = setup();
+    const run = db.runs.create(task.id, "opencode");
+    db.runs.updateStatus(run.id, "completed", { worktree_path: "/missing/remote-workspace" });
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(response.status).toBe(409);
+    expect(inputs).toEqual([]);
+  });
+  it("denies a message to a repository owned by another workspace", async () => {
+    const { db, repo, task, app, inputs } = setup();
+    const configuredKey = Boolean(process.env.VIBE_CODE_API_KEY);
+    const keyPresent = "VIBE_CODE_API_KEY" in process.env;
+    const configuredEmails = process.env.VIBE_CODE_ALLOWED_EMAILS;
+    if (!configuredKey) process.env.VIBE_CODE_API_KEY = "remote-test-auth";
+    process.env.VIBE_CODE_ALLOWED_EMAILS = "alice@example.com";
+    try {
+      db.settings.set("auth_enabled", "true");
+      const { account } = resolveAccountForIdentity(db, {
+        provider: "github",
+        subject: "fixture-alice",
+        email: "alice@example.com",
+        username: "alice",
+        displayName: "Alice",
+        avatarUrl: null,
+        accessToken: "fixture-unused",
+      });
+      const own = db.workspaces.create({
+        id: "remote-alice",
+        name: "Alice",
+        slug: "alice",
+        ownerAccountId: account.id,
+      });
+      const foreign = db.workspaces.create({
+        id: "remote-bob",
+        name: "Bob",
+        slug: "bob",
+        ownerAccountId: "acc-bob",
+      });
+      db.raw
+        .prepare("UPDATE repositories SET workspace_id = ? WHERE id = ?")
+        .run(foreign.id, repo.id);
+      const token = "remote-test-session";
+      db.raw
+        .prepare(
+          "INSERT INTO auth_sessions (id, github_id, username, access_token, expires_at, account_id, provider) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .run(
+          createHash("sha256").update(token).digest("hex"),
+          "fixture-alice",
+          "alice",
+          "fixture-unused",
+          "9999-01-01T00:00:00.000Z",
+          account.id,
+          "github"
+        );
+      const response = await app.request(`/api/tasks/${task.id}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ message: "Change a foreign repository" }),
+        headers: {
+          Cookie: `vibe_session=${token}`,
+          "x-workspace-id": own.id,
+          "Content-Type": "application/json",
+        },
+      });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error).toBe("repo_forbidden");
+      expect(inputs).toEqual([]);
+      const headers = {
+        Cookie: `vibe_session=${token}`,
+        "x-workspace-id": own.id,
+        "Content-Type": "application/json",
+      };
+      const before = db.tasks.list().length;
+      const create = await app.request("/api/tasks", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ repoId: repo.id, title: "Foreign task" }),
+      });
+      expect(create.status).toBe(403);
+      expect(db.tasks.list().length).toBe(before);
+      for (const path of [
+        `/api/tasks/${task.id}/diff`,
+        `/api/tasks/${task.id}/diff/file?path=private.txt`,
+      ]) {
+        const denied = await app.request(path, { headers });
+        expect(denied.status).toBe(403);
+        expect((await denied.json()).error).toBe("repo_forbidden");
+      }
+    } finally {
+      if (!configuredKey) {
+        if (keyPresent) process.env.VIBE_CODE_API_KEY = "";
+        else delete process.env.VIBE_CODE_API_KEY;
+      }
+      if (configuredEmails === undefined) delete process.env.VIBE_CODE_ALLOWED_EMAILS;
+      else process.env.VIBE_CODE_ALLOWED_EMAILS = configuredEmails;
+    }
+  });
+  it("reloads conversation history across runs with a log cursor and task boundary", async () => {
+    const { db, repo, task, app } = setup();
+    const first = db.runs.create(task.id, "opencode");
+    const old = db.logs.create(first.id, "stdout", "First answer");
+    const second = db.runs.create(task.id, "opencode");
+    db.logs.create(second.id, "stdin", "Follow-up");
+    db.logs.create(second.id, "stdout", "Second answer");
+    const other = db.tasks.create({ title: "Other task", repoId: repo.id });
+    db.logs.create(db.runs.create(other.id, "opencode").id, "stdout", "Other conversation");
+    const response = await app.request(
+      `/api/tasks/poll?focused_task_id=${task.id}&focused_logs_after_id=${old.id}`
+    );
+    expect(response.status).toBe(200);
+    expect(
+      (await response.json()).data.focusedLogs.map((l: { content: string }) => l.content)
+    ).toEqual(["Follow-up", "Second answer"]);
+    const all = await app.request(`/api/tasks/poll?focused_task_id=${task.id}`);
+    expect((await all.json()).data.focusedLogs.map((l: { content: string }) => l.content)).toEqual([
+      "First answer",
+      "Follow-up",
+      "Second answer",
+    ]);
+  });
+
+  it("rejects a follow-up when the engine cannot resume conversations", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Legacy remote",
+      description: "Started before resume support",
+      repoId: repo.id,
+      engine: "claude-code",
+      tags: ["remote-session"],
+    });
+    const run = db.runs.create(task.id, "claude-code");
+    db.runs.updateStatus(run.id, "completed", {
+      worktree_path: "/tmp/legacy-worktree",
+    });
+    db.runs.updateSessionId(run.id, "acp-session");
+    const app = buildApp(db, makeOrchestrator({ supportsSessionResume: () => false }));
+
+    const response = await app.request(`/api/tasks/${task.id}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ message: "Continue" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe("session_unavailable");
+  });
+
+  it("refuses to create a remote session with a non-resumable engine", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const app = buildApp(db, makeOrchestrator({ supportsSessionResume: () => false }));
+
+    const response = await app.request("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        description: "Remote turn",
+        repoId: repo.id,
+        engine: "claude-code",
+        tags: ["remote-session"],
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("engine_not_resumable");
+  });
+
+  it("requires an explicit resumable engine for a remote session", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const app = buildApp(db);
+
+    const response = await app.request("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        description: "Remote turn",
+        repoId: repo.id,
+        tags: ["remote-session"],
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("engine_not_resumable");
+  });
+});
+
+describe("focused log history", () => {
+  it("opens a long run on its newest page instead of the oldest", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Long run", repoId: repo.id });
+    const run = db.runs.create(task.id, "opencode");
+    for (let line = 1; line <= 405; line++) {
+      db.logs.create(run.id, "stdout", `line ${line}`);
+    }
+
+    const response = await buildApp(db).request(`/api/tasks/poll?focused_task_id=${task.id}`);
+    expect(response.status).toBe(200);
+    const logs = (await response.json()).data.focusedLogs as { content: string }[];
+
+    expect(logs).toHaveLength(400);
+    expect(logs[0]?.content).toBe("line 6");
+    expect(logs[399]?.content).toBe("line 405");
+  });
+});
+
+describe("project default model and per-turn model switch", () => {
+  const json = (body: unknown) => ({
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+  it("new sessions inherit the project's default engine and model", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    db.repos.updateDefaults(repo.id, {
+      defaultEngine: "opencode",
+      defaultModel: "litellm/qwen3-coder#high",
+    });
+    const app = buildApp(db);
+    const res = await app.request(
+      "/api/tasks",
+      json({ title: "x", description: "Fix login", repoId: repo.id, tags: ["remote-session"] })
+    );
+    const body = await res.json();
+    expect(res.status, JSON.stringify(body)).toBe(201);
+    const task = body.data;
+    expect(task.engine).toBe("opencode");
+    expect(task.model).toBe("litellm/qwen3-coder#high");
+
+    // An explicit choice wins, and the default model never leaks to another engine.
+    const other = await app.request(
+      "/api/tasks",
+      json({ title: "y", description: "z", repoId: repo.id, engine: "claude-code" })
+    );
+    expect((await other.json()).data.model ?? null).toBeNull();
+  });
+  it("switches the session model for the next turn", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Remote",
+      description: "Initial",
+      repoId: repo.id,
+      engine: "opencode",
+      model: "opencode-go/glm-5.3",
+      tags: ["remote-session"],
+    });
+    const models: (string | undefined)[] = [];
+    const app = buildApp(
+      db,
+      makeOrchestrator({
+        launch: async (t) => {
+          models.push(t.model ?? undefined);
+          return db.runs.create(task.id, "opencode");
+        },
+      })
+    );
+    const ok = await app.request(
+      `/api/tasks/${task.id}/messages`,
+      json({ message: "go", model: "litellm/qwen3-coder" })
+    );
+    expect(ok.status).toBe(202);
+    expect(models).toEqual(["litellm/qwen3-coder"]);
+    expect(db.tasks.getById(task.id)?.model).toBe("litellm/qwen3-coder");
+    const bad = await app.request(
+      `/api/tasks/${task.id}/messages`,
+      json({ message: "go", model: "rm -rf /" })
+    );
+    expect(bad.status).toBe(400);
+  });
+});
+
+describe("tool approvals", () => {
+  function setup() {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({
+      title: "Supervised",
+      description: "x",
+      repoId: repo.id,
+      engine: "opencode",
+      tags: ["remote-session", "supervised"],
+    });
+    const approvals = new ApprovalBroker(() => {});
+    const app = buildApp(db, makeOrchestrator({ approvals } as Partial<Orchestrator>));
+    return { db, task, app, approvals };
+  }
+  const answer = (app: Hono, path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
+
+  it("lists what the agent is waiting on and resumes it with the operator's reply", async () => {
+    const { task, app, approvals } = setup();
+    const pending = approvals.request(task.id, "r1", {
+      id: "per_1",
+      permission: "bash",
+      patterns: ["bun test"],
+    });
+    const listed = await (await app.request(`/api/tasks/${task.id}/approvals`)).json();
+    expect(listed.data).toMatchObject([{ id: "per_1", permission: "bash" }]);
+
+    const res = await answer(app, `/api/tasks/${task.id}/approvals/per_1`, { reply: "once" });
+    expect(res.status).toBe(200);
+    expect(await pending).toBe("once");
+  });
+
+  it("rejects unknown replies, answered requests and other tasks' requests", async () => {
+    const { db, task, app, approvals } = setup();
+    void approvals.request(task.id, "r1", { id: "per_1", permission: "edit", patterns: [] });
+    const path = `/api/tasks/${task.id}/approvals/per_1`;
+    expect((await answer(app, path, { reply: "yes" })).status).toBe(400);
+    const other = db.tasks.create({ title: "o", description: "", repoId: task.repoId });
+    expect(
+      (await answer(app, `/api/tasks/${other.id}/approvals/per_1`, { reply: "once" })).status
+    ).toBe(404);
+    expect((await answer(app, path, { reply: "reject" })).status).toBe(200);
+    expect((await answer(app, path, { reply: "once" })).status).toBe(404);
+  });
+});
+
+describe("PUT /api/tasks/:id/schedule (routine PR toggle)", () => {
+  it("stores the open-PR toggle and preserves it when the cron is edited", async () => {
+    const db = makeDb();
+    const repo = seedRepo(db);
+    const task = db.tasks.create({ title: "Routine", repoId: repo.id });
+    const app = buildApp(db);
+    const put = (body: unknown) =>
+      app.request(`/api/tasks/${task.id}/schedule`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    let response = await put({ cronExpression: "0 9 * * *", openPr: true });
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.openPr).toBe(true);
+
+    response = await put({ cronExpression: "0 10 * * *" });
+    expect((await response.json()).data.openPr).toBe(true);
+
+    response = await put({ cronExpression: "0 10 * * *", openPr: false });
+    expect((await response.json()).data.openPr).toBe(false);
+    db.close();
+  });
+});
