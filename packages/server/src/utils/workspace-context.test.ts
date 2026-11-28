@@ -28,7 +28,6 @@ function ownedWorkspace(db: Db, id: string, accountId: string, slug = id) {
     id,
     name: id,
     slug,
-    description: null,
     ownerAccountId: accountId,
   });
 }
@@ -75,7 +74,7 @@ describe("Workspace Context Utilities", () => {
     it("uses c.env.workspaceId when the account owns it", async () => {
       ownedWorkspace(db, "env-ws", user.accountId as string);
       const result = await getWorkspaceContext(createMockContext({ envWs: "env-ws" }), db, user);
-      expect(result).toEqual({ workspaceId: "env-ws", userId: user.accountId });
+      expect(result).toEqual({ workspaceId: "env-ws", userId: user.accountId as string });
     });
 
     it("uses the x-workspace-id header when owned", async () => {
@@ -85,13 +84,13 @@ describe("Workspace Context Utilities", () => {
         db,
         user
       );
-      expect(result).toEqual({ workspaceId: "header-ws", userId: user.accountId });
+      expect(result).toEqual({ workspaceId: "header-ws", userId: user.accountId as string });
     });
 
     it("uses the workspace_id query when owned", async () => {
       ownedWorkspace(db, "query-ws", user.accountId as string);
       const result = await getWorkspaceContext(createMockContext({ query: "query-ws" }), db, user);
-      expect(result).toEqual({ workspaceId: "query-ws", userId: user.accountId });
+      expect(result).toEqual({ workspaceId: "query-ws", userId: user.accountId as string });
     });
 
     it("uses workspace_id from the body on non-GET requests when owned", async () => {
@@ -101,7 +100,7 @@ describe("Workspace Context Utilities", () => {
         db,
         user
       );
-      expect(result).toEqual({ workspaceId: "body-ws", userId: user.accountId });
+      expect(result).toEqual({ workspaceId: "body-ws", userId: user.accountId as string });
     });
 
     it("ignores an invalid JSON body", async () => {
