@@ -71,3 +71,13 @@ as PRs #259, #263 e #264).
 | Limite por arquivo | upload de 26 MB | `413 {"error":"too_large"}` |
 | UI desktop/telefone | `artifacts-desktop-1440.png`, `artifacts-mobile-390.png` | faixa "Evidências" com miniatura e download |
 | Raiz dedicada | `ls /data/artifacts` no pod | arquivos em `_operator/<task>/<id>.<ext>` |
+
+## Iteração 5 — migração de ownership (PR #273)
+
+| Verificação | Como | Resultado |
+| --- | --- | --- |
+| Dry run no banco real | `bun scripts/migrate-ownership.ts --db /data/vibe.db --map {}` no pod | `ready=false`, `ISSUE unmapped_workspace ws-1795835018551`, nada escrito |
+| Apply em cópia do banco | criar `acc-homolog`, mapa `{ws: acc}`, `--apply` | `applied workspaces=1 projectsCreated=1 projectsLinked=1 tasksLinked=1` |
+| Idempotência | segundo `--apply` no mesmo mapa | `applied workspaces=0 projectsCreated=0 projectsLinked=0 tasksLinked=0` |
+| Bloqueio por pendência | conta inexistente / repo órfão / conflito de dono | `ready=false` e `applied` zerado |
+| Testes | `bun test src/migrations/ownership.test.ts` | 8 passando |
