@@ -81,3 +81,14 @@ as PRs #259, #263 e #264).
 | Idempotência | segundo `--apply` no mesmo mapa | `applied workspaces=0 projectsCreated=0 projectsLinked=0 tasksLinked=0` |
 | Bloqueio por pendência | conta inexistente / repo órfão / conflito de dono | `ready=false` e `applied` zerado |
 | Testes | `bun test src/migrations/ownership.test.ts` | 8 passando |
+
+## Iteração 6 — rotinas com "Abrir PR ao final" (PR #275)
+
+| Verificação | Como | Resultado |
+| --- | --- | --- |
+| Liga o toggle | `PUT /api/tasks/:id/schedule { cron, openPr:true }` | `openPr=true` persistido |
+| Edita cron sem o campo | `PUT` só com `cronExpression` | `openPr` continua `true` |
+| Desliga | `PUT` com `openPr:false` | `openPr=false` |
+| Coluna no banco | `PRAGMA table_info(task_schedules)` no pod | `open_pr INTEGER` presente |
+| Executor | grant `routine_toggle` antes do push; sem grant/toggle, não há push nem PR | coberto pelo fluxo e por `pr-grants.test.ts` |
+| Teste de integração | `bun test src/api/tasks.integration.test.ts` | 62 passando |
