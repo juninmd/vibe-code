@@ -537,6 +537,16 @@ export interface TaskArtifact {
   uri: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+  /** Present when the artifact is a stored file under the artifacts root. */
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  expiresAt?: string;
+  accountId?: string;
+  /** Relative URL that streams or downloads the file. */
+  downloadUrl?: string;
 }
 
 export interface TaskPollResponse {

@@ -1,6 +1,7 @@
 import { existsSync, promises as fs, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentRun, Task } from "@vibe-code/shared";
+import { getActiveArtifactStore } from "../../artifacts/store";
 import type { Db } from "../../db";
 import { agentProcessEnv } from "../../utils/agent-env";
 import { killProcessTree } from "../../utils/process-tree";
@@ -159,6 +160,37 @@ export async function captureFrontendScreenshotIfNeeded(
       uri: `file:///${screenshotPath.replace(/\\/g, "/")}`,
       metadata: { path: relativeFilename, port: matchedPort },
     });
+
+    // Copy the screenshot into the artifact root so the browser can show it
+    // inline and download it (issue #262).
+    const store = getActiveArtifactStore();
+    if (store) {
+      const repo = db.repos.getById(task.repoId);
+      const owner = repo?.workspaceId
+        ? db.raw
+            .query<{ owner_account_id: string | null }, [string]>(
+              "SELECT owner_account_id FROM workspaces WHERE id = ?"
+            )
+            .get(repo.workspaceId)?.owner_account_id
+        : undefined;
+      await store
+        .registerFile({
+          taskId: task.id,
+          runId: run.id,
+          accountId: owner ?? null,
+          sourcePath: relativeFilename,
+          allowedRoot: wtPath,
+          title: "Visual Evidence (E2E Screenshot)",
+          kind: "other",
+        })
+        .catch((err: unknown) => {
+          sysLog(
+            `[verify] Screenshot stored in the workspace but not in the artifact library: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        });
+    }
   } catch (err: any) {
     sysLog(`[verify] Playwright screenshot capture failed: ${err.message}`);
   } finally {

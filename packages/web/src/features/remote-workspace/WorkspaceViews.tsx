@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { api } from "../../api/client";
+import { api, getApiKey } from "../../api/client";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { EmptyState } from "../../ui/EmptyState";
@@ -410,6 +410,61 @@ export function Conversation({
   );
 }
 
+/** Inline evidence for the open session: images render, other files download. */
+function ArtifactsStrip({ taskId }: { taskId: string }) {
+  const artifacts = useQuery({
+    queryKey: ["task-artifacts", taskId],
+    queryFn: () => api.tasks.artifacts(taskId),
+    retry: false,
+    refetchInterval: 30_000,
+  });
+  const items = (artifacts.data ?? []).filter((artifact) => artifact.downloadUrl);
+  if (items.length === 0) return null;
+  // <img>/<a> cannot send the Authorization header: the access key travels in
+  // the query string for these file URLs (the server accepts it there).
+  const withKey = (url: string) => {
+    const key = getApiKey();
+    return key ? `${url}?api_key=${encodeURIComponent(key)}` : url;
+  };
+  return (
+    <section className="rw-artifacts" aria-label="Evidências da sessão">
+      <header>
+        <Icon name="file" size={13} />
+        <span>Evidências</span>
+        <small>{items.length}</small>
+      </header>
+      <div className="rw-artifacts-row">
+        {items.map((artifact) => {
+          const inline = artifact.mimeType?.startsWith("image/");
+          return (
+            <a
+              key={artifact.id}
+              className={inline ? "rw-artifact-thumb" : "rw-artifact-file"}
+              href={withKey(artifact.downloadUrl as string)}
+              target="_blank"
+              rel="noreferrer"
+              title={`${artifact.title}${artifact.sizeBytes ? ` · ${Math.round(artifact.sizeBytes / 1024)} KB` : ""}`}
+            >
+              {inline ? (
+                <img
+                  src={withKey(artifact.downloadUrl as string)}
+                  alt={artifact.title}
+                  loading="lazy"
+                />
+              ) : (
+                <>
+                  <Icon name="file" size={16} />
+                  <span>{artifact.fileName ?? artifact.title}</span>
+                </>
+              )}
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function Composer({
   workspace,
   draft,
@@ -503,6 +558,7 @@ export function Composer({
   return (
     <div className="rw-composer-dock">
       <div className="rw-composer-wrap">
+        {selected && <ArtifactsStrip taskId={selected.id} />}
         <ErrorNotice
           error={
             workspace.sendError ||

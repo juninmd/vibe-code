@@ -27,6 +27,12 @@ import {
   buildTaskExecutionPlan,
   materializeTaskExecutionPlan,
 } from "../agents/orchestrator/task-plan";
+import {
+  ArtifactError,
+  type ArtifactStore,
+  safeFileName,
+  withDownloadUrl,
+} from "../artifacts/store";
 import { getCurrentUser } from "../auth";
 import type { Db } from "../db";
 import type { GitService } from "../git/git-service";
@@ -235,7 +241,8 @@ export function createTasksRouter(
   db: Db,
   orchestrator: Orchestrator,
   git?: GitService,
-  lanes?: LaneSyncService
+  lanes?: LaneSyncService,
+  artifactStore?: ArtifactStore
 ) {
   const router = new Hono();
   const memoryService = new MemoryService(db);
@@ -1227,10 +1234,135 @@ export function createTasksRouter(
     return c.json({ data: runs });
   });
 
-  router.get("/:id/artifacts", (c) => {
+  router.get("/:id/artifacts", async (c) => {
+    const denied = await taskAccessDenied(c, db, c.req.param("id"));
+    if (denied) return denied;
     const task = db.tasks.getById(c.req.param("id"));
     if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
-    return c.json({ data: db.artifacts.listByTask(task.id) });
+    return c.json({
+      data: db.artifacts.listByTask(task.id).map((artifact) => withDownloadUrl(artifact)),
+      ...(artifactStore
+        ? { storage: artifactStore.usage(getCurrentUser(db, c)?.accountId ?? null) }
+        : {}),
+    });
+  });
+
+  // Streams/downloads one stored artifact. Inline for the web image types;
+  // everything else goes as an attachment.
+  router.get("/:id/artifacts/:artifactId/file", async (c) => {
+    if (!artifactStore) return c.json({ error: "not_found" }, 404);
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    try {
+      const opened = await artifactStore.open(id, c.req.param("artifactId"));
+      const fileName = opened.artifact.fileName ?? "artifact";
+      const disposition = opened.inline ? "inline" : "attachment";
+      const response = new Response(Bun.file(opened.absolutePath), {
+        headers: {
+          "Content-Type": opened.mimeType,
+          "Content-Length": String(opened.size),
+          "Content-Disposition": `${disposition}; filename="${fileName.replace(/"/g, "")}"`,
+          "Cache-Control": "private, max-age=300",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+      return response;
+    } catch (err) {
+      if (err instanceof ArtifactError) {
+        const status =
+          err.code === "expired"
+            ? 410
+            : err.code === "forbidden"
+              ? 403
+              : err.code === "not_found"
+                ? 404
+                : 400;
+        return c.json({ error: err.code, message: err.message }, status);
+      }
+      throw err;
+    }
+  });
+
+  // Registers a file the session produced (path inside its worktree) in the
+  // dedicated artifact root, enforcing size, quota and retention.
+  router.post("/:id/artifacts", async (c) => {
+    if (!artifactStore) return c.json({ error: "artifacts_disabled" }, 503);
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    const task = db.tasks.getById(id);
+    if (!task) return c.json({ error: "not_found", message: "Task not found" }, 404);
+    const parsed = z
+      .object({
+        path: z.string().trim().min(1).max(2000),
+        title: z.string().trim().max(200).optional(),
+        kind: z.string().max(40).optional(),
+        runId: z.string().max(64).optional(),
+      })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "invalid_input", message: "path is required" }, 400);
+    }
+    const run = parsed.data.runId
+      ? db.runs.getById(parsed.data.runId)
+      : db.runs.listByTask(id).find((candidate) => !!candidate.worktreePath);
+    if (!run?.worktreePath) {
+      return c.json({ error: "invalid_state", message: "Session has no workspace yet" }, 409);
+    }
+    try {
+      const artifact = await artifactStore.registerFile({
+        taskId: id,
+        runId: run.id,
+        accountId: getCurrentUser(db, c)?.accountId ?? null,
+        sourcePath: parsed.data.path,
+        allowedRoot: run.worktreePath,
+        title: parsed.data.title,
+        kind: parsed.data.kind as never,
+      });
+      return c.json({ data: withDownloadUrl(artifact) }, 201);
+    } catch (err) {
+      if (err instanceof ArtifactError) {
+        const status =
+          err.code === "too_large" || err.code === "quota_exceeded" || err.code === "invalid"
+            ? 413
+            : err.code === "forbidden"
+              ? 403
+              : 404;
+        return c.json({ error: err.code, message: err.message }, status);
+      }
+      throw err;
+    }
+  });
+
+  // Raw upload for the browser (small images/logs).
+  router.post("/:id/artifacts/upload", async (c) => {
+    if (!artifactStore) return c.json({ error: "artifacts_disabled" }, 503);
+    const id = c.req.param("id");
+    const denied = await taskAccessDenied(c, db, id);
+    if (denied) return denied;
+    const declared = Number(c.req.header("content-length") ?? "0");
+    if (declared > artifactStore.limits.maxBytes) {
+      return c.json({ error: "too_large", message: "Artifact exceeds the size limit" }, 413);
+    }
+    const fileName = safeFileName(c.req.header("x-file-name") ?? "artifact.bin");
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    try {
+      const artifact = await artifactStore.registerBytes({
+        taskId: id,
+        accountId: getCurrentUser(db, c)?.accountId ?? null,
+        fileName,
+        bytes,
+        title: c.req.header("x-artifact-title") ?? undefined,
+        mimeType: c.req.header("content-type") ?? undefined,
+      });
+      return c.json({ data: withDownloadUrl(artifact) }, 201);
+    } catch (err) {
+      if (err instanceof ArtifactError) {
+        return c.json({ error: err.code, message: err.message }, 413);
+      }
+      throw err;
+    }
   });
 
   // ─── Schedule Endpoints ─────────────────────────────────────────────────────

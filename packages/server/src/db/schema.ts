@@ -638,5 +638,25 @@ Ao terminar, rode "npm run build" para garantir zero erros de compilação.', 'a
     ('dockerfile-optimize', 'Otimizar Dockerfile', 'Reduz imagem e melhora segurança do container', 'Otimize o Dockerfile e a configuração de container deste projeto:\n\n- Use multi-stage build e imagens base mínimas.\n- Ordene camadas para maximizar cache e minimizar rebuilds.\n- Rode como usuário não-root e remova ferramentas de build do runtime.\n- Garanta .dockerignore adequado e ausência de segredos na imagem.\n- Valide com hadolint/trivy se disponível e documente o tamanho final.', 'devops', 1)
   `);
 
+  // Artifact files live under a dedicated root; the row keeps the relative
+  // storage path, size, MIME, checksum and retention deadline (issue #262).
+  const artifactCols = db.query("PRAGMA table_info(task_artifacts)").all() as { name: string }[];
+  const artifactColNames = artifactCols.map((c) => c.name);
+  for (const [name, sql] of [
+    ["storage_path", "ALTER TABLE task_artifacts ADD COLUMN storage_path TEXT"],
+    ["file_name", "ALTER TABLE task_artifacts ADD COLUMN file_name TEXT"],
+    ["mime_type", "ALTER TABLE task_artifacts ADD COLUMN mime_type TEXT"],
+    ["size_bytes", "ALTER TABLE task_artifacts ADD COLUMN size_bytes INTEGER"],
+    ["sha256", "ALTER TABLE task_artifacts ADD COLUMN sha256 TEXT"],
+    ["expires_at", "ALTER TABLE task_artifacts ADD COLUMN expires_at TEXT"],
+    ["account_id", "ALTER TABLE task_artifacts ADD COLUMN account_id TEXT"],
+  ] as const) {
+    if (!artifactColNames.includes(name)) db.exec(sql);
+  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_task_artifacts_account ON task_artifacts(account_id, size_bytes)"
+  );
+  db.exec("CREATE INDEX IF NOT EXISTS idx_task_artifacts_expires ON task_artifacts(expires_at)");
+
   return db;
 }

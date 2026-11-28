@@ -299,6 +299,16 @@
 .rw-suggestions button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--rw-border); border-radius: 6px; padding: 9px 11px; color: var(--rw-secondary); font-size: 10px; }
 .rw-suggestions button:hover { background: var(--rw-raised); color: var(--rw-text); }
 .rw-composer-dock { position: relative; flex-shrink: 0; background: var(--rw-bg); }
+.rw-artifacts { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
+.rw-artifacts header { display: flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--rw-muted); }
+.rw-artifacts header small { padding: 0 6px; border: 1px solid var(--rw-border); border-radius: 999px; color: var(--rw-secondary); font-size: 10px; }
+.rw-artifacts-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.rw-artifact-thumb { flex: 0 0 auto; width: 112px; height: 72px; overflow: hidden; border: 1px solid var(--rw-border); border-radius: 8px; background: var(--rw-panel); }
+.rw-artifact-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.rw-artifact-file { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; max-width: 200px; padding: 8px 10px; border: 1px solid var(--rw-border); border-radius: 8px; background: var(--rw-panel); color: var(--rw-secondary); text-decoration: none; font-size: 12px; }
+.rw-artifact-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-artifacts a:hover { border-color: var(--rw-accent-line); }
+.rw-artifacts a:focus-visible { outline: 2px solid var(--rw-accent); outline-offset: 2px; }
 .rw-composer-dock::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: 20px; background: linear-gradient(to top, var(--rw-bg), transparent); pointer-events: none; }
 .rw-composer-wrap { width: 100%; max-width: 750px; margin: 0 auto; padding: 12px 30px max(12px, env(safe-area-inset-bottom)); }
 .rw-composer { background: var(--rw-field); border: 1px solid var(--rw-border-strong); border-radius: 10px; padding: 12px 12px 8px; transition: border-color .12s, box-shadow .12s; }

@@ -152,6 +152,13 @@ interface ArtifactRow {
   uri: string;
   metadata: string | null;
   created_at: string;
+  storage_path: string | null;
+  file_name: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  sha256: string | null;
+  expires_at: string | null;
+  account_id: string | null;
 }
 
 // ─── Mappers ─────────────────────────────────────────────────────────────────
@@ -265,6 +272,13 @@ function mapArtifact(row: ArtifactRow): TaskArtifact {
     uri: row.uri,
     metadata: row.metadata ? JSON.parse(row.metadata) : null,
     createdAt: row.created_at,
+    storagePath: row.storage_path ?? undefined,
+    fileName: row.file_name ?? undefined,
+    mimeType: row.mime_type ?? undefined,
+    sizeBytes: row.size_bytes ?? undefined,
+    sha256: row.sha256 ?? undefined,
+    expiresAt: row.expires_at ?? undefined,
+    accountId: row.account_id ?? undefined,
   };
 }
 
@@ -1062,6 +1076,92 @@ export function createArtifactQueries(db: Database) {
         );
       if (!row) throw new Error("Failed to upsert task artifact");
       return mapArtifact(row);
+    },
+    getById: (taskId: string, id: string): TaskArtifact | null => {
+      const row = db
+        .prepare<ArtifactRow, [string, string]>(
+          "SELECT * FROM task_artifacts WHERE task_id = ? AND id = ?"
+        )
+        .get(taskId, id);
+      return row ? mapArtifact(row) : null;
+    },
+    createFile: (params: {
+      id: string;
+      taskId: string;
+      runId?: string | null;
+      kind: TaskArtifactKind;
+      title: string;
+      fileName: string;
+      storagePath: string;
+      mimeType: string;
+      sizeBytes: number;
+      sha256: string;
+      expiresAt: string;
+      accountId?: string | null;
+      metadata?: Record<string, unknown> | null;
+    }): TaskArtifact => {
+      const row = db
+        .prepare<
+          ArtifactRow,
+          [
+            string,
+            string,
+            string | null,
+            string,
+            string,
+            string,
+            string,
+            string,
+            string,
+            number,
+            string,
+            string,
+            string | null,
+            string | null,
+          ]
+        >(
+          `INSERT INTO task_artifacts
+             (id, task_id, run_id, kind, title, uri, storage_path, file_name, mime_type,
+              size_bytes, sha256, expires_at, account_id, metadata)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           RETURNING *`
+        )
+        .get(
+          params.id,
+          params.taskId,
+          params.runId ?? null,
+          params.kind,
+          params.title,
+          `artifact://${params.id}/${params.fileName}`,
+          params.storagePath,
+          params.fileName,
+          params.mimeType,
+          params.sizeBytes,
+          params.sha256,
+          params.expiresAt,
+          params.accountId ?? null,
+          params.metadata ? JSON.stringify(params.metadata) : null
+        );
+      if (!row) throw new Error("Failed to create file artifact");
+      return mapArtifact(row);
+    },
+    sumBytesByAccount: (accountId: string | null): number => {
+      const row = db
+        .prepare<{ total: number | null }, [string | null]>(
+          "SELECT SUM(size_bytes) AS total FROM task_artifacts WHERE account_id IS ?"
+        )
+        .get(accountId);
+      return row?.total ?? 0;
+    },
+    listExpired: (nowIso: string): TaskArtifact[] =>
+      db
+        .prepare<ArtifactRow, [string]>(
+          "SELECT * FROM task_artifacts WHERE expires_at IS NOT NULL AND expires_at <= ?"
+        )
+        .all(nowIso)
+        .map(mapArtifact),
+    removeById: (id: string): void => {
+      db.prepare("DELETE FROM task_artifacts WHERE id = ?").run(id);
     },
   };
 }
