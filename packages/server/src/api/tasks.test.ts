@@ -654,6 +654,7 @@ describe("Tasks Router (unit)", () => {
   // --- /:id/artifacts ---
   it("GET /:id/artifacts returns artifacts for a task", async () => {
     mockDb.tasks.getById.mockReturnValueOnce({ id: "t-1" });
+    mockDb.tasks.getById.mockReturnValueOnce({ id: "t-1" });
     mockDb.artifacts = { listByTask: mock().mockReturnValue([{ id: "art-1" }]) } as any;
     const res = await router.request("/t-1/artifacts");
     expect(res.status).toBe(200);

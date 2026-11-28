@@ -1,0 +1,567 @@
+import { readFile, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { config } from "dotenv";
+
+config({ path: resolve(import.meta.dir, "../../../.env") });
+
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { allowedLoginEmails, pruneDisallowedSessions } from "./accounts";
+import { AgentTemplateRegistry } from "./agents/agent-templates";
+import { customProviderSecrets } from "./agents/custom-providers";
+import { useDbForOpenCodeProviders } from "./agents/opencode-providers";
+import { Orchestrator } from "./agents/orchestrator";
+import { EngineRegistry } from "./agents/registry";
+import { AgentRunner } from "./agents/runners/k8s";
+import { readRunnerSettings } from "./agents/runners/k8s/config";
+import { taskOwner } from "./agents/runners/k8s/owner";
+import { ScheduleRunner } from "./agents/schedule-runner";
+import { createAgentTemplatesRouter } from "./api/agent-templates";
+import { createAutomationRouter } from "./api/automation";
+import { createConnectorsRouter } from "./api/connectors";
+import { createCredentialsRouter } from "./api/credentials";
+import { createCustomProvidersRouter } from "./api/custom-providers";
+import { createEnginesRouter } from "./api/engines";
+import { createInboxRouter } from "./api/inbox";
+import { createLabelsRouter } from "./api/labels";
+import { createLanesRouter } from "./api/lanes";
+import { createProjectsRouter } from "./api/projects";
+import { createPromptsRouter } from "./api/prompts";
+import { createReposRouter } from "./api/repos";
+import { createReviewsRouter } from "./api/reviews";
+import { createRunnerSettingsRouter } from "./api/runner-settings";
+import { createRunsRouter } from "./api/runs";
+import { createRuntimesRouter } from "./api/runtimes";
+import { createSessionsRouter } from "./api/sessions";
+import { createSettingsRouter } from "./api/settings";
+import { createSkillsRouter } from "./api/skills";
+import { createStatsRouter } from "./api/stats";
+import { createTasksRouter } from "./api/tasks";
+import { createTemplatesRouter } from "./api/templates";
+import { createTerminalRouter } from "./api/terminal";
+import { createWorkspacesRouter } from "./api/workspaces";
+import { ArtifactStore, artifactLimits, setActiveArtifactStore } from "./artifacts/store";
+import { authMiddleware, createAuthRouter, isAuthEnabled, isRequestAuthenticated } from "./auth";
+import { PrAutomation } from "./automation/pr-automation";
+import { resolveMaxAgents } from "./config/max-agents";
+import { createDb } from "./db";
+import { GitService } from "./git/git-service";
+import { ProviderRegistry } from "./git/providers/registry";
+import { createConnectFlows } from "./integrations/connect-flows";
+import { createIntegrationsRouter } from "./integrations/router";
+import { LaneSyncService } from "./lanes/lane-sync";
+import { createTelegramNotifier } from "./notifications/telegram";
+import { rotateAccountCredentials } from "./security/account-credentials";
+import { blockUnauthenticatedRemote, rejectUnauthenticatedSocket } from "./security/network-guard";
+import { SessionService } from "./sessions/session-service";
+import { SkillsLoader } from "./skills/loader";
+import { SkillRegistryService } from "./skills/registry";
+import { logValidationReport, validateSkills } from "./skills/validator";
+import { TerminalController } from "./terminal/controller";
+import { cleanupWorkspaces } from "./terminal/workspace-cleanup";
+import { redactSecrets, registerSecretSource } from "./utils/secret-redactor";
+import { isVsCodeSocket, VsCodeProxy } from "./vscode/proxy";
+import { createVsCodeRouter } from "./vscode/router";
+import { VsCodeService } from "./vscode/service";
+import { BroadcastHub } from "./ws/broadcast";
+
+const PORT = Number(process.env.PORT) || 3000;
+let DATA_DIR = process.env.VIBE_CODE_DATA_DIR
+  ? process.env.VIBE_CODE_DATA_DIR.replace(/^~/, homedir())
+  : join(homedir(), ".vibe-code");
+
+// Safety: prevent using a data dir that lives inside the repository/workspace
+try {
+  const resolvedDataDir = resolve(DATA_DIR);
+  const cwd = process.cwd();
+  const rel = relative(cwd, resolvedDataDir);
+  // If `rel` does not start with '..' then DATA_DIR is inside (or equal to) cwd.
+  // On Windows, paths on a different drive make relative() return an absolute
+  // path (no '..' prefix) — that also means DATA_DIR is outside the repo.
+  if (!(rel.startsWith("..") || rel === "" || isAbsolute(rel))) {
+    // inside a subpath of cwd -> override to user's home directory
+    const fallback = join(homedir(), ".vibe-code");
+    if (resolve(fallback) !== resolvedDataDir) {
+      console.warn(
+        `[startup] VIBE_CODE_DATA_DIR (${resolvedDataDir}) is inside the repository; overriding to ${fallback}`
+      );
+      DATA_DIR = fallback;
+    }
+  }
+} catch (_err) {
+  // best-effort; if path ops fail, fall back to default behavior
+}
+const DB_PATH = join(DATA_DIR, "vibe.db");
+const MAX_AGENTS = Number(process.env.VIBE_CODE_MAX_AGENTS) || 4;
+
+const db = createDb(DB_PATH);
+useDbForOpenCodeProviders(db);
+// Sessions created before accounts existed, or accounts whose allowlisted
+// e-mail was revoked, must not survive a restart (issue #262).
+if (isAuthEnabled() && allowedLoginEmails().size > 0) {
+  const removed = pruneDisallowedSessions(db);
+  if (removed > 0) console.info(`[auth] invalidated ${removed} session(s) on boot`);
+}
+try {
+  const rotated = rotateAccountCredentials(db);
+  if (rotated > 0) console.info(`[credentials] re-encrypted ${rotated} credential(s)`);
+} catch (err) {
+  console.warn(
+    `[credentials] encryption disabled: ${err instanceof Error ? err.message : String(err)}`
+  );
+}
+// Credentials saved in Settings are scrubbed from every log line and WS message.
+registerSecretSource(() =>
+  [
+    "github_token",
+    "gitlab_token",
+    "anthropic_api_key",
+    "openai_api_key",
+    "gemini_api_key",
+    "litellm_api_key",
+    "opencode_go_api_key",
+    "telegram_bot_token",
+    "gitlab_refresh_token",
+    "gitlab_oauth_client_secret",
+  ]
+    .map((key) => db.settings.get(key))
+    .concat(customProviderSecrets(db.settings).map((secret) => secret ?? null))
+);
+const git = new GitService(DATA_DIR);
+const providerRegistry = new ProviderRegistry(db);
+git.providers = providerRegistry;
+const hub = new BroadcastHub(db);
+// Settings → Execução: OpenCode turns run here or in one pod per task, deleted after inactivity.
+const agentRunner = new AgentRunner({
+  settings: () => readRunnerSettings(db.settings),
+  dataDir: DATA_DIR,
+  ownerOf: (workdir) => taskOwner(db, workdir),
+});
+const registry = new EngineRegistry({ opencodeServeStart: agentRunner.start });
+// Restore max_agents from DB (overrides env var if previously set via UI)
+const storedMaxAgents = Number(db.settings.get("max_agents") || 0);
+const orchestrator = new Orchestrator(
+  db,
+  git,
+  registry,
+  hub,
+  resolveMaxAgents(MAX_AGENTS, storedMaxAgents)
+);
+const agentTemplates = new AgentTemplateRegistry();
+const skillsBase =
+  process.env.VIBE_CODE_SKILLS_PATH || db.settings.get("skills_path") || "~/.agents";
+const skillsLoader = new SkillsLoader(skillsBase);
+// Runs need the catalog: OpenCode discovers these SKILL.md dirs natively.
+orchestrator.skillsLoader = skillsLoader;
+validateSkills(skillsLoader)
+  .then(logValidationReport)
+  .catch((err) => {
+    console.error("[startup] Skills validation failed with error:", err);
+  });
+const skillRegistry = new SkillRegistryService(skillsBase);
+const terminalController = new TerminalController({
+  db,
+  git,
+  registry,
+  hub,
+  skills: skillsLoader,
+});
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    terminalController.service.closeAll();
+    process.exit(0);
+  });
+}
+// Board lanes follow the labels of the linked GitHub/GitLab issues (opt-in, see Settings).
+const laneSync = new LaneSyncService({
+  db,
+  providers: providerRegistry,
+  hub,
+  isBusy: (taskId) =>
+    terminalController.service.isOpen(taskId) || orchestrator.getActiveRunEngines().has(taskId),
+});
+laneSync.start();
+const scheduleRunner = new ScheduleRunner(db, orchestrator, skillRegistry);
+
+scheduleRunner.start();
+if (process.env.VIBE_CODE_PR_AUTOMATION !== "false") {
+  const telegram = createTelegramNotifier(db);
+  new PrAutomation({
+    listReviewTasks: () => db.tasks.list().filter((t) => t.status === "review" && t.prUrl),
+    getRepoUrl: (t) => db.repos.getById(t.repoId)?.url ?? t.prUrl,
+    getToken: (url) => providerRegistry.resolve(url)?.token ?? null,
+    isRunning: (id) => orchestrator.getActiveRunEngines().has(id),
+    relaunch: async (task, prompt) => {
+      const updated = db.tasks.update(task.id, { status: "in_progress" });
+      if (updated) hub.broadcastAll({ type: "task_updated", task: updated });
+      await orchestrator.launch(updated ?? task, undefined, undefined, prompt);
+    },
+    notify: (msg) => telegram.send(msg).catch(() => {}),
+  }).start();
+}
+
+// Mark orphaned runs (stuck in 'running' after pod restart) as cancelled
+try {
+  const orphanedRunsResult = db.raw
+    .query(
+      "UPDATE agent_runs SET status = 'cancelled', finished_at = datetime('now'), error_message = 'Process interrupted by server restart' WHERE status = 'running'"
+    )
+    .run() as { changes: number };
+  if (orphanedRunsResult.changes > 0) {
+    console.log(`[startup] Marked ${orphanedRunsResult.changes} orphaned runs as cancelled`);
+  }
+} catch (err) {
+  console.warn("[startup] Failed to cleanup orphaned runs:", err);
+}
+
+// Clean up stale workspaces at startup to prevent PVC storage exhaustion. Workspaces of
+// unfinished terminal sessions hold the user's work in progress and are kept.
+try {
+  const workspacesPath = join(DATA_DIR, "workspaces");
+  const { removed, kept } = await cleanupWorkspaces(db, workspacesPath);
+  console.log(
+    `[startup] Cleaned up ${removed} stale workspaces at ${workspacesPath} (kept ${kept} terminal workspaces)`
+  );
+} catch (err) {
+  console.warn("[startup] Failed to cleanup stale workspaces:", err);
+}
+
+agentRunner.startBackground();
+
+orchestrator.recoverInProgressTasks().catch((err) => {
+  console.warn("[startup] recoverInProgressTasks failed:", err);
+});
+
+const vscode = new VsCodeService({
+  dataDir: DATA_DIR,
+  maxInstances: Number(process.env.VIBE_VSCODE_MAX) || 3,
+  idleMs: Number(process.env.VIBE_VSCODE_IDLE_MS) || undefined,
+});
+const vscodeProxy = new VsCodeProxy(vscode, (req) => isRequestAuthenticated(db, req));
+process.once("exit", () => vscode.stopAll());
+
+const app = new Hono();
+
+app.use(
+  "*",
+  cors({
+    origin: (origin) => origin || "*",
+    credentials: true,
+  })
+);
+
+// auth routes are public (no middleware)
+const connectFlows = createConnectFlows();
+const authRouter = createAuthRouter(db, connectFlows);
+app.route("/api/auth", authRouter);
+
+// all other /api/* routes require authentication
+app.use("/api/*", authMiddleware(db));
+
+// Serve web/dist in production; proxy to Vite dev server in development
+const WEB_DIST = resolve(import.meta.dir, "../../web/dist");
+const isProduction = process.env.NODE_ENV === "production";
+
+async function proxyDevFrontend(c: import("hono").Context, devFrontend: string): Promise<Response> {
+  const requestUrl = new URL(c.req.url);
+  const targetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devFrontend);
+  return fetch(targetUrl, {
+    method: c.req.raw.method,
+    headers: c.req.raw.headers,
+    body: c.req.raw.body,
+    redirect: "manual",
+  });
+}
+
+/** True when the path points at a regular file inside the build output. */
+async function webFileExists(filePath: string): Promise<boolean> {
+  try {
+    const info = await stat(filePath);
+    return info.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve a URL pathname inside the web build, rejecting path traversal. */
+function resolveWebAsset(pathname: string): string | null {
+  const normalized = pathname.replace(/^\/+/, "");
+  if (normalized.length === 0 || normalized.includes("\0")) return null;
+  const resolved = resolve(WEB_DIST, normalized);
+  const rel = relative(WEB_DIST, resolved);
+  if (rel.startsWith("..") || isAbsolute(rel)) return null;
+  return resolved;
+}
+
+function cacheControlFor(pathname: string): string {
+  // Hashed build output never changes under the same name.
+  if (pathname.startsWith("/assets/")) return "public, max-age=31536000, immutable";
+  // The service worker and manifest must always be revalidated so updates land.
+  if (pathname === "/sw.js" || pathname === "/manifest.webmanifest") return "no-cache";
+  return "public, max-age=3600";
+}
+
+async function serveWebAsset(filePath: string, pathname: string): Promise<Response> {
+  const content = await readFile(filePath);
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  const mime: Record<string, string> = {
+    html: "text/html; charset=utf-8",
+    js: "application/javascript",
+    css: "text/css",
+    svg: "image/svg+xml",
+    png: "image/png",
+    ico: "image/x-icon",
+    json: "application/json",
+    webmanifest: "application/manifest+json",
+    webp: "image/webp",
+    txt: "text/plain; charset=utf-8",
+    map: "application/json",
+    woff2: "font/woff2",
+    woff: "font/woff",
+  };
+  return new Response(content, {
+    headers: {
+      "Content-Type": mime[ext] ?? "application/octet-stream",
+      "Cache-Control": cacheControlFor(pathname),
+    },
+  });
+}
+
+async function serveSpaIndex(): Promise<Response> {
+  const index = await readFile(join(WEB_DIST, "index.html"));
+  return new Response(index, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
+  });
+}
+
+// Read-only projection of the local coding-CLI session stores (OpenCode,
+// Claude Code, Antigravity) onto kanban cards. Nothing is spawned or mutated
+// here — the service only scans each CLI's own storage directory.
+const sessionService = new SessionService();
+
+const api = new Hono();
+const artifactStore = new ArtifactStore(db, artifactLimits(DATA_DIR));
+setActiveArtifactStore(artifactStore);
+api.route("/repos", createReposRouter(db, git, hub));
+api.route("/projects", createProjectsRouter(db));
+api.route("/credentials", createCredentialsRouter(db));
+api.route("/tasks", createTasksRouter(db, orchestrator, git, laneSync, artifactStore));
+api.route("/lanes", createLanesRouter(laneSync));
+api.route("/runs", createRunsRouter(db));
+api.route("/engines", createEnginesRouter(registry, orchestrator));
+api.route("/workspaces", createWorkspacesRouter(db));
+api.route(
+  "/settings/runner",
+  createRunnerSettingsRouter(db.settings, () => agentRunner.clusterStatus())
+);
+api.route("/integrations", createIntegrationsRouter(db, connectFlows));
+api.route("/providers/custom", createCustomProvidersRouter(db));
+api.route("/vscode", createVsCodeRouter(db, vscode, vscodeProxy));
+api.route("/settings", createSettingsRouter(db, providerRegistry, skillsLoader, orchestrator));
+api.route("/skills", createSkillsRouter(skillsLoader, skillRegistry, db));
+api.route("/terminal", createTerminalRouter(db, terminalController));
+api.route("/stats", createStatsRouter(db));
+api.route("/reviews", createReviewsRouter(db));
+api.route("/runtimes", createRuntimesRouter(db, registry, orchestrator, DATA_DIR, MAX_AGENTS));
+api.route("/templates", createTemplatesRouter(db, skillsLoader));
+api.route("/agent-templates", createAgentTemplatesRouter(agentTemplates));
+api.route("/inbox", createInboxRouter(db, registry, orchestrator));
+api.route("/connectors", createConnectorsRouter());
+api.route("/automation", createAutomationRouter());
+api.route("/labels", createLabelsRouter(db));
+api.route("/prompts", createPromptsRouter(db));
+api.route("/sessions", createSessionsRouter(sessionService, terminalController));
+
+api.get("/changelog", async (c) => {
+  // Try cwd-relative first (works in Docker/production), fallback to dev path
+  const candidates = [
+    resolve(process.cwd(), "CHANGELOG.md"),
+    resolve(import.meta.dir, "../../../CHANGELOG.md"),
+  ];
+  for (const filePath of candidates) {
+    try {
+      const content = await readFile(filePath, "utf-8");
+      return c.json({ content });
+    } catch {
+      // try next candidate
+    }
+  }
+  console.warn("[changelog] CHANGELOG.md not found in any candidate path");
+  return c.json({ content: "No changelog available." });
+});
+
+api.get("/health", (c) => c.json({ ok: true, version: process.env.npm_package_version ?? "dev" }));
+
+app.route("/api", api);
+
+app.get("/health", (c) => c.json({ status: "ok" }));
+
+if (isProduction) {
+  // Serve real files from the build output (assets, icons, sw.js, manifest);
+  // fall back to index.html only for extension-less SPA routes.
+  app.get("*", async (c) => {
+    let pathname = c.req.path;
+    try {
+      pathname = decodeURIComponent(pathname);
+    } catch {
+      /* malformed escape — treat as-is */
+    }
+
+    const assetPath = resolveWebAsset(pathname);
+    if (assetPath && (await webFileExists(assetPath))) {
+      return serveWebAsset(assetPath, pathname);
+    }
+
+    // Never answer a missing asset/API path with the HTML shell.
+    if (
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/assets/") ||
+      /\.[a-z0-9]+$/i.test(pathname)
+    ) {
+      return c.notFound();
+    }
+    // SPA catch-all: must be registered AFTER all API routes
+    return serveSpaIndex();
+  });
+} else {
+  if (process.env.VITE_DEV_URL) {
+    const devFrontend = process.env.VITE_DEV_URL;
+    app.all("*", (c) => proxyDevFrontend(c, devFrontend));
+  }
+}
+
+const wsClients = new Map<unknown, ReturnType<typeof hub.addClient>>();
+
+const server = Bun.serve({
+  port: PORT,
+  hostname: process.env.VIBE_CODE_HOST || "0.0.0.0",
+  reusePort: true,
+  // A few endpoints are legitimately slow — `GET /api/sessions` scans every local CLI
+  // store on disk, and repo operations shell out to git. Bun's 10s default would drop
+  // those connections mid-flight, so the server waits longer before giving up.
+  idleTimeout: 60,
+  fetch(req, server) {
+    const blocked = blockUnauthenticatedRemote(
+      server.requestIP(req)?.address,
+      isAuthEnabled(),
+      process.env,
+      new URL(req.url).pathname
+    );
+    if (blocked) return blocked;
+    const url = new URL(req.url);
+    if (VsCodeProxy.matches(url.pathname)) return vscodeProxy.handle(req, server as never);
+    if (url.pathname === "/ws") {
+      const authenticated = isRequestAuthenticated(db, req);
+      const refused = rejectUnauthenticatedSocket(authenticated);
+      if (refused) return refused;
+      const workspaceId = url.searchParams.get("workspaceId") || null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const success = (server as any).upgrade(req, {
+        data: { workspaceId, authenticated },
+      });
+      if (success) return undefined;
+    }
+    return app.fetch(req);
+  },
+  websocket: {
+    open(ws) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.open(ws as never);
+      const client = hub.addClient(ws);
+      wsClients.set(ws, client);
+    },
+    message(ws, message) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.message(ws as never, message);
+      const client = wsClients.get(ws);
+      if (!client) return;
+      try {
+        const msg = JSON.parse(message as string);
+        if (msg.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+        } else if (msg.type === "subscribe" && msg.taskId) {
+          hub.subscribe(client, msg.taskId);
+        } else if (msg.type === "unsubscribe" && msg.taskId) {
+          hub.unsubscribe(client, msg.taskId);
+        } else if (typeof msg.type === "string" && msg.type.startsWith("terminal_")) {
+          // A terminal is a shell on the server: never serve it to unauthenticated sockets.
+          if (!(ws.data as { authenticated?: boolean } | undefined)?.authenticated) {
+            ws.send(JSON.stringify({ type: "error", message: "Authentication required" }));
+            return;
+          }
+          if (!msg.taskId) return;
+          if (msg.type === "terminal_open") {
+            // Attach: the session itself is started over HTTP (POST /api/terminal/:id/start).
+            hub.subscribe(client, msg.taskId);
+            const info = terminalController.service.getInfo(msg.taskId);
+            if (info) {
+              ws.send(
+                JSON.stringify({
+                  type: "terminal_opened",
+                  taskId: msg.taskId,
+                  runId: info.runId,
+                  cols: info.cols,
+                  rows: info.rows,
+                })
+              );
+              terminalController.snapshotTo(msg.taskId, (replay) => {
+                if (!replay) return;
+                try {
+                  ws.send(
+                    redactSecrets(
+                      JSON.stringify({
+                        type: "terminal_output",
+                        taskId: msg.taskId,
+                        runId: info.runId,
+                        stream: "stdout",
+                        chunk: replay,
+                        timestamp: new Date().toISOString(),
+                        replay: true,
+                      })
+                    )
+                  );
+                } catch {
+                  // The socket closed while the snapshot was being prepared.
+                }
+              });
+            }
+          } else if (msg.type === "terminal_input" && typeof msg.input === "string") {
+            terminalController.input(msg.taskId, msg.input);
+          } else if (msg.type === "terminal_resize") {
+            terminalController.resize(msg.taskId, Number(msg.cols), Number(msg.rows));
+          } else if (msg.type === "terminal_signal") {
+            terminalController.signal(msg.taskId, msg.signal);
+          } else if (msg.type === "terminal_close") {
+            // Detach only: closing a panel must not kill the agent session.
+            hub.unsubscribe(client, msg.taskId);
+          }
+        }
+      } catch {
+        // ignore malformed messages
+      }
+    },
+    close(ws) {
+      if (isVsCodeSocket(ws.data)) return vscodeProxy.close(ws as never);
+      const client = wsClients.get(ws);
+      if (client) hub.removeClient(client);
+      wsClients.delete(ws);
+    },
+  },
+});
+
+console.log(`vibe-code server running on http://localhost:${server.port}`);
+// Artifact retention: expire rows and files on boot and every hour.
+const sweepArtifacts = () => {
+  artifactStore
+    .cleanupExpired()
+    .then((removed) => {
+      if (removed > 0) console.info(`[artifacts] removed ${removed} expired artifact(s)`);
+    })
+    .catch((err) => console.warn("[artifacts] cleanup failed", err));
+};
+sweepArtifacts();
+setInterval(sweepArtifacts, 60 * 60 * 1000).unref?.();
+if (!isAuthEnabled() && process.env.VIBE_CODE_ALLOW_UNAUTHENTICATED_REMOTE !== "true") {
+  console.warn(
+    "[security] Authentication is off: only localhost can use the app. Set VIBE_CODE_API_KEY or GitHub OAuth to use it from your phone."
+  );
+}
