@@ -71,6 +71,10 @@ export function useRemoteWorkspace() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [branch, setBranch] = useState("main");
+  /** Project (1 project : n repositories) of the next session and the branch its PR targets. */
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  const [prTargetBranch, setPrTargetBranch] = useState("main");
   /** Model chosen for the next turn of the open session (empty = keep the session's). */
   const [nextModel, setNextModel] = useState("");
   /** Engine that takes over the open session on the next turn (empty = keep the session's). */
@@ -110,6 +114,19 @@ export function useRemoteWorkspace() {
     enabled: server && !!project && !selected,
     retry: false,
   });
+  // A repository may belong to several projects; the session records which one.
+  const projectCatalog = useQuery({
+    queryKey: ["remote-projects"],
+    queryFn: api.projects.list,
+    enabled: server,
+    staleTime: 30_000,
+    retry: false,
+  });
+  const repoProjects = (projectCatalog.data ?? []).filter((item) =>
+    item.repoIds.includes(project?.id ?? "")
+  );
+  const activeProject =
+    repoProjects.find((item) => item.id === activeProjectId) ?? repoProjects[0] ?? null;
   const history = useQuery({
     queryKey: ["unified-prototype", "logs", selectedId],
     queryFn: async () => {
@@ -186,7 +203,9 @@ export function useRemoteWorkspace() {
     window.history.replaceState(null, "", url);
     const targetId = repoId ?? selected?.projectId ?? project?.id ?? projectId;
     setProjectId(targetId);
-    setBranch(projects.find((p) => p.id === targetId)?.branch ?? "main");
+    const nextBranch = projects.find((p) => p.id === targetId)?.branch ?? "main";
+    setBranch(nextBranch);
+    setPrTargetBranch(nextBranch);
   };
   const changeSource = (next: "demo" | "server") => {
     const url = new URL(window.location.href);
@@ -222,6 +241,7 @@ export function useRemoteWorkspace() {
           engines.data?.find((item) => item.name === engine)?.supportsResume === true;
         const task = await api.tasks.create({
           repoId: project.id,
+          ...(activeProject ? { projectId: activeProject.id } : {}),
           description: prompt,
           engine,
           ...(model
@@ -229,6 +249,8 @@ export function useRemoteWorkspace() {
                 model: engine === "opencode" && effort ? `${model.split("#")[0]}#${effort}` : model,
               }
             : {}),
+          startBranch: branch || project.branch,
+          prTargetBranch: prTargetBranch || branch || project.branch,
           baseBranch: branch || project.branch,
           tags: [
             MANUAL_TASK_TAG,
@@ -431,6 +453,11 @@ export function useRemoteWorkspace() {
     sendError,
     branch,
     setBranch,
+    repoProjects,
+    activeProject,
+    setActiveProjectId,
+    prTargetBranch,
+    setPrTargetBranch,
     messages,
     logs: history.data ?? [],
     historyLoading: history.isLoading && server,

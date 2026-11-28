@@ -20,6 +20,7 @@ import type {
   LaneSettings,
   LaunchTaskRequest,
   McpConnection,
+  Project,
   PromptTemplate,
   RegistryAssetRecord,
   RemotePluginCatalog,
@@ -287,6 +288,42 @@ export const api = {
       const qs = params.toString();
       return request<RepositoryIssue[]>(`/repos/${id}/issues${qs ? `?${qs}` : ""}`);
     },
+  },
+
+  projects: {
+    list: () => request<Project[]>("/projects"),
+    create: (data: { name: string; description?: string; repoIds?: string[] }) =>
+      request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }),
+    addRepo: (id: string, repoId: string) =>
+      request<Project>(`/projects/${id}/repos`, {
+        method: "POST",
+        body: JSON.stringify({ repoId }),
+      }),
+    removeRepo: (id: string, repoId: string) =>
+      request<Project>(`/projects/${id}/repos/${repoId}`, { method: "DELETE" }),
+  },
+
+  credentials: {
+    list: () =>
+      request<{
+        encryptionConfigured: boolean;
+        credentials: Array<{
+          kind: string;
+          connected: boolean;
+          version: string | null;
+          updatedAt: string | null;
+          error: string | null;
+        }>;
+      }>("/credentials"),
+    setOpencode: (apiKey: string) =>
+      request<{ kind: string; connected: boolean }>("/credentials/opencode", {
+        method: "PUT",
+        body: JSON.stringify({ apiKey }),
+      }),
+    removeOpencode: () =>
+      request<{ kind: string; connected: boolean }>("/credentials/opencode", {
+        method: "DELETE",
+      }),
   },
 
   tasks: {

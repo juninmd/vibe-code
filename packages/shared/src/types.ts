@@ -1436,6 +1436,19 @@ export interface Workspace {
   description?: string;
   createdAt: string;
   updatedAt: string;
+  /** Account that owns the workspace; null for the operator/API-key scope. */
+  ownerAccountId?: string;
+}
+
+export interface Project {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Repositories linked to this project. */
+  repoIds: string[];
 }
 
 export type WorkspaceMemberRole = "owner" | "member" | "viewer";
