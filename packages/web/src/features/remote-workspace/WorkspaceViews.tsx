@@ -705,6 +705,42 @@ export function Composer({
                     </select>
                   )}
                 </span>
+                {!selected && server && workspace.repoProjects.length > 0 && (
+                  <span className="rw-branch">
+                    <Icon name="folder" size={12} />
+                    <select
+                      aria-label="Projeto da nova sessão"
+                      value={workspace.activeProject?.id ?? ""}
+                      onChange={(event) => workspace.setActiveProjectId(event.target.value)}
+                    >
+                      {workspace.repoProjects.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                )}
+                {!selected && server && (
+                  <span className="rw-branch">
+                    <Icon name="branch" size={12} />
+                    <select
+                      aria-label="Branch alvo do PR"
+                      title="Branch em que o PR será aberto"
+                      value={workspace.prTargetBranch}
+                      onChange={(event) => workspace.setPrTargetBranch(event.target.value)}
+                    >
+                      {(workspace.branches.data ?? []).map((branch) => (
+                        <option key={branch} value={branch}>
+                          {branch}
+                        </option>
+                      ))}
+                      {!workspace.branches.data?.includes(workspace.prTargetBranch) && (
+                        <option value={workspace.prTargetBranch}>{workspace.prTargetBranch}</option>
+                      )}
+                    </select>
+                  </span>
+                )}
               </div>
               <div className="rw-composer-model">
                 <select
