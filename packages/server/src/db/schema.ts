@@ -179,6 +179,7 @@ export function initDatabase(dbPath: string): Database {
       task_id         TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
       cron_expression TEXT NOT NULL,
       enabled         INTEGER NOT NULL DEFAULT 1,
+      open_pr         INTEGER NOT NULL DEFAULT 0,
       deadline_at     TEXT,
       last_run_at     TEXT,
       next_run_at     TEXT,
@@ -657,6 +658,12 @@ Ao terminar, rode "npm run build" para garantir zero erros de compilação.', 'a
     "CREATE INDEX IF NOT EXISTS idx_task_artifacts_account ON task_artifacts(account_id, size_bytes)"
   );
   db.exec("CREATE INDEX IF NOT EXISTS idx_task_artifacts_expires ON task_artifacts(expires_at)");
+
+  // Routines can open the PR at the end of each run (issue #262).
+  const scheduleCols = db.query("PRAGMA table_info(task_schedules)").all() as { name: string }[];
+  if (!scheduleCols.some((column) => column.name === "open_pr")) {
+    db.exec("ALTER TABLE task_schedules ADD COLUMN open_pr INTEGER NOT NULL DEFAULT 0");
+  }
 
   return db;
 }

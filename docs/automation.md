@@ -21,3 +21,19 @@ API: `POST /api/automation/validate-plan`, `GET /api/automation/reactions`,
 ## Avatares e ambientes 3D
 
 `packages/web/src/components/office3d/`: `skins.ts` (dev, robô, astronauta, mago, ninja, gato) e `environments.ts` (escritório, estação espacial, cyberpunk, floresta, praia). Seletores no modo 3D, persistidos em `localStorage`. Protótipo: `docs/previews/avatar-skins/` (`index.html` + screenshots; rebuild com `bun build main.ts --outfile bundle.js --target browser`).
+
+## Rotinas: Abrir PR ao final
+
+Cada rotina (`task_schedules`) tem o toggle `openPr`. Com ele ligado, a
+ocorrência abre (ou atualiza) o PR ao terminar: o executor registra um grant
+`routine_toggle` antes do push e o consome na publicação. Com o toggle desligado
+a branch fica no worktree e nenhum push/PR acontece, mesmo que o agente tenha
+sugerido abrir um PR.
+
+```bash
+PUT /api/tasks/:id/schedule
+{ "cronExpression": "0 9 * * 1-5", "openPr": true }
+```
+
+Editar o cron sem enviar `openPr` preserva o valor atual. A UI ainda não expõe o
+toggle; use a API (ou o campo no registro da rotina).
