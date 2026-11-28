@@ -1,9 +1,9 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useTheme } from "../../theme/ThemeProvider";
-import { AddProjectPanel } from "./AddProjectDialog";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
+import { AddProjectPanel } from "./AddProjectDialog";
 import { CommandPalette, ShortcutList } from "./CommandPalette";
 import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
 import { draftStore } from "./composerHistory";

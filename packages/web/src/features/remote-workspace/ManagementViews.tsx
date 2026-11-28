@@ -7,7 +7,6 @@ import { api } from "../../api/client";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
-import { Tabs } from "../../ui/Tabs";
 import { CustomProvidersSettings } from "./CustomProvidersSettings";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
@@ -775,7 +774,7 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
           disabled={!url.trim() || !!action.busy}
         >
           {action.busy ? "Adicionando…" : "Adicionar projeto"}
-        </button>
+        </Button>
         {!url.trim() && (
           <small className="rw-field-hint">Cole a URL do repositório para continuar.</small>
         )}
