@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 ### Changed
+- **Adding a repository**: "Adicionar projeto" in the sidebar, the project area and ⌘K opens a dialog that lists your GitHub repositories (search, one click to activate) or takes any Git URL, follows the clone and opens a session in the new project. "Nova sessão" opens it when there is no project yet instead of being disabled.
+- **Settings**: tabs grouped (primeiros passos, contas e acesso, projetos, agentes, preferências), a "Começar" checklist (GitHub, LLM key, project) shown first when connected to the server, "Provedores" renamed to "Chaves de LLM" with readable provider names, and hints where a field or MCP depends on another screen.
+- **Terminais and Escritório 3D** list the app's own sessions that are running or waiting for you (remote conversations have no PTY or CLI session file, so they were missing).
+- **E2E**: server/web ports and screenshots are configurable (`VIBE_E2E_SERVER_PORT`, `VIBE_E2E_WEB_PORT`, `VIBE_E2E_SCREENSHOT`).
 - **Web on the Sonido design system**: `packages/web` now installs `@juninmd/sonido@^2.2.1` and imports its stylesheet at the entry. Buttons, the settings tabs, count/category pills, empty states, loading skeletons, the busy spinner, keycaps and the ⌘K palette come from the design system; the app keeps its props, ARIA and `filterCommands`. `data-theme` is shared with Sonido (the GitHub palette maps to Sonido's dark tokens) and the only extra CSS is a documented layout bridge. Before/after screenshots and the mapping live in `docs/sonido-migration/`.
 - **Mobile workspace**: phone top bar shows the session title with a status dot, session tabs fit on one row, settings tabs scroll in one row and every touch control is 44 px. README tour now has fresh desktop and phone screenshots of every screen (`docs/screenshots/telas/`).
 
@@ -28,6 +32,7 @@
 - Bumped `zod` to 4.6.7 (fixed in 4.6.6), `vite` in `packages/web` to 8.1.7 (fixed in 8.1.6) and `vitest`/`@vitest/coverage-v8` to ^4.1.12, and refreshed transitive deps within their ranges (hono, undici, js-yaml, fast-uri, source-map-js), so the Dependabot security job no longer fails. `pnpm-lock.yaml` was regenerated: it had a duplicated key and pnpm could not parse it.
 
 ### Fixed
+- The web app failed to load on case-insensitive file systems (Windows, macOS): `WorkLog.tsx` and `workLog.ts` collided. The helper is now `workEntries.ts`.
 - Signing in with GitHub now lets the agent push and open PRs as you: the OAuth token reaches server-side `git clone/fetch/push` (private repos included) and the agent's terminal/engine as `GH_TOKEN`/`GITHUB_TOKEN` plus a git `extraheader` for github.com, kept out of remote URLs and argv. Before, only the API PR call used it and `git push` had no credentials.
 - Session lists no longer show "60m ago" or "24h ago" near the hour/day boundary; they roll over to "1h ago" and "1d ago".
 - Stopping an OpenCode turn over `opencode serve` no longer crashes the server (an SDK abort left an unhandled `AbortError`).

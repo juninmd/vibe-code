@@ -8,6 +8,7 @@ import { formatRelativeTime } from "../../../utils/relative-time";
 import { Icon } from "../Icon";
 import { ErrorNotice } from "../ManagementViews";
 import type { Workspace } from "../WorkspaceViews";
+import { appSessionCards } from "./appSessions";
 import { ExternalTerminal } from "./ExternalTerminal";
 import { SurfaceHeading } from "./SurfaceHeading";
 
@@ -30,6 +31,13 @@ export function TerminalsView({
     () => board.cards.filter((c) => c.status === "active" || c.status === "idle").slice(0, 40),
     [board.cards]
   );
+  const conversations = useMemo(
+    () =>
+      appSessionCards(workspace.sessions, workspace.projects).filter(
+        (c) => !live.sessions.some((t) => t.taskId === c.sessionId)
+      ),
+    [workspace.sessions, workspace.projects, live.sessions]
+  );
   const title = (taskId: string) =>
     workspace.sessions.find((s) => s.id === taskId)?.title ?? "Sessão";
 
@@ -41,7 +49,7 @@ export function TerminalsView({
       <SurfaceHeading
         title="Terminais"
         description="Harnesses ativos no servidor e sessões de CLI abertas fora do vibe-code."
-        count={live.sessions.length + outside.length}
+        count={live.sessions.length + conversations.length + outside.length}
       />
       <ErrorNotice error={live.error ?? error} />
       {!workspace.server ? (
@@ -77,6 +85,35 @@ export function TerminalsView({
                 </button>
               ))}
             </div>
+          )}
+          {conversations.length > 0 && (
+            <>
+              <h2 className="rw-surface-section">Conversas em andamento</h2>
+              <div className="rw-session-table">
+                {conversations.map((card) => (
+                  <button
+                    type="button"
+                    key={card.id}
+                    onClick={() => onOpenTerminal(card.sessionId)}
+                  >
+                    <span>
+                      <strong>{card.title}</strong>
+                      <small>
+                        {card.project}
+                        {card.branch ? ` · ${card.branch}` : ""} · {card.messageCount} msgs
+                      </small>
+                    </span>
+                    <span className="rw-table-project">{SESSION_SOURCE_LABELS[card.source]}</span>
+                    <span className="rw-state">
+                      <i
+                        className={`rw-status-dot ${card.status === "active" ? "working" : "waiting"}`}
+                      />
+                      {card.status === "active" ? "Em execução" : "Aguardando você"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
           <h2 className="rw-surface-section">Detectados fora do vibe-code</h2>
           {outside.length === 0 ? (

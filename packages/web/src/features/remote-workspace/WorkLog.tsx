@@ -1,5 +1,5 @@
 import { Icon } from "./Icon";
-import { summarizeWork, type WorkEntry, type WorkKind } from "./workLog";
+import { summarizeWork, type WorkEntry, type WorkKind } from "./workEntries";
 
 const ICONS: Record<WorkKind, Parameters<typeof Icon>[0]["name"]> = {
   read: "file",

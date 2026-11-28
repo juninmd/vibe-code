@@ -1,8 +1,9 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useTheme } from "../../theme/ThemeProvider";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
+import { AddProjectPanel } from "./AddProjectDialog";
 import { CommandPalette, ShortcutList } from "./CommandPalette";
 import { type Command, isTypingTarget, matchShortcut, SHORTCUTS } from "./commands";
 import { draftStore } from "./composerHistory";
@@ -28,7 +29,7 @@ import "./workspace.css";
 import "./workspace-mobile.css";
 
 type Tab = "conversation" | "terminal" | "changes";
-type Dialog = "projects" | "commands" | "shortcuts" | null;
+type Dialog = "projects" | "add-project" | "commands" | "shortcuts" | null;
 
 function Modal({
   title,
@@ -77,6 +78,7 @@ function Modal({
 
 export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void }) {
   const workspace = useRemoteWorkspace();
+  const refetchWorkspace = workspace.data.refetch;
   // Returning from an OAuth connect lands on Settings → MCP with the outcome.
   const [connectResult] = useState(takeConnectResult);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
@@ -124,6 +126,26 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
     setMobileNav(false);
     setDialog(null);
   };
+  // A freshly cloned project opens a session once the workspace data includes it.
+  const [pendingProject, setPendingProject] = useState<string | null>(null);
+  const pendingLoaded = workspace.projects.some((p) => p.id === pendingProject);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, when the new project arrives.
+  useEffect(() => {
+    if (!pendingProject || !pendingLoaded) return;
+    setPendingProject(null);
+    newSession(pendingProject);
+  }, [pendingProject, pendingLoaded]);
+  const addProject = () => {
+    setMobileNav(false);
+    setDialog("add-project");
+  };
+  const projectReady = useCallback(
+    (id: string) => {
+      setPendingProject(id);
+      void refetchWorkspace();
+    },
+    [refetchWorkspace]
+  );
   const openContext = () => {
     setInspector(true);
     setMobileContext(true);
@@ -165,8 +187,19 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
       section: "Ações",
       title: "Nova sessão",
       shortcut: SHORTCUTS.newSession,
-      run: () => newSession(),
+      run: () => (workspace.server && !workspace.projects.length ? addProject() : newSession()),
     },
+    ...(workspace.server
+      ? [
+          {
+            id: "add-project",
+            section: "Ações" as const,
+            title: "Adicionar projeto",
+            keywords: "repositório github clonar",
+            run: addProject,
+          },
+        ]
+      : []),
     ...workspace.projects.map((project) => ({
       id: `new-${project.id}`,
       section: "Ações" as const,
@@ -350,8 +383,12 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
         <button
           type="button"
           className="rw-new-session"
-          disabled={workspace.server && !workspace.projects.length}
-          onClick={() => newSession()}
+          disabled={workspace.server && workspace.data.isError}
+          onClick={() =>
+            workspace.server && !workspace.data.isLoading && !workspace.projects.length
+              ? addProject()
+              : newSession()
+          }
         >
           <Icon name="plus" size={16} />
           Nova sessão<span aria-hidden="true">↗</span>
@@ -425,6 +462,17 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
           >
             <Icon name="folder" size={13} />
           </button>
+          {workspace.server && (
+            <button
+              type="button"
+              className="rw-icon-button"
+              aria-label="Adicionar projeto"
+              title="Adicionar projeto"
+              onClick={addProject}
+            >
+              <Icon name="plus" size={13} />
+            </button>
+          )}
         </div>
         <nav className="rw-project-tree" aria-label="Projetos e sessões">
           {workspace.server && workspace.data.isLoading && (
@@ -481,7 +529,12 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
             );
           })}
           {!workspace.data.isLoading && workspace.server && workspace.projects.length === 0 && (
-            <p className="rw-inline-state">Nenhum projeto disponível.</p>
+            <div className="rw-project-empty-state">
+              <p className="rw-inline-state">Nenhum projeto ainda.</p>
+              <button type="button" className="rw-button" onClick={addProject}>
+                Adicionar projeto
+              </button>
+            </div>
           )}
         </nav>
         <div className="rw-sidebar-footer">
@@ -959,6 +1012,22 @@ export default function RemoteWorkspace({ onLogout }: { onLogout?: () => void })
         </div>
       </div>
 
+      {dialog === "add-project" && (
+        <Modal
+          title="Adicionar projeto"
+          description="Ative um repositório; a sessão abre quando o clone terminar."
+          onClose={() => setDialog(null)}
+        >
+          <AddProjectPanel
+            existingUrls={(workspace.data.data?.repos ?? []).map((repo) => repo.url)}
+            onReady={projectReady}
+            onConnectGitHub={() => {
+              setDialog(null);
+              openManagement("settings", "github");
+            }}
+          />
+        </Modal>
+      )}
       {dialog === "projects" && (
         <Modal
           title="Escolher projeto"

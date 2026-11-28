@@ -7,7 +7,6 @@ import { api } from "../../api/client";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
 import { Skeleton } from "../../ui/Skeleton";
-import { Tabs } from "../../ui/Tabs";
 import { CustomProvidersSettings } from "./CustomProvidersSettings";
 import { Icon } from "./Icon";
 import { importRemoteSkills, type SkillImportProgress, uniqueRemoteSkills } from "./importSkills";
@@ -738,8 +737,8 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
       <div className="rw-card-heading">
         <h2>Projetos conectados</h2>
         <p>
-          Adicione um repositório para desenvolver em sessões isoladas. O acesso ao GitHub usa a
-          conexão configurada no servidor.
+          Cada projeto é um repositório Git em que as sessões trabalham, em workspaces isolados.
+          Repositórios privados precisam do GitHub conectado.
         </p>
       </div>
       <form
@@ -776,6 +775,9 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
         >
           {action.busy ? "Adicionando…" : "Adicionar projeto"}
         </Button>
+        {!url.trim() && (
+          <small className="rw-field-hint">Cole a URL do repositório para continuar.</small>
+        )}
       </form>
       <ErrorNotice error={action.error || projects.error} />
       {action.notice && (
@@ -800,7 +802,7 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
               <small className="rw-project-default">
                 {repo.defaultModel || repo.defaultEngine
                   ? `Modelo padrão: ${[repo.defaultEngine, repo.defaultModel].filter(Boolean).join(" · ")}`
-                  : "Sem modelo padrão. Defina na nova sessão com “Definir padrão”."}
+                  : "Sem modelo padrão do projeto."}
               </small>
             </div>
             {(repo.defaultModel || repo.defaultEngine) && (
@@ -836,6 +838,108 @@ function ProjectSettings({ workspace }: { workspace: Workspace }) {
   );
 }
 
+/** Settings grouped by what the person is trying to do, not by implementation detail. */
+const PROVIDER_LABELS = {
+  anthropic: "Anthropic (Claude)",
+  openai: "OpenAI",
+  gemini: "Google Gemini",
+} as const;
+
+const SETTINGS_GROUPS: { label: string; tabs: [string, string][] }[] = [
+  { label: "Primeiros passos", tabs: [["setup", "Começar"]] },
+  {
+    label: "Contas e acesso",
+    tabs: [
+      ["github", "Acesso ao GitHub"],
+      ["providers", "Chaves de LLM"],
+      ["mcp", "MCP"],
+    ],
+  },
+  { label: "Projetos", tabs: [["projects", "Projetos"]] },
+  {
+    label: "Agentes",
+    tabs: [
+      ["harness", "Harnesses e modelos"],
+      ["runner", "Execução"],
+    ],
+  },
+  { label: "Preferências", tabs: [["general", "Interface"]] },
+];
+
+function SetupChecklist({
+  github,
+  llm,
+  projects,
+  onGoto,
+}: {
+  github: boolean | undefined;
+  llm: boolean | undefined;
+  projects: number | undefined;
+  onGoto: (section: string) => void;
+}) {
+  const items: {
+    done: boolean | undefined;
+    title: string;
+    hint: string;
+    section: string;
+    action: string;
+  }[] = [
+    {
+      done: github,
+      title: "Conectar o GitHub",
+      hint: "Necessário para clonar repositórios privados, abrir PRs e liberar o MCP do GitHub.",
+      section: "github",
+      action: "Conectar",
+    },
+    {
+      done: llm,
+      title: "Adicionar uma chave de LLM",
+      hint: "Anthropic, OpenAI, Gemini, OpenCode Go ou LiteLLM. Sem ela os agentes não executam.",
+      section: "providers",
+      action: "Adicionar chave",
+    },
+    {
+      done: projects === undefined ? undefined : projects > 0,
+      title: "Adicionar um projeto",
+      hint: "O repositório em que as sessões vão trabalhar, cada uma em um workspace isolado.",
+      section: "projects",
+      action: "Adicionar projeto",
+    },
+  ];
+  return (
+    <section className="rw-settings-card" aria-label="Primeiros passos">
+      <div className="rw-card-heading">
+        <h2>Primeiros passos</h2>
+        <p>Três coisas deixam o ambiente pronto para uma sessão real.</p>
+      </div>
+      <ol className="rw-setup-list">
+        {items.map((item) => (
+          <li key={item.section} className={item.done ? "done" : ""}>
+            <span
+              className="rw-setup-state"
+              role="img"
+              aria-label={item.done ? "Concluído" : "Pendente"}
+            >
+              {item.done ? "✓" : "○"}
+            </span>
+            <span className="rw-setup-text">
+              <strong>{item.title}</strong>
+              <small>{item.done ? "Configurado." : item.hint}</small>
+            </span>
+            <button
+              type="button"
+              className={`rw-button ${item.done ? "" : "primary"}`}
+              onClick={() => onGoto(item.section)}
+            >
+              {item.done ? "Ver" : item.action}
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 function SettingsPage({
   workspace,
   compact,
@@ -855,7 +959,9 @@ function SettingsPage({
   setInspector: (value: boolean) => void;
   onSource: (source: "demo" | "server") => void;
 }) {
-  const [section, setSection] = useState(initialSection ?? "general");
+  const [section, setSection] = useState(
+    initialSection ?? (workspace.server ? "setup" : "general")
+  );
   const [token, setToken] = useState("");
   const [keys, setKeys] = useState<Record<string, string>>({});
   const [maxAgents, setMaxAgents] = useState("");
@@ -869,6 +975,12 @@ function SettingsPage({
   const query = useQuery({
     queryKey: ["prototype-settings"],
     queryFn: api.settings.get,
+    retry: false,
+  });
+  const repoCount = useQuery({
+    queryKey: ["prototype-connected-repos"],
+    queryFn: api.repos.list,
+    enabled: section === "setup",
     retry: false,
   });
   const engines = useQuery({
@@ -903,26 +1015,53 @@ function SettingsPage({
     );
   return (
     <>
-      <Tabs
-        label="Seções de configurações"
-        className="rw-settings-tabs"
-        value={section}
-        onChange={setSection}
-        tabs={[
-          { key: "general", label: "Interface" },
-          { key: "projects", label: "Projetos" },
-          { key: "github", label: "Acesso ao GitHub" },
-          { key: "harness", label: "Harnesses e modelos" },
-          { key: "runner", label: "Execução" },
-          { key: "providers", label: "Provedores" },
-          { key: "mcp", label: "MCP" },
-        ]}
-      />
+      <nav className="rw-settings-tabs" aria-label="Seções de configurações">
+        {SETTINGS_GROUPS.map((group) => (
+          <div
+            className="rw-settings-group"
+            key={group.label}
+            role="group"
+            aria-label={group.label}
+          >
+            <span className="rw-settings-group-label">{group.label}</span>
+            <div className="rw-settings-group-tabs">
+              {group.tabs.map(([id, label]) => (
+                <button
+                  type="button"
+                  key={id}
+                  className={section === id ? "selected" : ""}
+                  onClick={() => setSection(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
       <ErrorNotice error={query.error || action.error} />
       {action.notice && (
         <p role="status" className="rw-success">
           {action.notice}
         </p>
+      )}
+      {section === "setup" && (
+        <SetupChecklist
+          github={query.data?.github.tokenSet}
+          llm={
+            query.data
+              ? Boolean(
+                  query.data.apiKeys.anthropic.tokenSet ||
+                    query.data.apiKeys.openai.tokenSet ||
+                    query.data.apiKeys.gemini.tokenSet ||
+                    query.data.opencodeGo?.tokenSet ||
+                    query.data.litellm?.apiKeySet
+                )
+              : undefined
+          }
+          projects={repoCount.data?.length}
+          onGoto={setSection}
+        />
       )}
       {section === "general" && (
         <>
@@ -1184,10 +1323,10 @@ function SettingsPage({
         <>
           <section className="rw-settings-card">
             <div className="rw-card-heading">
-              <h2>Chaves dos provedores</h2>
+              <h2>Chaves de LLM</h2>
               <p>
-                Credenciais usadas pelo harness no servidor. Preencha apenas as que deseja
-                substituir.
+                Chaves que os agentes usam para falar com os modelos. Preencha só a que quiser
+                trocar ou adicionar; as outras ficam como estão.
               </p>
             </div>
             <form
@@ -1203,7 +1342,7 @@ function SettingsPage({
             >
               {(["anthropic", "openai", "gemini"] as const).map((provider) => (
                 <label key={provider}>
-                  {provider}
+                  {PROVIDER_LABELS[provider]}
                   <input
                     aria-label={`Chave ${provider}`}
                     type="password"
@@ -1380,6 +1519,15 @@ function SettingsPage({
         </>
       )}
       {section === "providers" && <CustomProvidersSettings />}
+      {section === "mcp" && (
+        <p className="rw-section-note">
+          O GitHub MCP usa o token da aba{" "}
+          <button type="button" className="rw-text-button" onClick={() => setSection("github")}>
+            Acesso ao GitHub
+          </button>
+          . Conecte lá primeiro.
+        </p>
+      )}
       {section === "mcp" && <McpConnections connectResult={connectResult} />}
       {section === "mcp" && (
         <section className="rw-settings-card">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitWork, summarizeWork } from "./workLog";
+import { splitWork, summarizeWork } from "./workEntries";
 
 describe("splitWork", () => {
   it("keeps tool chatter out of the prose the user reads", () => {

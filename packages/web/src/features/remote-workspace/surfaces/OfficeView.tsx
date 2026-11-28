@@ -7,6 +7,7 @@ import { AVATAR_SKINS, isAvatarSkin } from "../../../components/office3d/skins";
 import { useOfficeScene } from "../../../components/office3d/useOfficeScene";
 import { useSessions } from "../../../hooks/useSessions";
 import type { Workspace } from "../WorkspaceViews";
+import { appSessionCards, mergeOpenCards } from "./appSessions";
 
 /** 3D office: every open CLI session becomes a character working at a desk. */
 export function OfficeView({ workspace }: { workspace: Workspace }) {
@@ -14,10 +15,13 @@ export function OfficeView({ workspace }: { workspace: Workspace }) {
   const demo = !workspace.server;
   const open = useMemo(
     () =>
-      (demo ? DEMO_SESSIONS : board.cards)
+      (demo
+        ? DEMO_SESSIONS
+        : mergeOpenCards(appSessionCards(workspace.sessions, workspace.projects), board.cards)
+      )
         .filter((c) => c.status === "active" || c.status === "idle")
         .slice(0, 12),
-    [board.cards, demo]
+    [board.cards, demo, workspace.sessions, workspace.projects]
   );
 
   const { canvasRef, selected, failed, environment, setEnvironment, skin, setSkin } =
