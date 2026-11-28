@@ -9,9 +9,6 @@ on:
       tag:
         description: Image tag (defaults to a slug of the branch)
         required: false
-  push:
-    branches:
-      - feat/accounts-auth
 
 concurrency:
   group: image-branch-${{ github.ref }}
