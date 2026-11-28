@@ -2,8 +2,8 @@
 
 Ambiente: cluster k3s `junin-vm`, namespace `vibe-code`, release
 `https://vibe.antonio-code.duckdns.org`.
-Imagem: `ghcr.io/juninmd/vibe-code` (branch `feat/accounts-auth`, tag
-`feataccounts-auth`; `latest` após o merge).
+Imagem: `ghcr.io/juninmd/vibe-code:latest` (build do merge `e16e38b`, que inclui
+as PRs #259, #263 e #264).
 
 ## O que foi exercitado
 
